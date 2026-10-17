@@ -1,10 +1,42 @@
-# Cafe
+# Architect
 
-Cloudflare · Alchemy · Foldkit · Effect.
+A learning game about system design, built on Cafe: Cloudflare · Alchemy · Foldkit · Effect.
 
-A strict, extensible full-stack starter. The name is the stack: Cloudflare for the runtime, Alchemy for infrastructure and deployment, Foldkit for the UI, and Effect for the server and the shared contract.
+A player assembles an architecture from a fixed catalog of components, runs it for one
+simulated month, and is scored on what that architecture did. The diagram is the input, the
+ledger is the truth, and every choice costs something.
 
-The website and the API are separate apps. Alchemy composes them into one deployment, with a service binding routing same-origin API requests to the backend.
+The design is settled. Implementation has not started, so the apps still ship the starter's
+demo surface.
+
+## How a run plays
+
+1. A scenario hands you a brief, a small starting capital, and a demand curve.
+2. You place components on the canvas and connect them. Placing a component spends capital, and
+   every component burns money for as long as it exists.
+3. You run the month. Demand grows, income follows the requests your design serves, and the
+   metrics table and the graphs show latency, throughput, errors, and money as they move.
+4. You adapt while the clock runs: add capacity, move a cache, fix the bottleneck, drop what
+   you cannot pay for.
+5. The month ends in a report card: Reliability, Performance, Simplicity, and Money.
+
+A session runs 15 to 25 minutes. Roles, meaning the Edge Lead, the Data Lead, and the Platform
+Lead, are hats you wear to see a different objective over the same design.
+
+The cluster behaves like Kubernetes: pods, deployments, rollout, probes, restarts, services,
+DNS, and endpoints. The game models what the cluster does not: demand, latency under load,
+capacity, failures, cost, and income.
+
+Read [Game design](docs/game-design.md) for the overview, [CONTEXT.md](CONTEXT.md) for the
+vocabulary, and [docs/adr](docs/adr) for the decisions behind both.
+
+## The stack
+
+Cafe is the stack. Cloudflare for the runtime, Alchemy for infrastructure and deployment,
+Foldkit for the UI, and Effect for the server and the shared contract.
+
+The website and the API are separate apps. Alchemy composes them into one deployment, with a
+service binding routing same-origin API requests to the backend.
 
 ## Apps and packages
 
