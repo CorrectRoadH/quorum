@@ -1,0 +1,10 @@
+# Quorum — development services for orbs.
+# `amp orb services ensure` starts what is missing and prints the portal URLs.
+services:
+  web:
+    command: pnpm exec vite --host 0.0.0.0 --port "$PORT" --strictPort
+    cwd: apps/web
+    health: /
+    portal:
+      title: Quorum
+      description: The Quorum client — title, rooms, run, report.

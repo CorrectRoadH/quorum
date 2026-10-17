@@ -7,5 +7,5 @@ coverage/
 .env
 .env.*
 !.env.example
-.amp/portals/*
+.amp/portals/
 .DS_Store
