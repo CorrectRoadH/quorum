@@ -1,108 +1,163 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   Quorum — the shipped palette.
+   Blueprint base · accent #77A4F6 · light · square corners · Space Grotesk
+   figures in JetBrains Mono · alerts amber / red.
+   ========================================================================== */
 :root {
-  color: #172033;
-  background: #f8fafc;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --radius: 0px;
+
+  --background: oklch(0.981 0.005 258);
+  --foreground: oklch(0.259 0.052 263);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.259 0.052 263);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.259 0.052 263);
+  --primary: oklch(0.721 0.13 262);
+  --primary-foreground: oklch(0.259 0.052 263);
+  --secondary: oklch(0.949 0.011 258);
+  --secondary-foreground: oklch(0.259 0.052 263);
+  --muted: oklch(0.96 0.009 258);
+  --muted-foreground: oklch(0.525 0.045 261);
+  --accent: oklch(0.94 0.016 260);
+  --accent-foreground: oklch(0.259 0.052 263);
+  --destructive: oklch(0.545 0.19 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.914 0.017 259);
+  --input: oklch(0.895 0.02 259);
+  --ring: oklch(0.61 0.156 263);
+
+  /* Quorum additions */
+  --primary-strong: oklch(0.61 0.156 263);
+  --primary-soft: oklch(0.721 0.13 262 / 0.16);
+  --primary-faint: oklch(0.721 0.13 262 / 0.08);
+  --ok: oklch(0.56 0.13 155);
+  --warn: oklch(0.66 0.145 66);
+  --danger: oklch(0.545 0.19 27);
+  --ok-soft: oklch(0.56 0.13 155 / 0.12);
+  --warn-soft: oklch(0.66 0.145 66 / 0.14);
+  --danger-soft: oklch(0.545 0.19 27 / 0.12);
+  --canvas: oklch(0.966 0.007 261);
+  --canvas-grid: oklch(0.45 0.03 260 / 0.1);
+  --node: oklch(1 0 0);
+  --edge: oklch(0.55 0.04 260 / 0.45);
+  --chart-1: oklch(0.61 0.156 263);
+  --chart-2: oklch(0.56 0.1 190);
+  --chart-3: oklch(0.66 0.145 66);
+  --chart-4: oklch(0.52 0.15 295);
+  --chart-5: oklch(0.58 0.18 15);
+  --sidebar: oklch(0.96 0.009 258);
+  --sidebar-foreground: oklch(0.259 0.052 263);
+  --sidebar-primary: oklch(0.721 0.13 262);
+  --sidebar-primary-foreground: oklch(0.259 0.052 263);
+  --sidebar-accent: oklch(0.94 0.016 260);
+  --sidebar-accent-foreground: oklch(0.259 0.052 263);
+  --sidebar-border: oklch(0.914 0.017 259);
+  --sidebar-ring: oklch(0.61 0.156 263);
 }
 
-* {
-  box-sizing: border-box;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-canvas: var(--canvas);
+  --color-node: var(--node);
+  --color-edge: var(--edge);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
+/* Square corners are the whole point, so every Tailwind radius step is 0. */
+@theme {
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
-.page {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1rem;
-  width: min(100% - 3rem, 48rem);
-  margin-inline: auto;
-  padding-block: 4rem;
-}
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 
-.eyebrow {
-  color: #52617a;
-  font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
-}
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
 
-h1 {
-  max-width: 14ch;
-  margin: 0;
-  font-size: clamp(2.5rem, 8vw, 4.5rem);
-  line-height: 1.02;
-  letter-spacing: -0.05em;
-}
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
 
-.description {
-  max-width: 42rem;
-  color: #52617a;
-  font-size: 1.1rem;
-  line-height: 1.6;
-}
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
 
-.card {
-  margin-top: 1rem;
-  padding: 1.5rem;
-  border: 1px solid #dbe2ec;
-  border-radius: 1rem;
-  background: white;
-  box-shadow: 0 1rem 2.5rem rgb(23 32 51 / 6%);
-}
-
-.card h2 {
-  margin-top: 0;
-}
-
-.card p {
-  margin-bottom: 0;
-  color: #52617a;
-  line-height: 1.6;
-}
-
-.action {
-  margin-top: 1.25rem;
-  padding: 0.65rem 1.1rem;
-  border: 1px solid #172033;
-  border-radius: 0.6rem;
-  background: #172033;
-  color: #f8fafc;
-  font: inherit;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 120ms ease,
-    transform 120ms ease;
-}
-
-.action:hover {
-  background: #2b3a55;
-  border-color: #2b3a55;
-}
-
-.action:active {
-  transform: translateY(1px);
-}
-
-.action:focus-visible {
-  outline: 2px solid #172033;
-  outline-offset: 2px;
-}
-
-.card .status {
-  margin-top: 1rem;
-  padding-left: 0.9rem;
-  border-left: 2px solid #172033;
-  color: #172033;
-  font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
+  ::selection {
+    background: var(--primary-soft);
+  }
 }
