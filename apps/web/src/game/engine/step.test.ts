@@ -55,7 +55,7 @@ describe('a Garage minute', () => {
       90,
     )
     const box = game.nodes.find((node) => node.type === 'server')
-    expect(box?.credits).toBe(0)
+    expect(box?.credits).toBeLessThan(1)
     expect(events.filter((event) => event._tag === 'CreditsExhausted')).toHaveLength(1)
     expect(game.users).toBeLessThan(700)
   })

@@ -32,7 +32,7 @@ import {
   vcpuOf,
 } from '@/game/engine/lookups.ts'
 import type { Game, GameNode } from '@/game/engine/state.ts'
-import { compact, money, rate } from '@/game/format.ts'
+import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { COMPONENT_ICONS } from '@/game/icons.ts'
@@ -303,7 +303,7 @@ const stats = (
           util >= 0.9 ? 'danger' : util >= 0.7 ? 'warn' : 'plain',
           h,
         ),
-        row('Latency', `${Math.round(own.latency)} ms`, 'plain', h),
+        row('Latency', ms(own.latency), 'plain', h),
         row('Dropped', `${rate(own.dropped)}/s`, own.dropped > 0.05 ? 'danger' : 'plain', h),
         ...(own.hitRatio !== null ? [row('Hit ratio', percent(own.hitRatio), 'plain', h)] : []),
         row('Burn', `${money(burnOf(game, node))}/s`, 'plain', h),
@@ -631,10 +631,8 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
               ],
               [
                 `${rate(entry?.rate ?? 0)}/s · ${percent(entry?.success ?? 0)} ok · ${
-                  percentiles
-                    ? `p99 ${Math.round(entry?.p99 ?? 0)}`
-                    : `${Math.round(entry?.mean ?? 0)}`
-                } ms`,
+                  percentiles ? `p99 ${ms(entry?.p99 ?? 0)}` : ms(entry?.mean ?? 0)
+                }`,
               ],
             ),
           ],

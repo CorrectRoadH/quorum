@@ -24,7 +24,7 @@ import type { Ledger } from '@/game/engine/ledger.ts'
 import { eraOf, has, nextEra, researchReady } from '@/game/engine/lookups.ts'
 import { clockOf } from '@/game/engine/solve.ts'
 import { describeDelta, undoAvailable } from '@/game/feedback.ts'
-import { compact, money, rate } from '@/game/format.ts'
+import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
@@ -188,11 +188,11 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
           stat(
             'Apdex',
             Smile,
-            ledger.apdex.toFixed(2),
+            game.apdex.toFixed(2),
             `/ ${target.toFixed(2)}`,
-            ledger.apdex >= target ? 'ok' : 'danger',
+            game.apdex >= target ? 'ok' : 'danger',
             h,
-            `Apdex: users grow above ${target.toFixed(2)} and leave below it`,
+            `Apdex over the last hour: users grow above ${target.toFixed(2)} and leave below it`,
           ),
           stat(
             'Errors',
@@ -206,8 +206,8 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
           stat(
             percentiles ? 'p99' : 'Latency',
             Timer,
-            `${Math.round(percentiles ? ledger.p99 : ledger.latency)} ms`,
-            percentiles ? `μ ${Math.round(ledger.latency)}` : '',
+            ms(percentiles ? ledger.p99 : ledger.latency),
+            percentiles ? `μ ${ms(ledger.latency)}` : '',
             'plain',
             h,
           ),

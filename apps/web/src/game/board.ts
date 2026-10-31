@@ -48,7 +48,7 @@ import {
 import type { Ledger } from './engine/ledger.ts'
 import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
-import { compact, money, rate } from './format.ts'
+import { compact, money, ms, rate } from './format.ts'
 import { COMPONENT_ICONS } from './icons.ts'
 
 /* ==========================================================================
@@ -455,7 +455,7 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     tone: own.utilization >= 0.9 ? 'danger' : own.utilization >= 0.7 ? 'warn' : 'plain',
     bar: Math.min(own.utilization, 1),
   }
-  const latency: Row = { glyph: 'latency', name: 'Latency', value: `${Math.round(own.latency)} ms` }
+  const latency: Row = { glyph: 'latency', name: 'Latency', value: ms(own.latency) }
   const out: Row = {
     glyph: own.stranded > 0.01 ? 'stranded' : 'out',
     name: own.stranded > 0.01 ? 'Stranded' : 'Out',
@@ -470,8 +470,8 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
         {
           glyph: 'apdex',
           name: 'Apdex',
-          value: ledger.apdex.toFixed(2),
-          tone: ledger.apdex >= target ? 'ok' : 'danger',
+          value: game.apdex.toFixed(2),
+          tone: game.apdex >= target ? 'ok' : 'danger',
         },
         { glyph: 'requests', name: 'Requests', value: `${rate(ledger.demand)}/s` },
       ]

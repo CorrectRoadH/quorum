@@ -180,7 +180,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const efficiency = swapping ? Math.max(0.15, 1 - (2.5 * (ramUsed - ram)) / ram) : 1
 
   const usable = Math.min(vcpu, runtime.model === 'process' ? Math.max(1, processes) : processes)
-  const throttled = node.family === 'burstable' && node.credits <= 0
+  const throttled = node.family === 'burstable' && node.credits < 1
   const cores = throttled ? Math.min(usable, BURST_BASELINE * vcpu) : usable
   const perRequest = Math.min(1, cores)
 
@@ -286,7 +286,7 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
   const ram = ramOf(node) * context.boost
   const workingSet = LOCAL_DB_RAM + game.users * LOCAL_DB_RAM_PER_USER
   const disk = workingSet > ram - OS_RAM
-  const throttled = node.family === 'burstable' && node.credits <= 0
+  const throttled = node.family === 'burstable' && node.credits < 1
   const cores = throttled ? BURST_BASELINE * vcpu : vcpu
   const perRequest = Math.min(1, cores)
   const warmth = 0.5 + 0.5 * node.warm

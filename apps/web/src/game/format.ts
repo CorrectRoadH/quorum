@@ -26,6 +26,10 @@ export const money = (value: number): string => {
 export const rate = (value: number): string =>
   value === Number.POSITIVE_INFINITY ? '∞' : value < 100 ? value.toFixed(1) : compact(value)
 
+/** Milliseconds: whole ms under a second, seconds above. */
+export const ms = (value: number): string =>
+  value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} s`
+
 export const clock = (seconds: number): string => {
   const whole = Math.floor(seconds)
   const hours = Math.floor(whole / 3600)

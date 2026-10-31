@@ -9,6 +9,9 @@ import type { Game, GameNode } from './state.ts'
    The next thing to do: one sentence, from the most urgent problem down.
    ========================================================================== */
 
+/** Warn this many sim seconds before a Burstable box runs out of CPU credits. */
+const CREDIT_WARNING = 120
+
 const limitHint = (game: Game, node: GameNode, limit: Limit): string => {
   const name = COMPONENTS[node.type].name
   switch (limit) {
@@ -61,6 +64,12 @@ export const nextGoal = (game: Game, ledger: Ledger): string => {
   const stranded = game.nodes.find((node) => (ledger.nodes[node.id]?.stranded ?? 0) > 0.01)
   if (stranded)
     return `${COMPONENTS[stranded.type].name} has requests with nowhere to go. Link it to something that takes them.`
+  const draining = game.nodes.find((node) => {
+    const rate = ledger.nodes[node.id]?.resources.credits?.rate ?? 0
+    return node.credits >= 1 && rate < 0 && node.credits / -rate < CREDIT_WARNING
+  })
+  if (draining)
+    return `${COMPONENTS[draining.type].name} runs out of CPU credits soon and drops to 20% CPU. Switch it to General or resize it.`
   const bottleneck = game.nodes.find((node) => node.id === ledger.bottleneck)
   if (bottleneck) {
     const limit = ledger.nodes[bottleneck.id]?.limit ?? 'none'
