@@ -22,7 +22,7 @@ The [divergence log](./16-balancing.md#divergence-log) lists where the build and
 
 - The simulation stays a pure module with no UI imports, so it can run in tests, in the offline
   simulation, in Challenge verification on the server, and in the Tradeoff card preview.
-- The browser owns the company simulation ([ADR 0007](../adr/0007-endless-idle-game-in-the-browser.md)).
+- The browser owns the company simulation ([ADR 0002](../adr/0002-endless-incremental-game-in-the-browser.md)).
   The API Worker owns only what needs a server: Challenge verification, histograms, and the daily
   drill. Those contracts go in `packages/rpc` and their handlers in `apps/backend`, as the repository
   guide requires.
@@ -36,7 +36,7 @@ and the [dominance test](./16-balancing.md#the-dominance-test) passing for the c
 
 | #   | Milestone                    | Contents                                                                                                                                                           | Exit check                                                                            |
 | --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| M0  | Design and vocabulary        | These documents, [CONTEXT.md](../../CONTEXT.md), [ADR 0007](../adr/0007-endless-idle-game-in-the-browser.md)                                                       | Reviewed                                                                              |
+| M0  | Design and vocabulary        | These documents, [CONTEXT.md](../../CONTEXT.md), [ADR 0002](../adr/0002-endless-incremental-game-in-the-browser.md)                                                | Reviewed                                                                              |
 | M1  | Real capacity model          | Instance types, concurrency models, memory limits, the latency coupling, Apdex revenue, logistic growth, connection limits, the bottleneck marker                  | Runtime balance targets pass ([Balancing](./16-balancing.md#runtime-balance-targets)) |
 | M2  | Garage and Pre-seed complete | Kinds `page` to `login`; PHP, Ruby, Node.js, Python with their early variants; Cache, Pooler, Replica, DNS, Load Balancer; visibility steps 0–4; first incidents   | Balanced bot reaches Seed in 45–60 minutes                                            |
 | M3  | Tradeoff cards and preview   | The six-axis card, the ghost-simulation preview, Settling and Stable, delta toasts, undo                                                                           | Playtest: players predict the effect of a Stack change                                |
@@ -52,7 +52,7 @@ and the [dominance test](./16-balancing.md#the-dominance-test) passing for the c
 - Multiplayer and shared companies.
 - Accounts beyond what Challenge histograms need.
 - Paid currency of any kind.
-- A Kubernetes-faithful cluster simulation ([ADR 0007](../adr/0007-endless-idle-game-in-the-browser.md)).
+- A simulated Kubernetes cluster ([ADR 0002](../adr/0002-endless-incremental-game-in-the-browser.md)).
 - Mobile layouts below 1024 px wide. The board needs space.
 
 ## Open questions

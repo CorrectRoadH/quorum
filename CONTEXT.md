@@ -242,9 +242,3 @@ _Avoid_: level, mission, scenario, puzzle (in UI copy)
 - The **Simulation** turns the Design into the **Ledger** each **Step**. Every number on screen comes from the Ledger.
 - **Analytics** turns sampled traffic into **Insight**. Insight buys **Research**.
 - An **Exit** turns **Equity** × **Valuation** into **Legacy**.
-
-## Retired terms
-
-The earlier "Architect" design used these terms. They no longer apply:
-Scenario, Run, Role, Report card, Tick, Capital, Income, Cluster, Cluster Component, Manifest.
-See [ADR 0007](docs/adr/0007-endless-idle-game-in-the-browser.md).

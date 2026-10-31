@@ -97,9 +97,8 @@ Test: no action needs more than five repeated clicks without a bulk alternative.
   consequences.
 - **Not a vendor catalog.** Products appear as examples of a category, such as "Cache (Redis)".
   The game does not rank vendors.
-- **Not a Kubernetes simulator.** The earlier design simulated a real cluster. Quorum models the
-  behaviors that the player optimizes, and it models them directly
-  ([ADR 0007](../adr/0007-endless-idle-game-in-the-browser.md)).
+- **Not a Kubernetes simulator.** Quorum models the behaviors that the player optimizes, and it
+  models them directly ([ADR 0002](../adr/0002-endless-incremental-game-in-the-browser.md)).
 - **Not an infinite number treadmill.** The user count stops at the number of people online, about
   6 billion ([Reality check](./reality-check.md#scale)). After that, the game is about margin,
   latency, and reliability.

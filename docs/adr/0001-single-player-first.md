@@ -1,15 +1,14 @@
-# Architect ships single-player first
+# Quorum ships single-player first
 
-Architect ships as a single-player game. The multiplayer design in the original handoff
-(rooms, chat, proposals, per-role budgets, reconnection, late joiners) is deferred, and the
-run is built so that one run can later serve several players.
+Quorum ships as a single-player game. Each Company has one player. Shared companies, co-op, and
+competitive modes are deferred.
 
-Considered options: multiplayer in v1 alongside single-player. Rejected because the core
-loop must be validated alone, game feel does not improve with more players, and the
-multiplayer surface roughly triples the work.
+Considered options: multiplayer from the start. Rejected because the core loop must be validated
+alone, an idle game is played at each player's own pace, and multiplayer would need a shared
+authority for the Simulation, which conflicts with offline progress.
 
 ## Consequences
 
-- Roles survive as hats the single player wears, not as separate owners.
-- Every run has one client.
-- The intent protocol serves one client in v1 and does not change for multiplayer.
+- The Company Simulation runs on the player's device ([ADR 0002](./0002-endless-incremental-game-in-the-browser.md)).
+- Players compare results through Challenge histograms and shared Playbooks, not shared Companies.
+- Teams in the game are simulated Engineers, not other players.

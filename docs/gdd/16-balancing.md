@@ -100,7 +100,7 @@ about 1.5× these values.
 ## Pacing model
 
 The pacing model is a set of scripted players that run against the real simulation in tests. They
-exist because a greedy bot found the earlier build's IPO time (about 44 minutes) far below the target.
+exist because a greedy bot found the current build's IPO time (about 44 minutes) far below the target.
 
 | Bot      | Strategy                                                                      | Purpose                                                          |
 | -------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------- |
