@@ -27,8 +27,8 @@ const fromBench = (bx: number, by: number) => [BENCH.left + bx * S, BENCH.top + 
 
 /** The lead cable's points in the bench SVG, from apps/web/art/figures/hero.mjs:
  *  where it meets the users plate, where it crosses the front edge, and where it ends below. */
-const LEAD_PLATE = fromBench(74.07, 101.39)
-const LEAD_EDGE = fromBench(48.44, 114.2)
+const LEAD_PLATE = fromBench(74.07, 102.86)
+const LEAD_EDGE = fromBench(48.44, 115.68)
 const LEAD_END = fromBench(48.44, 140.69)
 
 const MENU = { left: 96, top: 470, width: 400, pad: 8, row: 64 }

@@ -1,4 +1,5 @@
 import * as k from '../kit/iso-kit.mjs'
+import * as G from '../kit/lathe.mjs'
 import { PLATE_H, tools } from '../parts.mjs'
 import { draw as cache } from './cache.mjs'
 import { draw as database } from './database.mjs'
@@ -98,86 +99,73 @@ function bench(t) {
 }
 
 // Cables lie on the bench and run under the plates they connect, so they are drawn
-// before the machines. Each leaves its plate through a small gland block.
+// before the machines. Each leaves its plate and runs through the gaps between
+// plates, where it can be seen, and request packets ride along it.
+const CABLE_Z = TOP + 1.5
+const CABLE_R = 1.5
+const CABLE_BEND = 5
+const CABLES = {
+  // Out the front of the users plate, along the bench edge, and under the load balancer.
+  users: [
+    [-200, 54],
+    [-200, 74],
+    [-130, 74],
+    [-130, 54],
+  ],
+  // Two cables run side by side down the gap between the servers, one into each.
+  serverA: [
+    [-76, -6],
+    [0, -6],
+    [0, -22],
+  ],
+  serverB: [
+    [-76, 4],
+    [8, 4],
+    [8, 20],
+  ],
+  // Out of each server's inner edge, across to the cache.
+  cacheA: [
+    [44, -22],
+    [44, -4],
+    [86, -4],
+  ],
+  cacheB: [
+    [52, 20],
+    [52, 4],
+    [86, 4],
+  ],
+  // Out the front of the cache and into the front of the database.
+  database: [
+    [150, 18],
+    [150, 36],
+    [200, 36],
+    [200, 14],
+  ],
+}
+// The lead: out from under the users plate, over the front edge, and down.
+const LEAD = [
+  [-240, 56, CABLE_Z],
+  [-240, 96, CABLE_Z],
+  [-240, 96, BOTTOM - 16],
+]
+
+/** A cable's centreline as the tube draws it, rounded corners included. */
+const centreline = (points) => G.fillet(points, CABLE_BEND, 7, { P, tube: CABLE_R })
+
 function cables(t) {
-  const z = TOP + 1.5
   const routes = [
-    [
-      [-182, 30, z],
-      [-154, 30, z],
-    ],
-    [
-      [-74, -10, z],
-      [-52, -10, z],
-      [-52, -40, z],
-      [-28, -40, z],
-    ],
-    [
-      [-74, 46, z],
-      [-28, 46, z],
-    ],
-    [
-      [56, -30, z],
-      [84, -30, z],
-    ],
-    [
-      [56, 20, z],
-      [84, 20, z],
-    ],
-    [
-      [164, 0, z],
-      [190, 0, z],
-    ],
-    // The lead: out from under the users plate, over the front edge, and down.
-    [
-      [-240, 56, z],
-      [-240, 96, z],
-      [-240, 96, BOTTOM - 16],
-    ],
+    ...Object.values(CABLES).map((route) => route.map(([x, y]) => [x, y, CABLE_Z])),
+    LEAD,
   ]
-  return routes.map((points) => t.tube(points, 1.5, { tone: 'mid', bend: 5 }))
+  return routes.map((points) => t.tube(points, CABLE_R, { tone: 'mid', bend: CABLE_BEND }))
 }
 
 // The title screen is the game idling, as Factorio's menu is: requests leave the
-// users and hop machine to machine along the plate fronts and the gaps between them.
-// Four requests per loop take the two servers in turn. The packets ride on top of
-// the plates, so they are drawn after the machines.
+// users and ride the cables machine to machine. Four requests per loop take the two
+// servers in turn. Packets follow each cable's centreline and are drawn with the
+// cables, under the machines, so a plate hides a packet where its cable runs beneath.
 const LOOP = 3.6
 const START = 2.3
-const HOPS = {
-  users: [
-    [-205, 52],
-    [-125, 52],
-  ],
-  serverA: [
-    [-100, 48],
-    [-50, 48],
-    [-50, -10],
-    [-5, -10],
-  ],
-  serverB: [
-    [-100, 48],
-    [-50, 48],
-    [-50, 86],
-    [-5, 86],
-  ],
-  cacheA: [
-    [35, -10],
-    [70, -10],
-    [70, 14],
-    [110, 14],
-  ],
-  cacheB: [
-    [35, 86],
-    [70, 86],
-    [70, 14],
-    [110, 14],
-  ],
-  database: [
-    [140, 14],
-    [215, 14],
-  ],
-}
 const TRIPS = [
   ['users', 'serverA', 'cacheA', 'database'],
   ['users', 'serverB', 'cacheB', 'database'],
@@ -190,10 +178,9 @@ const WINDOWS = [
 ]
 
 function packet(route, [from, to], begin) {
-  const z = 2
-  const path = route
-    .map(([x, y], i) => {
-      const [px, py] = k.iso([x, y, z], P)
+  const path = centreline(route.map(([x, y]) => [x, y, CABLE_Z]))
+    .map((point, i) => {
+      const [px, py] = k.iso(point, P)
       return `${i ? 'L' : 'M'}${px.toFixed(2)} ${py.toFixed(2)}`
     })
     .join('')
@@ -207,22 +194,19 @@ function packet(route, [from, to], begin) {
 
 // Each hop sits in the depth order at its nearest point, so a machine in front hides it.
 function packets() {
-  return Object.entries(HOPS).map(([name, route]) => ({
-    depth: Math.max(...route.map(([x, y]) => k.depthOf([x, y, 0], P))),
-    svg: `<g class="packets">${[0, 1, 2, 3]
-      .map((n) => {
-        const i = TRIPS[n % 2].indexOf(name)
-        return i < 0 ? '' : packet(route, WINDOWS[i], START + (n * LOOP) / 4)
-      })
-      .join('')}</g>`,
-  }))
+  const out = Object.entries(CABLES).flatMap(([name, route]) =>
+    [0, 1, 2, 3].map((n) => {
+      const i = TRIPS[n % 2].indexOf(name)
+      return i < 0 ? '' : packet(route, WINDOWS[i], START + (n * LOOP) / 4)
+    }),
+  )
+  return `<g class="packets">${out.join('')}</g>`
 }
 
 // On first paint the bench is assembled. The slab falls into place, its fittings
 // drop on, and then each machine in turn, left to right, lands as a plate and has
 // its parts set on it one by one, back to front, before its callout is pinned.
-// Things fall with gravity, sink a little and settle; every plate landing sends a
-// shock outline across its footprint and jolts the whole bench. The cables lay
+// Things fall with gravity, sink a little and settle. The cables lay
 // once both ends are down; then traffic starts.
 const GRAVITY = 'cubic-bezier(.55,0,1,.45)'
 const SETTLE = 'cubic-bezier(.23,1,.32,1)'
@@ -230,8 +214,6 @@ const ASSEMBLY = `<style>
 .iso .slam{animation:iso-slam 520ms both}
 .iso .drop{animation:iso-drop 420ms both}
 .iso .pin{animation:iso-fade 300ms ease both}
-.iso .jolt{animation:iso-jolt 260ms ${SETTLE} both}
-.iso .shock{fill:none;stroke:var(--anatomy-lit);stroke-width:.9;transform-box:fill-box;transform-origin:center;animation:iso-shock 560ms ${SETTLE} both}
 @keyframes iso-slam{
   0%{opacity:0;transform:translateY(-26px);animation-timing-function:${GRAVITY}}
   10%{opacity:1}
@@ -244,13 +226,10 @@ const ASSEMBLY = `<style>
   55%{transform:translateY(0);animation-timing-function:${SETTLE}}
   72%{transform:translateY(.8px);animation-timing-function:${SETTLE}}
   100%{transform:none}}
-@keyframes iso-jolt{40%{transform:translateY(1.4px)}}
-@keyframes iso-shock{0%{opacity:0;transform:scale(.97)}8%{opacity:.8}100%{opacity:0;transform:scale(1.14)}}
 @keyframes iso-fade{from{opacity:0}}
 @media (prefers-reduced-motion:reduce){
   .iso :is(.slam,.drop){animation:iso-fade 300ms ease both}
-  .iso .jolt{animation:none}
-  .iso :is(.shock,.packets){display:none}}
+  .iso .packets{display:none}}
 </style>`
 
 const FIRST_MACHINE = 300
@@ -267,10 +246,6 @@ const dropAll = (parts, start) => {
   const gap = Math.min(28, PARTS / Math.max(parts.length, 1))
   return parts.map((part, index) => step('drop', start + index * gap, part)).join('')
 }
-
-/** The outline a landing sends across a footprint, starting as it lands. */
-const shock = (plan, z, landing) =>
-  `<path class="shock" style="animation-delay:${Math.round(landing)}ms" d="${k.planOutline(plan, z, P, 8)}"/>`
 
 // A drawing callout above each machine: a dot on its top, a leader up, and its tag.
 // `left` turns the tag to the left where the machine behind would cover it.
@@ -292,32 +267,28 @@ export function figure() {
   // The slab, its feet and its halo land together; screws, outline and ruler drop onto it.
   const body = [
     step('slam', 0, benchParts.slice(0, 14).join('')),
-    shock(BENCH, TOP, PLATE),
     dropAll(benchParts.slice(14), PLATE),
   ]
   // Each cable lays once the later of its two machines has its plate down.
   const laid = [lb, serverA, serverB, cache, cache, database, users]
   body.push(...cables(t).map((cable, index) => step('pin', laid[index] + PLATE, cable)))
+  body.push(packets())
   const machines = MODULES.map((module) => {
     const at = start(module)
     const [x, y] = module.at
     const [plate, ...parts] = module.draw(moved(module.at), { feet: false, lit: module.lit })
     return {
       depth: k.depthOf([x, y, 0], P),
-      svg: `<g data-machine="${module.name}">${step('slam', at, plate)}${shock({ x: x - 46, y: y - 40, w: 92, d: 80, r: 6 }, 0, at + PLATE)}${dropAll(parts, at + PLATE)}${step('pin', at + PLATE + PARTS + 60, callout(module))}</g>`,
+      svg: `<g data-machine="${module.name}">${step('slam', at, plate)}${dropAll(parts, at + PLATE)}${step('pin', at + PLATE + PARTS + 60, callout(module))}</g>`,
     }
   })
-  for (const { svg } of [...machines, ...packets()].sort((a, b) => a.depth - b.depth))
-    body.push(svg)
-  // Every landing jolts the whole bench: one nested group per landing.
-  const landings = [0, ...MODULES.map(start)].map((at) => at + PLATE)
-  const jolted = landings.reduce((inner, at) => step('jolt', at, inner), body.join(''))
+  for (const { svg } of machines.sort((a, b) => a.depth - b.depth)) body.push(svg)
   return {
     width: WIDTH,
     height: HEIGHT,
     theme: 'dark',
     label:
       'A workbench of machines in a row: phone handsets send requests to a rotary load balancer, which feeds two rack servers; they read from a memory-stick cache and a disk-pack database, all joined by cables.',
-    body: [ASSEMBLY, jolted],
+    body: [ASSEMBLY, ...body],
   }
 }
