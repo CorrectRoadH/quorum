@@ -1,10 +1,13 @@
 import * as Alchemy from 'alchemy'
-import * as Cloudflare from 'alchemy/Cloudflare'
+import * as Cloudflare from '@alchemy.run/cloudflare'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { API_PREFIX } from '@template/rpc'
 
 const compatibility = { date: '2026-10-08' }
+
+/** The public hostname of the `prod` stage. Its zone must exist in the Cloudflare account. */
+const PRODUCTION_DOMAIN = 'quorum.elianiva.com'
 
 /**
  * Cloudflare Workers Observability, configured on the host resources only.
@@ -25,7 +28,7 @@ const state = Layer.unwrap(
 )
 
 export default Alchemy.Stack(
-  'effect-foldkit-template',
+  'quorum',
   { providers: Cloudflare.providers(), state },
   Effect.gen(function* () {
     const stage = yield* Alchemy.Stack.use((stack) => Effect.succeed(stack.stage))
@@ -42,6 +45,7 @@ export default Alchemy.Stack(
       main: 'src/worker.ts',
       env: { API: ApiWorker },
       assets: { runWorkerFirst: [`${API_PREFIX}/*`] },
+      ...(stage === 'prod' && { domain: PRODUCTION_DOMAIN }),
       compatibility,
       observability,
     })

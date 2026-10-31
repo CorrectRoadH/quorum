@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   lefthook: true
   workerd: true
+  esbuild: true
 overrides:
   effect: 4.0.0
   workerd: 1.20261008.1

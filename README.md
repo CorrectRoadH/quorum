@@ -64,9 +64,13 @@ pnpm build
 
 ## Deploy
 
-`pnpm deploy` deploys the default stack to Cloudflare with the `prod` stage. Configure your Alchemy credentials and stack state before the first deploy.
+CI deploys every push to `main` to the `prod` stage at <https://quorum.elianiva.com>, after the checks pass. The job reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the repository's Actions secrets. Alchemy keeps the stack state in a Cloudflare state-store Worker in the same account, so CI needs no other credentials.
+
+`pnpm deploy` runs the same deployment from your machine. Only the `prod` stage attaches the custom domain; other stages use their `workers.dev` URL.
 
 The API Worker has no `workers.dev` URL. The website reaches it through its service binding, so the RPC endpoint has one public origin. Remove `workersDev: false` in `alchemy.run.ts` when the API needs its own URL or custom domain.
+
+The social card `apps/web/public/og.png` is a screenshot of `apps/web/art/og.html`. That file says how to render it again.
 
 ## Design notes
 
