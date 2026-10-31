@@ -217,6 +217,30 @@ const gradient = (top: number, bottom: number): FillGradient => {
   return made
 }
 
+/** CSS cubic-bezier timing, so the board moves on the same curves as the DOM. */
+const cubicBezier =
+  (x1: number, y1: number, x2: number, y2: number) =>
+  (t: number): number => {
+    const at = (s: number, a: number, b: number) =>
+      3 * (1 - s) * (1 - s) * s * a + 3 * (1 - s) * s * s * b + s * s * s
+    // Solve x(s) = t by bisection; 20 halvings is far below a pixel.
+    let lo = 0
+    let hi = 1
+    for (let step = 0; step < 20; step += 1) {
+      const mid = (lo + hi) / 2
+      if (at(mid, x1, x2) < t) lo = mid
+      else hi = mid
+    }
+    return at((lo + hi) / 2, y1, y2)
+  }
+
+/** `--ease-out` in styles.css. */
+const easeOut = cubicBezier(0.23, 1, 0.32, 1)
+const ENTER_S = 0.2
+const EXIT_S = 0.15
+
+const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches
+
 const glyphs = new Map<IconNode, Texture>()
 const GLYPH_PX = 96
 
@@ -577,9 +601,23 @@ class NodeView {
   private readonly foot = label(12, SANS, '600')
   private readonly footMark = glyph(14)
   private digest = ''
+  /** Seconds since the card arrived; Infinity when it was already on the board. */
+  private age = Number.POSITIVE_INFINITY
+  /** Seconds into the exit, or -1 while the Node lives. */
+  private leaving = -1
 
-  constructor(readonly type: ComponentId) {
+  constructor(
+    readonly type: ComponentId,
+    enter: boolean,
+  ) {
     const layout = layoutOf(type)
+    // Scale around the card's center, so it grows in place.
+    this.root.pivot.set(CARD_W / 2, heightOf(type) / 2)
+    if (enter) {
+      this.age = 0
+      this.root.alpha = 0
+      if (!reducedMotion()) this.root.scale.set(0.96)
+    }
     this.root.addChild(
       this.frame,
       this.bars,
@@ -611,15 +649,46 @@ class NodeView {
     this.foot.anchor.set(0, 0.5)
   }
 
-  update(game: Game, node: GameNode, ledger: Ledger, selected: boolean, colors: Palette): void {
+  leave(): void {
+    this.leaving = 0
+  }
+
+  /** Entrance 200ms and exit 150ms on --ease-out, from 0.96 scale. False once the exit ends. */
+  tick(seconds: number): boolean {
+    const still = reducedMotion()
+    if (this.leaving >= 0) {
+      this.leaving += seconds
+      const t = easeOut(Math.min(1, this.leaving / EXIT_S))
+      this.root.alpha = 1 - t
+      if (!still) this.root.scale.set(1 - 0.04 * t)
+      return this.leaving < EXIT_S
+    }
+    if (this.age < ENTER_S) {
+      this.age += seconds
+      const t = easeOut(Math.min(1, this.age / ENTER_S))
+      this.root.alpha = t
+      this.root.scale.set(still ? 1 : 0.96 + 0.04 * t)
+    }
+    return true
+  }
+
+  update(
+    game: Game,
+    node: GameNode,
+    ledger: Ledger,
+    selected: boolean,
+    pressed: boolean,
+    colors: Palette,
+  ): void {
     const own = ledger.nodes[node.id]
     if (!own) return
     const def = COMPONENTS[node.type]
     const layout = layoutOf(node.type)
     const rows = rowsOf(game, node, ledger)
     const footer = footerOf(game, node)
-    this.root.position.set(node.x, node.y)
+    this.root.position.set(node.x + CARD_W / 2, node.y + heightOf(node.type) / 2)
     const digest = JSON.stringify([
+      pressed,
       rows,
       footer,
       node.size,
@@ -685,6 +754,7 @@ class NodeView {
               ? colors.accent
               : colors.track
       const { x, y, w, h } = rect
+      const sink = pressed && footer.enabled && footer.tone !== 'muted' ? 2 : 0
       if (footer.tone === 'muted') {
         // Disabled: sunk into the card instead of raised.
         this.frame.roundRect(x, y + 1, w, h, 8).fill(fill)
@@ -699,15 +769,17 @@ class NodeView {
         const top = footer.tone === 'accent' ? colors.fillTop : mix(fill, 0xffffff, 0.16)
         const bottom = footer.tone === 'accent' ? colors.fillBottom : mix(fill, 0x000000, 0.08)
         // Raised: soft drop, a darker lip, a top-lit body and a glossy top edge.
-        this.frame.roundRect(x, y + 3, w, h, 8).fill({ color: colors.ink, alpha: 0.12 })
+        // Pressed, the body sinks onto its lip and the drop shadow goes.
+        const lifted = y + sink
+        if (!sink) this.frame.roundRect(x, y + 3, w, h, 8).fill({ color: colors.ink, alpha: 0.12 })
         this.frame.roundRect(x, y + 2, w, h, 8).fill(mix(bottom, 0x000000, 0.28))
-        this.frame.roundRect(x, y, w, h, 8).fill(gradient(top, bottom))
+        this.frame.roundRect(x, lifted, w, h, 8).fill(gradient(top, bottom))
         this.frame
-          .roundRect(x, y, w, h, 8)
+          .roundRect(x, lifted, w, h, 8)
           .stroke({ color: mix(bottom, 0x000000, 0.3), width: 1, alignment: 1, alpha: 0.7 })
         this.frame
-          .moveTo(x + 8, y + 1.5)
-          .lineTo(x + w - 8, y + 1.5)
+          .moveTo(x + 8, lifted + 1.5)
+          .lineTo(x + w - 8, lifted + 1.5)
           .stroke({ color: 0xffffff, width: 1, alpha: 0.28 })
       }
       const ink =
@@ -715,7 +787,7 @@ class NodeView {
       this.foot.text = footer.text
       // Center the glyph and text together.
       const start = x + (w - (14 + 6 + this.foot.width)) / 2
-      const mid = y + h / 2 + (footer.tone === 'muted' ? 1 : 0)
+      const mid = y + h / 2 + (footer.tone === 'muted' ? 1 : sink)
       paint(this.footMark, FOOT_ICONS[footer.glyph], ink)
       this.footMark.position.set(start, mid - 7)
       this.footMark.visible = true
@@ -802,6 +874,12 @@ class BoardController {
   private readonly bottleneckTag = label(9, MONO, '600')
   private readonly ghost = new Container()
   private readonly views = new Map<string, NodeView>()
+  /** Cards fading out after their Node left the Design. */
+  private leaving: Array<NodeView> = []
+  /** False until the first sync, so a loaded board does not animate in. */
+  private seeded = false
+  /** The Node whose card button is held down. */
+  private pressed: string | null = null
   private state: BoardState | null = null
   private gesture: Gesture = null
   private hoverLink: Readonly<{ from: string; to: string }> | null = null
@@ -1009,6 +1087,10 @@ class BoardController {
         }
         const node = this.nodeAt(point)
         if (node) {
+          if (inFooter(node, point)) {
+            this.pressed = node.id
+            this.syncCards()
+          }
           this.gesture = {
             kind: 'node',
             id: node.id,
@@ -1091,6 +1173,10 @@ class BoardController {
     const finish = (event: PointerEvent, cancelled: boolean) => {
       const gesture = this.gesture
       this.gesture = null
+      if (this.pressed) {
+        this.pressed = null
+        this.syncCards()
+      }
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
       canvas.style.cursor = 'grab'
       if (!gesture || cancelled) {
@@ -1147,17 +1233,26 @@ class BoardController {
       let view = this.views.get(node.id)
       if (!view || view.type !== node.type) {
         view?.root.destroy({ children: true })
-        view = new NodeView(node.type)
+        view = new NodeView(node.type, this.seeded)
         this.views.set(node.id, view)
         this.cards.addChild(view.root)
       }
-      view.update(state.game, node, state.ledger, state.selected === node.id, colors)
+      view.update(
+        state.game,
+        node,
+        state.ledger,
+        state.selected === node.id,
+        this.pressed === node.id,
+        colors,
+      )
     }
     for (const [id, view] of this.views) {
       if (live.has(id)) continue
-      view.root.destroy({ children: true })
+      view.leave()
+      this.leaving.push(view)
       this.views.delete(id)
     }
+    this.seeded = true
   }
 
   private syncGhost(): void {
@@ -1174,16 +1269,14 @@ class BoardController {
       .roundRect(0, 0, CARD_W, height, RADIUS)
       .fill(colors.card)
       .stroke({ color: colors.accent, width: 2 })
-    frame.roundRect(8, 7, 34, HEAD - 14, 4).fill(colors.well)
+    frame.roundRect(8, 5, 24, HEAD - 10, 6).fill(colors.well)
     const name = label(12.5, SANS, '600')
     name.text = COMPONENTS[type].name
-    name.position.set(46, 7)
-    const code = label(9.5, MONO, '600')
-    code.text = COMPONENTS[type].code.toUpperCase()
-    code.style.fill = colors.accent
-    code.anchor.set(0.5)
-    code.position.set(25, HEAD / 2)
-    this.ghost.addChild(frame, name, code)
+    name.position.set(38, 7)
+    const mark = glyph(14)
+    paint(mark, COMPONENT_ICONS[type], colors.ink)
+    mark.position.set(13, HEAD / 2 - 7)
+    this.ghost.addChild(frame, name, mark)
   }
 
   private animate(seconds: number): void {
@@ -1191,6 +1284,12 @@ class BoardController {
     if (!state) return
     const colors = palette()
     this.phase += seconds
+    for (const view of this.views.values()) view.tick(seconds)
+    this.leaving = this.leaving.filter((view) => {
+      if (view.tick(seconds)) return true
+      view.root.destroy({ children: true })
+      return false
+    })
     const byId = new Map(this.nodes().map((node) => [node.id, node]))
     const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 

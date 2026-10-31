@@ -128,7 +128,7 @@ const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
             {
               onClick: Message.PanelOpened({ panel: 'offer' }),
               size: 'sm',
-              className: 'mt-1 w-full animate-in fade-in',
+              className: 'enter-pop shine mt-1 w-full',
             },
             [icon(h, Rocket, 'size-3.5'), `${next.name} offer`],
             h,
@@ -271,7 +271,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.Class(
                     cn(
                       FIGURE,
-                      'absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[9.5px] leading-none font-semibold text-white shadow-raised',
+                      'enter-badge absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[9.5px] leading-none font-semibold text-white shadow-raised',
                     ),
                   ),
                 ],
@@ -336,7 +336,7 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
   const undo = undoAvailable(model)
   if (model.change) {
     return h.div(
-      [h.Key('settling'), h.Class(pill)],
+      [h.Key('settling'), h.Class(`enter-down ${pill}`)],
       [
         spinner({ className: 'size-3.5 text-muted-foreground' }, h),
         h.span(
@@ -350,7 +350,7 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
   const delta = model.delta
   if (!delta) return h.empty
   return h.div(
-    [h.Key(`delta-${delta.id}`), h.Class(`animate-in fade-in ${pill}`)],
+    [h.Key(`delta-${delta.id}`), h.Class(`enter-down ${pill}`)],
     [
       h.span([h.Class(`size-2 shrink-0 rounded-full ${delta.worse ? 'bg-danger' : 'bg-ok'}`)], []),
       h.span(

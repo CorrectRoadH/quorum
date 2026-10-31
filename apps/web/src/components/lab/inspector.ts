@@ -87,7 +87,7 @@ const gauge = (
 /** A folded section: the title alone until opened. */
 const section = (title: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
   h.details(
-    [h.Key(title), h.Class('group px-4')],
+    [h.Key(title), h.Class('fold group px-4')],
     [
       h.summary(
         [
@@ -99,7 +99,7 @@ const section = (title: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Me
           icon(
             h,
             ChevronRight,
-            'size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90',
+            'fold-chevron size-3.5 shrink-0 text-muted-foreground group-open:rotate-90',
           ),
           h.span([h.Class(EYEBROW)], [title]),
         ],
@@ -679,9 +679,9 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
 
   return h.aside(
     [
-      h.Key(`inspector-${node.id}`),
+      h.Key('inspector'),
       h.Class(
-        `absolute top-[76px] right-3 bottom-3 z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} animate-in fade-in slide-in-from-right-2`,
+        `absolute top-[76px] right-3 bottom-3 z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} enter-panel`,
       ),
     ],
     [

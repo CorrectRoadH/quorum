@@ -37,16 +37,12 @@ const shell = (
   h.div(
     [
       h.Class(
-        'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] animate-in fade-in',
+        'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] enter-backdrop',
       ),
     ],
     [
       h.div(
-        [
-          h.Class(
-            `flex max-h-full w-full flex-col overflow-hidden ${width} ${FLOAT} animate-in zoom-in-[0.98]`,
-          ),
-        ],
+        [h.Class(`flex max-h-full w-full flex-col overflow-hidden ${width} ${FLOAT} enter-modal`)],
         [
           h.div(
             [h.Class('flex items-center justify-between gap-4 px-5 pt-4 pb-3')],
@@ -379,7 +375,7 @@ export const eraPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
     [],
     [
       h.div(
-        [h.Class('flex flex-col gap-4 px-5 pt-1 pb-5')],
+        [h.Class('stagger flex flex-col gap-4 px-5 pt-1 pb-5')],
         [
           h.span(
             [h.Class('text-[26px] font-semibold leading-tight tracking-[-0.035em]')],

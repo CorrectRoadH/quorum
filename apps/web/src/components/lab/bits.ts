@@ -26,7 +26,7 @@ export const FIGURE = 'font-mono tabular-nums tracking-[-0.01em]'
 /** A square icon control inside a panel: flat at rest, a raised ink fill when on. */
 export const tool = (active: boolean): string =>
   cn(
-    'relative grid size-10 shrink-0 place-items-center rounded-xl transition-[background-color,box-shadow,color]',
+    'press relative grid size-10 shrink-0 place-items-center rounded-xl',
     active
       ? 'bg-primary-fill text-on-primary-fill shadow-primary'
       : 'text-muted-foreground hover:bg-well hover:text-foreground',
@@ -112,8 +112,13 @@ export const meter = (share: number, fill: string, h: HtmlBuilder<Message>): Htm
     [
       h.div(
         [
-          h.Class(cn('h-full rounded-full transition-[width] duration-300', fill)),
-          h.Style({ width: `${Math.max(0, Math.min(1, share)) * 100}%` }),
+          // The fill slides rather than resizing: transform skips layout, and progress moves linearly.
+          h.Class(
+            cn('h-full w-full rounded-full transition-transform duration-250 ease-linear', fill),
+          ),
+          h.Style({
+            transform: `translateX(${(Math.max(0, Math.min(1, share)) - 1) * 100}%)`,
+          }),
         ],
         [],
       ),
@@ -135,7 +140,7 @@ export const toast = (value: Toast | null, h: HtmlBuilder<Message>): Html =>
           h.Key(`toast-${value.id}`),
           h.Role('status'),
           h.Class(
-            `pointer-events-none fixed bottom-[176px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float animate-in fade-in slide-in-from-bottom-2`,
+            `pointer-events-none fixed bottom-[176px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float enter-toast`,
           ),
         ],
         [

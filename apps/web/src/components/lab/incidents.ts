@@ -33,7 +33,7 @@ export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.div(
     [
       h.Class(
-        'flex items-center gap-2.5 rounded-xl bg-danger px-3.5 py-2 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
+        'enter-down flex items-center gap-2.5 rounded-xl bg-danger px-3.5 py-2 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
       ),
     ],
     [
@@ -47,10 +47,7 @@ export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
 const card = (postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
   const def = INCIDENTS[postmortem.kind]
   return h.details(
-    [
-      h.Key(`pm-${postmortem.id}`),
-      h.Class(`group w-[340px] ${PANEL} animate-in fade-in slide-in-from-left-2`),
-    ],
+    [h.Key(`pm-${postmortem.id}`), h.Class(`fold enter-left group w-[340px] ${PANEL}`)],
     [
       h.summary(
         [
@@ -63,7 +60,7 @@ const card = (postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
           icon(
             h,
             ChevronRight,
-            'size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90',
+            'fold-chevron size-3.5 shrink-0 text-muted-foreground group-open:rotate-90',
           ),
           badge(
             { variant: def.severity === 2 ? 'destructive' : 'warn', className: 'font-mono' },

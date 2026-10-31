@@ -299,3 +299,188 @@
     background: var(--primary-soft);
   }
 }
+
+/* ==========================================================================
+   Motion. Curves and durations follow the animate skill
+   (.agents/skills/animate). Only transform, opacity and clip-path move.
+   Surfaces opened from the keyboard appear at once: shortcuts must feel
+   instant. Reduced motion keeps the fades and drops the movement.
+   ========================================================================== */
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root {
+  interpolate-size: allow-keywords;
+}
+
+/* A pressable control sinks a little under the pointer. */
+.press {
+  transition:
+    transform 160ms var(--ease-out),
+    filter 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+.press:active:not([aria-haspopup], :disabled) {
+  transform: scale(0.97);
+}
+
+/* Entrances. Each surface comes from where it lives. */
+.enter-pop {
+  transform-origin: bottom center;
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.enter-badge {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.enter-panel {
+  transition:
+    opacity 250ms var(--ease-out),
+    transform 250ms var(--ease-out);
+}
+.enter-modal,
+.enter-backdrop {
+  transition:
+    opacity 250ms var(--ease-out),
+    transform 250ms var(--ease-out);
+}
+.enter-down,
+.enter-left {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.enter-toast {
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
+}
+
+@starting-style {
+  .enter-pop {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  .enter-badge {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  .enter-panel {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  .enter-modal {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  .enter-backdrop {
+    opacity: 0;
+  }
+  .enter-down {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  .enter-left {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  .enter-toast {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+:root[data-input='keyboard'] :is(.enter-pop, .enter-modal, .enter-backdrop) {
+  transition-duration: 0ms;
+}
+
+/* A rare moment, so it gets the delight budget: the content arrives in order. */
+.stagger > * {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: stagger-in 300ms var(--ease-out) forwards;
+}
+.stagger > :nth-child(2) {
+  animation-delay: 50ms;
+}
+.stagger > :nth-child(3) {
+  animation-delay: 100ms;
+}
+.stagger > :nth-child(4) {
+  animation-delay: 150ms;
+}
+@keyframes stagger-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* A funding offer is rare: one light sweep says it is new. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, oklch(1 0 0 / 0.35) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shine-sweep 900ms var(--ease-in-out) 250ms forwards;
+  pointer-events: none;
+}
+@keyframes shine-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Folded sections open by height: the one place height may animate. */
+details.fold::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow-y: clip;
+  transition:
+    block-size 200ms var(--ease-out),
+    opacity 200ms var(--ease-out),
+    content-visibility 200ms allow-discrete;
+}
+details.fold[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+}
+.fold-chevron {
+  transition: transform 200ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .press:active:not([aria-haspopup], :disabled) {
+    transform: none;
+  }
+  @starting-style {
+    .enter-pop,
+    .enter-badge,
+    .enter-panel,
+    .enter-modal,
+    .enter-down,
+    .enter-left,
+    .enter-toast {
+      transform: none;
+    }
+  }
+  .stagger > * {
+    transform: none;
+  }
+  .shine::after {
+    display: none;
+  }
+}

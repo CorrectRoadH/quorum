@@ -39,7 +39,7 @@ const tile = (model: Model, type: ComponentId, h: HtmlBuilder<Message>): Html =>
       ),
       h.OnClick(Message.PlacingChosen({ type })),
       h.Class(
-        `flex w-[92px] shrink-0 flex-col items-center gap-1.5 rounded-xl px-1.5 pt-2.5 pb-2 transition-[filter,box-shadow] ${
+        `press flex w-[92px] shrink-0 flex-col items-center gap-1.5 rounded-xl px-1.5 pt-2.5 pb-2 ${
           armed
             ? 'bg-raised shadow-[var(--elev-raised),0_0_0_1.5px_var(--primary-strong)]'
             : unlocked
@@ -99,10 +99,7 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
     [
       open
         ? h.div(
-            [
-              h.Key(`tray-${open}`),
-              h.Class('flex gap-1.5 animate-in fade-in slide-in-from-bottom-1'),
-            ],
+            [h.Key('tray'), h.Class('enter-pop flex gap-1.5')],
             items.map((type) => tile(model, type, h)),
           )
         : h.empty,
