@@ -1,4 +1,41 @@
-import { Application, Container, Graphics, Point, Text } from 'pixi.js'
+import {
+  Activity,
+  Archive,
+  ArrowRightFromLine,
+  ArrowRightToLine,
+  Banknote,
+  Cable,
+  Check,
+  ChevronsUp,
+  Coins,
+  Gauge,
+  Gem,
+  HandCoins,
+  type IconNode,
+  Inbox,
+  Layers,
+  LogIn,
+  Plus,
+  RotateCcw,
+  ScanLine,
+  Shuffle,
+  Smile,
+  Target,
+  Timer,
+  Unplug,
+  Users,
+  Wallet,
+} from 'lucide'
+import {
+  Application,
+  Container,
+  FillGradient,
+  Graphics,
+  Point,
+  Sprite,
+  Text,
+  Texture,
+} from 'pixi.js'
 import {
   COMPONENTS,
   FRAMEWORKS,
@@ -12,6 +49,7 @@ import type { Ledger } from './engine/ledger.ts'
 import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
 import { compact, money, rate } from './format.ts'
+import { COMPONENT_ICONS } from './icons.ts'
 
 /* ==========================================================================
    The board: a PixiJS plane the player builds on. Foldkit owns the Model;
@@ -40,7 +78,7 @@ export type BoardState = Readonly<{
 export const CARD_W = 216
 const HEAD = 30
 const ROW = 24
-const FOOT = 32
+const FOOT = 44
 const PORT_R = 6
 
 type Layout = Readonly<{
@@ -138,6 +176,9 @@ const palette = () => ({
   border: token('--input', '#d5ddea'),
   edge: token('--edge-solid', '#9aa8bf'),
   accent: token('--primary-strong', '#4f7fe0'),
+  fillTop: token('--primary-fill-top', '#4a4a50'),
+  fillBottom: token('--primary-fill-bottom', '#2a2a2e'),
+  onFill: token('--on-primary-fill', '#ffffff'),
   ink: token('--foreground', '#16233d'),
   muted: token('--muted-foreground', '#5c6b85'),
   track: token('--muted', '#eef2f8'),
@@ -147,6 +188,110 @@ const palette = () => ({
 })
 
 type Palette = ReturnType<typeof palette>
+
+/** Blends two 0xRRGGBB colours; `t` is the share of `b`. */
+const mix = (a: number, b: number, t: number): number => {
+  const channel = (shift: number) =>
+    Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t) << shift
+  return channel(16) | channel(8) | channel(0)
+}
+
+const gradients = new Map<string, FillGradient>()
+
+/** A cached top-to-bottom gradient, so redraws do not allocate textures. */
+const gradient = (top: number, bottom: number): FillGradient => {
+  const key = `${top}:${bottom}`
+  const cached = gradients.get(key)
+  if (cached) return cached
+  const made = new FillGradient({
+    type: 'linear',
+    start: { x: 0, y: 0 },
+    end: { x: 0, y: 1 },
+    colorStops: [
+      { offset: 0, color: top },
+      { offset: 1, color: bottom },
+    ],
+    textureSpace: 'local',
+  })
+  gradients.set(key, made)
+  return made
+}
+
+const glyphs = new Map<IconNode, Texture>()
+const GLYPH_PX = 96
+
+/**
+ * A lucide icon drawn once in white onto a canvas, then tinted per use.
+ * Canvas `Path2D` reads every SVG path form lucide uses.
+ */
+const glyphOf = (node: IconNode): Texture => {
+  const cached = glyphs.get(node)
+  if (cached) return cached
+  const canvas = document.createElement('canvas')
+  canvas.width = GLYPH_PX
+  canvas.height = GLYPH_PX
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.scale(GLYPH_PX / 24, GLYPH_PX / 24)
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    const num = (value: unknown) => Number(value ?? 0)
+    for (const [tag, attrs] of node) {
+      const a = attrs as Record<string, unknown>
+      ctx.beginPath()
+      switch (tag) {
+        case 'path':
+          ctx.stroke(new Path2D(String(a['d'])))
+          continue
+        case 'circle':
+          ctx.arc(num(a['cx']), num(a['cy']), num(a['r']), 0, Math.PI * 2)
+          break
+        case 'ellipse':
+          ctx.ellipse(num(a['cx']), num(a['cy']), num(a['rx']), num(a['ry']), 0, 0, Math.PI * 2)
+          break
+        case 'rect':
+          ctx.roundRect(num(a['x']), num(a['y']), num(a['width']), num(a['height']), num(a['rx']))
+          break
+        case 'line':
+          ctx.moveTo(num(a['x1']), num(a['y1']))
+          ctx.lineTo(num(a['x2']), num(a['y2']))
+          break
+        case 'polyline':
+        case 'polygon': {
+          const points = String(a['points'])
+            .trim()
+            .split(/[\s,]+/)
+            .map(Number)
+          for (let index = 0; index + 1 < points.length; index += 2)
+            ctx.lineTo(points[index] ?? 0, points[index + 1] ?? 0)
+          if (tag === 'polygon') ctx.closePath()
+          break
+        }
+      }
+      ctx.stroke()
+    }
+  }
+  const made = Texture.from(canvas)
+  glyphs.set(node, made)
+  return made
+}
+
+/** A sprite for one glyph at `size` pixels; set its texture and tint per update. */
+const glyph = (size: number): Sprite => {
+  const view = new Sprite(Texture.EMPTY)
+  view.setSize(size)
+  return view
+}
+
+/** Points a glyph sprite at an icon and colour. */
+const paint = (view: Sprite, node: IconNode, color: number): void => {
+  const size = view.width
+  view.texture = glyphOf(node)
+  view.setSize(size)
+  view.tint = color
+}
 
 /* ---------- geometry ---------- */
 
@@ -164,7 +309,7 @@ const inPort = (node: GameNode): Pt => ({
 /** The footer button, in the node's own coordinates. */
 const footerRect = (type: ComponentId) => {
   const y = rowTop(layoutOf(type).rows) + 4
-  return { x: 8, y, w: CARD_W - 16, h: FOOT - 10 }
+  return { x: 8, y, w: CARD_W - 16, h: FOOT - 13 }
 }
 
 const inFooter = (node: GameNode, point: Pt): boolean => {
@@ -214,8 +359,49 @@ const label = (size: number, family: string, weight: '400' | '500' | '600' = '50
   })
 
 type RowTone = 'plain' | 'warn' | 'danger' | 'ok'
-type Row = Readonly<{ name: string; value: string; tone?: RowTone; bar?: number }>
+/** Row glyphs by key, so the per-frame digest stays a short string. */
+const ROW_ICONS = {
+  inbound: ArrowRightToLine,
+  load: Gauge,
+  latency: Timer,
+  out: ArrowRightFromLine,
+  stranded: Unplug,
+  users: Users,
+  apdex: Smile,
+  requests: Activity,
+  revenue: Banknote,
+  drawer: Wallet,
+  stripe: Check,
+  sampling: ScanLine,
+  kept: Archive,
+  insight: Gem,
+  stack: Layers,
+  connections: Cable,
+  hits: Target,
+  policy: Shuffle,
+  logins: LogIn,
+  cost: Coins,
+} as const
+
+const FOOT_ICONS = {
+  collect: HandCoins,
+  auto: Check,
+  empty: Inbox,
+  replace: RotateCcw,
+  max: ChevronsUp,
+  resize: ChevronsUp,
+  more: Plus,
+} as const
+
+type Row = Readonly<{
+  glyph: keyof typeof ROW_ICONS
+  name: string
+  value: string
+  tone?: RowTone
+  bar?: number
+}>
 type Footer = Readonly<{
+  glyph: keyof typeof FOOT_ICONS
   text: string
   enabled: boolean
   tone: 'accent' | 'ok' | 'muted' | 'danger'
@@ -230,11 +416,13 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
   const own = ledger.nodes[node.id]
   if (!own) return []
   const inbound: Row = {
+    glyph: 'inbound',
     name: 'Inbound',
     value: `${rate(own.inbound)}/s`,
     tone: own.dropped > 0.05 ? 'danger' : 'plain',
   }
   const capacity: Row = {
+    glyph: 'load',
     name: 'Load',
     value:
       own.inbound > 0
@@ -243,8 +431,9 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     tone: own.utilization >= 0.9 ? 'danger' : own.utilization >= 0.7 ? 'warn' : 'plain',
     bar: Math.min(own.utilization, 1),
   }
-  const latency: Row = { name: 'Latency', value: `${Math.round(own.latency)} ms` }
+  const latency: Row = { glyph: 'latency', name: 'Latency', value: `${Math.round(own.latency)} ms` }
   const out: Row = {
+    glyph: own.stranded > 0.01 ? 'stranded' : 'out',
     name: own.stranded > 0.01 ? 'Stranded' : 'Out',
     value: own.stranded > 0.01 ? `${rate(own.stranded)}/s` : `${rate(outRate(ledger, node.id))}/s`,
     tone: own.stranded > 0.01 ? 'danger' : 'plain',
@@ -253,20 +442,22 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     case 'users': {
       const target = eraOf(game).apdexTarget
       return [
-        { name: 'Users', value: compact(game.users) },
+        { glyph: 'users', name: 'Users', value: compact(game.users) },
         {
+          glyph: 'apdex',
           name: 'Apdex',
           value: ledger.apdex.toFixed(2),
           tone: ledger.apdex >= target ? 'ok' : 'danger',
         },
-        { name: 'Requests', value: `${rate(ledger.demand)}/s` },
+        { glyph: 'requests', name: 'Requests', value: `${rate(ledger.demand)}/s` },
       ]
     }
     case 'payments': {
       const size = drawerSize(game, ledger.revenue)
       return [
-        { name: 'Revenue', value: `${money(ledger.revenue)}/s`, tone: 'ok' },
+        { glyph: 'revenue', name: 'Revenue', value: `${money(ledger.revenue)}/s`, tone: 'ok' },
         {
+          glyph: has(game, 'stripe') ? 'stripe' : 'drawer',
           name: has(game, 'stripe') ? 'Stripe' : 'Drawer',
           value: has(game, 'stripe') ? 'auto' : `${money(game.pending)} / ${money(size)}`,
           tone: game.pending >= size * 0.98 ? 'warn' : 'plain',
@@ -277,14 +468,16 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     case 'analytics': {
       const sampled = Math.min(own.inbound, own.capacity)
       return [
-        { name: 'Sampling', value: `${rate(own.inbound)}/s` },
+        { glyph: 'sampling', name: 'Sampling', value: `${rate(own.inbound)}/s` },
         {
+          glyph: 'kept',
           name: 'Kept',
           value: `${rate(sampled)} / ${rate(own.capacity)}`,
           tone: own.inbound > own.capacity ? 'warn' : 'plain',
           bar: own.capacity > 0 ? Math.min(1, own.inbound / own.capacity) : 0,
         },
         {
+          glyph: 'insight',
           name: 'Insight',
           value: `+${(sampled * INSIGHT_YIELD * (2 - ledger.apdex)).toFixed(2)}/s`,
           tone: 'ok',
@@ -295,7 +488,7 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
       const runtime = RUNTIMES[node.runtime].name
       const stack =
         node.framework === 'none' ? runtime : `${runtime} · ${FRAMEWORKS[node.framework].name}`
-      return [inbound, capacity, { name: 'Stack', value: stack }, latency, out]
+      return [inbound, capacity, { glyph: 'stack', name: 'Stack', value: stack }, latency, out]
     }
     case 'database':
     case 'replica': {
@@ -304,6 +497,7 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
         inbound,
         capacity,
         {
+          glyph: 'connections',
           name: 'Connections',
           value: pool ? `${Math.round(pool.used)} / ${pool.max}` : '—',
           tone:
@@ -319,7 +513,7 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     case 'cache':
       return [
         inbound,
-        { name: 'Hit ratio', value: pct(own.hitRatio ?? 0), bar: own.hitRatio ?? 0 },
+        { glyph: 'hits', name: 'Hit ratio', value: pct(own.hitRatio ?? 0), bar: own.hitRatio ?? 0 },
         latency,
         out,
       ]
@@ -328,11 +522,11 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     case 'lb':
       return [inbound, capacity, out]
     case 'dns':
-      return [inbound, { name: 'Policy', value: 'round robin' }, out]
+      return [inbound, { glyph: 'policy', name: 'Policy', value: 'round robin' }, out]
     case 'auth':
       return [
-        { name: 'Logins', value: `${rate(own.inbound)}/s` },
-        { name: 'Cost', value: `${money(burnOf(game, node))}/s` },
+        { glyph: 'logins', name: 'Logins', value: `${rate(own.inbound)}/s` },
+        { glyph: 'cost', name: 'Cost', value: `${money(burnOf(game, node))}/s` },
         latency,
       ]
   }
@@ -342,21 +536,28 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
   if (!layoutOf(node.type).footer) return null
   if (node.type === 'payments') {
     if (has(game, 'stripe'))
-      return { text: 'Collected automatically', enabled: false, tone: 'muted' }
+      return { glyph: 'auto', text: 'Collected automatically', enabled: false, tone: 'muted' }
     return game.pending >= 0.01
-      ? { text: `Collect ${money(game.pending)}`, enabled: true, tone: 'ok' }
-      : { text: 'Drawer empty', enabled: false, tone: 'muted' }
+      ? { glyph: 'collect', text: `Collect  ${money(game.pending)}`, enabled: true, tone: 'ok' }
+      : { glyph: 'empty', text: 'Drawer empty', enabled: false, tone: 'muted' }
   }
   if (node.down === -1) {
     const price = replacePrice(game, node)
-    return { text: `Replace  ${money(price)}`, enabled: game.cash >= price, tone: 'danger' }
+    return {
+      glyph: 'replace',
+      text: `Replace  ${money(price)}`,
+      enabled: game.cash >= price,
+      tone: 'danger',
+    }
   }
   const price = resizePrice(game, node)
-  if (price === null) return { text: 'Largest size', enabled: false, tone: 'muted' }
-  const label =
-    node.type === 'analytics' ? 'More samples' : `Resize → ${SIZES[node.size + 1]?.name ?? ''}`
+  if (price === null) return { glyph: 'max', text: 'Largest size', enabled: false, tone: 'muted' }
+  const analytics = node.type === 'analytics'
   return {
-    text: `${label}  ${money(price)}`,
+    glyph: analytics ? 'more' : 'resize',
+    text: analytics
+      ? `More samples  ${money(price)}`
+      : `Resize to ${SIZES[node.size + 1]?.name ?? ''}  ${money(price)}`,
     enabled: game.cash >= price,
     tone: game.cash >= price ? 'accent' : 'muted',
   }
@@ -367,12 +568,14 @@ class NodeView {
   private readonly frame = new Graphics()
   private readonly bars = new Graphics()
   private readonly ports = new Graphics()
-  private readonly code = label(9.5, MONO, '600')
+  private readonly mark = glyph(14)
   private readonly title = label(12.5, SANS, '600')
   private readonly level = label(10, MONO)
+  private readonly glyphs: Array<Sprite> = []
   private readonly names: Array<Text> = []
   private readonly values: Array<Text> = []
-  private readonly foot = label(11, MONO, '600')
+  private readonly foot = label(12, SANS, '600')
+  private readonly footMark = glyph(14)
   private digest = ''
 
   constructor(readonly type: ComponentId) {
@@ -381,30 +584,31 @@ class NodeView {
       this.frame,
       this.bars,
       this.ports,
-      this.code,
+      this.mark,
       this.title,
       this.level,
       this.foot,
+      this.footMark,
     )
-    this.code.anchor.set(0.5)
-    this.code.position.set(25, HEAD / 2)
-    this.title.position.set(46, 7)
+    this.mark.position.set(13, HEAD / 2 - 7)
+    this.title.position.set(38, 7)
     this.level.anchor.set(1, 0)
     this.level.position.set(CARD_W - 12, 9)
     for (let index = 0; index < layout.rows; index += 1) {
+      const mark = glyph(13)
       const name = label(11, SANS, '500')
       const value = label(11, MONO, '500')
       name.anchor.set(0, 0.5)
       value.anchor.set(1, 0.5)
-      name.position.set(14, rowMid(index) - 1)
+      mark.position.set(13, rowMid(index) - 7.5)
+      name.position.set(32, rowMid(index) - 1)
       value.position.set(CARD_W - 14, rowMid(index) - 1)
+      this.glyphs.push(mark)
       this.names.push(name)
       this.values.push(value)
-      this.root.addChild(name, value)
+      this.root.addChild(mark, name, value)
     }
-    const rect = footerRect(type)
-    this.foot.anchor.set(0.5)
-    this.foot.position.set(rect.x + rect.w / 2, rect.y + rect.h / 2)
+    this.foot.anchor.set(0, 0.5)
   }
 
   update(game: Game, node: GameNode, ledger: Ledger, selected: boolean, colors: Palette): void {
@@ -461,7 +665,7 @@ class NodeView {
       .moveTo(0, HEAD)
       .lineTo(CARD_W, HEAD)
       .stroke({ color: colors.border, width: 1, alpha: 0.7 })
-    this.frame.roundRect(8, 7, 34, HEAD - 14, 4).fill(colors.well)
+    this.frame.roundRect(8, 5, 24, HEAD - 10, 6).fill(colors.well)
     for (let index = 1; index < layout.rows; index += 1) {
       this.frame
         .moveTo(10, rowTop(index))
@@ -480,23 +684,52 @@ class NodeView {
             : footer.tone === 'accent'
               ? colors.accent
               : colors.track
-      this.frame.roundRect(rect.x, rect.y, rect.w, rect.h, 7).fill(fill)
-      if (footer.tone !== 'muted')
+      const { x, y, w, h } = rect
+      if (footer.tone === 'muted') {
+        // Disabled: sunk into the card instead of raised.
+        this.frame.roundRect(x, y + 1, w, h, 8).fill(fill)
         this.frame
-          .moveTo(rect.x + 7, rect.y + 0.5)
-          .lineTo(rect.x + rect.w - 7, rect.y + 0.5)
-          .stroke({ color: 0xffffff, width: 1, alpha: 0.18 })
+          .roundRect(x, y + 1, w, h, 8)
+          .stroke({ color: colors.ink, width: 1, alignment: 1, alpha: 0.06 })
+        this.frame
+          .moveTo(x + 8, y + 1.5)
+          .lineTo(x + w - 8, y + 1.5)
+          .stroke({ color: colors.ink, width: 1, alpha: 0.06 })
+      } else {
+        const top = footer.tone === 'accent' ? colors.fillTop : mix(fill, 0xffffff, 0.16)
+        const bottom = footer.tone === 'accent' ? colors.fillBottom : mix(fill, 0x000000, 0.08)
+        // Raised: soft drop, a darker lip, a top-lit body and a glossy top edge.
+        this.frame.roundRect(x, y + 3, w, h, 8).fill({ color: colors.ink, alpha: 0.12 })
+        this.frame.roundRect(x, y + 2, w, h, 8).fill(mix(bottom, 0x000000, 0.28))
+        this.frame.roundRect(x, y, w, h, 8).fill(gradient(top, bottom))
+        this.frame
+          .roundRect(x, y, w, h, 8)
+          .stroke({ color: mix(bottom, 0x000000, 0.3), width: 1, alignment: 1, alpha: 0.7 })
+        this.frame
+          .moveTo(x + 8, y + 1.5)
+          .lineTo(x + w - 8, y + 1.5)
+          .stroke({ color: 0xffffff, width: 1, alpha: 0.28 })
+      }
+      const ink =
+        footer.tone === 'muted' ? colors.muted : footer.tone === 'accent' ? colors.onFill : 0xffffff
       this.foot.text = footer.text
-      this.foot.style.fill = footer.tone === 'muted' ? colors.muted : colors.card
+      // Center the glyph and text together.
+      const start = x + (w - (14 + 6 + this.foot.width)) / 2
+      const mid = y + h / 2 + (footer.tone === 'muted' ? 1 : 0)
+      paint(this.footMark, FOOT_ICONS[footer.glyph], ink)
+      this.footMark.position.set(start, mid - 7)
+      this.footMark.visible = true
+      this.foot.position.set(start + 20, mid)
+      this.foot.style.fill = ink
     } else {
       this.foot.text = ''
+      this.footMark.visible = false
     }
     this.frame
       .roundRect(0, 0, CARD_W, height, RADIUS)
       .stroke({ color: edge, width: selected ? 2 : 1, alignment: 1, alpha: selected ? 1 : 0.8 })
 
-    this.code.text = def.code.toUpperCase()
-    this.code.style.fill = colors.accent
+    paint(this.mark, COMPONENT_ICONS[node.type], colors.ink)
     this.title.text =
       node.down === -1
         ? `${def.name} · failed`
@@ -517,9 +750,11 @@ class NodeView {
     if (status !== colors.border)
       this.bars.circle(this.title.x + this.title.width + 8, HEAD / 2, 3).fill(status)
     rows.forEach((row, index) => {
+      const mark = this.glyphs[index]
       const name = this.names[index]
       const value = this.values[index]
-      if (!name || !value) return
+      if (!mark || !name || !value) return
+      paint(mark, ROW_ICONS[row.glyph], colors.muted)
       name.text = row.name
       name.style.fill = colors.muted
       value.text = row.value

@@ -68,7 +68,7 @@ export const initialModel = (): Model =>
     selected: null,
     placing: null,
     panel: 'none',
-    buildGroup: 'compute',
+    buildGroup: null,
     speed: 1,
     paused: false,
     savedAt: 0,
@@ -375,9 +375,11 @@ const route = (model: Model, message: Message): Result =>
           const next: Model =
             model.placing !== null
               ? { ...model, placing: null }
-              : model.panel !== 'none'
-                ? { ...model, panel: 'none' }
-                : { ...model, selected: null }
+              : model.buildGroup !== null
+                ? { ...model, buildGroup: null }
+                : model.panel !== 'none'
+                  ? { ...model, panel: 'none' }
+                  : { ...model, selected: null }
           return { model: next, commands: [sync(next)] }
         }
         case 'r':
@@ -415,12 +417,14 @@ const route = (model: Model, message: Message): Result =>
           return selected ? route(model, Message.NodeSold({ nodeId: selected })) : { model }
         default: {
           const group = BUILD_KEYS[key]
-          return group ? { model: { ...model, buildGroup: group } } : { model }
+          return group ? route(model, Message.BuildGroupChosen({ group })) : { model }
         }
       }
     },
 
-    BuildGroupChosen: ({ group }) => ({ model: { ...model, buildGroup: group } }),
+    BuildGroupChosen: ({ group }) => ({
+      model: { ...model, buildGroup: model.buildGroup === group ? null : group },
+    }),
 
     PlacingChosen: ({ type }) => {
       const next: Model = { ...model, placing: model.placing === type ? null : type, panel: 'none' }

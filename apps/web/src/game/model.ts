@@ -76,7 +76,8 @@ export const Model = Schema.Struct({
   selected: Schema.NullOr(Schema.String),
   placing: Schema.NullOr(ComponentId),
   panel: Panel,
-  buildGroup: BuildGroupKey,
+  /** The open build tray, or null when the dock shows only its group icons. */
+  buildGroup: Schema.NullOr(BuildGroupKey),
   speed: Schema.Finite,
   paused: Schema.Boolean,
   /** Game time of the last save, so the clock saves every few seconds. */

@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { ArrowUp, Minus, Plus, RotateCcw, Trash2, X } from 'lucide'
+import { ArrowUp, ChevronRight, Minus, Plus, RotateCcw, Trash2, X } from 'lucide'
 import {
   COMPONENTS,
   CREDIT_CAP,
@@ -35,6 +35,7 @@ import type { Game, GameNode } from '@/game/engine/state.ts'
 import { compact, money, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
+import { COMPONENT_ICONS } from '@/game/icons.ts'
 import { icon } from '@/lib/icons'
 import { badge } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
@@ -83,10 +84,28 @@ const gauge = (
   )
 }
 
+/** A folded section: the title alone until opened. */
 const section = (title: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
-  h.div(
-    [h.Key(title), h.Class('flex flex-col gap-2 px-4 py-2.5')],
-    [h.span([h.Class(EYEBROW)], [title]), ...children],
+  h.details(
+    [h.Key(title), h.Class('group px-4')],
+    [
+      h.summary(
+        [
+          h.Class(
+            'flex cursor-pointer list-none items-center gap-1.5 py-2.5 hover:[&>span]:text-foreground [&::-webkit-details-marker]:hidden',
+          ),
+        ],
+        [
+          icon(
+            h,
+            ChevronRight,
+            'size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90',
+          ),
+          h.span([h.Class(EYEBROW)], [title]),
+        ],
+      ),
+      h.div([h.Class('flex flex-col gap-2 pb-3')], children),
+    ],
   )
 
 /** A segmented control: options sunk in a well, the chosen one raised. */
@@ -662,14 +681,17 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
     [
       h.Key(`inspector-${node.id}`),
       h.Class(
-        `absolute top-[84px] right-3 bottom-[136px] z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} animate-in fade-in slide-in-from-right-2`,
+        `absolute top-[76px] right-3 bottom-3 z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} animate-in fade-in slide-in-from-right-2`,
       ),
     ],
     [
       h.div(
         [h.Class('flex items-center gap-3 px-4 pt-4 pb-2')],
         [
-          mark(def.code, 'h-10 w-12 rounded-lg text-[11px] uppercase', h),
+          h.span(
+            [h.Class('grid size-10 shrink-0 place-items-center rounded-lg bg-well shadow-well')],
+            [icon(h, COMPONENT_ICONS[node.type], 'size-5')],
+          ),
           h.div(
             [h.Class('flex min-w-0 flex-1 flex-col')],
             [

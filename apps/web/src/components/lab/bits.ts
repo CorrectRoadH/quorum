@@ -23,6 +23,15 @@ export const NESTED =
 export const WELL = 'rounded-xl bg-well shadow-well'
 export const FIGURE = 'font-mono tabular-nums tracking-[-0.01em]'
 
+/** A square icon control inside a panel: flat at rest, a raised ink fill when on. */
+export const tool = (active: boolean): string =>
+  cn(
+    'relative grid size-10 shrink-0 place-items-center rounded-xl transition-[background-color,box-shadow,color]',
+    active
+      ? 'bg-primary-fill text-on-primary-fill shadow-primary'
+      : 'text-muted-foreground hover:bg-well hover:text-foreground',
+  )
+
 export type Tone = 'plain' | 'ok' | 'warn' | 'danger'
 
 export const toneText = (tone: Tone): string =>
@@ -126,7 +135,7 @@ export const toast = (value: Toast | null, h: HtmlBuilder<Message>): Html =>
           h.Key(`toast-${value.id}`),
           h.Role('status'),
           h.Class(
-            `pointer-events-none fixed bottom-[132px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float animate-in fade-in slide-in-from-bottom-2`,
+            `pointer-events-none fixed bottom-[176px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float animate-in fade-in slide-in-from-bottom-2`,
           ),
         ],
         [

@@ -28,6 +28,8 @@ const svgElement =
         return h.path(attributes)
       case 'circle':
         return h.circle(attributes)
+      case 'ellipse':
+        return h.ellipse(attributes)
       case 'rect':
         return h.rect(attributes)
       case 'line':
