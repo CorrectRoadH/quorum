@@ -69,20 +69,23 @@ Engineers belong to teams. The player creates teams and assigns engineers.
 Communication cost grows with the number of people who must agree. The game models this per team:
 
 ```text
-effective_engineers(team) = n / (1 + k × (n − 1))
+effective_engineers(team) = n / (1 + k × (n − 1) + β × n × (n − 1))
 k = 0.08 by default, × 0.7 with a structured framework (Spring Boot, NestJS, Symfony)
+β = 0.0004
 ```
 
 | Engineers in one team | Effective engineers |
 | --------------------- | ------------------- |
 | 1                     | 1.0                 |
 | 5                     | 3.8                 |
-| 10                    | 5.8                 |
-| 20                    | 8.0                 |
-| 40                    | 9.6                 |
+| 10                    | 5.7                 |
+| 20                    | 7.5                 |
+| 40                    | 8.4                 |
+| 80                    | 8.1                 |
 
-Past about 10 people, one team adds little. This is the game's version of Brooks's law: "adding
-manpower to a late software project makes it later".
+Past about 10 people, one team adds little. The β term is the retrograde term of the Universal
+Scalability Law: a team above about 48 people produces less than a smaller one. This is the game's
+version of Brooks's law: "adding manpower to a late software project makes it later".
 
 ## Services
 
@@ -230,9 +233,12 @@ deploys_per_calendar_day = min(max_from_policy, 8 hours of work / (build_time + 
   it up.
 - Deploy time comes from the strategy ([Components](./05-components.md#cicd-pipeline)) and the runtime
   startup and warmup.
-- More deploys per day ship features sooner and make each deploy smaller, which lowers the chance and
-  the size of a bad deploy. This is a finding of the DORA research program: high performers deploy
-  more often and have lower change failure rates.
+- More deploys per day ship features sooner and make each deploy smaller, which lowers the size of a
+  bad deploy. DORA research links deployment frequency and short lead times to better
+  delivery performance. Its 2024 report found that change failure rate does not fall in step: the
+  medium cluster had a lower rate than the high cluster. So the game lowers the size of a bad deploy
+  with frequency, and it does not lower the chance.
 
-The four DORA metrics appear on the Team panel once the player has a CI/CD Pipeline: deploy
-frequency, lead time for changes, change failure rate, and time to restore service.
+The five DORA metrics appear on the Team panel once the player has a CI/CD Pipeline: deploy
+frequency, lead time for changes, change failure rate, failed deployment recovery time, and rework
+rate.

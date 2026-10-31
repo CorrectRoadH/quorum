@@ -67,7 +67,8 @@ The key consequence: **with process-per-request and thread-pool runtimes, a slow
 app server capacity**, because each waiting request holds a worker. With event loops and green
 threads, a slow database only adds latency. Capacity is then limited by CPU.
 
-Example. A 4-vCPU PHP-FPM box with 20 workers serves `read` at 4 ms of CPU and waits 16 ms on the database.
+Example. A 4-vCPU PHP-FPM box with OPcache and 20 workers serves `read` at 4 ms of CPU
+(1.5 ref ms ÷ 0.375) and waits 16 ms on the database.
 Residence is 20 ms, so the concurrency limit is 20 / 0.020 = 1,000 rps. If the database slows to
 96 ms per query, residence is 100 ms and the limit falls to 200 rps, while the CPU sits at 20%.
 The player sees a full box with idle CPU. The fixes are more workers (more RAM), a faster database,
@@ -224,12 +225,12 @@ must call a GPU Node or an LLM API.
 
 ### Java
 
-| Variant                    | Model                | Speed     | Profile                                                                                                                          |
-| -------------------------- | -------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Tomcat thread pool (start) | 200 platform threads | 1.10 warm | Each thread holds about 1 MB of stack. Above 200 waiting requests, new requests queue even with idle CPU.                        |
-| Virtual threads (Java 21)  | Green threads        | 1.10 warm | Waiting no longer holds a platform thread. Code that pins virtual threads (for example inside `synchronized`) loses the benefit. |
-| Spring WebFlux             | Event loop           | 1.10 warm | Very high concurrency. Hard to write and debug: −20% velocity.                                                                   |
-| GraalVM native image       | Thread pool          | 0.80      | Starts in under 100 ms with no warmup and −60% memory. Lower peak speed. Slower builds. Great for Serverless Functions.          |
+| Variant                    | Model                | Speed     | Profile                                                                                                                                  |
+| -------------------------- | -------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Tomcat thread pool (start) | 200 platform threads | 1.10 warm | Each thread holds about 1 MB of stack. Above 200 waiting requests, new requests queue even with idle CPU.                                |
+| Virtual threads            | Green threads        | 1.10 warm | Waiting no longer holds a platform thread. Since JDK 24, `synchronized` no longer pins. Native (JNI) calls still pin the carrier thread. |
+| Spring WebFlux             | Event loop           | 1.10 warm | Very high concurrency. Hard to write and debug: −20% velocity.                                                                           |
+| GraalVM native image       | Thread pool          | 0.80      | Starts in under 100 ms with no warmup and −60% memory. Lower peak speed. Slower builds. Great for Serverless Functions.                  |
 
 | GC option  | p99 pause | Throughput | Memory |
 | ---------- | --------- | ---------- | ------ |

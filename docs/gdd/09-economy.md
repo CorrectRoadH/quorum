@@ -33,7 +33,8 @@ Users are not a currency. They are the state that every currency depends on.
 Revenue first goes to the **Payments** drawer. The player clicks Collect to move it into Cash.
 
 - The drawer holds 60 seconds of revenue at the current rate, at size 1. Each size step doubles it.
-- Revenue beyond the drawer's size is lost.
+- Revenue beyond the drawer's size is lost while the player is playing. While the player is away, the
+  offline simulation pays revenue straight into Cash ([Simulation](./04-simulation.md#offline-progress)).
 - Research "Stripe Billing" (Garage, 30 ◇) collects automatically. After that, the drawer only shows
   the rate.
 
@@ -69,8 +70,10 @@ surfaces them on purpose.
 | Object storage, standard | $0.00002/s per GB |
 | Engineer salary (base)   | $0.40/s           |
 
-Prices rise with each Era at the same rate as revenue per request, so the ratios stay meaningful.
-[Balancing](./16-balancing.md#prices) holds the full table.
+These are Garage prices. Every price in this document, including placement, Burn, egress, and
+third-party fees, is multiplied by the Era's cost index. The index keeps Burn a real share of
+revenue at every size of company. [Balancing](./16-balancing.md#cost-index) holds the index and the
+salary scale, and [Balancing](./16-balancing.md#prices) holds the full table.
 
 ## Pricing models
 
@@ -118,31 +121,45 @@ When users reach an Era milestone, investors offer a round. The player can raise
 | Pre-seed | 1,000                            | $2,500        | 10%                      |                                                  |
 | Seed     | 5,000                            | $15,000       | 15%                      |                                                  |
 | Series A | 25,000                           | $80,000       | 20%                      |                                                  |
-| Series B | 150,000                          | $400,000      | 18%                      |                                                  |
-| Series C | 1,000,000                        | $2,000,000    | 15%                      |                                                  |
-| Pre-IPO  | 10,000,000                       | $10,000,000   | 10%                      |                                                  |
+| Series B | 150,000                          | $1,500,000    | 18%                      |                                                  |
+| Series C | 1,000,000                        | $18,000,000   | 15%                      |                                                  |
+| Pre-IPO  | 10,000,000                       | $200,000,000  | 10%                      |                                                  |
 | IPO      | 50,000,000 and the IPO checklist | Public market | 15% sold in the offering | [Progression](./10-progression.md#era-6-pre-ipo) |
+
+A grant is about 17 sim minutes (1,000 s) of the Burn at the milestone, so it stays worth taking
+at every size of company.
+
+**Money buys growth.** An Era that begins with a raised round runs at the full growth rate `g`. An
+Era that begins with a declined round runs at 0.7 × `g`, so it takes about 1.4 times as long
+([Simulation](./04-simulation.md#users-and-growth)). The player trades Equity for speed.
 
 **Declining** a round keeps Equity and gives no grant. The Era still advances, so the new kinds still
 arrive, and the player must pay for them from revenue. A player who declines every round and still
-reaches IPO earns the achievement "Default Alive", named after Paul Graham's essay.
+reaches IPO earns the achievement "Default Alive", named after Paul Graham's essay. The pacing bots
+check that this path does not beat the raise-every-round path in Legacy per hour
+([Balancing](./16-balancing.md#pacing-model)).
 
 Dilution compounds. A founder who raises every round keeps about
-0.90 × 0.85 × 0.80 × 0.82 × 0.85 × 0.90 × 0.85 ≈ 32% before the IPO offering, which is close to a
-typical real founder stake at IPO.
+0.90 × 0.85 × 0.80 × 0.82 × 0.85 × 0.90 ≈ 38% before the IPO offering and about 33% after it, which
+is above a typical real founder stake at IPO.
 
 ## Valuation
 
 The company has a valuation at all times. It decides the Exit payout.
 
 ```text
-ARR        = revenue per calendar day × 365
+ARR        = revenue per calendar day × 365 × valuation_scale
 growth     = user growth over the last calendar week, annualized, in percent
 margin     = (income − Burn) / income, in percent
 rule_of_40 = growth + margin
 multiple   = 4 + 0.15 × max(0, rule_of_40)            clamped to [2, 30]
 valuation  = ARR × multiple
 ```
+
+`valuation_scale` is 7.5 × 10⁻⁵. Request values are stylized game dollars, so Cash and revenue run
+far above real figures. The scale converts a year of game revenue into the real-dollar ARR that the
+company would report ([Balancing](./16-balancing.md#valuation-scale)). The Valuation, Exit payout,
+and Legacy use real dollars. Cash, revenue, and Burn use game dollars.
 
 The [Rule of 40](./glossary.md#rule-of-40) is a real heuristic for software companies: growth plus
 profit margin should be at least 40%. It gives the late game a reason to care about margin, not only

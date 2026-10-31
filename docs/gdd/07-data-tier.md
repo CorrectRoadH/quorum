@@ -81,7 +81,8 @@ can take the database down ([Simulation](./04-simulation.md#connections)).
 
 ## Cache
 
-Real products: Redis (start), Memcached (variant), Valkey.
+Real products: Redis (start), Memcached (variant), Valkey (the open fork made after Redis changed
+its license in 2024). Redis added AGPLv3 as a license option in 2025.
 
 Serves `q-read` from memory. A hit costs 0.5 ms. A miss costs the cache lookup plus the database read.
 
@@ -190,11 +191,11 @@ Real products: Elasticsearch, OpenSearch (variant), Meilisearch (variant).
 | Shards and replicas | More shards parallelize large indexes and fan out every query. Replicas add query capacity and memory.                               |
 | Heap                | The JVM heap holds caches. Too small: GC pauses. Too large: long pauses and less file system cache.                                  |
 
-| Variant       | Profile                                                                                          |
-| ------------- | ------------------------------------------------------------------------------------------------ |
-| Elasticsearch | Full features, JVM, heavy memory. A license change can arrive as a business event.               |
-| OpenSearch    | The Apache-licensed fork. Same profile, no license event.                                        |
-| Meilisearch   | Simple and fast for small and medium indexes. One node until research. Lower relevance at scale. |
+| Variant       | Profile                                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| Elasticsearch | Full features, JVM, heavy memory. Its license moved to SSPL and ELv2 in 2021, and AGPL was added in 2024. |
+| OpenSearch    | The Apache-licensed fork from 2021. Same profile.                                                         |
+| Meilisearch   | Simple and fast for small and medium indexes. One node until research. Lower relevance at scale.          |
 
 Feeding the index: either dual writes from the app or a CDC Connector
 ([keeping copies in sync](#keeping-copies-in-sync)).
@@ -220,7 +221,8 @@ Research "Lifecycle rules" moves old objects to cheaper classes automatically.
 
 ## Document Store
 
-Real products: MongoDB, Firestore.
+Real products: MongoDB, Firestore, Amazon DynamoDB (AWS lists it as a key-value and document
+database).
 
 Serves `q-read` and `q-write` on documents.
 
@@ -255,24 +257,28 @@ rises by 30%, because answers use the company's own data.
 
 ## Wide-column Store
 
-Real products: Apache Cassandra, ScyllaDB, Amazon DynamoDB.
+Real products: Apache Cassandra, ScyllaDB.
 
 This Component is the game's namesake. It replicates each key to N nodes and uses quorums for reads
 and writes.
 
 ```text
 N = replication factor     W = nodes that must acknowledge a write     R = nodes asked on a read
-R + W > N  →  every read overlaps the latest write: strong consistency
+R + W > N  →  every read asks at least one replica that acknowledged the latest write
 R + W ≤ N  →  a read can miss the latest write: eventual consistency
 ```
 
-| Setting (N = 3)   | Write latency          | Read latency           | Consistency | Survives                             |
-| ----------------- | ---------------------- | ---------------------- | ----------- | ------------------------------------ |
-| W=1, R=1          | Fastest                | Fastest                | Eventual    | 2 node failures for reads and writes |
-| W=2, R=2 (QUORUM) | Second-fastest replica | Second-fastest replica | Strong      | 1 node failure                       |
-| W=3, R=1          | Slowest replica        | Fastest                | Strong      | 0 node failures for writes           |
-| W=1, R=3          | Fastest                | Slowest replica        | Strong      | 0 node failures for reads            |
+| Setting (N = 3)   | Write latency          | Read latency           | Consistency      | Survives                             |
+| ----------------- | ---------------------- | ---------------------- | ---------------- | ------------------------------------ |
+| W=1, R=1          | Fastest                | Fastest                | Eventual         | 2 node failures for reads and writes |
+| W=2, R=2 (QUORUM) | Second-fastest replica | Second-fastest replica | Read-after-write | 1 node failure                       |
+| W=3, R=1          | Slowest replica        | Fastest                | Read-after-write | 0 node failures for writes           |
+| W=1, R=3          | Fastest                | Slowest replica        | Read-after-write | 0 node failures for reads            |
 
+- **Overlap is not linearizability.** Concurrent writes, sloppy quorums, hinted handoff, and clock
+  skew can still return old or conflicting values, so `buy` on this store gets `stale` and
+  `duplicate` errors. Cassandra offers lightweight transactions for a linearizable write, at a
+  latency of several round trips. A Distributed SQL Node is the real fix.
 - Latency at a quorum is the latency of the k-th fastest replica, so quorum reads have a better tail
   than "all" reads and a worse tail than "one" reads.
 - Writes scale linearly with nodes, until the partition key is skewed.

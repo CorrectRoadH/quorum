@@ -63,7 +63,9 @@ patience target. Kinds arrive by Era ([Progression](./10-progression.md#eras)).
 
 "App CPU (ref ms)" is CPU time on a runtime with speed 1.0 (Go). Each runtime divides it by its
 speed factor ([Runtimes](./06-runtimes.md#language-profiles)). Values are game dollars and are
-stylized.
+stylized. [Balancing](./16-balancing.md#cost-index) sets the prices that they are measured against,
+and the [valuation scale](./16-balancing.md#valuation-scale) converts annual revenue into the
+Valuation.
 
 ### Backend kinds
 
@@ -200,8 +202,9 @@ The game shows the mean in the Garage Era and earns the right to show percentile
 ([Observability](./12-observability.md#the-visibility-ladder)). When shown, percentiles come from this
 model:
 
-- The queueing part of an M/M/1 response time is exponential, so its q-th percentile is
-  `mean × ln(1 / (1 − q))`. The p99 of the queueing part is about 4.6 times its mean.
+- The M/M/1 response time (wait plus service) is exponential with mean `service_time / (1 − ρ)`, so
+  its q-th percentile is `mean × ln(1 / (1 − q))`. The p99 of the response time is about 4.6 times
+  its mean. The wait alone is not exponential: a request waits at all with probability ρ.
 - Fixed parts (base latency, network) add directly.
 - Tail events add to the percentile that matches their probability. A GC pause that hits 2% of
   requests moves the p99 but not the p50.
@@ -288,13 +291,16 @@ Users grow along an S-curve toward the market size, and only while the design ke
 
 ```text
 h(A)     = clamp((A − A_target) / (1 − A_target), −1, 1)       A = Apdex over the last calendar hour
-growth   = g × Users × (1 − Users / Market) × h(A)              when h(A) ≥ 0
+growth   = g × funding_mult × Users × (1 − Users / Market) × h(A)   when h(A) ≥ 0
 churn    = c × Users × h(A)                                     when h(A) < 0
 ```
 
 - `A_target` is 0.85 in the Garage Era and rises to 0.94 in the Public Era.
 - `Market` is the Era's market size, multiplied by features, regions, and Venture rules
   ([Progression](./10-progression.md#eras)). It never exceeds the online population (about 6 billion).
+- `funding_mult` is 1.0 in the Garage Era and in an Era that began with a raised round, and 0.7 in an
+  Era that began with a declined round ([Economy](./09-economy.md#funding)). Money buys growth, so a declined round is
+  slower and keeps Equity.
 - Churn has no logistic term. Unhappy users leave fast, which is the main pressure in the game.
 
 Constants `g` and `c` are in [Balancing](./16-balancing.md#user-growth).
@@ -328,6 +334,15 @@ A failed request shows as a particle that turns red and fades. Particle math nev
   jitter. Everything else is deterministic.
 - The same save, the same seed, and the same sequence of actions at the same steps produce the same
   Ledger. A test covers this property.
+- **Exact math only.** ECMAScript defines `+ − × ÷`, `Math.sqrt`, `floor`, `ceil`, `round`, `min`,
+  `max`, and `abs` as exact IEEE 754 operations. It leaves `sin`, `cos`, `exp`, `log`, and `pow` to
+  the engine, and engines differ by 1 to 4 ulp ([Reality check](./reality-check.md#determinism)).
+  The Simulation never calls them. The diurnal curve reads a committed table of 1,440 values, one
+  per calendar minute, with linear interpolation. Percentile factors such as `ln(1 / (1 − q))` are
+  constants. A square root is `Math.sqrt`, never `** 0.5`.
+- A golden-hash test replays one fixed save for 10,000 steps in Chromium, Firefox, WebKit, and the
+  API Worker runtime, and the hashes must match. The server score of a Challenge is the
+  authoritative one ([Challenges](./14-challenges.md#rules)).
 
 ## Offline progress
 
@@ -337,6 +352,8 @@ When the player returns, the game simulates the time they were away:
 - The day and night cycle and the weekly cycle apply, so a design that cannot hold the peak loses
   users at peak.
 - Incidents do not fire offline ([pillar 5](./01-vision.md#pillar-5-respect-the-player)).
+- Offline revenue goes straight to Cash. The Payments drawer limit applies only to live play
+  ([Economy](./09-economy.md#the-payments-drawer)).
 - Offline churn is capped at 5% of users, so the player never returns to a ruined company.
 - The cap is 8 hours. Legacy raises it to 24 hours.
 - A return screen shows what happened: users, Cash, Insight, Dev Hours, peak utilization, and the

@@ -104,8 +104,9 @@ Organizations design systems that copy their communication structure. In the gam
 
 ## DORA metrics
 
-Four measures of software delivery from the DORA research program: deploy frequency, lead time for
-changes, change failure rate, and time to restore service. In the game:
+Five measures of software delivery from the DORA research program: deploy frequency, lead time for
+changes, change failure rate, failed deployment recovery time (formerly time to restore service),
+and rework rate. In the game:
 [Deploy frequency](./08-team-and-velocity.md#deploy-frequency).
 
 ## Egress
@@ -242,7 +243,9 @@ In the game: [Concurrency models](./06-runtimes.md#concurrency-models).
 ## Quorum
 
 The number of replicas that must take part in a read or write. With N replicas, read quorum R, and
-write quorum W, R + W > N means every read sees the latest write. In the game:
+write quorum W, R + W > N means every read asks at least one replica that acknowledged the latest
+write. That is not linearizability: concurrent writes and sloppy quorums can still return old
+values. In the game:
 [Wide-column Store](./07-data-tier.md#wide-column-store).
 
 ## Raft

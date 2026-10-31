@@ -29,23 +29,30 @@ time_between_incidents = base_interval(Era) × random(0.6, 1.4)
 weight(type)           = base_weight(type) × weakness(type, design) × (1 + tech_debt)
 ```
 
-| Era      | Base interval (sim time) | Max severity |
-| -------- | ------------------------ | ------------ |
-| Garage   | None                     | —            |
-| Pre-seed | 12 min                   | SEV3         |
-| Seed     | 10 min                   | SEV3         |
-| Series A | 9 min                    | SEV2         |
-| Series B | 8 min                    | SEV2         |
-| Series C | 8 min                    | SEV1         |
-| Pre-IPO  | 10 min                   | SEV1         |
-| Public   | 10 min                   | SEV1         |
+| Era      | Base interval (sim time) | Highest starting severity |
+| -------- | ------------------------ | ------------------------- |
+| Garage   | None                     | —                         |
+| Pre-seed | 12 min                   | SEV2                      |
+| Seed     | 10 min                   | SEV2                      |
+| Series A | 9 min                    | SEV2                      |
+| Series B | 8 min                    | SEV1                      |
+| Series C | 8 min                    | SEV1                      |
+| Pre-IPO  | 10 min                   | SEV1                      |
+| Public   | 10 min                   | SEV1                      |
 
 `weakness(type, design)` is 0.2 to 3.0. For example, "Instance failure" has weakness 3.0 when a
 critical path has a single Node and 0.2 when every Node on it has a redundant copy in another zone.
 This makes the director a teacher: it shows the player their weakest point.
 
 **Severity.** SEV3 affects one Node or one kind. SEV2 affects a service or a zone. SEV1 affects the
-whole company or a region. Severity sets the postmortem reward.
+whole company or a region. Severity sets the postmortem reward. An arrow in the catalog, such as
+"3→1", means that the incident escalates to the second severity if the player does not mitigate it.
+The director never starts an incident above the Era's highest starting severity.
+
+**Duration.** Incident durations are in calendar time, because the SLO is. One sim second is one
+calendar minute. An unmitigated incident lasts about 5 calendar minutes (5 sim s) at SEV3, 20 at SEV2,
+and 60 at SEV1. Only failed requests spend the error budget, so a design with spare capacity or
+redundancy loses little or nothing.
 
 ## The incident loop
 
@@ -80,7 +87,7 @@ threshold. With `anomaly-detection`, a warning appears before the incident peaks
 | Certificate expired          | Seed     | 2   | Calendar date. Weak: no automation                             | Every TLS Node fails at once                             | Renew                                      | Certificate automation                                           | Many large services have had certificate-expiry outages                     |
 | Disk full                    | Seed     | 2   | Logs or WAL fill a disk                                        | Database writes fail                                     | Expand the volume                          | Retention, alerts on disk                                        | Common                                                                      |
 | Poison message               | Seed     | 3   | A job that always fails. Weak: no dead-letter queue            | Queue depth climbs forever; Workers busy                 | Delete the message                         | Dead-letter queue, max attempts                                  | Common                                                                      |
-| Regex backtracking           | Seed     | 1   | A WAF rule with catastrophic backtracking                      | WAF CPU 100% on every Node                               | Disable the rule                           | Canary rule rollouts                                             | Cloudflare global outage, 2 July 2019                                       |
+| Regex backtracking           | Series B | 1   | A WAF rule with catastrophic backtracking                      | WAF CPU 100% on every Node                               | Disable the rule                           | Canary rule rollouts                                             | Cloudflare global outage, 2 July 2019                                       |
 | DDoS                         | Seed     | 2→1 | An attacker floods the edge                                    | Demand ×50 of junk                                       | Enable "Under attack" mode (challenge all) | WAF, CDN, Anycast                                                | Common                                                                      |
 | Zone outage                  | Series A | 2   | A zone fails. Weak: single-zone services                       | All Nodes in one zone go grey                            | Fail over                                  | Multi-zone with spare capacity                                   | Several AWS us-east-1 events                                                |
 | Retry storm                  | Series A | 2→1 | A brief slowdown plus naive retries. See [below](#retry-storm) | Load keeps rising after the trigger ends                 | Open circuit breakers, shed load           | Backoff with jitter, circuit breakers, retry budgets             | Metastable failures (HotOS 2021, OSDI 2022)                                 |
@@ -172,6 +179,7 @@ When an incident resolves, a postmortem card appears.
 
 ```text
 insight_reward = base(severity) × (1 + 1 / (1 + MTTR_minutes)) × (1.5 with an SRE team)
+MTTR_minutes   = calendar minutes, which equal sim seconds
 ```
 
 The card names the incident, the timeline, the cost (users lost, revenue lost), and suggested action
@@ -197,13 +205,18 @@ budget_left  = error_budget − failed requests
 This is the Google SRE error budget policy. It turns reliability into a resource that the player
 spends on speed.
 
-| SLO    | Allowed downtime per 30 days |
-| ------ | ---------------------------- |
-| 99%    | 7 hours 12 minutes           |
-| 99.5%  | 3 hours 36 minutes           |
-| 99.9%  | 43 minutes                   |
-| 99.95% | 22 minutes                   |
-| 99.99% | 4 minutes 19 seconds         |
+| SLO     | Allowed downtime per calendar week | Real time at 1× speed |
+| ------- | ---------------------------------- | --------------------- |
+| 99%     | 1 hour 41 minutes                  | 101 seconds           |
+| 99.5%   | 50 minutes                         | 50 seconds            |
+| 99.9%   | 10 minutes                         | 10 seconds            |
+| 99.95%  | 5 minutes                          | 5 seconds             |
+| 99.99%  | 1 minute                           | 1 second              |
+| 99.999% | 6 seconds                          | 0.1 second (1 step)   |
+
+The budget counts failed requests, not clock time, so a partial failure spends a partial budget. A
+SEV1 incident that fails 100% of requests for its full 60 calendar minutes spends six times a 99.9%
+budget. A design that fails 2% of requests for the same hour spends about 12% of it.
 
 **SLA credits.** With research `enterprise-sales`, the company also has an SLA. Each calendar week
 below the SLA pays credits to customers: 10% of that week's subscription revenue.

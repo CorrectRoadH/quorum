@@ -33,7 +33,9 @@ picks a direction, and each player's best results usually come from different de
 - Challenges unlock by Era reached in any company.
 - A Challenge's palette is fixed. Legacy perks do not apply. Every player has the same tools.
 - The seed is fixed. Incidents in a Challenge are scripted and the same for everyone.
-- Results upload as a design plus a seed, and the server re-runs them to verify. The simulation is
+- Results upload as a design plus a seed, and the server re-runs them to verify. The server score is
+  the authoritative one, and a score on the player's device is provisional until the server confirms
+  it. The simulation is
   deterministic ([Simulation](./04-simulation.md#determinism-and-randomness)).
 - Rewards: a badge, and Legacy on first completion (1 to 10 ★ by difficulty). No Cash, no power.
 
@@ -42,40 +44,40 @@ picks a direction, and each player's best results usually come from different de
 Each Challenge is inspired by a real event or a real engineering problem. Briefs name the event as
 an inspiration; the numbers are the game's.
 
-| #   | Challenge                      | Unlock   | Inspired by                                                           | The problem                                                         |
-| --- | ------------------------------ | -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| 1   | Hello, World                   | Garage   | Every first deploy                                                    | Serve 20 rps of `page` on one box under $0.50/s                     |
-| 2   | Split the Box                  | Garage   | The first scaling step at most companies                              | App and database share a box; reach 100 rps                         |
-| 3   | Slashdotted                    | Pre-seed | The Slashdot effect                                                   | ×10 traffic for 3 minutes with a fixed budget                       |
-| 4   | C10k                           | Pre-seed | Dan Kegel's C10k problem (1999)                                       | 10,000 concurrent slow clients; process-per-request runtimes fail   |
-| 5   | The Event Loop                 | Pre-seed | Node.js "Don't block the event loop"                                  | Node.js only; 5% `login`; p99 under 300 ms                          |
-| 6   | Too Many Connections           | Pre-seed | PostgreSQL connection limits                                          | 40 App Servers, one Postgres; no `refused` errors                   |
-| 7   | Stack Overflow on a Shoestring | Seed     | Stack Overflow serving huge traffic from a small number of servers    | Serve the target with at most 12 Nodes                              |
-| 8   | The N+1                        | Seed     | ORM lazy loading                                                      | Rails with N+1; fix it with the fewest Dev Hours                    |
-| 9   | Thirteen Engineers             | Seed     | Instagram had 13 employees when Facebook acquired it (2012)           | Reach the target with a team of 13 and a fixed Dev Hour budget      |
-| 10  | Credential Stuffing            | Seed     | Common attacks on login endpoints                                     | Survive a `login` bot flood without blocking real users             |
-| 11  | Black Friday                   | Series A | Retail peak days                                                      | A known spike at a known hour; minimize cost                        |
-| 12  | us-east-1                      | Series A | Several AWS us-east-1 outages                                         | A zone dies at minute 5; keep 99.9%                                 |
-| 13  | Exactly Once                   | Series A | Payment idempotency                                                   | Checkout with retries and no duplicates                             |
-| 14  | Two Million Sockets            | Series A | Phoenix reached 2 million WebSocket connections on one server (2015)  | Hold the most `rt` connections per dollar                           |
-| 15  | Pokémon GO                     | Series A | Pokémon GO launch traffic reached about 50× the planned target (2016) | Demand ×50 of the forecast within 10 minutes                        |
-| 16  | Healthcare Launch Day          | Series A | The healthcare.gov launch (2013)                                      | A fixed design with many faults; fix it under time pressure         |
-| 17  | Thundering Herd                | Series A | Reconnect storms                                                      | A Realtime Hub restart with 1 million clients                       |
-| 18  | Read States                    | Series B | Discord moved a service from Go to Rust to remove GC spikes (2020)    | A hot service with a strict p99; any runtime                        |
-| 19  | The Fail Whale                 | Series B | Twitter's timeline scaling problems                                   | Serve `feed` for accounts with 10 million followers                 |
-| 20  | Reports at Noon                | Series B | Analytical queries on transactional databases                         | Add dashboards without hurting checkout                             |
-| 21  | GPU Economics                  | Series B | Self-hosted inference against hosted APIs                             | Serve `ai` at the target with a positive margin                     |
-| 22  | Metastable                     | Series B | Metastable failures in distributed systems                            | A retry storm in progress; recover with the fewest changes          |
-| 23  | Regex of Doom                  | Series B | Cloudflare outage, 2 July 2019                                        | A WAF rule pins CPU worldwide; restore service                      |
-| 24  | 43 Seconds                     | Series C | GitHub network partition, 21 October 2018                             | A short partition between regions; avoid split brain                |
-| 25  | Follow the Sun                 | Series C | Global daily peaks                                                    | Four regions with offset peaks; minimize cost                       |
-| 26  | Celebrity                      | Series C | Hot keys from viral accounts                                          | One key receives 30% of reads                                       |
-| 27  | Gone From the Internet         | Series C | Facebook outage, 4 October 2021                                       | A routing change removes all regions; restore with a staged rollout |
-| 28  | The Typo                       | Series C | Amazon S3 outage, 28 February 2017                                    | A capacity removal command goes wrong; recover a data tier          |
-| 29  | Leap Second                    | Pre-IPO  | The 2012 leap second                                                  | Clock jumps across a region                                         |
-| 30  | Rule of 40                     | Pre-IPO  | The SaaS Rule of 40                                                   | Reach growth plus margin of 40 from a loss-making design            |
-| 31  | Postgres for Everything        | Pre-IPO  | The "just use Postgres" argument                                      | Serve every kind with only Postgres Components                      |
-| 32  | Five Nines                     | Public   | 99.999% availability targets                                          | One calendar week at 99.999% through scripted incidents             |
+| #   | Challenge                      | Unlock   | Inspired by                                                           | The problem                                                          |
+| --- | ------------------------------ | -------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 1   | Hello, World                   | Garage   | Every first deploy                                                    | Serve 20 rps of `page` on one box under $0.50/s                      |
+| 2   | Split the Box                  | Garage   | The first scaling step at most companies                              | App and database share a box; reach 100 rps                          |
+| 3   | Slashdotted                    | Pre-seed | The Slashdot effect                                                   | ×10 traffic for 3 minutes with a fixed budget                        |
+| 4   | C10k                           | Pre-seed | Dan Kegel's C10k problem (1999)                                       | 10,000 concurrent slow clients; process-per-request runtimes fail    |
+| 5   | The Event Loop                 | Pre-seed | Node.js "Don't block the event loop"                                  | Node.js only; 5% `login`; p99 under 300 ms                           |
+| 6   | Too Many Connections           | Pre-seed | PostgreSQL connection limits                                          | 40 App Servers, one Postgres; no `refused` errors                    |
+| 7   | Stack Overflow on a Shoestring | Seed     | Stack Overflow serving huge traffic from a small number of servers    | Serve the target with at most 12 Nodes                               |
+| 8   | The N+1                        | Seed     | ORM lazy loading                                                      | Rails with N+1; fix it with the fewest Dev Hours                     |
+| 9   | Thirteen Engineers             | Seed     | Instagram had 13 employees when Facebook acquired it (2012)           | Reach the target with a team of 13 and a fixed Dev Hour budget       |
+| 10  | Credential Stuffing            | Seed     | Common attacks on login endpoints                                     | Survive a `login` bot flood without blocking real users              |
+| 11  | Black Friday                   | Series A | Retail peak days                                                      | A known spike at a known hour; minimize cost                         |
+| 12  | us-east-1                      | Series A | Several AWS us-east-1 outages                                         | A zone dies at minute 5; keep 99.9%                                  |
+| 13  | Exactly Once                   | Series A | Payment idempotency                                                   | Checkout with retries and no duplicates                              |
+| 14  | Two Million Sockets            | Series A | Phoenix reached 2 million WebSocket connections on one server (2015)  | Hold the most `rt` connections per dollar                            |
+| 15  | Pokémon GO                     | Series A | Pokémon GO launch traffic reached about 50× the planned target (2016) | Demand ×50 of the forecast within 10 minutes                         |
+| 16  | Healthcare Launch Day          | Series A | The healthcare.gov launch (2013)                                      | A fixed design with many faults; fix it under time pressure          |
+| 17  | Thundering Herd                | Series A | Reconnect storms                                                      | A Realtime Hub restart with 1 million clients                        |
+| 18  | Read States                    | Series B | Discord moved a service from Go to Rust to remove GC spikes (2020)    | A hot service with a strict p99; any runtime                         |
+| 19  | The Fail Whale                 | Series B | Twitter's timeline scaling problems                                   | Serve `feed` for accounts with 10 million followers                  |
+| 20  | Reports at Noon                | Series B | Analytical queries on transactional databases                         | Add dashboards without hurting checkout                              |
+| 21  | GPU Economics                  | Series B | Self-hosted inference against hosted APIs                             | Serve `ai` at the target with a positive margin                      |
+| 22  | Metastable                     | Series B | Metastable failures in distributed systems                            | A retry storm in progress; recover with the fewest changes           |
+| 23  | Regex of Doom                  | Series B | Cloudflare outage, 2 July 2019                                        | A WAF rule pins CPU worldwide; restore service                       |
+| 24  | 43 Seconds                     | Series C | GitHub network partition, 21 October 2018                             | A short partition between regions; avoid split brain                 |
+| 25  | Follow the Sun                 | Series C | Global daily peaks                                                    | Four regions with offset peaks; minimize cost                        |
+| 26  | Celebrity                      | Series C | Hot keys from viral accounts                                          | One key receives 30% of reads                                        |
+| 27  | Gone From the Internet         | Series C | Facebook outage, 4 October 2021                                       | A routing change removes all regions; restore with a staged rollout  |
+| 28  | The Typo                       | Series C | Amazon S3 outage, 28 February 2017                                    | A capacity removal command goes wrong; recover a data tier           |
+| 29  | Leap Second                    | Pre-IPO  | The 2012 leap second                                                  | Clock jumps across a region                                          |
+| 30  | Rule of 40                     | Pre-IPO  | The SaaS Rule of 40                                                   | Reach growth plus margin of 40 from a loss-making design             |
+| 31  | Postgres for Everything        | Pre-IPO  | The "just use Postgres" argument                                      | Serve every kind with only Postgres Components                       |
+| 32  | Five Nines                     | Public   | 99.999% availability targets                                          | 99.999% of requests across four calendar weeks of scripted incidents |
 
 ## The daily drill
 

@@ -218,7 +218,7 @@ The founder's share of the Company. It starts at 100% and falls with each Fundin
 _Avoid_: ownership, stake
 
 **Valuation**:
-The Company's worth: annual revenue times a multiple set by the Rule of 40.
+The Company's worth in real dollars: annual revenue, converted at the valuation scale, times a multiple set by the Rule of 40.
 _Avoid_: score, net worth, market cap (before IPO)
 
 **Exit**:

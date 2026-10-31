@@ -18,6 +18,9 @@ Considered options:
 ## Consequences
 
 - The Simulation must be deterministic, so the server can verify a Challenge by replaying the same
-  Design, seed, and actions.
+  Design, seed, and actions. JavaScript engines differ in `sin`, `cos`, `exp`, `log`, and `pow`, so
+  the Simulation uses only exact operations, committed tables, and constants
+  ([Simulation](../gdd/04-simulation.md#determinism-and-randomness)). The server score is
+  authoritative, and a golden-hash test across engines guards the rule.
 - Offline progress is a coarse re-run of the same Simulation ([Simulation](../gdd/04-simulation.md#offline-progress)).
 - Kubernetes appears as a Component with modeled behavior, not as a simulated cluster.

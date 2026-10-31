@@ -76,7 +76,7 @@ The tutorial, without tutorial screens.
   Node.js players see the event loop stall on `login`. PHP players see FPM workers wait on the
   database.
 - **New systems.** Hiring and Dev Hours ([Team](./08-team-and-velocity.md)). Incidents begin, with
-  low-severity types only ([Incidents](./11-incidents.md#catalog)).
+  types up to SEV2 only ([Incidents](./11-incidents.md#catalog)).
 - **Unlocks available.** Cache, Connection Pooler, Read Replica, CI/CD Pipeline, Auth Provider,
   percentiles, alerting, Python, Node.js cluster mode.
 

@@ -25,7 +25,7 @@ insight_per_second = Σ_nodes sampled_rps(node) × yield(kind) × multipliers
 | Term          | Value                                                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------- |
 | `sample_rate` | A setting: 1%, 5%, 10% (default), 50%, or 100%.                                                                |
-| `yield(kind)` | 0.03 Insight per sampled request, × 2 for failed or slow requests (they teach more), × 0 for `bot`.            |
+| `yield(kind)` | 0.5 Insight per sampled request, × 2 for failed or slow requests (they teach more), × 0 for `bot`.             |
 | Multipliers   | JVM services +25% ([Runtimes](./06-runtimes.md#java)), Service Mesh +20%, `tail-sampling` × 2 for kept traces. |
 
 Analytics has a capacity in samples per second. Samples beyond it are dropped.

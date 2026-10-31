@@ -452,6 +452,11 @@ Without this Component, TLS certificates expire on the calendar, and the inciden
 expired" takes down every Node that terminates TLS. Let's Encrypt certificates last 90 days, which is
 why automation matters. With this Component, renewal is automatic.
 
+Real lifetimes are shrinking: the industry maximum is 200 days since March 2026 and falls to 47 days
+in March 2029, and Let's Encrypt moves to 45 days by 2028. The game follows the trend. Certificates
+last 90 calendar days until Series C and 45 calendar days from Series C, so manual renewal gets
+harder with each Era.
+
 ## Observability and money
 
 ### Analytics
