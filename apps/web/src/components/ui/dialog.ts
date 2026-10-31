@@ -45,7 +45,7 @@ export const dialogBackdropClass =
   'data-enter:animate-in data-leave:animate-out data-leave:fade-out-0 data-enter:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50'
 
 export const dialogPanelClass =
-  'bg-popover text-popover-foreground data-enter:animate-in data-leave:animate-out data-leave:fade-out-0 data-enter:fade-in-0 data-leave:zoom-out-95 data-enter:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 sm:max-w-sm fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none'
+  'bg-surface text-popover-foreground shadow-float data-enter:animate-in data-leave:animate-out data-leave:fade-out-0 data-enter:fade-in-0 data-leave:zoom-out-95 data-enter:zoom-in-95 grid max-w-[calc(100%-2rem)] gap-4 rounded-2xl p-4 text-sm duration-100 sm:max-w-sm fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none'
 
 /** Upstream renders its close control as `<Button variant="ghost" size="icon-sm"
  *  className="cn-dialog-close">`; compose the same tokens here. */
@@ -60,7 +60,7 @@ export const dialogDescriptionClass =
 export const dialogHeaderClass = 'gap-2 flex flex-col'
 
 export const dialogFooterClass =
-  'bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'
+  'bg-nested -mx-4 -mb-4 rounded-b-2xl border-t border-hairline p-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'
 
 // These abstract away element types, base classes, and attribute spreading.
 // Use inside `styledViewInputs` content callbacks:

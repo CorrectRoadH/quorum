@@ -17,7 +17,7 @@ export const emptyMediaClass =
 
 export const emptyMediaVariants: Record<EmptyMediaVariant, string> = {
   default: 'bg-transparent',
-  icon: "bg-muted text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg [&_svg:not([class*='size-'])]:size-4",
+  icon: "bg-raised shadow-raised text-foreground flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg:not([class*='size-'])]:size-4",
 }
 
 export const emptyTitleClass = 'text-sm font-medium tracking-tight font-heading'

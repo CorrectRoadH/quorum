@@ -8,13 +8,13 @@ export const alertVariantKeys = ['default', 'destructive'] as const
 export type AlertVariant = (typeof alertVariantKeys)[number]
 
 export const alertVariants: Record<AlertVariant, string> = {
-  default: 'bg-card text-card-foreground',
+  default: 'bg-surface shadow-card text-card-foreground',
   destructive:
-    'text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
+    'text-destructive bg-destructive/8 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--destructive)_25%,transparent)] *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
 }
 
 export const alertClass =
-  "grid gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4 group/alert relative w-full"
+  "grid gap-0.5 rounded-xl border border-transparent px-3 py-2.5 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4 group/alert relative w-full"
 
 export const alertTitleClass =
   'font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground'

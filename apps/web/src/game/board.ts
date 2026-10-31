@@ -133,7 +133,8 @@ const palette = () => ({
   canvas: token('--canvas', '#f1f4f9'),
   grid: token('--canvas-dot', '#c9d3e3'),
   card: token('--card', '#ffffff'),
-  head: token('--secondary', '#eaeff6'),
+  head: token('--surface-nested', '#f7f7f8'),
+  well: token('--well', '#eeeef0'),
   border: token('--input', '#d5ddea'),
   edge: token('--edge-solid', '#9aa8bf'),
   accent: token('--primary-strong', '#4f7fe0'),
@@ -200,8 +201,10 @@ const distanceTo = (curve: Curve, point: Pt): number => {
 
 /* ---------- one node window ---------- */
 
-const MONO = '"JetBrains Mono", ui-monospace, monospace'
-const SANS = '"Space Grotesk", ui-sans-serif, system-ui, sans-serif'
+const MONO = '"Geist Mono", ui-monospace, monospace'
+const SANS = '"Geist", ui-sans-serif, system-ui, sans-serif'
+/** Corner radius of a Node card, matching the panels around the board. */
+const RADIUS = 12
 
 const label = (size: number, family: string, weight: '400' | '500' | '600' = '500') =>
   new Text({
@@ -448,15 +451,17 @@ class NodeView {
         : colors.border
 
     this.frame.clear()
-    this.frame.rect(3, 4, CARD_W, height).fill({ color: colors.ink, alpha: 0.06 })
-    this.frame.rect(0, 0, CARD_W, height).fill(colors.card)
-    this.frame.rect(0, 0, CARD_W, HEAD).fill(colors.head)
-    this.frame.moveTo(0, HEAD).lineTo(CARD_W, HEAD).stroke({ color: colors.border, width: 1 })
+    // Depth: a wide soft shadow and a tight contact shadow under the card.
+    this.frame.roundRect(1, 3, CARD_W - 2, height, RADIUS).fill({ color: colors.ink, alpha: 0.035 })
+    this.frame.roundRect(0, 1, CARD_W, height, RADIUS).fill({ color: colors.ink, alpha: 0.05 })
+    this.frame.roundRect(0, 0, CARD_W, height, RADIUS).fill(colors.card)
+    this.frame.roundRect(0, 0, CARD_W, HEAD + RADIUS, RADIUS).fill(colors.head)
+    this.frame.rect(0, HEAD, CARD_W, RADIUS).fill(colors.card)
     this.frame
-      .rect(8, 7, 34, HEAD - 14)
-      .fill(colors.card)
-      .stroke({ color: colors.border, width: 1 })
-    this.frame.rect(0, 0, 3, HEAD).fill(status)
+      .moveTo(0, HEAD)
+      .lineTo(CARD_W, HEAD)
+      .stroke({ color: colors.border, width: 1, alpha: 0.7 })
+    this.frame.roundRect(8, 7, 34, HEAD - 14, 4).fill(colors.well)
     for (let index = 1; index < layout.rows; index += 1) {
       this.frame
         .moveTo(10, rowTop(index))
@@ -464,9 +469,7 @@ class NodeView {
         .stroke({ color: colors.border, width: 1, alpha: 0.55 })
     }
     if (node.down !== 0)
-      this.frame
-        .rect(1, HEAD + 1, CARD_W - 2, height - HEAD - 2)
-        .fill({ color: colors.danger, alpha: 0.08 })
+      this.frame.roundRect(0, 0, CARD_W, height, RADIUS).fill({ color: colors.danger, alpha: 0.07 })
     if (footer) {
       const rect = footerRect(node.type)
       const fill =
@@ -477,15 +480,20 @@ class NodeView {
             : footer.tone === 'accent'
               ? colors.accent
               : colors.track
-      this.frame.rect(rect.x, rect.y, rect.w, rect.h).fill(fill)
+      this.frame.roundRect(rect.x, rect.y, rect.w, rect.h, 7).fill(fill)
+      if (footer.tone !== 'muted')
+        this.frame
+          .moveTo(rect.x + 7, rect.y + 0.5)
+          .lineTo(rect.x + rect.w - 7, rect.y + 0.5)
+          .stroke({ color: 0xffffff, width: 1, alpha: 0.18 })
       this.foot.text = footer.text
       this.foot.style.fill = footer.tone === 'muted' ? colors.muted : colors.card
     } else {
       this.foot.text = ''
     }
     this.frame
-      .rect(0, 0, CARD_W, height)
-      .stroke({ color: edge, width: selected ? 2 : 1, alignment: 1 })
+      .roundRect(0, 0, CARD_W, height, RADIUS)
+      .stroke({ color: edge, width: selected ? 2 : 1, alignment: 1, alpha: selected ? 1 : 0.8 })
 
     this.code.text = def.code.toUpperCase()
     this.code.style.fill = colors.accent
@@ -506,6 +514,8 @@ class NodeView {
     this.level.style.fill = colors.muted
 
     this.bars.clear()
+    if (status !== colors.border)
+      this.bars.circle(this.title.x + this.title.width + 8, HEAD / 2, 3).fill(status)
     rows.forEach((row, index) => {
       const name = this.names[index]
       const value = this.values[index]
@@ -517,8 +527,10 @@ class NodeView {
       if (row.bar !== undefined) {
         const y = rowTop(index) + ROW - 4
         const tone = row.bar > 0.95 ? colors.danger : row.bar > 0.8 ? colors.warn : colors.accent
-        this.bars.rect(14, y, CARD_W - 28, 2).fill(colors.track)
-        this.bars.rect(14, y, (CARD_W - 28) * Math.max(0, Math.min(1, row.bar)), 2).fill(tone)
+        const share = Math.max(0, Math.min(1, row.bar))
+        this.bars.roundRect(14, y, CARD_W - 28, 3, 1.5).fill(colors.well)
+        if (share > 0)
+          this.bars.roundRect(14, y, Math.max(3, (CARD_W - 28) * share), 3, 1.5).fill(tone)
       }
     })
 
@@ -588,8 +600,8 @@ class BoardController {
       preference: 'webgl',
     })
     await Promise.all([
-      document.fonts.load('600 13px "Space Grotesk"'),
-      document.fonts.load('500 10px "JetBrains Mono"'),
+      document.fonts.load('600 13px "Geist"'),
+      document.fonts.load('500 10px "Geist Mono"'),
     ]).catch(() => undefined)
     if (this.destroyed) {
       this.app.destroy(true, { children: true })
@@ -923,8 +935,11 @@ class BoardController {
     const colors = palette()
     const height = heightOf(type)
     const frame = new Graphics()
-    frame.rect(0, 0, CARD_W, height).fill(colors.card).stroke({ color: colors.accent, width: 2 })
-    frame.rect(0, 0, CARD_W, HEAD).fill(colors.head)
+    frame
+      .roundRect(0, 0, CARD_W, height, RADIUS)
+      .fill(colors.card)
+      .stroke({ color: colors.accent, width: 2 })
+    frame.roundRect(8, 7, 34, HEAD - 14, 4).fill(colors.well)
     const name = label(12.5, SANS, '600')
     name.text = COMPONENTS[type].name
     name.position.set(46, 7)
@@ -983,7 +998,7 @@ class BoardController {
       for (let index = 0; index < count; index += 1) {
         const t = (this.phase * speed + index / count) % 1
         const at = pointOn(curve, t)
-        this.packets.rect(at.x - 3, at.y - 3, 6, 6)
+        this.packets.circle(at.x, at.y, 3)
       }
       this.packets.fill({ color: packet, alpha: tap ? 0.6 : 0.95 })
     }
@@ -994,19 +1009,20 @@ class BoardController {
       const pulse = 0.45 + 0.4 * Math.abs(Math.sin(this.phase * 2.4))
       const pad = 5
       this.overlay
-        .rect(
+        .roundRect(
           bottleneck.x - pad,
           bottleneck.y - pad,
           CARD_W + pad * 2,
           heightOf(bottleneck.type) + pad * 2,
+          RADIUS + pad,
         )
         .stroke({ color: colors.warn, width: 2.5, alpha: pulse })
       const tag = 'BOTTLENECK'
       this.overlay
-        .rect(bottleneck.x - pad, bottleneck.y - pad - 16, tag.length * 6.6 + 10, 15)
+        .roundRect(bottleneck.x - pad + 6, bottleneck.y - pad - 18, tag.length * 6.4 + 12, 15, 5)
         .fill({ color: colors.warn, alpha: 0.95 })
       this.bottleneckTag.text = tag
-      this.bottleneckTag.position.set(bottleneck.x - pad + 5, bottleneck.y - pad - 15)
+      this.bottleneckTag.position.set(bottleneck.x - pad + 12, bottleneck.y - pad - 16.5)
       this.bottleneckTag.visible = true
     } else {
       this.bottleneckTag.visible = false
@@ -1026,7 +1042,13 @@ class BoardController {
         this.overlay.circle(end.x, end.y, 5).fill(colors.accent)
         if (target && target.id !== from.id) {
           this.overlay
-            .rect(target.x - 3, target.y - 3, CARD_W + 6, heightOf(target.type) + 6)
+            .roundRect(
+              target.x - 3,
+              target.y - 3,
+              CARD_W + 6,
+              heightOf(target.type) + 6,
+              RADIUS + 3,
+            )
             .stroke({ color: colors.accent, width: 2 })
         }
       }

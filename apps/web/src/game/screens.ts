@@ -11,6 +11,8 @@ import {
   offerPanel,
   researchPanel,
 } from '@/components/lab/panels.ts'
+import { ArrowRight } from 'lucide'
+import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'
 import { nextGoal } from './engine/goals.ts'
 import { eraOf } from './engine/lookups.ts'
@@ -36,10 +38,10 @@ const menuButton = (
       h.Type('button'),
       h.OnClick(message),
       h.Class(
-        `group flex w-full items-center justify-between gap-4 border px-5 py-4 text-left transition-colors ${
+        `group flex w-full items-center justify-between gap-4 rounded-xl px-4 py-3.5 text-left transition-[filter] active:translate-y-px ${
           primary
-            ? 'border-primary-strong bg-primary text-primary-foreground hover:bg-primary/85'
-            : 'border-border bg-card hover:bg-muted'
+            ? 'bg-primary-fill text-on-primary-fill shadow-primary hover:brightness-110'
+            : 'bg-raised shadow-raised hover:brightness-[0.985]'
         }`,
       ),
     ],
@@ -47,12 +49,12 @@ const menuButton = (
       h.span(
         [h.Class('flex flex-col gap-0.5')],
         [
-          h.span([h.Class('text-[16px] font-semibold')], [label]),
+          h.span([h.Class('text-[15px] font-medium')], [label]),
           detail
             ? h.span(
                 [
                   h.Class(
-                    `font-mono text-[11px] ${primary ? 'text-primary-foreground/75' : 'text-muted-foreground'}`,
+                    `font-mono text-[11.5px] tabular-nums ${primary ? 'opacity-70' : 'text-muted-foreground'}`,
                   ),
                 ],
                 [detail],
@@ -61,8 +63,8 @@ const menuButton = (
         ],
       ),
       h.span(
-        [h.Class('font-mono text-[15px] transition-transform group-hover:translate-x-0.5')],
-        ['→'],
+        [h.Class('opacity-60 transition-transform group-hover:translate-x-0.5')],
+        [icon(h, ArrowRight, 'size-4')],
       ),
     ],
   )
@@ -87,9 +89,9 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(
         [h.Class('relative z-10 flex flex-col gap-8')],
         [
-          h.h1([h.Class('text-[88px] leading-[0.9] font-semibold tracking-[-0.05em]')], ['Quorum']),
+          h.h1([h.Class('text-[88px] leading-[0.9] font-semibold tracking-[-0.06em]')], ['Quorum']),
           h.div(
-            [h.Class('flex flex-col gap-2')],
+            [h.Class('flex flex-col gap-2 rounded-2xl bg-surface p-2 shadow-card')],
             [
               ...(model.saved
                 ? [
@@ -148,7 +150,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
         ? h.div(
             [
               h.Class(
-                'pointer-events-none absolute top-[76px] left-1/2 z-10 -translate-x-1/2 border border-border bg-card px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground',
+                'pointer-events-none absolute top-[84px] left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface px-3 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground shadow-card',
               ),
             ],
             ['Paused'],

@@ -24,11 +24,11 @@ export type ButtonGroupOrientation = keyof typeof buttonGroupOrientationClasses
 
 /** Upstream ButtonGroupText string. */
 export const buttonGroupTextClass =
-  "bg-muted gap-2 rounded-lg border px-2.5 text-sm font-medium [&_svg:not([class*='size-'])]:size-4 flex items-center [&_svg]:pointer-events-none"
+  "bg-well shadow-well gap-2 rounded-lg px-2.5 text-sm font-medium [&_svg:not([class*='size-'])]:size-4 flex items-center [&_svg]:pointer-events-none"
 
 /** Upstream ButtonGroupSeparator string. */
 export const buttonGroupSeparatorClass =
-  'bg-input relative self-stretch data-horizontal:mx-px data-horizontal:w-auto data-vertical:my-px data-vertical:h-auto'
+  'bg-hairline relative self-stretch data-horizontal:mx-px data-horizontal:w-auto data-vertical:my-px data-vertical:h-auto'
 
 type StyleConfig = Readonly<{ className?: string; orientation?: ButtonGroupOrientation }>
 

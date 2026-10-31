@@ -14,8 +14,8 @@ export type ItemVariant = (typeof itemVariantKeys)[number]
 
 export const itemVariants: Record<ItemVariant, string> = {
   default: 'border-transparent',
-  outline: 'border-border',
-  muted: 'bg-muted/50 border-transparent',
+  outline: 'bg-raised shadow-raised border-transparent',
+  muted: 'bg-nested shadow-[inset_0_0_0_1px_var(--hairline-soft)] border-transparent',
 }
 
 export const itemSizeKeys = ['default', 'sm', 'xs'] as const
@@ -29,7 +29,7 @@ export const itemSizes: Record<ItemSize, string> = {
 
 /** Upstream cva base string. */
 export const itemClass =
-  '[a]:hover:bg-muted rounded-lg border text-sm group/item flex w-full flex-wrap items-center transition-colors duration-100 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [a]:transition-colors'
+  '[a]:hover:bg-muted rounded-xl border text-sm group/item flex w-full flex-wrap items-center transition-colors duration-100 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [a]:transition-colors'
 
 export const itemMediaVariantKeys = ['default', 'icon', 'image'] as const
 export type ItemMediaVariant = (typeof itemMediaVariantKeys)[number]

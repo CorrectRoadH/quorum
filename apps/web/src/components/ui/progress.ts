@@ -16,9 +16,10 @@ import { cn } from '@/lib/utils'
 export const progressClass = 'flex flex-wrap gap-3'
 
 export const progressTrackClass =
-  'bg-muted h-1 rounded-full relative flex w-full items-center overflow-x-hidden'
+  'bg-well shadow-well h-1.5 rounded-full relative flex w-full items-center overflow-x-hidden'
 
-export const progressIndicatorClass = 'bg-primary h-full transition-all'
+export const progressIndicatorClass =
+  'bg-primary-fill rounded-full shadow-[inset_0_1px_0_oklch(1_0_0/0.3)] h-full w-full transition-all'
 
 export const progressLabelClass = 'text-sm font-medium'
 

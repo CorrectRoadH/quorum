@@ -5,7 +5,7 @@ type Child = Html | string
 import { cn } from '@/lib/utils'
 
 export const kbdClass =
-  "bg-muted text-muted-foreground in-data-[slot=tooltip-content]:bg-background/20 in-data-[slot=tooltip-content]:text-background dark:in-data-[slot=tooltip-content]:bg-background/10 h-5 w-fit min-w-5 gap-1 rounded-sm px-1 font-sans text-xs font-medium [&_svg:not([class*='size-'])]:size-3 pointer-events-none inline-flex items-center justify-center select-none"
+  "bg-raised shadow-raised text-foreground/75 in-data-[slot=tooltip-content]:bg-background/20 in-data-[slot=tooltip-content]:bg-none in-data-[slot=tooltip-content]:shadow-none in-data-[slot=tooltip-content]:text-background dark:in-data-[slot=tooltip-content]:bg-background/10 h-5 w-fit min-w-5 gap-1 rounded-[5px] px-1.5 font-mono text-[10.5px] font-medium [&_svg:not([class*='size-'])]:size-3 pointer-events-none inline-flex items-center justify-center select-none"
 
 export const kbdGroupClass = 'gap-1 inline-flex items-center'
 

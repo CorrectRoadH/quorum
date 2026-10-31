@@ -36,37 +36,15 @@ import { compact, money, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
-import { EYEBROW, PANEL, SCROLL, mark } from './bits.ts'
+import { badge } from '@/components/ui/badge'
+import { button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { EYEBROW, FIGURE, NESTED, PANEL, SCROLL, WELL, mark, meter, row } from './bits.ts'
 
 /* ==========================================================================
    The inspector: one Node up close. Its numbers and resources, its instance
    type, its Stack if it is an App Server, and the actions it offers.
    ========================================================================== */
-
-type Tone = 'plain' | 'warn' | 'danger' | 'ok'
-
-const toneText = (tone: Tone) =>
-  tone === 'danger'
-    ? 'text-danger'
-    : tone === 'warn'
-      ? 'text-warn'
-      : tone === 'ok'
-        ? 'text-ok'
-        : 'text-foreground'
-
-const row = (name: string, value: string, tone: Tone, h: HtmlBuilder<Message>) =>
-  h.div(
-    [
-      h.Key(name),
-      h.Class(
-        'flex items-baseline justify-between border-b border-border/70 py-1.5 last:border-b-0',
-      ),
-    ],
-    [
-      h.span([h.Class('text-[12.5px] text-muted-foreground')], [name]),
-      h.span([h.Class(`font-mono text-[12px] tabular-nums ${toneText(tone)}`)], [value]),
-    ],
-  )
 
 const gauge = (
   name: string,
@@ -78,33 +56,42 @@ const gauge = (
 ) => {
   const share = total > 0 ? Math.min(1, used / total) : 0
   const level = invert ? 1 - share : share
-  const color = level >= 0.9 ? 'bg-danger' : level >= 0.7 ? 'bg-warn' : 'bg-primary-strong'
+  const fill = level >= 0.9 ? 'bg-danger' : level >= 0.7 ? 'bg-warn' : 'bg-primary-fill'
   return h.div(
-    [h.Key(name), h.Class('flex flex-col gap-1 py-1')],
+    [h.Key(name), h.Class('flex flex-col gap-1.5 py-0.5')],
     [
       h.div(
         [h.Class('flex items-baseline justify-between')],
         [
           h.span([h.Class('text-[12.5px] text-muted-foreground')], [name]),
           h.span(
-            [h.Class(`font-mono text-[12px] tabular-nums ${level >= 0.9 ? 'text-danger' : ''}`)],
+            [
+              h.Class(
+                cn(
+                  FIGURE,
+                  'text-[12px]',
+                  level >= 0.9 ? 'text-danger' : level >= 0.7 ? 'text-warn' : '',
+                ),
+              ),
+            ],
             [value],
           ),
         ],
       ),
-      h.div(
-        [h.Class('h-1.5 bg-muted')],
-        [h.div([h.Class(`h-full ${color}`), h.Style({ width: `${share * 100}%` })], [])],
-      ),
+      meter(share, fill, h),
     ],
   )
 }
 
 const section = (title: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
   h.div(
-    [h.Key(title), h.Class('flex flex-col gap-2 border-t border-border px-4 py-3')],
+    [h.Key(title), h.Class('flex flex-col gap-2 px-4 py-2.5')],
     [h.span([h.Class(EYEBROW)], [title]), ...children],
   )
+
+/** A segmented control: options sunk in a well, the chosen one raised. */
+const segmented = (columns: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
+  h.div([h.Class(cn('grid gap-[3px] p-[3px]', WELL, 'rounded-[11px]', columns))], children)
 
 const choice = (
   key: string,
@@ -121,14 +108,15 @@ const choice = (
       h.Type('button'),
       h.Title(title),
       h.Disabled(!ready),
+      h.AriaPressed(selected ? 'true' : 'false'),
       h.OnClick(message),
       h.Class(
-        `flex items-center gap-2 border px-2 py-1.5 text-left text-[12px] transition-colors ${
+        `flex h-8 min-w-0 items-center gap-2 rounded-lg px-2 text-left text-[12px] font-medium transition-colors ${
           selected
-            ? 'border-primary-strong bg-primary/12 text-foreground'
+            ? 'bg-raised text-foreground shadow-raised'
             : ready
-              ? 'border-border bg-card hover:bg-muted'
-              : 'cursor-not-allowed border-dashed border-border bg-card text-muted-foreground/60'
+              ? 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
+              : 'cursor-not-allowed text-muted-foreground/45'
         }`,
       ),
     ],
@@ -142,18 +130,16 @@ const smallButton = (
   enabled: boolean,
   h: HtmlBuilder<Message>,
 ) =>
-  h.button(
-    [
-      h.Type('button'),
-      h.AriaLabel(label),
-      h.Title(label),
-      h.Disabled(!enabled),
-      h.OnClick(message),
-      h.Class(
-        'grid size-7 place-items-center border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40',
-      ),
-    ],
-    [icon(h, glyph, 'size-3.5')],
+  button(
+    {
+      onClick: message,
+      isDisabled: !enabled,
+      variant: 'outline',
+      size: 'icon-sm',
+      attributes: [h.AriaLabel(label), h.Title(label)],
+    },
+    icon(h, glyph, 'size-3.5'),
+    h,
   )
 
 const percent = (value: number) => `${Math.round(value * 100)}%`
@@ -170,7 +156,7 @@ const callout = (
     [
       h.Key(text),
       h.Class(
-        `mx-4 mb-3 flex flex-col gap-2 border px-3 py-2 text-[12px] leading-snug ${tone === 'danger' ? 'border-danger/40 bg-danger/8 text-danger' : 'border-warn/50 bg-warn/8 text-warn'}`,
+        `mx-4 mb-3 flex flex-col gap-2 rounded-xl px-3 py-2.5 text-[12px] leading-snug ${tone === 'danger' ? 'bg-danger/8 text-danger shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--danger)_25%,transparent)]' : 'bg-warn/10 text-warn shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--warn)_28%,transparent)]'}`,
       ),
     ],
     [h.span([], [text]), ...(action ? [action] : [])],
@@ -191,16 +177,16 @@ const warnings = (
       callout(
         'The host under this VM died. It still bills.',
         'danger',
-        h.button(
-          [
-            h.Type('button'),
-            h.Disabled(game.cash < price),
-            h.OnClick(Message.ReplaceBought({ nodeId: node.id })),
-            h.Class(
-              'h-8 self-start border border-danger bg-danger px-3 text-[12px] font-semibold text-white hover:bg-danger/90 disabled:opacity-50',
-            ),
-          ],
-          [`Replace · ${money(price)}`],
+        button(
+          {
+            onClick: Message.ReplaceBought({ nodeId: node.id }),
+            isDisabled: game.cash < price,
+            variant: 'outline',
+            size: 'sm',
+            className: 'self-start text-danger',
+          },
+          ['Replace', h.span([h.Class(FIGURE)], [money(price)])],
+          h,
         ),
         h,
       ),
@@ -225,15 +211,15 @@ const warnings = (
       callout(
         `Memory grows: ${node.leak.toFixed(1)} GB leaked.`,
         'danger',
-        h.button(
-          [
-            h.Type('button'),
-            h.OnClick(Message.RestartChosen({ nodeId: node.id })),
-            h.Class(
-              'flex h-8 items-center gap-1.5 self-start border border-danger px-3 text-[12px] font-semibold hover:bg-danger/10',
-            ),
-          ],
+        button(
+          {
+            onClick: Message.RestartChosen({ nodeId: node.id }),
+            variant: 'outline',
+            size: 'sm',
+            className: 'self-start text-danger',
+          },
           [icon(h, RotateCcw, 'size-3.5'), 'Restart'],
+          h,
         ),
         h,
       ),
@@ -411,7 +397,7 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
     'Instance',
     [
       h.div(
-        [h.Class('flex items-center justify-between gap-2')],
+        [h.Class(cn('flex items-center justify-between gap-2 p-1', WELL))],
         [
           smallButton(
             'Smaller (free)',
@@ -421,7 +407,7 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
             h,
           ),
           h.span(
-            [h.Class('flex-1 text-center font-mono text-[12.5px]')],
+            [h.Class(cn(FIGURE, 'flex-1 text-center text-[12.5px]'))],
             [`${SIZES[node.size]?.name ?? ''} · ${vcpuOf(node)} vCPU · ${ramOf(node)} GB`],
           ),
           smallButton(
@@ -433,8 +419,8 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
           ),
         ],
       ),
-      h.div(
-        [h.Class('grid grid-cols-4 gap-1.5')],
+      segmented(
+        'grid-cols-4',
         FAMILY_IDS.map((id) =>
           choice(
             id,
@@ -446,6 +432,7 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
             h,
           ),
         ),
+        h,
       ),
     ],
     h,
@@ -468,8 +455,8 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
     section(
       'Runtime',
       [
-        h.div(
-          [h.Class('grid grid-cols-2 gap-1.5')],
+        segmented(
+          'grid-cols-2',
           RUNTIME_IDS.map((id) =>
             choice(
               id,
@@ -477,7 +464,11 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               runtimeReady(game, id),
               Message.RuntimeChosen({ nodeId: node.id, runtime: id }),
               [
-                mark(LANGUAGES[RUNTIMES[id].language].mark, 'size-5 text-[9px] lowercase', h),
+                mark(
+                  LANGUAGES[RUNTIMES[id].language].mark,
+                  'size-5 rounded text-[9px] lowercase',
+                  h,
+                ),
                 h.span([h.Class('truncate')], [RUNTIMES[id].name]),
               ],
               runtimeReady(game, id)
@@ -486,6 +477,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               h,
             ),
           ),
+          h,
         ),
         h.p([h.Class('text-[12px] leading-snug text-muted-foreground')], [runtime.blurb]),
       ],
@@ -510,7 +502,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
                     h,
                   ),
                   h.span(
-                    [h.Class('w-12 text-center font-mono text-[13px] tabular-nums')],
+                    [h.Class(cn(FIGURE, 'w-12 text-center text-[13px]'))],
                     [String(node.workers)],
                   ),
                   smallButton(
@@ -526,7 +518,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
                   h.span(
                     [
                       h.Class(
-                        `ml-auto font-mono text-[11px] ${node.workers > fit ? 'text-danger' : 'text-muted-foreground'}`,
+                        `ml-auto ${FIGURE} text-[11.5px] ${node.workers > fit ? 'text-danger' : 'text-muted-foreground'}`,
                       ),
                     ],
                     [`RAM fits ${fit}`],
@@ -541,8 +533,8 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
     section(
       'Framework',
       [
-        h.div(
-          [h.Class('grid grid-cols-2 gap-1.5')],
+        segmented(
+          'grid-cols-2',
           frameworks.map((id) =>
             choice(
               id,
@@ -556,6 +548,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               h,
             ),
           ),
+          h,
         ),
         h.p(
           [h.Class('text-[12px] leading-snug text-muted-foreground')],
@@ -571,8 +564,8 @@ const sampler = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html =>
   section(
     'Sample rate',
     [
-      h.div(
-        [h.Class('grid grid-cols-4 gap-1.5')],
+      segmented(
+        'grid-cols-4',
         SAMPLE_RATES.map((value, index) =>
           choice(
             String(value),
@@ -584,6 +577,7 @@ const sampler = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html =>
             h,
           ),
         ),
+        h,
       ),
     ],
     h,
@@ -604,7 +598,7 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
           [
             h.span(
               [
-                h.Class('size-2'),
+                h.Class('size-2 rounded-full'),
                 h.Style({ background: `#${KINDS[kind].color.toString(16).padStart(6, '0')}` }),
               ],
               [],
@@ -613,7 +607,7 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
             h.span(
               [
                 h.Class(
-                  `font-mono text-[11.5px] tabular-nums ${failing ? 'text-danger' : slow ? 'text-warn' : 'text-muted-foreground'}`,
+                  `${FIGURE} text-[11.5px] ${failing ? 'text-danger' : slow ? 'text-warn' : 'text-muted-foreground'}`,
                 ),
               ],
               [
@@ -634,9 +628,14 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
     list.push(
       section(
         'Errors by cause',
-        Object.entries(ledger.errors).map(([cause, value]) =>
-          row(cause, `${rate(value)}/s`, value > 0.01 ? 'danger' : 'plain', h),
-        ),
+        [
+          h.div(
+            [h.Class(NESTED)],
+            Object.entries(ledger.errors).map(([cause, value]) =>
+              row(cause, `${rate(value)}/s`, value > 0.01 ? 'danger' : 'plain', h),
+            ),
+          ),
+        ],
         h,
       ),
     )
@@ -663,48 +662,45 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
     [
       h.Key(`inspector-${node.id}`),
       h.Class(
-        `absolute top-[76px] right-4 bottom-[128px] z-20 flex w-[340px] flex-col ${PANEL} animate-in fade-in slide-in-from-right-2`,
+        `absolute top-[84px] right-3 bottom-[136px] z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} animate-in fade-in slide-in-from-right-2`,
       ),
     ],
     [
       h.div(
-        [h.Class('flex items-center gap-3 px-4 pt-3.5 pb-2')],
+        [h.Class('flex items-center gap-3 px-4 pt-4 pb-2')],
         [
-          mark(def.code, 'h-9 w-11 text-[11px] uppercase', h),
+          mark(def.code, 'h-10 w-12 rounded-lg text-[11px] uppercase', h),
           h.div(
             [h.Class('flex min-w-0 flex-1 flex-col')],
             [
-              h.span([h.Class('text-[18px] font-semibold tracking-[-0.02em]')], [def.name]),
-              h.span([h.Class('font-mono text-[11px] text-muted-foreground')], [def.product]),
+              h.span([h.Class('text-[17px] font-semibold tracking-[-0.025em]')], [def.name]),
+              h.span([h.Class(cn(FIGURE, 'text-[11.5px] text-muted-foreground'))], [def.product]),
             ],
           ),
           sizeLabel
-            ? h.span(
-                [h.Class('border border-border bg-secondary px-2 py-0.5 font-mono text-[11px]')],
-                [sizeLabel],
-              )
+            ? badge({ variant: 'secondary', className: 'font-mono' }, [sizeLabel], h)
             : h.empty,
-          h.button(
-            [
-              h.Type('button'),
-              h.AriaLabel('Close'),
-              h.OnClick(Message.EmptyTapped()),
-              h.Class(
-                'grid size-7 place-items-center text-muted-foreground hover:bg-muted hover:text-foreground',
-              ),
-            ],
-            [icon(h, X, 'size-4')],
+          button(
+            {
+              onClick: Message.EmptyTapped(),
+              variant: 'ghost',
+              size: 'icon-sm',
+              className: 'text-muted-foreground',
+              attributes: [h.AriaLabel('Close')],
+            },
+            icon(h, X, 'size-4'),
+            h,
           ),
         ],
       ),
       h.p([h.Class('px-4 pb-3 text-[12.5px] leading-snug text-muted-foreground')], [def.blurb]),
       ...warnings(game, node, ledger, h),
       h.div(
-        [h.Class(`flex min-h-0 flex-1 flex-col ${SCROLL}`)],
+        [h.Class(`flex min-h-0 flex-1 flex-col divide-y divide-hairline ${SCROLL}`)],
         [
           h.div(
-            [h.Class('flex flex-col border-t border-border px-4 py-1.5')],
-            stats(game, node, ledger, h),
+            [h.Class('px-4 pt-1 pb-2')],
+            [h.div([h.Class(NESTED)], stats(game, node, ledger, h))],
           ),
           ...(has(game, 'metrics') && history.length > 1 && !def.fixed
             ? [section('Load, last 2 minutes', [sparkline(history, h)], h)]
@@ -717,7 +713,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
         ],
       ),
       h.div(
-        [h.Class('flex gap-2 border-t border-border p-3')],
+        [h.Class('flex gap-2 border-t border-hairline bg-nested p-3')],
         [
           node.type === 'payments' && game.pending > 0
             ? h.button(
@@ -725,23 +721,21 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                   h.Type('button'),
                   h.OnClick(Message.Collected()),
                   h.Class(
-                    'flex h-10 flex-1 items-center justify-center gap-2 border border-ok bg-ok text-[13px] font-semibold text-white hover:bg-ok/90',
+                    'flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-ok text-[13px] font-medium text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--ok),black_25%),0_2px_6px_-2px_color-mix(in_oklch,var(--ok)_50%,transparent)] transition-[filter] hover:brightness-105 active:translate-y-px',
                   ),
                 ],
-                [`Collect ${money(game.pending)}`],
+                ['Collect', h.span([h.Class(FIGURE)], [money(game.pending)])],
               )
             : h.empty,
           price !== null && node.down !== -1
-            ? h.button(
-                [
-                  h.Type('button'),
-                  h.Title('U'),
-                  h.Disabled(game.cash < price),
-                  h.OnClick(Message.ResizeChosen({ nodeId: node.id, direction: 1 })),
-                  h.Class(
-                    'flex h-10 flex-1 items-center justify-between gap-2 border border-primary-strong bg-primary px-3 text-[12.5px] font-semibold text-primary-foreground transition-colors hover:bg-primary/85 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',
-                  ),
-                ],
+            ? button(
+                {
+                  onClick: Message.ResizeChosen({ nodeId: node.id, direction: 1 }),
+                  isDisabled: game.cash < price,
+                  size: 'lg',
+                  className: 'min-w-0 flex-1 justify-between px-3',
+                  attributes: [h.Title('U')],
+                },
                 [
                   h.span(
                     [h.Class('flex items-center gap-1.5 truncate')],
@@ -754,37 +748,41 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                           : 'More samples',
                     ],
                   ),
-                  h.span([h.Class('font-mono text-[12px]')], [money(price)]),
+                  h.span([h.Class(FIGURE)], [money(price)]),
                 ],
+                h,
               )
             : h.empty,
           node.type === 'server' && node.down === 0
-            ? h.button(
-                [
-                  h.Type('button'),
-                  h.Title('Restart: frees leaked memory, comes back cold'),
-                  h.AriaLabel('Restart'),
-                  h.OnClick(Message.RestartChosen({ nodeId: node.id })),
-                  h.Class(
-                    'grid size-10 shrink-0 place-items-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground',
-                  ),
-                ],
-                [icon(h, RotateCcw, 'size-4')],
+            ? button(
+                {
+                  onClick: Message.RestartChosen({ nodeId: node.id }),
+                  variant: 'outline',
+                  size: 'icon-lg',
+                  attributes: [
+                    h.Title('Restart: frees leaked memory, comes back cold'),
+                    h.AriaLabel('Restart'),
+                  ],
+                },
+                icon(h, RotateCcw, 'size-4'),
+                h,
               )
             : h.empty,
           def.fixed
             ? h.empty
-            : h.button(
-                [
-                  h.Type('button'),
-                  h.Title(`Sell for ${money(refundOf(game, node))} (Delete)`),
-                  h.AriaLabel('Sell'),
-                  h.OnClick(Message.NodeSold({ nodeId: node.id })),
-                  h.Class(
-                    'grid size-10 shrink-0 place-items-center border border-border text-muted-foreground transition-colors hover:border-danger/50 hover:bg-danger/8 hover:text-danger',
-                  ),
-                ],
-                [icon(h, Trash2, 'size-4')],
+            : button(
+                {
+                  onClick: Message.NodeSold({ nodeId: node.id }),
+                  variant: 'outline',
+                  size: 'icon-lg',
+                  className: 'text-muted-foreground hover:text-danger',
+                  attributes: [
+                    h.Title(`Sell for ${money(refundOf(game, node))} (Delete)`),
+                    h.AriaLabel('Sell'),
+                  ],
+                },
+                icon(h, Trash2, 'size-4'),
+                h,
               ),
         ],
       ),

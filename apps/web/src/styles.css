@@ -4,62 +4,66 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ==========================================================================
-   Quorum — the shipped palette.
-   Blueprint base · accent #77A4F6 · light · square corners · Space Grotesk
-   figures in JetBrains Mono · alerts amber / red.
+   Quorum — the shipped palette: Graphite.
+   Near-neutral greys with a faint cool cast · ink primary · soft depth ·
+   Geist text and Geist Mono figures · status green / amber / red.
    ========================================================================== */
 :root {
-  --radius: 0px;
+  --radius: 10px;
 
-  --background: oklch(0.981 0.005 258);
-  --foreground: oklch(0.259 0.052 263);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.259 0.052 263);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.259 0.052 263);
-  --primary: oklch(0.721 0.13 262);
-  --primary-foreground: oklch(0.259 0.052 263);
-  --secondary: oklch(0.949 0.011 258);
-  --secondary-foreground: oklch(0.259 0.052 263);
-  --muted: oklch(0.96 0.009 258);
-  --muted-foreground: oklch(0.525 0.045 261);
-  --accent: oklch(0.94 0.016 260);
-  --accent-foreground: oklch(0.259 0.052 263);
+  --sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --heading: var(--sans);
+  --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --background: oklch(0.981 0.0012 260);
+  --foreground: oklch(0.26 0.01 260);
+  --card: oklch(0.997 0.0006 260);
+  --card-foreground: oklch(0.26 0.01 260);
+  --popover: var(--card);
+  --popover-foreground: oklch(0.26 0.01 260);
+  --primary: oklch(0.3 0.004 260);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.949 0.0024 260);
+  --secondary-foreground: oklch(0.26 0.01 260);
+  --muted: oklch(0.96 0.002 260);
+  --muted-foreground: oklch(0.52 0.01 260);
+  --accent: oklch(0.94 0.0036 260);
+  --accent-foreground: oklch(0.26 0.01 260);
   --destructive: oklch(0.545 0.19 27);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.914 0.017 259);
-  --input: oklch(0.895 0.02 259);
-  --ring: oklch(0.61 0.156 263);
+  --border: oklch(0.914 0.004 260);
+  --input: oklch(0.895 0.0044 260);
+  --ring: oklch(0.55 0 0);
 
   /* Quorum additions */
-  --primary-strong: oklch(0.61 0.156 263);
-  --primary-soft: oklch(0.721 0.13 262 / 0.16);
-  --primary-faint: oklch(0.721 0.13 262 / 0.08);
+  --primary-strong: oklch(0.3 0 0);
+  --primary-soft: oklch(0.3 0 0 / 0.08);
+  --primary-faint: oklch(0.3 0 0 / 0.04);
   --ok: oklch(0.56 0.13 155);
   --warn: oklch(0.66 0.145 66);
   --danger: oklch(0.545 0.19 27);
   --ok-soft: oklch(0.56 0.13 155 / 0.12);
   --warn-soft: oklch(0.66 0.145 66 / 0.14);
   --danger-soft: oklch(0.545 0.19 27 / 0.12);
-  --canvas: oklch(0.966 0.007 261);
-  --canvas-grid: oklch(0.45 0.03 260 / 0.1);
-  --canvas-dot: oklch(0.86 0.022 259);
-  --edge-solid: oklch(0.72 0.035 260);
-  --node: oklch(1 0 0);
-  --edge: oklch(0.55 0.04 260 / 0.45);
-  --chart-1: oklch(0.61 0.156 263);
+  --canvas: oklch(0.955 0.002 260);
+  --canvas-grid: oklch(0.45 0.004 260 / 0.1);
+  --canvas-dot: oklch(0.83 0.004 260);
+  --edge-solid: oklch(0.7 0.006 260);
+  --node: var(--card);
+  --edge: oklch(0.5 0.006 260 / 0.45);
+  --chart-1: oklch(0.3 0 0);
   --chart-2: oklch(0.56 0.1 190);
   --chart-3: oklch(0.66 0.145 66);
   --chart-4: oklch(0.52 0.15 295);
   --chart-5: oklch(0.58 0.18 15);
-  --sidebar: oklch(0.96 0.009 258);
-  --sidebar-foreground: oklch(0.259 0.052 263);
-  --sidebar-primary: oklch(0.721 0.13 262);
-  --sidebar-primary-foreground: oklch(0.259 0.052 263);
-  --sidebar-accent: oklch(0.94 0.016 260);
-  --sidebar-accent-foreground: oklch(0.259 0.052 263);
-  --sidebar-border: oklch(0.914 0.017 259);
-  --sidebar-ring: oklch(0.61 0.156 263);
+  --sidebar: var(--muted);
+  --sidebar-foreground: oklch(0.26 0.01 260);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: oklch(0.26 0.01 260);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @theme inline {
@@ -103,9 +107,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--sans);
+  --font-heading: var(--heading);
+  --font-mono: var(--mono);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -116,16 +120,148 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Square corners are the whole point, so every Tailwind radius step is 0. */
-@theme {
-  --radius-xs: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-3xl: 0px;
-  --radius-4xl: 0px;
+/* ==========================================================================
+   Depth. Surfaces sit on the page at three heights, and each height has one
+   recipe: a hairline edge, a light top edge, and a soft shadow below.
+
+   - well:   sunk into its parent (tracks, inputs, segmented controls)
+   - raised: one step up (buttons, keycaps, switch thumbs)
+   - card:   a panel on the page
+   - float:  above everything (dialogs, tooltips, toasts)
+
+   Nest radii concentrically: card 2xl, nested group xl, control lg.
+   ========================================================================== */
+:root {
+  --page: oklch(0.955 0.002 260);
+  --surface-nested: oklch(0.975 0.0012 260);
+  --well: oklch(0.938 0.002 260);
+  --raised-top: oklch(1 0 0);
+  --raised-bottom: oklch(0.972 0.0012 260);
+  --hairline: oklch(0.26 0.01 260 / 0.1);
+  --hairline-soft: oklch(0.26 0.01 260 / 0.06);
+  --highlight: oklch(1 0 0 / 0.95);
+  --primary-fill-top: oklch(0.38 0.004 260);
+  --primary-fill-bottom: oklch(0.25 0.004 260);
+  --primary-edge: oklch(0.18 0 0);
+  --on-primary-fill: oklch(0.99 0 0);
+
+  --elev-well: inset 0 1px 2px oklch(0.26 0.01 260 / 0.09), inset 0 0 0 1px var(--hairline-soft);
+  --elev-raised:
+    inset 0 1px 0 var(--highlight), 0 0 0 1px var(--hairline),
+    0 1px 1px oklch(0.26 0.01 260 / 0.05), 0 2px 4px -1px oklch(0.26 0.01 260 / 0.07);
+  --elev-card:
+    inset 0 1px 0 var(--highlight), 0 0 0 1px var(--hairline-soft),
+    0 1px 2px oklch(0.26 0.01 260 / 0.05), 0 10px 28px -12px oklch(0.26 0.01 260 / 0.16);
+  --elev-float:
+    inset 0 1px 0 var(--highlight), 0 0 0 1px var(--hairline),
+    0 2px 6px oklch(0.26 0.01 260 / 0.06), 0 28px 56px -18px oklch(0.26 0.01 260 / 0.3);
+  --elev-primary:
+    inset 0 1px 0 oklch(1 0 0 / 0.22), inset 0 -1px 0 oklch(0 0 0 / 0.2),
+    0 0 0 1px var(--primary-edge), 0 1px 2px oklch(0 0 0 / 0.25),
+    0 4px 10px -4px oklch(0 0 0 / 0.35);
+}
+
+/* Dark Graphite: ink and paper swap, so the primary fill turns white. */
+.dark {
+  --background: oklch(0.175 0.0016 260);
+  --foreground: oklch(0.94 0.0018 260);
+  --card: oklch(0.215 0.0018 260);
+  --card-foreground: oklch(0.94 0.0018 260);
+  --popover: oklch(0.235 0.002 260);
+  --popover-foreground: oklch(0.94 0.0018 260);
+  --primary: oklch(0.93 0 0);
+  --primary-foreground: oklch(0.2 0.004 260);
+  --primary-strong: oklch(0.93 0 0);
+  --primary-soft: oklch(1 0 0 / 0.1);
+  --secondary: oklch(0.26 0.0022 260);
+  --secondary-foreground: oklch(0.94 0.0018 260);
+  --muted: oklch(0.25 0.002 260);
+  --muted-foreground: oklch(0.68 0.0034 260);
+  --accent: oklch(0.27 0.0026 260);
+  --accent-foreground: oklch(0.94 0.0018 260);
+  --border: oklch(1 0 0 / 0.08);
+  --input: oklch(1 0 0 / 0.1);
+  --ring: oklch(0.75 0 0);
+  --ok: oklch(0.74 0.15 155);
+  --warn: oklch(0.8 0.14 75);
+  --danger: oklch(0.68 0.19 25);
+  --destructive: oklch(0.68 0.19 25);
+  --ok-soft: oklch(0.74 0.15 155 / 0.14);
+  --warn-soft: oklch(0.8 0.14 75 / 0.14);
+  --danger-soft: oklch(0.68 0.19 25 / 0.16);
+  --canvas: oklch(0.16 0.0014 260);
+  --canvas-dot: oklch(1 0 0 / 0.07);
+
+  --page: oklch(0.155 0.0014 260);
+  --surface-nested: oklch(0.24 0.002 260);
+  --well: oklch(0.165 0.0014 260);
+  --raised-top: oklch(0.31 0.0022 260);
+  --raised-bottom: oklch(0.27 0.002 260);
+  --hairline: oklch(1 0 0 / 0.09);
+  --hairline-soft: oklch(1 0 0 / 0.06);
+  --highlight: oklch(1 0 0 / 0.07);
+  --primary-fill-top: oklch(0.99 0 0);
+  --primary-fill-bottom: oklch(0.88 0.003 260);
+  --primary-edge: oklch(0 0 0 / 0.6);
+  --on-primary-fill: oklch(0.2 0.004 260);
+
+  --elev-well:
+    inset 0 1px 3px oklch(0 0 0 / 0.45), inset 0 0 0 1px oklch(0 0 0 / 0.25),
+    0 1px 0 var(--highlight);
+  --elev-raised:
+    inset 0 1px 0 oklch(1 0 0 / 0.1), 0 0 0 1px oklch(0 0 0 / 0.45), 0 1px 2px oklch(0 0 0 / 0.4),
+    0 3px 6px -2px oklch(0 0 0 / 0.35);
+  --elev-card:
+    inset 0 1px 0 var(--highlight), 0 0 0 1px var(--hairline-soft), 0 1px 2px oklch(0 0 0 / 0.35),
+    0 12px 32px -12px oklch(0 0 0 / 0.6);
+  --elev-float:
+    inset 0 1px 0 oklch(1 0 0 / 0.08), 0 0 0 1px oklch(1 0 0 / 0.1), 0 2px 6px oklch(0 0 0 / 0.4),
+    0 28px 56px -16px oklch(0 0 0 / 0.75);
+  --elev-primary:
+    inset 0 1px 0 oklch(1 0 0 / 0.28), inset 0 -1px 0 oklch(0 0 0 / 0.18),
+    0 0 0 1px var(--primary-edge), 0 1px 2px oklch(0 0 0 / 0.45);
+}
+
+/* A white switch thumb on a white track disappears, so keep it dark. */
+.dark [data-slot='switch-thumb'][data-checked] {
+  --raised-top: oklch(0.32 0 0);
+  --raised-bottom: oklch(0.24 0 0);
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-well: var(--well);
+  --color-nested: var(--surface-nested);
+  --color-hairline: var(--hairline);
+  --color-on-primary-fill: var(--on-primary-fill);
+
+  --shadow-well: var(--elev-well);
+  --shadow-raised: var(--elev-raised);
+  --shadow-card: var(--elev-card);
+  --shadow-float: var(--elev-float);
+  --shadow-primary: var(--elev-primary);
+}
+
+/* A raised fill: lit from above. Pair with `shadow-raised`. */
+@utility bg-raised {
+  background-color: var(--raised-bottom);
+  background-image: linear-gradient(to bottom, var(--raised-top), var(--raised-bottom));
+}
+
+/* The primary fill. Pair with `shadow-primary` and `text-on-primary-fill`. */
+@utility bg-primary-fill {
+  background-color: var(--primary-fill-bottom);
+  background-image: linear-gradient(to bottom, var(--primary-fill-top), var(--primary-fill-bottom));
+}
+
+/* A card fill: a faint light falloff from the top edge. Pair with `shadow-card`. */
+@utility bg-surface {
+  background-color: var(--card);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in oklch, var(--card), white 3%),
+    var(--card) 48px
+  );
 }
 
 @layer base {
@@ -143,7 +279,7 @@
   body {
     background: var(--background);
     color: var(--foreground);
-    font-family: var(--font-sans);
+    font-family: var(--sans);
     font-size: 13px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
@@ -153,9 +289,9 @@
   h2,
   h3,
   h4 {
-    font-family: var(--font-heading);
+    font-family: var(--heading);
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
     line-height: 1.1;
   }
 

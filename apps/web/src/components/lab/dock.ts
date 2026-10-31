@@ -12,7 +12,10 @@ import { money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
-import { PANEL, mark } from './bits.ts'
+import { Kbd } from '@/components/ui/kbd'
+import { tabsListClass, tabsTriggerClass } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
+import { FIGURE, PANEL, mark } from './bits.ts'
 
 /* ==========================================================================
    The build dock: pick a group, pick a Component, click the board to place
@@ -32,17 +35,21 @@ const card = (model: Model, type: ComponentId, h: HtmlBuilder<Message>): Html =>
       h.Title(unlocked ? def.blurb : `Research ${RESEARCH[def.unlock ?? 'stripe'].name} to unlock`),
       h.OnClick(Message.PlacingChosen({ type })),
       h.Class(
-        `flex w-[156px] shrink-0 items-center gap-2.5 border px-2.5 py-2 text-left transition-colors ${
+        `flex w-[160px] shrink-0 items-center gap-2.5 rounded-xl p-2 text-left transition-[filter,box-shadow] ${
           armed
-            ? 'border-primary-strong bg-primary/10'
+            ? 'bg-raised shadow-[var(--elev-raised),0_0_0_1.5px_var(--primary-strong)]'
             : unlocked
-              ? 'border-border bg-card hover:border-primary-strong/60 hover:bg-secondary/60'
-              : 'border-dashed border-border bg-card/60 text-muted-foreground'
+              ? 'bg-raised shadow-raised hover:brightness-[0.985]'
+              : 'border border-dashed border-border text-muted-foreground'
         }`,
       ),
     ],
     [
-      mark(def.code, `h-7 w-9 text-[10px] uppercase ${unlocked ? '' : 'opacity-40'}`, h),
+      mark(
+        def.code,
+        `h-8 w-10 rounded-lg text-[10px] uppercase ${unlocked ? '' : 'opacity-40'}`,
+        h,
+      ),
       h.span(
         [h.Class('flex min-w-0 flex-col')],
         [
@@ -51,7 +58,7 @@ const card = (model: Model, type: ComponentId, h: HtmlBuilder<Message>): Html =>
             ? h.span(
                 [
                   h.Class(
-                    `font-mono text-[11px] ${affordable ? 'text-muted-foreground' : 'text-danger'}`,
+                    `${FIGURE} text-[11.5px] ${affordable ? 'text-muted-foreground' : 'text-danger'}`,
                   ),
                 ],
                 [money(price)],
@@ -71,42 +78,48 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
     (type) => COMPONENTS[type].group === model.buildGroup && !COMPONENTS[type].fixed,
   )
   return h.div(
-    [h.Class(`absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 flex-col ${PANEL}`)],
+    [h.Class(`absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-2 p-2 ${PANEL}`)],
     [
       h.div(
-        [h.Class('flex items-center border-b border-border')],
+        [h.Class('flex items-center gap-3')],
         [
-          ...BUILD_GROUPS.map((group, index) =>
-            h.button(
-              [
-                h.Key(group.key),
-                h.Type('button'),
-                h.OnClick(Message.BuildGroupChosen({ group: group.key })),
-                h.Class(
-                  `flex items-center gap-2 border-r border-border px-3.5 py-2 text-[12px] font-medium transition-colors ${
-                    group.key === model.buildGroup
-                      ? 'bg-card text-foreground shadow-[inset_0_-2px_0_var(--primary-strong)]'
-                      : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
-                  }`,
-                ),
-              ],
-              [
-                h.span(
-                  [h.Class('font-mono text-[10px] text-muted-foreground')],
-                  [String(index + 1)],
-                ),
-                group.label,
-              ],
+          h.div(
+            [
+              h.Class(tabsListClass()),
+              h.Attribute('data-variant', 'default'),
+              h.Role('group'),
+              h.AriaLabel('Build group'),
+            ],
+            BUILD_GROUPS.map((group, index) =>
+              h.button(
+                [
+                  h.Key(group.key),
+                  h.Type('button'),
+                  h.AriaPressed(group.key === model.buildGroup ? 'true' : 'false'),
+                  h.OnClick(Message.BuildGroupChosen({ group: group.key })),
+                  h.Class(cn(tabsTriggerClass, 'gap-1.5 px-2.5 text-[12.5px]')),
+                  ...(group.key === model.buildGroup ? [h.Attribute('data-selected', '')] : []),
+                ],
+                [
+                  h.span(
+                    [h.Class(`${FIGURE} text-[10.5px] text-muted-foreground`)],
+                    [String(index + 1)],
+                  ),
+                  group.label,
+                ],
+              ),
             ),
           ),
-          h.span(
-            [h.Class('px-3.5 font-mono text-[10.5px] text-muted-foreground')],
-            [model.placing ? 'Click the board to place · Esc to cancel' : ''],
-          ),
+          model.placing
+            ? h.span(
+                [h.Class('flex items-center gap-1.5 pr-1 text-[12px] text-muted-foreground')],
+                ['Click the board to place', Kbd({}, ['Esc'], h)],
+              )
+            : h.empty,
         ],
       ),
       h.div(
-        [h.Class('flex gap-2 p-2')],
+        [h.Class('flex gap-2')],
         items.map((type) => card(model, type, h)),
       ),
     ],

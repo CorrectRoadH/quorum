@@ -16,13 +16,14 @@ export const buttonVariantKeys = [
 ] as const
 
 export const buttonVariants: Record<ButtonVariant, string> = {
-  default: 'bg-primary text-primary-foreground hover:bg-primary/80',
+  default:
+    'bg-primary-fill text-on-primary-fill shadow-primary hover:brightness-[1.06] active:brightness-95',
   destructive:
-    'bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30',
+    'bg-destructive/10 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--destructive)_22%,transparent)] hover:bg-destructive/15 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive',
   outline:
-    'border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground',
+    'bg-raised shadow-raised text-foreground hover:brightness-[0.985] dark:hover:brightness-110 aria-expanded:brightness-95',
   secondary:
-    'bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
+    'bg-secondary text-secondary-foreground shadow-[inset_0_0_0_1px_var(--hairline-soft)] hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
   ghost:
     'hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground',
   link: 'text-primary underline-offset-4 hover:underline',
@@ -57,7 +58,7 @@ export const buttonSizes: Record<ButtonSize, string> = {
 export type ButtonSize = (typeof buttonSizeKeys)[number]
 
 const buttonBase =
-  "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none [&_svg]:pointer-events-none [&_svg]:shrink-0 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-disabled:pointer-events-none data-disabled:opacity-50"
+  "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px transition-[filter,background-color,box-shadow,transform,color] [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap outline-none select-none [&_svg]:pointer-events-none [&_svg]:shrink-0 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-disabled:pointer-events-none data-disabled:opacity-50"
 
 export type ButtonConfig<M> = Readonly<{
   onClick?: M
