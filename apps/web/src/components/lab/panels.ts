@@ -1,21 +1,26 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Check, Lock, X } from 'lucide'
+import { Check, Download, Lock, Trash2, X } from 'lucide'
+import { offer } from '@/game/engine/actions.ts'
 import {
-  COMPONENTS,
+  ERAS,
+  INCIDENTS,
+  INCIDENT_IDS,
   RESEARCH,
   RESEARCH_TRACKS,
   researchList,
   type ResearchDef,
 } from '@/game/engine/catalog.ts'
-import { has, researchReady } from '@/game/engine/sim.ts'
+import { eraOf, has, researchReady } from '@/game/engine/lookups.ts'
 import { clock, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
+import { SPEEDS } from '@/game/update.ts'
 import { icon } from '@/lib/icons'
 import { EYEBROW, PANEL, SCROLL, mark } from './bits.ts'
 
 /* ==========================================================================
-   The full panels over the board: Research, How to play, and the IPO.
+   The panels over the board: Research, How to play, the funding offer, the
+   Era card, the end of the slice, and the playtest panel.
    ========================================================================== */
 
 const shell = (
@@ -62,11 +67,47 @@ const shell = (
     ],
   )
 
+const primaryButton = (label: string, message: Message, h: HtmlBuilder<Message>) =>
+  h.button(
+    [
+      h.Type('button'),
+      h.OnClick(message),
+      h.Class(
+        'h-10 border border-primary-strong bg-primary px-5 text-[13px] font-semibold text-primary-foreground hover:bg-primary/85',
+      ),
+    ],
+    [label],
+  )
+
+const secondaryButton = (
+  label: string,
+  message: Message,
+  h: HtmlBuilder<Message>,
+  glyph?: Parameters<typeof icon>[1],
+) =>
+  h.button(
+    [
+      h.Type('button'),
+      h.OnClick(message),
+      h.Class(
+        'flex h-10 items-center gap-2 border border-border bg-card px-4 text-[13px] font-medium hover:bg-muted',
+      ),
+    ],
+    [...(glyph ? [icon(h, glyph, 'size-4')] : []), label],
+  )
+
+const stat = (name: string, value: string, h: HtmlBuilder<Message>) =>
+  h.div(
+    [h.Key(name), h.Class('flex flex-col gap-1 border-r border-border p-4 last:border-r-0')],
+    [h.span([h.Class(EYEBROW)], [name]), h.span([h.Class('font-mono text-[18px]')], [value])],
+  )
+
 /* ---------- research ---------- */
 
 const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   const owned = has(game, entry.id)
+  const early = entry.era > game.stage
   const ready = researchReady(game, entry.id)
   const affordable = game.insight >= entry.cost
   const state = owned ? 'owned' : !ready ? 'locked' : affordable ? 'buy' : 'saving'
@@ -80,7 +121,7 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
       h.Disabled(state !== 'buy'),
       h.OnClick(Message.ResearchBought({ id: entry.id })),
       h.Class(
-        `group grid grid-cols-[44px_minmax(0,1fr)] items-center gap-3 border p-2.5 text-left transition-colors ${
+        `group grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3 border p-2.5 text-left transition-colors ${
           state === 'owned'
             ? 'border-ok/40 bg-ok/6'
             : state === 'buy'
@@ -93,8 +134,8 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
     ],
     [
       mark(
-        entry.figure ? COMPONENTS[entry.figure].code.toUpperCase() : entry.mark,
-        `size-11 text-[12px] ${entry.figure ? '' : 'lowercase'} ${state === 'locked' ? 'opacity-40' : ''}`,
+        entry.mark,
+        `size-10 text-[11px] lowercase ${state === 'locked' ? 'opacity-40' : ''}`,
         h,
       ),
       h.div(
@@ -104,7 +145,7 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
             [h.Class('flex items-center justify-between gap-2')],
             [
               h.span([h.Class('truncate text-[13px] font-semibold')], [entry.name]),
-              state === 'owned'
+              owned
                 ? h.span([h.Class('text-ok')], [icon(h, Check, 'size-4')])
                 : h.span(
                     [
@@ -122,7 +163,12 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
               state === 'locked'
                 ? h.span(
                     [h.Class('inline-flex items-center gap-1')],
-                    [icon(h, Lock, 'size-3'), `Needs ${missing.join(', ')}`],
+                    [
+                      icon(h, Lock, 'size-3'),
+                      early
+                        ? `Opens in ${ERAS[entry.era]?.name ?? ''}`
+                        : `Needs ${missing.join(', ')}`,
+                    ],
                   )
                 : entry.blurb,
             ],
@@ -147,9 +193,10 @@ export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
     [
       h.div(
-        [h.Class(`grid min-h-0 grid-cols-4 gap-4 p-5 ${SCROLL}`)],
-        RESEARCH_TRACKS.map((track) =>
-          h.div(
+        [h.Class(`grid min-h-0 grid-cols-5 gap-3 p-5 ${SCROLL}`)],
+        RESEARCH_TRACKS.map((track) => {
+          const entries = researchList.filter((entry) => entry.track === track.key)
+          return h.div(
             [h.Key(track.key), h.Class('flex flex-col gap-2')],
             [
               h.div(
@@ -159,61 +206,53 @@ export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
                   h.span(
                     [h.Class('font-mono text-[10px] text-muted-foreground')],
                     [
-                      `${researchList.filter((entry) => entry.track === track.key && has(model.game, entry.id)).length} / ${researchList.filter((entry) => entry.track === track.key).length}`,
+                      `${entries.filter((entry) => has(model.game, entry.id)).length} / ${entries.length}`,
                     ],
                   ),
                 ],
               ),
-              ...researchList
-                .filter((entry) => entry.track === track.key)
-                .toSorted((a, b) => a.cost - b.cost)
+              ...entries
+                .toSorted((a, b) => a.era - b.era || a.cost - b.cost)
                 .map((entry) => researchCard(model, entry, h)),
             ],
-          ),
-        ),
+          )
+        }),
       ),
     ],
-    'max-w-[1180px]',
+    'max-w-[1240px]',
     h,
   )
 
 /* ---------- how to play ---------- */
 
 const STEPS: ReadonlyArray<readonly [string, string]> = [
-  [
-    'Wire it',
-    'Drag from a Node’s blue output port to another Node. Requests flow left to right. Click a link to cut it.',
-  ],
+  ['Wire it', 'Drag from a Node’s blue output port to another Node. Click a link to cut it.'],
   [
     'Collect',
-    'Revenue piles up in Payments. Click it before the drawer fills. Stripe Billing collects for you.',
+    'Revenue waits in Payments. Click it before the drawer fills. Stripe Billing collects for you.',
   ],
+  ['Learn', 'Analytics samples linked Nodes. Sampled traffic becomes Insight ◆ for Research.'],
   [
-    'Learn',
-    'Link any Node into Analytics. Sampled traffic becomes Insight ◆. Spend it in Research on languages, frameworks and infrastructure.',
+    'Find the limit',
+    'The pulsing outline marks the bottleneck. Its card says if it is out of CPU, credits, RAM, workers or connections.',
   ],
-  [
-    'Scale',
-    'A Node past its capacity drops requests and slows everything behind it. Upgrade it, or add another behind a Load Balancer.',
-  ],
-  [
-    'Grow',
-    'Users grow while you answer at least 90% of them quickly. Slow pages cost revenue, and failed requests cost users.',
-  ],
+  ['Grow', 'Users grow while Apdex beats the Era target, and leave fast when it does not.'],
   [
     'Raise',
-    'Reach the user target to raise the next round. Each round brings new kinds of traffic. Take the company public.',
+    'At the user target, take or decline the round. Pre-seed brings writes, logins and incidents.',
   ],
 ]
 
 const KEYS: ReadonlyArray<readonly [string, string]> = [
-  ['1–5', 'Build group'],
+  ['1–4', 'Build group'],
   ['R', 'Research'],
-  ['U', 'Upgrade selected'],
+  ['U', 'Resize selected'],
+  ['Z', 'Undo'],
   ['Del', 'Sell selected'],
   ['C', 'Collect'],
+  ['S', 'Speed'],
   ['Space', 'Pause'],
-  ['F', 'Fullscreen'],
+  ['`', 'Playtest panel'],
   ['Esc', 'Cancel'],
 ]
 
@@ -267,83 +306,215 @@ export const helpPanel = (h: HtmlBuilder<Message>): Html =>
       ),
       h.div(
         [h.Class('flex justify-end border-t border-border px-5 py-3')],
-        [
-          h.button(
-            [
-              h.Type('button'),
-              h.OnClick(Message.PanelClosed()),
-              h.Class(
-                'h-9 border border-primary-strong bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:bg-primary/85',
-              ),
-            ],
-            ['Start building'],
-          ),
-        ],
+        [primaryButton('Start building', Message.PanelClosed(), h)],
       ),
     ],
     'max-w-[980px]',
     h,
   )
 
-/* ---------- IPO ---------- */
+/* ---------- funding ---------- */
 
-export const ipoPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
+export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const deal = offer(model.game)
+  if (!deal) return h.empty
+  return shell(
+    `${deal.era.name} round`,
+    [],
+    [
+      h.div(
+        [h.Class('grid grid-cols-2 gap-px bg-border')],
+        [
+          h.div(
+            [h.Class('flex flex-col gap-3 bg-card p-5')],
+            [
+              h.span([h.Class('text-[15px] font-semibold')], ['Raise']),
+              h.div(
+                [h.Class('flex flex-col text-[13px]')],
+                [
+                  h.span([], [`+${money(deal.grant)} Cash`]),
+                  h.span(
+                    [],
+                    [
+                      `Equity ${Math.round(model.game.equity * 100)}% → ${Math.round(model.game.equity * (1 - deal.dilution) * 100)}%`,
+                    ],
+                  ),
+                  h.span([], ['Full growth']),
+                ],
+              ),
+              primaryButton('Raise', Message.RoundRaised(), h),
+            ],
+          ),
+          h.div(
+            [h.Class('flex flex-col gap-3 bg-card p-5')],
+            [
+              h.span([h.Class('text-[15px] font-semibold')], ['Decline']),
+              h.div(
+                [h.Class('flex flex-col text-[13px]')],
+                [
+                  h.span([], ['No Cash']),
+                  h.span([], [`Equity stays ${Math.round(model.game.equity * 100)}%`]),
+                  h.span([], ['Growth × 0.7']),
+                ],
+              ),
+              secondaryButton('Decline', Message.RoundDeclined(), h),
+            ],
+          ),
+        ],
+      ),
+    ],
+    'max-w-[620px]',
+    h,
+  )
+}
+
+export const eraPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const era = eraOf(model.game)
+  return shell(
+    era.name,
+    [],
+    [
+      h.div(
+        [h.Class('flex flex-col gap-4 px-6 py-6')],
+        [
+          h.span(
+            [h.Class('text-[26px] font-semibold leading-tight tracking-[-0.03em]')],
+            [era.question],
+          ),
+          h.p([h.Class('text-[14px] leading-relaxed text-muted-foreground')], [era.arrivals]),
+          h.div(
+            [h.Class('grid grid-cols-3 border border-border')],
+            [
+              stat(
+                'Next round',
+                Number.isFinite(era.raiseAt) ? `${compact(era.raiseAt)} users` : '—',
+                h,
+              ),
+              stat('Apdex target', era.apdexTarget.toFixed(2), h),
+              stat('Prices', `×${era.costIndex}`, h),
+            ],
+          ),
+        ],
+      ),
+      h.div(
+        [h.Class('flex justify-end border-t border-border px-5 py-3')],
+        [primaryButton('Continue', Message.PanelClosed(), h)],
+      ),
+    ],
+    'max-w-[620px]',
+    h,
+  )
+}
+
+export const endPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   shell(
-    'Public',
+    'End of the slice',
     [],
     [
       h.div(
         [h.Class('flex flex-col items-center gap-5 px-8 pt-4 pb-8')],
         [
-          h.img([h.Src('/art/hero.svg'), h.Alt(''), h.Class('w-full max-w-[640px]')]),
-          h.span([h.Class('text-[34px] font-semibold tracking-[-0.03em]')], ['The bell rings.']),
+          h.img([h.Src('/art/hero.svg'), h.Alt(''), h.Class('w-full max-w-[520px]')]),
+          h.span([h.Class('text-[30px] font-semibold tracking-[-0.03em]')], ['Seed reached.']),
           h.div(
-            [h.Class('grid w-full max-w-[560px] grid-cols-3 border border-border')],
+            [h.Class('grid w-full max-w-[640px] grid-cols-4 border border-border')],
             [
-              ['Time', clock(model.game.time)],
-              ['Users', compact(model.game.users)],
-              ['Earned', money(model.game.earned)],
-            ].map(([name, value]) =>
-              h.div(
-                [
-                  h.Key(name ?? ''),
-                  h.Class('flex flex-col gap-1 border-r border-border p-4 last:border-r-0'),
-                ],
-                [
-                  h.span([h.Class(EYEBROW)], [name ?? '']),
-                  h.span([h.Class('font-mono text-[20px]')], [value ?? '']),
-                ],
-              ),
-            ),
+              stat('Time', clock(model.game.time), h),
+              stat('Users', compact(model.game.users), h),
+              stat('Earned', money(model.game.earned), h),
+              stat('Equity', `${Math.round(model.game.equity * 100)}%`, h),
+            ],
           ),
           h.div(
             [h.Class('flex gap-2')],
             [
-              h.button(
-                [
-                  h.Type('button'),
-                  h.OnClick(Message.PanelClosed()),
-                  h.Class(
-                    'h-10 border border-primary-strong bg-primary px-5 text-[13px] font-semibold text-primary-foreground hover:bg-primary/85',
-                  ),
-                ],
-                ['Keep scaling'],
-              ),
-              h.button(
-                [
-                  h.Type('button'),
-                  h.OnClick(Message.NewCompanyStarted()),
-                  h.Class(
-                    'h-10 border border-border bg-card px-5 text-[13px] font-medium hover:bg-muted',
-                  ),
-                ],
-                ['Found a new company'],
-              ),
+              primaryButton('Keep playing', Message.PanelClosed(), h),
+              secondaryButton('Export playtest log', Message.LogExported(), h, Download),
             ],
           ),
         ],
       ),
     ],
     'max-w-[760px]',
+    h,
+  )
+
+/* ---------- playtest panel ---------- */
+
+export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
+  shell(
+    'Playtest',
+    [],
+    [
+      h.div(
+        [h.Class('flex flex-col gap-5 p-5')],
+        [
+          h.div(
+            [h.Class('flex flex-col gap-2')],
+            [
+              h.span([h.Class(EYEBROW)], ['Speed']),
+              h.div(
+                [h.Class('flex gap-2')],
+                SPEEDS.map((speed) =>
+                  h.button(
+                    [
+                      h.Key(String(speed)),
+                      h.Type('button'),
+                      h.OnClick(Message.SpeedChosen({ speed })),
+                      h.Class(
+                        `h-9 w-16 border font-mono text-[13px] ${model.speed === speed ? 'border-primary-strong bg-primary/15 text-primary-strong' : 'border-border hover:bg-muted'}`,
+                      ),
+                    ],
+                    [`${speed}×`],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          h.div(
+            [h.Class('flex flex-col gap-2')],
+            [
+              h.span([h.Class(EYEBROW)], ['Skip ahead']),
+              h.div(
+                [h.Class('flex flex-wrap gap-2')],
+                [
+                  model.game.stage === 0
+                    ? secondaryButton('Skip to Pre-seed', Message.CheatPreseed(), h)
+                    : h.empty,
+                  secondaryButton('+$1,000', Message.CheatCash(), h),
+                  secondaryButton('+100 Insight', Message.CheatInsight(), h),
+                ],
+              ),
+            ],
+          ),
+          h.div(
+            [h.Class('flex flex-col gap-2')],
+            [
+              h.span([h.Class(EYEBROW)], ['Start an incident']),
+              h.div(
+                [h.Class('flex flex-wrap gap-2')],
+                INCIDENT_IDS.map((kind) =>
+                  secondaryButton(INCIDENTS[kind].name, Message.IncidentForced({ kind }), h),
+                ),
+              ),
+            ],
+          ),
+          h.div(
+            [h.Class('flex flex-col gap-2')],
+            [
+              h.span([h.Class(EYEBROW)], ['Log']),
+              h.div(
+                [h.Class('flex flex-wrap gap-2')],
+                [
+                  secondaryButton('Export playtest log', Message.LogExported(), h, Download),
+                  secondaryButton('Clear log', Message.LogCleared(), h, Trash2),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+    'max-w-[640px]',
     h,
   )

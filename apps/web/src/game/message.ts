@@ -1,6 +1,13 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
-import { ComponentId, FrameworkId, LanguageId, ResearchId } from './engine/state.ts'
+import {
+  ComponentId,
+  FamilyId,
+  FrameworkId,
+  IncidentId,
+  ResearchId,
+  RuntimeId,
+} from './engine/state.ts'
 import { BuildGroupKey, Panel, Tone } from './model.ts'
 
 /* ==========================================================================
@@ -13,10 +20,12 @@ export const Message = defineMessageUnion({
   Saved: {},
   Continued: {},
   NewCompanyStarted: {},
+  PreseedStarted: {},
   TitleOpened: {},
 
   Ticked: {},
   SpeedCycled: {},
+  SpeedChosen: { speed: Schema.Finite },
   PauseToggled: {},
   KeyPressed: { key: Schema.String },
   FullscreenToggled: {},
@@ -30,18 +39,36 @@ export const Message = defineMessageUnion({
   LinkRequested: { from: Schema.String, to: Schema.String },
   LinkCut: { from: Schema.String, to: Schema.String },
   EmptyTapped: {},
+  /** The button at the bottom of a Node card. */
+  FooterPressed: { nodeId: Schema.String },
 
-  UpgradeBought: { nodeId: Schema.String },
-  NodeSold: { nodeId: Schema.String },
-  LanguageChosen: { nodeId: Schema.String, language: LanguageId },
+  ResizeChosen: { nodeId: Schema.String, direction: Schema.Literals([1, -1]) },
+  FamilyChosen: { nodeId: Schema.String, family: FamilyId },
+  RuntimeChosen: { nodeId: Schema.String, runtime: RuntimeId },
   FrameworkChosen: { nodeId: Schema.String, framework: FrameworkId },
+  WorkersChosen: { nodeId: Schema.String, workers: Schema.Finite },
+  SampleChosen: { nodeId: Schema.String, sample: Schema.Finite },
+  ReplaceBought: { nodeId: Schema.String },
+  RestartChosen: { nodeId: Schema.String },
+  NodeSold: { nodeId: Schema.String },
   Collected: {},
+  UndoChosen: {},
 
   ResearchBought: { id: ResearchId },
   RoundRaised: {},
+  RoundDeclined: {},
+  PostmortemFiled: { id: Schema.Finite },
 
   PanelOpened: { panel: Panel },
   PanelClosed: {},
+
+  /** Playtest panel. */
+  CheatCash: {},
+  CheatInsight: {},
+  CheatPreseed: {},
+  IncidentForced: { kind: IncidentId },
+  LogExported: {},
+  LogCleared: {},
 
   ToastRaised: { message: Schema.String, tone: Tone },
   ToastCleared: { id: Schema.Finite },

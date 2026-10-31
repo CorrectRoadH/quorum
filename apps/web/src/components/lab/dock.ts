@@ -7,7 +7,7 @@ import {
   RESEARCH,
   type ComponentId,
 } from '@/game/engine/catalog.ts'
-import { isUnlocked, priceOf } from '@/game/engine/sim.ts'
+import { isUnlocked, priceOf } from '@/game/engine/lookups.ts'
 import { money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'

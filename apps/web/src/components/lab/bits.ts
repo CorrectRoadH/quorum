@@ -38,7 +38,7 @@ export const figure = (
       h.span(
         [
           h.Class(
-            'flex items-baseline gap-1.5 font-mono text-[15px] leading-none tabular-nums text-foreground',
+            'flex items-baseline gap-1.5 whitespace-nowrap font-mono text-[15px] leading-none tabular-nums text-foreground',
           ),
         ],
         [
@@ -81,7 +81,7 @@ export const toast = (value: Toast | null, h: HtmlBuilder<Message>): Html =>
           h.Key(`toast-${value.id}`),
           h.Role('status'),
           h.Class(
-            `pointer-events-none fixed top-[76px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border bg-card px-4 py-2.5 text-[13px] shadow-lg animate-in fade-in slide-in-from-top-2 ${TOAST_TONE[value.tone]}`,
+            `pointer-events-none fixed bottom-[124px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border bg-card px-4 py-2.5 text-[13px] shadow-lg animate-in fade-in slide-in-from-bottom-2 ${TOAST_TONE[value.tone]}`,
           ),
         ],
         [h.span([h.Class(`size-2 shrink-0 ${TOAST_MARK[value.tone]}`)], []), value.message],

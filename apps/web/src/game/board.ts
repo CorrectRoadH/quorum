@@ -1,6 +1,15 @@
 import { Application, Container, Graphics, Point, Text } from 'pixi.js'
-import { COMPONENTS, FRAMEWORKS, KINDS, LANGUAGES, type ComponentId } from './engine/catalog.ts'
-import { canUpgrade, drawerSize, has, upgradePrice, type Flow } from './engine/sim.ts'
+import {
+  COMPONENTS,
+  FRAMEWORKS,
+  INSIGHT_YIELD,
+  KINDS,
+  RUNTIMES,
+  SIZES,
+  type ComponentId,
+} from './engine/catalog.ts'
+import type { Ledger } from './engine/ledger.ts'
+import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
 import { compact, money, rate } from './format.ts'
 
@@ -14,7 +23,7 @@ import { compact, money, rate } from './format.ts'
 export type BoardEvents = Readonly<{
   onNodeTap: (nodeId: string) => void
   onNodeMove: (nodeId: string, x: number, y: number) => void
-  onUpgrade: (nodeId: string) => void
+  onFooter: (nodeId: string) => void
   onLink: (from: string, to: string) => void
   onUnlink: (from: string, to: string) => void
   onPlace: (x: number, y: number) => void
@@ -23,7 +32,7 @@ export type BoardEvents = Readonly<{
 
 export type BoardState = Readonly<{
   game: Game
-  flow: Flow
+  ledger: Ledger
   selected: string | null
   placing: ComponentId | null
 }>
@@ -52,8 +61,17 @@ const layoutOf = (type: ComponentId): Layout => {
       return { rows: 3, inRow: 0, outRow: null, footer: true }
     case 'server':
       return { rows: 5, inRow: 0, outRow: 4, footer: true }
-    default:
-      return { rows: 4, inRow: 0, outRow: 3, footer: true }
+    case 'database':
+    case 'replica':
+      return { rows: 4, inRow: 0, outRow: null, footer: true }
+    case 'auth':
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
+    case 'dns':
+    case 'lb':
+      return { rows: 3, inRow: 0, outRow: 2, footer: false }
+    case 'cache':
+    case 'pooler':
+      return { rows: 4, inRow: 0, outRow: 3, footer: false }
   }
 }
 
@@ -194,15 +212,19 @@ const label = (size: number, family: string, weight: '400' | '500' | '600' = '50
 
 type RowTone = 'plain' | 'warn' | 'danger' | 'ok'
 type Row = Readonly<{ name: string; value: string; tone?: RowTone; bar?: number }>
-type Footer = Readonly<{ text: string; enabled: boolean; tone: 'accent' | 'ok' | 'muted' }>
+type Footer = Readonly<{
+  text: string
+  enabled: boolean
+  tone: 'accent' | 'ok' | 'muted' | 'danger'
+}>
 
 const pct = (value: number): string => `${Math.round(value * 100)}%`
 
-const outRate = (flow: Flow, id: string): number =>
-  flow.links.reduce((sum, link) => (link.from === id ? sum + link.rate : sum), 0)
+const outRate = (ledger: Ledger, id: string): number =>
+  ledger.links.reduce((sum, link) => (link.from === id ? sum + link.rate : sum), 0)
 
-const rowsOf = (game: Game, node: GameNode, flow: Flow): ReadonlyArray<Row> => {
-  const own = flow.nodes[node.id]
+const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> => {
+  const own = ledger.nodes[node.id]
   if (!own) return []
   const inbound: Row = {
     name: 'Inbound',
@@ -210,30 +232,37 @@ const rowsOf = (game: Game, node: GameNode, flow: Flow): ReadonlyArray<Row> => {
     tone: own.dropped > 0.05 ? 'danger' : 'plain',
   }
   const capacity: Row = {
-    name: 'Capacity',
-    value: `${rate(own.capacity)}/s · ${pct(Math.min(own.utilization, 9.99))}`,
-    tone: own.utilization > 0.95 ? 'danger' : own.utilization > 0.8 ? 'warn' : 'plain',
+    name: 'Load',
+    value:
+      own.inbound > 0
+        ? `${pct(Math.min(own.utilization, 9.99))} of ${rate(own.capacity)}/s`
+        : 'idle',
+    tone: own.utilization >= 0.9 ? 'danger' : own.utilization >= 0.7 ? 'warn' : 'plain',
     bar: Math.min(own.utilization, 1),
   }
   const latency: Row = { name: 'Latency', value: `${Math.round(own.latency)} ms` }
   const out: Row = {
     name: own.stranded > 0.01 ? 'Stranded' : 'Out',
-    value: own.stranded > 0.01 ? `${rate(own.stranded)}/s` : `${rate(outRate(flow, node.id))}/s`,
+    value: own.stranded > 0.01 ? `${rate(own.stranded)}/s` : `${rate(outRate(ledger, node.id))}/s`,
     tone: own.stranded > 0.01 ? 'danger' : 'plain',
   }
   switch (node.type) {
     case 'users': {
-      const happy = flow.quality * flow.patience
+      const target = eraOf(game).apdexTarget
       return [
         { name: 'Users', value: compact(game.users) },
-        { name: 'Satisfied', value: pct(happy), tone: happy >= 0.9 ? 'ok' : 'danger' },
-        { name: 'Requests', value: `${rate(flow.demand)}/s` },
+        {
+          name: 'Apdex',
+          value: ledger.apdex.toFixed(2),
+          tone: ledger.apdex >= target ? 'ok' : 'danger',
+        },
+        { name: 'Requests', value: `${rate(ledger.demand)}/s` },
       ]
     }
     case 'payments': {
-      const size = drawerSize(game)
+      const size = drawerSize(game, ledger.revenue)
       return [
-        { name: 'Revenue', value: `${money(flow.revenue)}/s`, tone: 'ok' },
+        { name: 'Revenue', value: `${money(ledger.revenue)}/s`, tone: 'ok' },
         {
           name: has(game, 'stripe') ? 'Stripe' : 'Drawer',
           value: has(game, 'stripe') ? 'auto' : `${money(game.pending)} / ${money(size)}`,
@@ -245,22 +274,64 @@ const rowsOf = (game: Game, node: GameNode, flow: Flow): ReadonlyArray<Row> => {
     case 'analytics': {
       const sampled = Math.min(own.inbound, own.capacity)
       return [
-        { name: 'Watching', value: `${rate(own.inbound)}/s` },
+        { name: 'Sampling', value: `${rate(own.inbound)}/s` },
         {
-          name: 'Samples',
+          name: 'Kept',
           value: `${rate(sampled)} / ${rate(own.capacity)}`,
           tone: own.inbound > own.capacity ? 'warn' : 'plain',
           bar: own.capacity > 0 ? Math.min(1, own.inbound / own.capacity) : 0,
         },
-        { name: 'Insight', value: `+${(sampled * 0.03).toFixed(2)}/s`, tone: 'ok' },
+        {
+          name: 'Insight',
+          value: `+${(sampled * INSIGHT_YIELD * (2 - ledger.apdex)).toFixed(2)}/s`,
+          tone: 'ok',
+        },
       ]
     }
     case 'server': {
-      const stack = `${LANGUAGES[node.language].name}${node.framework === 'none' ? '' : ` · ${FRAMEWORKS[node.framework].name}`}`
+      const runtime = RUNTIMES[node.runtime].name
+      const stack =
+        node.framework === 'none' ? runtime : `${runtime} · ${FRAMEWORKS[node.framework].name}`
       return [inbound, capacity, { name: 'Stack', value: stack }, latency, out]
     }
-    default:
+    case 'database':
+    case 'replica': {
+      const pool = own.connections
+      return [
+        inbound,
+        capacity,
+        {
+          name: 'Connections',
+          value: pool ? `${Math.round(pool.used)} / ${pool.max}` : '—',
+          tone:
+            pool && pool.used > pool.max
+              ? 'danger'
+              : pool && pool.used > pool.max * 0.8
+                ? 'warn'
+                : 'plain',
+        },
+        latency,
+      ]
+    }
+    case 'cache':
+      return [
+        inbound,
+        { name: 'Hit ratio', value: pct(own.hitRatio ?? 0), bar: own.hitRatio ?? 0 },
+        latency,
+        out,
+      ]
+    case 'pooler':
       return [inbound, capacity, latency, out]
+    case 'lb':
+      return [inbound, capacity, out]
+    case 'dns':
+      return [inbound, { name: 'Policy', value: 'round robin' }, out]
+    case 'auth':
+      return [
+        { name: 'Logins', value: `${rate(own.inbound)}/s` },
+        { name: 'Cost', value: `${money(burnOf(game, node))}/s` },
+        latency,
+      ]
   }
 }
 
@@ -273,10 +344,16 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
       ? { text: `Collect ${money(game.pending)}`, enabled: true, tone: 'ok' }
       : { text: 'Drawer empty', enabled: false, tone: 'muted' }
   }
-  if (!canUpgrade(node)) return { text: 'Max level', enabled: false, tone: 'muted' }
-  const price = upgradePrice(node)
+  if (node.down === -1) {
+    const price = replacePrice(game, node)
+    return { text: `Replace  ${money(price)}`, enabled: game.cash >= price, tone: 'danger' }
+  }
+  const price = resizePrice(game, node)
+  if (price === null) return { text: 'Largest size', enabled: false, tone: 'muted' }
+  const label =
+    node.type === 'analytics' ? 'More samples' : `Resize → ${SIZES[node.size + 1]?.name ?? ''}`
   return {
-    text: `Upgrade  ${money(price)}`,
+    text: `${label}  ${money(price)}`,
     enabled: game.cash >= price,
     tone: game.cash >= price ? 'accent' : 'muted',
   }
@@ -327,21 +404,22 @@ class NodeView {
     this.foot.position.set(rect.x + rect.w / 2, rect.y + rect.h / 2)
   }
 
-  update(game: Game, node: GameNode, flow: Flow, selected: boolean, colors: Palette): void {
-    const own = flow.nodes[node.id]
+  update(game: Game, node: GameNode, ledger: Ledger, selected: boolean, colors: Palette): void {
+    const own = ledger.nodes[node.id]
     if (!own) return
     const def = COMPONENTS[node.type]
     const layout = layoutOf(node.type)
-    const rows = rowsOf(game, node, flow)
+    const rows = rowsOf(game, node, ledger)
     const footer = footerOf(game, node)
     this.root.position.set(node.x, node.y)
     const digest = JSON.stringify([
       rows,
       footer,
-      node.level,
+      node.size,
       own.status,
       selected,
       Math.ceil(node.down),
+      node.warm < 1,
     ])
     if (digest === this.digest) return
     this.digest = digest
@@ -385,14 +463,20 @@ class NodeView {
         .lineTo(CARD_W - 10, rowTop(index))
         .stroke({ color: colors.border, width: 1, alpha: 0.55 })
     }
-    if (node.down > 0)
+    if (node.down !== 0)
       this.frame
         .rect(1, HEAD + 1, CARD_W - 2, height - HEAD - 2)
         .fill({ color: colors.danger, alpha: 0.08 })
     if (footer) {
       const rect = footerRect(node.type)
       const fill =
-        footer.tone === 'ok' ? colors.ok : footer.tone === 'accent' ? colors.accent : colors.track
+        footer.tone === 'ok'
+          ? colors.ok
+          : footer.tone === 'danger'
+            ? colors.danger
+            : footer.tone === 'accent'
+              ? colors.accent
+              : colors.track
       this.frame.rect(rect.x, rect.y, rect.w, rect.h).fill(fill)
       this.foot.text = footer.text
       this.foot.style.fill = footer.tone === 'muted' ? colors.muted : colors.card
@@ -405,9 +489,20 @@ class NodeView {
 
     this.code.text = def.code.toUpperCase()
     this.code.style.fill = colors.accent
-    this.title.text = node.down > 0 ? `${def.name} · down ${Math.ceil(node.down)}s` : def.name
-    this.title.style.fill = node.down > 0 ? colors.danger : colors.ink
-    this.level.text = node.type === 'users' ? '' : `Lv ${node.level}`
+    this.title.text =
+      node.down === -1
+        ? `${def.name} · failed`
+        : node.down > 0
+          ? `${def.name} · restart`
+          : node.warm < 1 && (def.sized || node.type === 'cache')
+            ? `${def.name} · cold`
+            : def.name
+    this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
+    this.level.text = def.sized
+      ? (SIZES[node.size]?.name ?? '')
+      : node.type === 'payments' || node.type === 'analytics'
+        ? `S${node.size}`
+        : ''
     this.level.style.fill = colors.muted
 
     this.bars.clear()
@@ -457,6 +552,7 @@ class BoardController {
   private readonly packets = new Graphics()
   private readonly cards = new Container()
   private readonly overlay = new Graphics()
+  private readonly bottleneckTag = label(9, MONO, '600')
   private readonly ghost = new Container()
   private readonly views = new Map<string, NodeView>()
   private state: BoardState | null = null
@@ -501,7 +597,16 @@ class BoardController {
     }
     this.host.append(this.app.canvas)
     this.app.stage.addChild(this.grid, this.world)
-    this.world.addChild(this.wires, this.packets, this.cards, this.overlay, this.ghost)
+    this.bottleneckTag.style.fill = 0xffffff
+    this.bottleneckTag.visible = false
+    this.world.addChild(
+      this.wires,
+      this.packets,
+      this.cards,
+      this.overlay,
+      this.bottleneckTag,
+      this.ghost,
+    )
     this.ghost.alpha = 0.55
     this.ghost.visible = false
     this.bindPointer()
@@ -751,8 +856,7 @@ class BoardController {
         const node = this.nodes().find((entry) => entry.id === gesture.id)
         if (gesture.moved && this.dragged)
           this.events.onNodeMove(gesture.id, this.dragged.x, this.dragged.y)
-        else if (node && node.type !== 'payments' && inFooter(node, point))
-          this.events.onUpgrade(gesture.id)
+        else if (node && inFooter(node, point)) this.events.onFooter(gesture.id)
         else this.events.onNodeTap(gesture.id)
         this.dragged = null
       }
@@ -800,7 +904,7 @@ class BoardController {
         this.views.set(node.id, view)
         this.cards.addChild(view.root)
       }
-      view.update(state.game, node, state.flow, state.selected === node.id, colors)
+      view.update(state.game, node, state.ledger, state.selected === node.id, colors)
     }
     for (const [id, view] of this.views) {
       if (live.has(id)) continue
@@ -838,7 +942,7 @@ class BoardController {
     const colors = palette()
     this.phase += seconds
     const byId = new Map(this.nodes().map((node) => [node.id, node]))
-    const rates = new Map(state.flow.links.map((link) => [`${link.from}>${link.to}`, link]))
+    const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 
     this.wires.clear()
     this.packets.clear()
@@ -852,7 +956,7 @@ class BoardController {
       const tap = COMPONENTS[to.type].tap
       const hovered = this.hoverLink?.from === link.from && this.hoverLink.to === link.to
       const busy = (flow?.rate ?? 0) > 0.01
-      const color = hovered ? colors.danger : busy ? colors.accent : colors.edge
+      const color = hovered || flow?.failing ? colors.danger : busy ? colors.accent : colors.edge
       this.wires
         .moveTo(curve.a.x, curve.a.y)
         .bezierCurveTo(curve.c1.x, curve.c1.y, curve.c2.x, curve.c2.y, curve.b.x, curve.b.y)
@@ -882,6 +986,30 @@ class BoardController {
         this.packets.rect(at.x - 3, at.y - 3, 6, 6)
       }
       this.packets.fill({ color: packet, alpha: tap ? 0.6 : 0.95 })
+    }
+
+    // The bottleneck: a pulsing outline on the one Node that costs the most revenue.
+    const bottleneck = state.ledger.bottleneck ? byId.get(state.ledger.bottleneck) : undefined
+    if (bottleneck) {
+      const pulse = 0.45 + 0.4 * Math.abs(Math.sin(this.phase * 2.4))
+      const pad = 5
+      this.overlay
+        .rect(
+          bottleneck.x - pad,
+          bottleneck.y - pad,
+          CARD_W + pad * 2,
+          heightOf(bottleneck.type) + pad * 2,
+        )
+        .stroke({ color: colors.warn, width: 2.5, alpha: pulse })
+      const tag = 'BOTTLENECK'
+      this.overlay
+        .rect(bottleneck.x - pad, bottleneck.y - pad - 16, tag.length * 6.6 + 10, 15)
+        .fill({ color: colors.warn, alpha: 0.95 })
+      this.bottleneckTag.text = tag
+      this.bottleneckTag.position.set(bottleneck.x - pad + 5, bottleneck.y - pad - 15)
+      this.bottleneckTag.visible = true
+    } else {
+      this.bottleneckTag.visible = false
     }
 
     const gesture = this.gesture

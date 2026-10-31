@@ -19,7 +19,7 @@ type BoardMessage =
   | ReturnType<typeof Message.LinkCut>
   | ReturnType<typeof Message.NodePlaced>
   | ReturnType<typeof Message.EmptyTapped>
-  | ReturnType<typeof Message.UpgradeBought>
+  | ReturnType<typeof Message.FooterPressed>
 
 const BoardMounted = Mount.defineStream('BoardMounted', {
   args: {},
@@ -30,7 +30,7 @@ const BoardMounted = Mount.defineStream('BoardMounted', {
     Message.LinkCut,
     Message.NodePlaced,
     Message.EmptyTapped,
-    Message.UpgradeBought,
+    Message.FooterPressed,
   ],
   execute: ({ element }) =>
     Stream.callback<BoardMessage>((queue) =>
@@ -41,7 +41,7 @@ const BoardMounted = Mount.defineStream('BoardMounted', {
             attachBoard('board', element as HTMLElement, {
               onNodeTap: (nodeId) => offer(Message.NodeTapped({ nodeId })),
               onNodeMove: (nodeId, x, y) => offer(Message.NodeMoved({ nodeId, x, y })),
-              onUpgrade: (nodeId) => offer(Message.UpgradeBought({ nodeId })),
+              onFooter: (nodeId) => offer(Message.FooterPressed({ nodeId })),
               onLink: (from, to) => offer(Message.LinkRequested({ from, to })),
               onUnlink: (from, to) => offer(Message.LinkCut({ from, to })),
               onPlace: (x, y) => offer(Message.NodePlaced({ x, y })),

@@ -1,10 +1,20 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { dock } from '@/components/lab/dock.ts'
-import { goalBar, hud, incidentBar } from '@/components/lab/hud.ts'
+import { changeBar, goalBar, hud } from '@/components/lab/hud.ts'
+import { pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
-import { helpPanel, ipoPanel, researchPanel } from '@/components/lab/panels.ts'
+import {
+  devPanel,
+  endPanel,
+  eraPanel,
+  helpPanel,
+  offerPanel,
+  researchPanel,
+} from '@/components/lab/panels.ts'
 import { boardHost } from './board-mount.ts'
-import { nextGoal, solve, stageOf } from './engine/sim.ts'
+import { nextGoal } from './engine/goals.ts'
+import { eraOf } from './engine/lookups.ts'
+import { solve } from './engine/solve.ts'
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
@@ -85,7 +95,7 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
                 ? [
                     menuButton(
                       'Continue',
-                      `${stageOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+                      `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
                       Message.Continued(),
                       true,
                       h,
@@ -99,6 +109,8 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
                 !model.saved,
                 h,
               ),
+              menuButton('Start in Pre-seed', '', Message.PreseedStarted(), false, h),
+              menuButton('Export playtest log', '', Message.LogExported(), false, h),
             ],
           ),
         ],
@@ -120,15 +132,17 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const flow = solve(model.game)
+  const ledger = solve(model.game)
   return h.main(
     [h.Class('relative h-full overflow-hidden bg-canvas')],
     [
       boardHost(h),
-      hud(model, flow, h),
-      goalBar(nextGoal(model.game, flow), h),
-      incidentBar(model, h),
-      inspector(model, flow, h),
+      hud(model, ledger, h),
+      goalBar(nextGoal(model.game, ledger), h),
+      changeBar(model, h),
+      pager(model, h),
+      inspector(model, ledger, h),
+      postmortems(model, h),
       dock(model, h),
       model.paused
         ? h.div(
@@ -142,7 +156,10 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
         : h.empty,
       model.panel === 'research' ? researchPanel(model, h) : h.empty,
       model.panel === 'help' ? helpPanel(h) : h.empty,
-      model.panel === 'ipo' ? ipoPanel(model, h) : h.empty,
+      model.panel === 'offer' ? offerPanel(model, h) : h.empty,
+      model.panel === 'era' ? eraPanel(model, h) : h.empty,
+      model.panel === 'end' ? endPanel(model, h) : h.empty,
+      model.panel === 'dev' ? devPanel(model, h) : h.empty,
     ],
   )
 }
