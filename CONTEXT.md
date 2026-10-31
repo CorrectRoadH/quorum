@@ -1,90 +1,250 @@
-# Architect
+# Quorum
 
-A learning game about system design. A player assembles an architecture from a fixed catalog
-and watches a simulation run it for one month.
+An incremental systems game. A player grows a startup by building and tuning the system that serves
+its users, one bottleneck at a time. The full design is in [docs/gdd](docs/gdd/README.md).
+
+This file is the game vocabulary. Code, UI copy, and the design documents use these words. Real
+engineering terms that the game teaches are in the
+[engineering glossary](docs/gdd/glossary.md).
 
 ## Language
 
+### The company
+
+**Company**:
+One play-through, from founding to Exit.
+_Avoid_: run, save, game, playthrough
+
+**Venture**:
+The kind of Company the player founds. It sets the request mix, demand shape, constraints, and signature incidents.
+_Avoid_: scenario, mode, industry, class
+
+**Mutator**:
+An optional rule that makes a Company harder in exchange for more Legacy.
+_Avoid_: modifier, handicap, challenge
+
+**Era**:
+A stage of the Company, from Garage to Public. Each Era brings new Request kinds and a new failure mode.
+_Avoid_: stage, level, chapter, tier
+
+**Milestone**:
+The user count, and in the Pre-IPO Era the checklist, that ends an Era.
+_Avoid_: goal, threshold, gate
+
+**Funding round**:
+The offer of a Grant for Equity at a Milestone. The player can raise or decline.
+_Avoid_: investment, raise (as a noun), stage
+
+**Users**:
+The people the Company serves. They send demand, and they grow or leave with Apdex.
+_Avoid_: customers, players, audience, DAU
+
 ### The design
 
-**Component**:
-An entry in the fixed catalog that a player can place, with its own cost, capacity, and configuration options.
-_Avoid_: building, node type, component type
+**Board**:
+The surface where the player places Nodes and draws Links. One Board per region.
+_Avoid_: canvas, map, grid, lab
 
-**Cluster Component**:
-A Component that becomes real Kubernetes resources in the simulated cluster, and therefore appears in the generated manifest.
-_Avoid_: workload, native component, pod component
+**Component**:
+An entry in the fixed catalog that a player can place, with its own cost, capacity, and options.
+_Avoid_: building, node type, item
 
 **Managed Component**:
-A Component the game models itself, outside the simulated cluster, because the simulation does not provide it.
-_Avoid_: external service, cloud service, SaaS, third-party
+A Component that stands for a third-party service. It costs nothing to place, charges per use, and has outages the player cannot fix.
+_Avoid_: external service, SaaS, vendor
 
 **Node**:
-One placed copy of a Component, with its own configuration and its own row in the metrics table.
-_Avoid_: instance, box, entity
+One placed copy of a Component, with its own size, options, and card.
+_Avoid_: instance, box, entity, machine
+
+**Link**:
+A directed network call from one Node to another, with a latency, timeout, and retry policy.
+_Avoid_: edge, wire, connection, pipe
 
 **Design**:
-The Nodes a player places and the connections between them.
+The Nodes and Links on all Boards of a Company.
 _Avoid_: topology, blueprint, layout, architecture
 
-**Manifest**:
-The Kubernetes resources a Design compiles to, shown read-only as a teaching artifact.
-_Avoid_: YAML, spec, config, output
+**Stack**:
+The language, runtime variant, and framework that an App Server or Worker runs.
+_Avoid_: tech, build, loadout
+
+**Instance type**:
+The family and size of a compute or data Node, which sets its vCPU, RAM, and price.
+_Avoid_: level, tier, spec
+
+**Service**:
+A codebase with its own deploy pipeline, owned by one Team. Every App Server and Worker belongs to one.
+_Avoid_: app, microservice, group
+
+**Playbook**:
+A saved part of a Design that the player can place in one action. Playbooks survive Exits.
+_Avoid_: blueprint, template, preset
+
+### Traffic
+
+**Request kind**:
+A class of work that Users send, such as `page`, `write`, or `ai`, with a value, a cost profile, and an Apdex target.
+_Avoid_: request type, traffic type, file type
+
+**Backend kind**:
+A class of work that a Node sends to the data tier or to a Managed Component, such as `q-read` or `infer`. It earns nothing by itself.
+_Avoid_: query type, internal request
+
+**Stranded**:
+Requests that reach a Node with no outbound Link that accepts them. They count as errors.
+_Avoid_: dropped, lost, orphaned
 
 ### The simulation
 
-**Cluster**:
-The simulated Kubernetes cluster that runs a Run's Cluster Components.
-_Avoid_: environment, sandbox, k8s cluster, backend
-
 **Simulation**:
-The game's own model of demand, load, failures, and money running against a Design, as distinct from the cluster's Kubernetes behaviour.
-_Avoid_: engine, kernel, simulator
+The pure model that turns a Design and demand into the Ledger.
+_Avoid_: engine, solver, kernel
 
-**Tick**:
-One step of simulated time. A Run advances in Ticks.
-_Avoid_: frame, turn, step, round
+**Step**:
+One advance of the Simulation, 100 ms of sim time.
+_Avoid_: tick, frame, turn
 
-### The numbers
+**Sim clock**:
+The clock for rates and operational events. One sim second is one real second at 1× speed.
+_Avoid_: game time, real time
+
+**Calendar**:
+The compressed clock for days, weeks, and quarters. One sim second is one calendar minute.
+_Avoid_: date, in-game time
 
 **Ledger**:
-The complete set of figures that the Simulation derives for a Design at a given Tick. It is the single source of truth for every figure the game shows.
-_Avoid_: spreadsheet, simulation state, model, stats
+Every figure the Simulation derives at a Step. It is the single source of truth for every number the game shows.
+_Avoid_: stats, state, model
 
-**Metrics table**:
-The panel that presents the Ledger, one row per Node.
-_Avoid_: spreadsheet, dashboard, stats panel
+**Capacity**:
+The most work a Node can do per second, set by its tightest limit: CPU, slots, memory, connections, or network.
+_Avoid_: throughput, power, max rps
 
-**Capital**:
-The money a player holds. Placing a Node spends it, and served requests earn it.
-_Avoid_: budget, wallet, cash, funds
+**Utilization**:
+Offered work divided by Capacity.
+_Avoid_: load (alone), usage
+
+**Bottleneck**:
+The one Node whose extra Capacity would earn the most revenue right now. The Board marks it.
+_Avoid_: chokepoint, weak link
+
+**Apdex**:
+The share of requests that satisfy users, with tolerating requests counted as half. It sets revenue and user growth.
+_Avoid_: satisfaction, happiness, patience
+
+### Reliability
+
+**Incident**:
+An event that stresses the Design, chosen by the incident director to test a weakness.
+_Avoid_: event, disaster, outage (as the general term)
+
+**SLO**:
+The availability target for the current Era, measured per calendar week.
+_Avoid_: uptime goal, target
+
+**Error budget**:
+The failures that the SLO allows. Spending it changes team velocity.
+_Avoid_: downtime allowance
+
+**Postmortem**:
+The card after an Incident that records its cost and grants Insight.
+_Avoid_: report, summary, review
+
+**Runbook**:
+An automatic response to one Incident type, written after the player has handled it by hand.
+_Avoid_: script, macro, automation
+
+### People
+
+**Team**:
+A group of Engineers that owns one or more Services, or a platform, SRE, data, or security area.
+_Avoid_: squad, department, crew
+
+**Engineer**:
+A hired person who produces Dev Hours. The founder is the first Engineer.
+_Avoid_: worker, developer, employee
+
+**Dev Hours**:
+The currency of engineering work, spent on Features, tasks, migrations, and debt paydown.
+_Avoid_: DH points, effort, time
+
+**Feature**:
+A product change built with Dev Hours that grows the market or revenue and changes load.
+_Avoid_: upgrade, perk, improvement
+
+**Tech debt**:
+A per-Service percentage that slows Dev Hours and raises Incident chances until paid down.
+_Avoid_: mess, cruft
+
+### Money and knowledge
+
+**Cash**:
+The money the Company holds. Served requests earn it; Nodes, Burn, and salaries spend it.
+_Avoid_: capital, budget, wallet, funds
 
 **Burn**:
-The monthly cost a Node accrues for as long as it exists. Removing the Node stops the Burn but returns no Capital.
-_Avoid_: opex, running cost, upkeep
+The Cash spent per second on everything that exists: Nodes, storage, egress, third parties, and salaries.
+_Avoid_: upkeep, opex, running cost
 
-**Income**:
-The money earned for each request that the Design serves.
-_Avoid_: revenue, earnings, takings
+**Revenue**:
+The Cash earned per second from served requests and subscriptions.
+_Avoid_: income (in UI copy), earnings
 
-### A session
+**Payments drawer**:
+Where Revenue waits until the player collects it, until research automates collection.
+_Avoid_: collector, wallet, pending
 
-**Scenario**:
-A fixed challenge: a brief, a demand curve, a starting Capital, targets, and the failures that occur during it.
-_Avoid_: level, map, mission, exercise, puzzle
+**Insight**:
+The research currency, earned from sampled traffic and Postmortems.
+_Avoid_: science, research points, XP
 
-**Run**:
-One play-through of a Scenario, from the first Tick to the report card.
-_Avoid_: session, match, game, playthrough
+**Analytics**:
+The Component that samples the traffic of linked Nodes and produces Insight.
+_Avoid_: telemetry node, research node
 
-**Role**:
-One of the three owners a player can wear as a hat. A Role groups Components and shows that owner's objective and score.
-_Avoid_: class, faction, seat, player type
-
-**Report card**:
-The scored outcome of a Run: one score per axis, with the reasons behind each score.
-_Avoid_: results screen, score screen, grading, summary
+**Research**:
+An unlock bought with Insight: a Component, a variant, a technique, or more visibility.
+_Avoid_: tech, upgrade, skill
 
 **Tradeoff card**:
-The forced choice that a configuration option presents when a player places or configures a Node, with the consequence of each option. A card belongs to the choice, not to a Component, so several Components can share it.
-_Avoid_: tooltip, info card, lesson, tutorial
+The forced choice shown when the player picks an option, with its six-axis profile and a preview on the player's own Design.
+_Avoid_: tooltip, info card, lesson
+
+### Prestige
+
+**Equity**:
+The founder's share of the Company. It starts at 100% and falls with each Funding round.
+_Avoid_: ownership, stake
+
+**Valuation**:
+The Company's worth: annual revenue times a multiple set by the Rule of 40.
+_Avoid_: score, net worth, market cap (before IPO)
+
+**Exit**:
+The end of a Company: acqui-hire, acquisition, IPO, or stepping down. It pays Legacy.
+_Avoid_: prestige, reset, ascend, portal
+
+**Legacy**:
+The permanent currency earned at Exit and spent in the Legacy shop.
+_Avoid_: prestige points, souls, tokens
+
+**Challenge**:
+A fixed puzzle outside the Company, scored on cost, tail latency, and complexity histograms.
+_Avoid_: level, mission, scenario, puzzle (in UI copy)
+
+## Relationships
+
+- A **Company** has one **Venture**, any number of **Mutators**, and passes through **Eras** in order.
+- A **Design** is made of **Nodes** and **Links** on one or more **Boards**.
+- A **Node** is a copy of one **Component**. Compute Nodes run a **Stack** and belong to a **Service**.
+- A **Service** is owned by one **Team**. **Engineers** in Teams produce **Dev Hours**.
+- The **Simulation** turns the Design into the **Ledger** each **Step**. Every number on screen comes from the Ledger.
+- **Analytics** turns sampled traffic into **Insight**. Insight buys **Research**.
+- An **Exit** turns **Equity** × **Valuation** into **Legacy**.
+
+## Retired terms
+
+The earlier "Architect" design used these terms. They no longer apply:
+Scenario, Run, Role, Report card, Tick, Capital, Income, Cluster, Cluster Component, Manifest.
+See [ADR 0007](docs/adr/0007-endless-idle-game-in-the-browser.md).

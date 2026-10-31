@@ -1,5 +1,7 @@
 # Faithful cluster mechanics, invented load and economics
 
+Status: superseded by [ADR 0007](./0007-endless-idle-game-in-the-browser.md).
+
 A faithful Kubernetes simulation runs the cluster. Pods, deployments, replicas, rollout,
 probes, restarts, crash loops, services, DNS, and endpoint routing behave like Kubernetes, and
 that behaviour is taken on trust from the port rather than reimplemented.

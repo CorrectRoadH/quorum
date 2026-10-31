@@ -1,5 +1,7 @@
 # Sample traffic per tick instead of tracing all of it
 
+Status: superseded by [ADR 0007](./0007-endless-idle-game-in-the-browser.md).
+
 Each tick sends a fixed sample of requests into the simulation, and the money model scales that
 sample up to the demand curve. The sample rate is scenario data.
 

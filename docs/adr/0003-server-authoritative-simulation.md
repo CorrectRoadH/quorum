@@ -1,5 +1,7 @@
 # The server owns the simulation and the game owns the clock
 
+Status: superseded by [ADR 0007](./0007-endless-idle-game-in-the-browser.md).
+
 The server runs the simulation. The client sends intents and renders snapshots. The server
 advances the cluster in fixed steps under its own control, because reproducibility requires a
 paused cluster driven by explicit steps; an unpaused cluster follows real wall-clock time and

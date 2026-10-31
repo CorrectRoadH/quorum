@@ -1,5 +1,7 @@
 # Keep the Kubernetes port behind one adapter
 
+Status: superseded by [ADR 0007](./0007-endless-idle-game-in-the-browser.md).
+
 The simulation uses `@ngrok/webernetes` pinned to `0.6.1`, and reaches it through one adapter
 module that exposes only what the game needs: apply a design, step a tick, read cluster state,
 read request events. The game never imports the port anywhere else.

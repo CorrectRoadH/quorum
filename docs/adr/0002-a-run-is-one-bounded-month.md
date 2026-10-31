@@ -1,5 +1,7 @@
 # A run is one bounded month
 
+Status: superseded by [ADR 0007](./0007-endless-idle-game-in-the-browser.md).
+
 A run is a bounded session that represents one month. The player starts with a small capital
 and a small design, demand grows during the month, income follows the requests the design
 serves, and the month ends in a report card. Leftover capital carries into the next scenario,

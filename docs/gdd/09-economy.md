@@ -1,0 +1,187 @@
+# 9. Economy
+
+[Index](./README.md) · Previous: [Team and velocity](./08-team-and-velocity.md) · Next: [Progression](./10-progression.md)
+
+## Currencies
+
+Each currency has one main source and one main sink, so the player always knows what each number
+is for.
+
+| Currency  | Symbol | Main source                          | Main sink                   | Resets on Exit |
+| --------- | ------ | ------------------------------------ | --------------------------- | -------------- |
+| Cash      | $      | Served requests                      | Nodes, Burn, salaries       | Yes            |
+| Insight   | ◇      | Sampled traffic, postmortems         | Research                    | Yes            |
+| Dev Hours | DH     | Engineers                            | Features, tasks, migrations | Yes            |
+| Equity    | %      | Starts at 100%; falls when you raise | Determines the Exit payout  | Yes            |
+| Legacy    | ★      | Exits                                | The Legacy shop             | No             |
+
+Users are not a currency. They are the state that every currency depends on.
+
+## Cash
+
+### Sources
+
+| Source            | Detail                                                                                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Request revenue   | `value × Apdex weight` per served request ([Simulation](./04-simulation.md#apdex-and-revenue)).                                                                                      |
+| Funding grants    | One grant per round raised ([Funding](#funding)).                                                                                                                                    |
+| Subscriptions     | From the Pre-seed Era, the "Paid plans" feature adds a fixed revenue per paying user per calendar day, independent of requests. This makes revenue less spiky and rewards retention. |
+| Challenge rewards | None. Challenges pay in Legacy and badges ([Challenges](./14-challenges.md)).                                                                                                        |
+
+### The Payments drawer
+
+Revenue first goes to the **Payments** drawer. The player clicks Collect to move it into Cash.
+
+- The drawer holds 60 seconds of revenue at the current rate, at size 1. Each size step doubles it.
+- Revenue beyond the drawer's size is lost.
+- Research "Stripe Billing" (Garage, 30 ◇) collects automatically. After that, the drawer only shows
+  the rate.
+
+This keeps the Garage Era active and then removes the click before it becomes a chore
+([pillar 5](./01-vision.md#pillar-5-respect-the-player)).
+
+## The cloud bill
+
+**Burn** is the total Cash spent per second. The HUD shows it next to income. The Cost panel splits it
+into these lines, like a real cloud bill:
+
+| Line          | Formula                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| Compute       | Σ instances `vCPU × price_per_vCPU + RAM × price_per_GB`, × family factor, × pricing model   |
+| Managed data  | Σ data Nodes at their size price                                                             |
+| Storage       | GB stored × class price ([Data tier](./07-data-tier.md#data-volume))                         |
+| Egress        | GB out × egress price ([Egress](#egress))                                                    |
+| Requests      | Per-request prices: API Gateway, Serverless Functions, SQS, Object Storage                   |
+| Third parties | Payment fees, Auth Provider per user, LLM tokens, push messages                              |
+| Observability | Analytics sampling and retention ([Observability](./12-observability.md#the-cost-of-seeing)) |
+| Salaries      | Σ engineers × salary × language factor                                                       |
+
+Real teams are often surprised by the egress, observability, and third-party lines. The game
+surfaces them on purpose.
+
+### Base prices
+
+| Resource                 | Price             |
+| ------------------------ | ----------------- |
+| vCPU, general family     | $0.05/s           |
+| RAM                      | $0.006/s per GB   |
+| Block storage            | $0.0001/s per GB  |
+| Object storage, standard | $0.00002/s per GB |
+| Engineer salary (base)   | $0.40/s           |
+
+Prices rise with each Era at the same rate as revenue per request, so the ratios stay meaningful.
+[Balancing](./16-balancing.md#prices) holds the full table.
+
+## Pricing models
+
+From the Series A Era, each compute Node has a pricing model.
+
+| Model      | Price   | Condition                                                                                                                                                                                                                                          |
+| ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| On-demand  | 1.0×    | None. Remove at any time.                                                                                                                                                                                                                          |
+| Reserved   | 0.6×    | A commitment of one calendar week. Removing the Node does not stop the Burn until the term ends.                                                                                                                                                   |
+| Spot       | 0.3×    | The provider can reclaim the Node at any time. The player gets a 10-second warning (stylized; the real AWS notice is two minutes). Good for Workers and stateless servers behind a load balancer with spare capacity. Fatal for a single database. |
+| Serverless | Per use | Only for Serverless Functions and managed services.                                                                                                                                                                                                |
+
+The real lesson: the cheapest fleet mixes all three. Reserved instances cover the base load, on-demand
+instances cover the daily peak, and spot instances run batch work.
+
+## Egress
+
+| Path                          | Price per GB |
+| ----------------------------- | ------------ |
+| Origin to internet            | $0.09        |
+| CDN to internet               | $0.02        |
+| Cross-zone, each direction    | $0.01        |
+| Cross-region                  | $0.02        |
+| Object storage R2 to internet | $0           |
+
+`media` at 5 MB per request makes egress the largest line on the bill in the Series A Era unless a CDN
+or R2 serves it. A player who ignores egress sees revenue rise and margin fall.
+
+## Third-party fees
+
+| Service          | Price                                          |
+| ---------------- | ---------------------------------------------- |
+| Payment Provider | 2.9% + $0.30 per successful `buy`              |
+| Auth Provider    | $0.02 per monthly active user per calendar day |
+| LLM API          | Per 1,000 tokens, by model size                |
+| Push and email   | $0.0001 per message                            |
+| API Gateway      | $0.002 per request (game dollars)              |
+
+## Funding
+
+When users reach an Era milestone, investors offer a round. The player can raise or decline.
+
+| Round    | Milestone (users)                | Grant         | Dilution                 | Notes                                            |
+| -------- | -------------------------------- | ------------- | ------------------------ | ------------------------------------------------ |
+| Pre-seed | 1,000                            | $2,500        | 10%                      |                                                  |
+| Seed     | 5,000                            | $15,000       | 15%                      |                                                  |
+| Series A | 25,000                           | $80,000       | 20%                      |                                                  |
+| Series B | 150,000                          | $400,000      | 18%                      |                                                  |
+| Series C | 1,000,000                        | $2,000,000    | 15%                      |                                                  |
+| Pre-IPO  | 10,000,000                       | $10,000,000   | 10%                      |                                                  |
+| IPO      | 50,000,000 and the IPO checklist | Public market | 15% sold in the offering | [Progression](./10-progression.md#era-6-pre-ipo) |
+
+**Declining** a round keeps Equity and gives no grant. The Era still advances, so the new kinds still
+arrive, and the player must pay for them from revenue. A player who declines every round and still
+reaches IPO earns the achievement "Default Alive", named after Paul Graham's essay.
+
+Dilution compounds. A founder who raises every round keeps about
+0.90 × 0.85 × 0.80 × 0.82 × 0.85 × 0.90 × 0.85 ≈ 32% before the IPO offering, which is close to a
+typical real founder stake at IPO.
+
+## Valuation
+
+The company has a valuation at all times. It decides the Exit payout.
+
+```text
+ARR        = revenue per calendar day × 365
+growth     = user growth over the last calendar week, annualized, in percent
+margin     = (income − Burn) / income, in percent
+rule_of_40 = growth + margin
+multiple   = 4 + 0.15 × max(0, rule_of_40)            clamped to [2, 30]
+valuation  = ARR × multiple
+```
+
+The [Rule of 40](./glossary.md#rule-of-40) is a real heuristic for software companies: growth plus
+profit margin should be at least 40%. It gives the late game a reason to care about margin, not only
+growth.
+
+## Runway and running out of Cash
+
+**Runway** is Cash divided by net Burn. The HUD shows it when net Burn is positive.
+
+When Cash reaches zero:
+
+1. Placement and upgrades stop.
+2. Burn continues and Cash goes negative.
+3. At −1 calendar day of Burn, investors offer a **bridge**: a grant that covers 3 calendar days of
+   Burn for 8% dilution. The player can accept, or cut costs.
+4. If the player declines and Cash reaches −3 calendar days of Burn, Nodes shut down, most expensive
+   first, until net Burn is zero.
+
+The company never ends. Running out of money is a setback, not a game over
+([pillar 5](./01-vision.md#pillar-5-respect-the-player)).
+
+## Sources and sinks summary
+
+```text
+Users ──requests──► Revenue ──► Payments ──collect──► CASH ──► Nodes, Burn, salaries, hires
+  ▲                                                     ▲
+  │                                                     └── Funding (costs Equity)
+  │
+  └── Apdex ◄── design quality ◄── capacity, research, features
+
+Sampled traffic ──► INSIGHT ──► Research ──► Components, variants, techniques, visibility
+Postmortems ─────┘
+
+Engineers ──► DEV HOURS ──► Features (more users, revenue, load)
+                         ──► Tasks, migrations, debt paydown (cheaper and safer system)
+
+Exit (Equity × valuation) ──► LEGACY ──► Permanent perks, Playbooks, Ventures
+```
+
+The three main currencies (Cash, Insight, Dev Hours) compete for the player's attention, not for
+each other. No exchange between them exists, except that Cash hires engineers and pays for Analytics.
+This keeps each choice legible.
