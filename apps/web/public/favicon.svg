@@ -1,12 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Effect Foldkit template">
-  <rect width="64" height="64" rx="14" fill="#172033" />
-  <path
-    d="M20 41 32 19l12 22"
-    fill="none"
-    stroke="#f8fafc"
-    stroke-width="6"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <circle cx="32" cy="46" r="3.5" fill="#f8fafc" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Quorum">
+  <rect width="64" height="64" rx="14" fill="#141517" />
+  <!-- The wordmark's q, from GLYPHS in apps/web/src/game/title.ts. -->
+  <g transform="translate(18.5 9.5) scale(0.24)">
+    <path d="M89 11V150M50 11a39 39 0 1 0 0.01 0" fill="none" stroke="#eaebec" stroke-width="22" />
+    <circle cx="89" cy="180" r="14" fill="#58cef8" />
+  </g>
 </svg>

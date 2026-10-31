@@ -4,26 +4,75 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#141517" />
+    <meta name="color-scheme" content="dark light" />
     <!-- The title screen is dark: paint the first frame to match it. -->
     <style>
       html {
         background: #141517;
       }
     </style>
+    <title>Quorum — a systems design game for software engineers</title>
     <meta
       name="description"
-      content="Quorum — a learning game about system design. Assemble an architecture, run it for one simulated month, and get scored on what it did."
+      content="Grow a startup from one server in a garage to a public company. Wire components, pick stacks, and fix one real bottleneck after another in an incremental systems design game."
     />
+    <link rel="canonical" href="https://quorum.elianiva.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Quorum" />
+    <meta property="og:url" content="https://quorum.elianiva.com/" />
+    <meta property="og:title" content="Quorum — a systems design game for software engineers" />
+    <meta
+      property="og:description"
+      content="Grow a startup from one server in a garage to a public company, one real bottleneck at a time."
+    />
+    <meta property="og:image" content="https://quorum.elianiva.com/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Quorum wordmark wired into an isometric workbench of users, a load balancer, two app servers, a cache, and a database."
+    />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quorum — a systems design game for software engineers" />
+    <meta
+      name="twitter:description"
+      content="Grow a startup from one server in a garage to a public company, one real bottleneck at a time."
+    />
+    <meta name="twitter:image" content="https://quorum.elianiva.com/og.png" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <title>Quorum</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Quorum",
+        "url": "https://quorum.elianiva.com/",
+        "image": "https://quorum.elianiva.com/og.png",
+        "description": "An incremental systems design game for software engineers. Grow a startup from one server in a garage to a public company.",
+        "genre": ["Incremental", "Simulation", "Educational"],
+        "gamePlatform": "Web browser",
+        "applicationCategory": "Game",
+        "operatingSystem": "Any",
+        "inLanguage": "en",
+        "isAccessibleForFree": true,
+        "author": { "@type": "Person", "name": "elianiva", "url": "https://elianiva.com" }
+      }
+    </script>
   </head>
   <body>
+    <noscript>Quorum is a browser game and needs JavaScript to run.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/entry.ts"></script>
   </body>
