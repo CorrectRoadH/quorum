@@ -1,0 +1,345 @@
+import * as Effect from 'effect/Effect'
+import { Mount } from 'foldkit'
+import type { Html, HtmlBuilder } from 'foldkit/html'
+import { ArrowRight, Download } from 'lucide'
+import { icon } from '@/lib/icons'
+import { eraOf } from './engine/lookups.ts'
+import { clock, compact } from './format.ts'
+import { Message } from './message.ts'
+import type { Model } from './model.ts'
+
+/* ==========================================================================
+   The title screen: the night shift. One 16:10 stage, 1600 x 1000 units,
+   scales as a whole so the menu's port, the overlay cable and the bench's
+   lead cable always meet. The bench is the game idling (Factorio's menu
+   world); the menu is a node wired into it (Upload Labs). Pointing at an
+   item lifts the machines it touches.
+   ========================================================================== */
+
+/** Stage units to percentages of the stage box. */
+const x = (u: number) => `${u / 16}%`
+const y = (u: number) => `${u / 10}%`
+
+/** The bench SVG is 640 x 360 and sits here, at this scale, bleeding off the right. */
+const BENCH = { left: 560, top: 190, width: 1120 }
+const S = BENCH.width / 640
+const fromBench = (bx: number, by: number) => [BENCH.left + bx * S, BENCH.top + by * S] as const
+
+/** The lead cable's points in the bench SVG, from apps/web/art/figures/hero.mjs:
+ *  where it meets the users plate, where it crosses the front edge, and where it ends below. */
+const LEAD_PLATE = fromBench(74.07, 101.39)
+const LEAD_EDGE = fromBench(48.44, 114.2)
+const LEAD_END = fromBench(48.44, 140.69)
+
+const MENU = { left: 96, top: 470, width: 400, pad: 8, row: 64 }
+const PORT = [MENU.left + MENU.width, MENU.top + MENU.pad + MENU.row / 2] as const
+
+/** Once assembled, the bench floats this many units up and back; the cable's end follows it. */
+const FLOAT = 10
+const cable = (lift: number) =>
+  `M${PORT[0]} ${PORT[1]} C${PORT[0] + 70} ${PORT[1]} ${LEAD_END[0]} ${PORT[1] + 26 - lift} ${LEAD_END[0]} ${LEAD_END[1] - lift}`
+const CABLE = cable(0)
+const CABLE_STYLE = { '--cable-raised': `path("${cable(FLOAT)}")` }
+
+/** The bench's footprint on the floor below it, where its shadow falls. */
+const FLOOR = '858,283 1649,678 1382,811 592,416'
+
+const ROUTE = `${CABLE} L${LEAD_EDGE[0]} ${LEAD_EDGE[1]} L${LEAD_PLATE[0]} ${LEAD_PLATE[1]}`
+
+/* --------------------------------------------------------------------------
+   The bench, inlined so page CSS reaches its machines. Both SVG clocks are
+   reset together, so a packet on the menu cable reaches the users plate as
+   the bench sends its next request on.
+   -------------------------------------------------------------------------- */
+
+const BenchMounted = Mount.define('BenchMounted', {
+  messages: [Message.Synced],
+  execute: ({ element }) =>
+    Effect.tryPromise(() => fetch('/art/hero.svg').then((response) => response.text())).pipe(
+      Effect.orElseSucceed(() => ''),
+      Effect.map((svg) => {
+        element.innerHTML = svg
+        for (const clockRoot of element.closest('.title-stage')?.querySelectorAll('svg') ?? [])
+          if (clockRoot instanceof SVGSVGElement) clockRoot.setCurrentTime(0)
+        return Message.Synced()
+      }),
+    ),
+})
+
+/* --------------------------------------------------------------------------
+   The wordmark. Monoline geometric lowercase on a 100-unit x-height with a
+   22-unit stroke; the q's tail is a link that ends in a lit node.
+   -------------------------------------------------------------------------- */
+
+const GLYPHS: ReadonlyArray<{ at: number; paths: ReadonlyArray<string> }> = [
+  { at: 0, paths: ['M89 11V150', 'M50 11a39 39 0 1 0 0.01 0'] },
+  { at: 120, paths: ['M11 0V50a39 39 0 0 0 78 0', 'M89 0V100'] },
+  { at: 240, paths: ['M50 11a39 39 0 1 0 0.01 0'] },
+  { at: 360, paths: ['M11 0V100', 'M11 50a39 39 0 0 1 39-39H60'] },
+  { at: 440, paths: ['M11 0V50a39 39 0 0 0 78 0', 'M89 0V100'] },
+  {
+    at: 560,
+    paths: ['M11 0V100', 'M11 45a34.5 34.5 0 0 1 69 0V100', 'M80 45a34.5 34.5 0 0 1 69 0V100'],
+  },
+]
+
+const wordmark = (h: HtmlBuilder<Message>): Html =>
+  h.svg(
+    [
+      h.ViewBox('0 0 720 194'),
+      h.Class('title-wordmark absolute overflow-visible text-foreground'),
+      h.Style({ left: x(MENU.left), top: y(282), width: x(420) }),
+      h.Role('img'),
+      h.AriaLabel('Quorum'),
+    ],
+    [
+      ...GLYPHS.flatMap(({ at, paths }, letter) =>
+        paths.map((d) =>
+          h.path([
+            h.D(d),
+            h.Transform(`translate(${at} 0)`),
+            h.PathLength('1'),
+            h.Fill('none'),
+            h.Stroke('currentColor'),
+            h.StrokeWidth('22'),
+            h.Style({ 'animation-delay': `${letter * 70}ms` }),
+          ]),
+        ),
+      ),
+      h.circle([h.Class('title-node'), h.Cx('89'), h.Cy('180'), h.R('14')]),
+    ],
+  )
+
+/* --------------------------------------------------------------------------
+   The menu: a node with one output port. `aim` names the machines an item
+   touches, which the stylesheet lifts while the item is pointed at.
+   -------------------------------------------------------------------------- */
+
+const item = (
+  label: string,
+  detail: string,
+  aim: string,
+  message: Message,
+  primary: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.button(
+    [
+      h.Key(label),
+      h.Type('button'),
+      h.OnClick(message),
+      h.DataAttribute('aim', aim),
+      h.Class(
+        `press group relative flex w-full items-center justify-between gap-4 rounded-[1cqw] px-[1.5cqw] text-left ${
+          primary
+            ? 'h-[4cqw] bg-primary-fill text-on-primary-fill shadow-primary hover:brightness-105'
+            : 'h-[3cqw] text-muted-foreground hover:bg-muted hover:text-foreground'
+        }`,
+      ),
+    ],
+    [
+      primary ? h.empty : h.span([h.Class('title-marker')], []),
+      h.span(
+        [h.Class('flex flex-col')],
+        [
+          h.span([h.Class('text-[max(13px,1.05cqw)] font-medium')], [label]),
+          detail
+            ? h.span(
+                [h.Class('font-mono text-[max(11px,0.78cqw)] tabular-nums opacity-60')],
+                [detail],
+              )
+            : h.empty,
+        ],
+      ),
+      h.span(
+        [
+          h.Class(
+            `transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 ${primary ? 'opacity-60' : 'opacity-0 group-hover:opacity-60'}`,
+          ),
+        ],
+        [icon(h, ArrowRight, 'size-4')],
+      ),
+    ],
+  )
+
+const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  return h.nav(
+    [
+      h.AriaLabel('Main menu'),
+      h.Class(
+        'title-menu absolute flex flex-col gap-[0.25cqw] rounded-[1.5cqw] bg-surface shadow-card',
+      ),
+      h.Style({
+        left: x(MENU.left),
+        top: y(MENU.top),
+        width: x(MENU.width),
+        padding: x(MENU.pad),
+      }),
+    ],
+    [
+      ...(model.saved
+        ? [
+            item(
+              'Continue',
+              `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+              'users lb server cache database',
+              Message.Continued(),
+              true,
+              h,
+            ),
+          ]
+        : []),
+      item(
+        model.saved ? 'New company' : 'Start a company',
+        '',
+        'users',
+        Message.NewCompanyStarted(),
+        !model.saved,
+        h,
+      ),
+      item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
+    ],
+  )
+}
+
+/* --------------------------------------------------------------------------
+   The overlay: the cable from the menu's port to the bench's lead, and the
+   requests that ride it, four per bench loop.
+   -------------------------------------------------------------------------- */
+
+const LOOP = 3.6
+const TRAVEL = 1.4
+/** When the bench, once assembled, sends its first request on (START in hero.mjs).
+ *  Cable packets leave so they reach the users plate just before each one. */
+const BENCH_START = 2.3
+const FIRST_DEPARTURE = BENCH_START + LOOP / 4 - 0.15 - TRAVEL
+
+const packet = (begin: number, h: HtmlBuilder<Message>): Html =>
+  h.g(
+    [h.Opacity('0')],
+    [
+      h.animate([
+        h.Attribute('attributeName', 'opacity'),
+        h.Attribute('dur', `${LOOP}s`),
+        h.Attribute('begin', `${begin}s`),
+        h.Attribute('repeatCount', 'indefinite'),
+        h.Attribute(
+          'keyTimes',
+          `0;0.03;${(TRAVEL / LOOP - 0.03).toFixed(3)};${(TRAVEL / LOOP).toFixed(3)};1`,
+        ),
+        h.Attribute('values', '0;1;1;0;0'),
+      ]),
+      h.animateMotion([
+        h.Attribute('path', ROUTE),
+        h.Attribute('dur', `${LOOP}s`),
+        h.Attribute('begin', `${begin}s`),
+        h.Attribute('repeatCount', 'indefinite'),
+        h.Attribute('calcMode', 'linear'),
+        h.Attribute('keyPoints', '0;1;1'),
+        h.Attribute('keyTimes', `0;${(TRAVEL / LOOP).toFixed(3)};1`),
+      ]),
+      h.circle([h.R('9'), h.Class('fill-signal opacity-20')]),
+      h.circle([h.R('3.8'), h.Class('fill-signal')]),
+    ],
+  )
+
+const overlay = (h: HtmlBuilder<Message>): Html =>
+  h.svg(
+    [
+      h.ViewBox('0 0 1600 1000'),
+      h.Class('title-overlay pointer-events-none absolute inset-0 size-full overflow-visible'),
+      h.AriaHidden(true),
+    ],
+    [
+      h.path([h.Class('title-cable-edge'), h.D(CABLE), h.PathLength('1'), h.Style(CABLE_STYLE)]),
+      h.path([h.Class('title-cable'), h.D(CABLE), h.PathLength('1'), h.Style(CABLE_STYLE)]),
+      h.g(
+        [h.Class('title-packets')],
+        [0, 1, 2, 3].map((n) => packet(FIRST_DEPARTURE + n * (LOOP / 4), h)),
+      ),
+      h.circle([h.Class('title-port'), h.Cx(`${PORT[0]}`), h.Cy(`${PORT[1]}`), h.R('9')]),
+      h.circle([h.Class('title-port-core'), h.Cx(`${PORT[0]}`), h.Cy(`${PORT[1]}`), h.R('3.5')]),
+    ],
+  )
+
+/* --------------------------------------------------------------------------
+   The drawing frame around the screen: hairline border, corner marks and edge
+   rulers. The build stamp at the foot holds the playtest tools.
+   -------------------------------------------------------------------------- */
+
+const CORNERS = [
+  'top-0 left-0 border-t border-l',
+  'top-0 right-0 border-t border-r',
+  'bottom-0 left-0 border-b border-l',
+  'bottom-0 right-0 border-b border-r',
+]
+
+const frame = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('title-frame pointer-events-none absolute inset-6')],
+    [
+      h.span([h.Class('title-ruler title-ruler-x')], []),
+      h.span([h.Class('title-ruler title-ruler-y')], []),
+      ...CORNERS.map((corner) => h.span([h.Class(`title-corner absolute size-4 ${corner}`)], [])),
+    ],
+  )
+
+const stamp = (h: HtmlBuilder<Message>): Html =>
+  h.footer(
+    [
+      h.Class(
+        'absolute right-10 bottom-9 left-10 flex items-center justify-between font-mono text-[10.5px] tracking-[0.12em] text-muted-foreground uppercase',
+      ),
+    ],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.OnClick(Message.LogExported()),
+          h.DataAttribute('aim', 'database'),
+          h.Class(
+            'press -mx-2 flex items-center gap-2 rounded-md px-2 py-1 uppercase hover:bg-muted hover:text-foreground',
+          ),
+        ],
+        [icon(h, Download, 'size-3.5'), 'Export playtest log'],
+      ),
+      h.span([], ['Playtest build']),
+    ],
+  )
+
+export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.main(
+    [
+      h.Class(
+        'title-screen dark relative grid h-full place-items-center overflow-hidden bg-page text-foreground',
+      ),
+    ],
+    [
+      h.div([h.Class('title-grid pointer-events-none absolute inset-0')], []),
+      frame(h),
+      h.div(
+        [h.Class('title-stage relative')],
+        [
+          h.svg(
+            [
+              h.ViewBox('0 0 1600 1000'),
+              h.Class('pointer-events-none absolute inset-0 size-full overflow-visible'),
+              h.AriaHidden(true),
+            ],
+            [h.polygon([h.Class('title-floor'), h.Points(FLOOR)])],
+          ),
+          h.div([
+            h.Key('bench'),
+            h.Class('title-bench absolute'),
+            h.Style({ left: x(BENCH.left), top: y(BENCH.top), width: x(BENCH.width) }),
+            h.OnMount(BenchMounted()),
+          ]),
+          wordmark(h),
+          menu(model, h),
+          overlay(h),
+        ],
+      ),
+      stamp(h),
+    ],
+  )

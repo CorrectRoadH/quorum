@@ -1,6 +1,7 @@
 import type { Document, HtmlBuilder } from 'foldkit/html'
 import { toast } from '@/components/lab/bits.ts'
-import { labScreen, titleScreen } from './screens.ts'
+import { labScreen } from './screens.ts'
+import { titleScreen } from './title.ts'
 import type { Message } from './message.ts'
 import type { Model } from './model.ts'
 

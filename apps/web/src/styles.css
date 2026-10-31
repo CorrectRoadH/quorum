@@ -51,6 +51,8 @@
   --edge-solid: oklch(0.7 0.006 260);
   --node: var(--card);
   --edge: oklch(0.5 0.006 260 / 0.45);
+  /* The title screen's one accent: lit parts, traffic, the wordmark's node. */
+  --signal: oklch(0.8 0.12 225);
   --chart-1: oklch(0.3 0 0);
   --chart-2: oklch(0.56 0.1 190);
   --chart-3: oklch(0.66 0.145 66);
@@ -93,6 +95,7 @@
   --color-canvas: var(--canvas);
   --color-node: var(--node);
   --color-edge: var(--edge);
+  --color-signal: var(--signal);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -276,8 +279,10 @@
     overflow: hidden;
   }
 
+  /* Both screens paint their own background; the body matches the dark title
+     screen so nothing flashes light before it renders. */
   body {
-    background: var(--background);
+    background: #141517;
     color: var(--foreground);
     font-family: var(--sans);
     font-size: 13px;
@@ -462,7 +467,250 @@ details.fold[open]::details-content {
   transition: transform 200ms var(--ease-out);
 }
 
+/* ==========================================================================
+   Title screen (src/game/title.ts). A rare screen, so it gets the delight
+   budget: the wordmark draws itself, the cable runs out to the bench, and the
+   bench boots plate by plate (in its own SVG). Pointing at a menu item lifts
+   the machines it touches and lights the cable.
+   ========================================================================== */
+.title-grid {
+  --iso-line: oklch(1 0 0 / 0.045);
+  background:
+    radial-gradient(ellipse 45% 55% at 66% 48%, oklch(0.8 0.12 225 / 0.07), transparent 70%),
+    repeating-linear-gradient(30deg, var(--iso-line) 0 1px, transparent 1px 36px),
+    repeating-linear-gradient(150deg, var(--iso-line) 0 1px, transparent 1px 36px);
+  mask-image: radial-gradient(ellipse 65% 70% at 62% 50%, black 10%, transparent 80%);
+}
+.title-frame {
+  border: 1px solid oklch(1 0 0 / 0.05);
+}
+.title-corner {
+  border-color: oklch(1 0 0 / 0.28);
+  margin: -1px;
+}
+/* Edge rulers: a minor tick every 12px and a major one every 96px. */
+.title-ruler {
+  position: absolute;
+  --tick: oklch(1 0 0 / 0.1);
+}
+.title-ruler-x {
+  top: 0;
+  left: 96px;
+  right: 96px;
+  height: 9px;
+  background:
+    repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 96px) top / 100% 9px
+      no-repeat,
+    repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 12px) top / 100% 4px
+      no-repeat;
+}
+.title-ruler-y {
+  left: 0;
+  top: 96px;
+  bottom: 96px;
+  width: 9px;
+  background:
+    repeating-linear-gradient(to bottom, var(--tick) 0 1px, transparent 1px 96px) left / 9px 100%
+      no-repeat,
+    repeating-linear-gradient(to bottom, var(--tick) 0 1px, transparent 1px 12px) left / 4px 100%
+      no-repeat;
+}
+/* The selection marker: a signal bar at the left of the row being pointed at. */
+.title-marker {
+  position: absolute;
+  left: 0;
+  top: 30%;
+  bottom: 30%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--signal);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition:
+    opacity 150ms ease,
+    transform 200ms var(--ease-out);
+}
+:focus-visible > .title-marker {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  :hover > .title-marker {
+    opacity: 1;
+    transform: none;
+  }
+}
+.title-stage {
+  width: min(100vw, 160vh);
+  aspect-ratio: 16 / 10;
+  container-type: inline-size;
+  --title-lift: -6px;
+}
+.title-bench svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Once assembled, the bench floats: it rises and falls over its floor shadow,
+   which tightens and darkens as the bench comes down. The menu cable's end
+   follows it (its raised path is set inline from title.ts). The 2.6s delay
+   waits out the assembly in the bench SVG. */
+.title-bench {
+  animation: title-float 6s ease-in-out 2.6s infinite;
+}
+.title-floor {
+  fill: oklch(0 0 0 / 0.7);
+  filter: blur(22px);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: title-floor 6s ease-in-out 2.6s infinite;
+}
+.title-cable-edge,
+.title-cable {
+  animation:
+    title-draw 600ms var(--ease-out) 450ms forwards,
+    title-cable-float 6s ease-in-out 2.6s infinite;
+}
+@keyframes title-float {
+  50% {
+    translate: 0 -0.625cqw;
+  }
+}
+@keyframes title-floor {
+  50% {
+    opacity: 0.7;
+    scale: 0.97;
+  }
+}
+@keyframes title-cable-float {
+  50% {
+    d: var(--cable-raised);
+  }
+}
+
+.title-wordmark path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: title-draw 900ms var(--ease-out) forwards;
+}
+.title-node {
+  fill: var(--signal);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: title-node 400ms var(--ease-out) 650ms forwards;
+}
+.title-menu {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: stagger-in 400ms var(--ease-out) 250ms forwards;
+}
+@keyframes title-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes title-node {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The menu cable, styled as the bench's tubes: an edge line around a dark core. */
+.title-cable-edge,
+.title-cable {
+  fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.title-cable-edge {
+  stroke: #7a818c;
+  stroke-width: 6.6;
+}
+.title-cable {
+  stroke: #2b2e33;
+  stroke-width: 4.6;
+  transition: stroke 200ms ease;
+}
+.title-port {
+  fill: var(--card);
+  stroke: #7a818c;
+  stroke-width: 1.2;
+}
+.title-port-core {
+  fill: var(--signal);
+  transition: opacity 200ms ease;
+  opacity: 0.55;
+}
+
+.title-bench [data-machine] {
+  transition:
+    translate 300ms var(--ease-out),
+    filter 300ms ease;
+}
+.title-screen:has([data-aim]:focus-visible) .title-cable {
+  stroke: color-mix(in oklch, var(--signal) 55%, #2b2e33);
+}
+.title-screen:has([data-aim]:focus-visible) .title-port-core {
+  opacity: 1;
+}
+.title-screen:has([data-aim~='users']:focus-visible) [data-machine='users'],
+.title-screen:has([data-aim~='lb']:focus-visible) [data-machine='lb'],
+.title-screen:has([data-aim~='server']:focus-visible) [data-machine='server'],
+.title-screen:has([data-aim~='cache']:focus-visible) [data-machine='cache'],
+.title-screen:has([data-aim~='database']:focus-visible) [data-machine='database'] {
+  translate: 0 var(--title-lift);
+  --callout: var(--signal);
+  filter: drop-shadow(0 7px 6px oklch(0 0 0 / 0.55))
+    drop-shadow(0 0 10px color-mix(in oklch, var(--signal) 35%, transparent));
+}
+@media (hover: hover) and (pointer: fine) {
+  .title-screen:has([data-aim]:hover) .title-cable {
+    stroke: color-mix(in oklch, var(--signal) 55%, #2b2e33);
+  }
+  .title-screen:has([data-aim]:hover) .title-port-core {
+    opacity: 1;
+  }
+  .title-screen:has([data-aim~='users']:hover) [data-machine='users'],
+  .title-screen:has([data-aim~='lb']:hover) [data-machine='lb'],
+  .title-screen:has([data-aim~='server']:hover) [data-machine='server'],
+  .title-screen:has([data-aim~='cache']:hover) [data-machine='cache'],
+  .title-screen:has([data-aim~='database']:hover) [data-machine='database'] {
+    translate: 0 var(--title-lift);
+    --callout: var(--signal);
+    filter: drop-shadow(0 7px 6px oklch(0 0 0 / 0.55))
+      drop-shadow(0 0 10px color-mix(in oklch, var(--signal) 35%, transparent));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .title-wordmark path,
+  .title-cable-edge,
+  .title-cable {
+    stroke-dasharray: none;
+    animation: none;
+  }
+  .title-node {
+    animation-name: stagger-in;
+  }
+  .title-menu {
+    transform: none;
+  }
+  .title-packets {
+    display: none;
+  }
+  .title-bench,
+  .title-floor {
+    animation: none;
+  }
+  .title-stage {
+    --title-lift: 0px;
+  }
   .press:active:not([aria-haspopup], :disabled) {
     transform: none;
   }
