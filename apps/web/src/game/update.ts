@@ -177,7 +177,7 @@ const eventText = (event: StepEvent, game: Game): Note =>
   StepEvent.$match(event, {
     IncidentStarted: ({ incident }): Note =>
       incident.kind === 'instance' && incident.nodeId
-        ? [`${nodeName(game, incident.nodeId)} failed. Replace it from its card.`, 'danger']
+        ? [`${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`, 'danger']
         : null,
     IncidentResolved: ({ postmortem }): Note => [
       `${INCIDENTS[postmortem.kind].name} is over. Write the postmortem for ${postmortem.reward} Insight.`,
@@ -224,7 +224,9 @@ const tick = (model: Model): Result => {
     events.push(...result.events)
   }
   const ledger = solve(game)
-  let next: Model = { ...model, game }
+  // An incident drops the clock to 1×, so the player has time to respond.
+  const incident = events.some((event) => event._tag === 'IncidentStarted')
+  let next: Model = { ...model, game, speed: incident ? 1 : model.speed }
   const commands: Array<AnyCommand> = [sync(next)]
   const logs: Array<LogEntry> = []
 

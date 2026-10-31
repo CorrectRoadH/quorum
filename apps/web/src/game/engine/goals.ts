@@ -55,7 +55,7 @@ export const nextGoal = (game: Game, ledger: Ledger): string => {
     return 'Click Payments to collect your revenue.'
   const failed = game.nodes.find((node) => node.down === -1)
   if (failed)
-    return `${COMPONENTS[failed.type].name} failed. Replace it from its card, or wait for the provider.`
+    return `${COMPONENTS[failed.type].name} failed. Select it and click Replace, or wait for the provider.`
   const restarting = game.nodes.find((node) => node.down > 0)
   if (restarting)
     return `${COMPONENTS[restarting.type].name} is restarting. Requests fail until it is up.`
