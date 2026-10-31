@@ -1,21 +1,24 @@
 import type { Document, HtmlBuilder } from 'foldkit/html'
-import { toasts } from '@/components/game/frame.ts'
-import { activeScreen } from './screens/index.ts'
+import { toast } from '@/components/lab/bits.ts'
+import { labScreen, titleScreen } from './screens.ts'
 import type { Message } from './message.ts'
 import type { Model } from './model.ts'
 
 /* ==========================================================================
-   The root view. Quorum is one window: the active screen fills it, and
-   toasts float above whatever that screen is.
+   The root view. Quorum is one window: the active screen fills it, and the
+   toast floats above it.
    ========================================================================== */
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: 'Quorum — a month in the life of your design',
+  title: 'Quorum',
   body: h.div(
-    [h.Class('h-dvh w-full overflow-hidden bg-background text-foreground')],
+    [h.Class('h-dvh w-full overflow-hidden bg-background text-foreground select-none')],
     [
-      h.div([h.Key(model.route), h.Class('h-full')], [activeScreen(model, h)]),
-      toasts(model.toast, h),
+      h.div(
+        [h.Key(model.route), h.Class('h-full')],
+        [model.route === 'lab' ? labScreen(model, h) : titleScreen(model, h)],
+      ),
+      toast(model.toast, h),
     ],
   ),
 })

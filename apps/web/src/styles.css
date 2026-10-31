@@ -43,6 +43,8 @@
   --danger-soft: oklch(0.545 0.19 27 / 0.12);
   --canvas: oklch(0.966 0.007 261);
   --canvas-grid: oklch(0.45 0.03 260 / 0.1);
+  --canvas-dot: oklch(0.86 0.022 259);
+  --edge-solid: oklch(0.72 0.035 260);
   --node: oklch(1 0 0);
   --edge: oklch(0.55 0.04 260 / 0.45);
   --chart-1: oklch(0.61 0.156 263);

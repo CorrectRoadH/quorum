@@ -1,43 +1,59 @@
-import { Schema } from 'effect'
+import * as Effect from 'effect/Effect'
+import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
+import { Schema } from 'effect'
 import { Subscription } from 'foldkit'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
-import { TICKS_IN_MONTH } from './simulation.ts'
+import { TICK_MS } from './update.ts'
 
 /* ==========================================================================
-   Time. A Tick is one step of the simulated month, and the session clock is
-   what tells a player how long they have been in the room.
+   Time and keys. The company runs while the lab is open and not paused, even
+   with a panel up: Quorum is an idle game. Keys only matter in the lab.
    ========================================================================== */
 
-export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
-  /** The month advances only while a Run is live, unfinished, and nothing is
-   *  in the way: any open overlay holds the clock, the Tradeoff card included
-   *  — reading it should not cost the player Ticks. */
-  tick: entry(
-    { running: Schema.Boolean, interval: Schema.Finite },
-    {
-      modelToDependencies: (model: Model) => ({
-        running:
-          model.route === 'run' &&
-          model.run.playing &&
-          model.run.overlay === 'none' &&
-          model.run.tick < TICKS_IN_MONTH,
-        interval: Math.round(260 / model.run.speed),
+type KeyMessage = ReturnType<typeof Message.KeyPressed>
+
+const keys = Stream.callback<KeyMessage>((queue) =>
+  Effect.gen(function* () {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const listener = (event: KeyboardEvent) => {
+          const target = event.target as HTMLElement | null
+          if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+          if (event.metaKey || event.ctrlKey || event.altKey) return
+          if (event.key === ' ') event.preventDefault()
+          Queue.offerUnsafe(
+            queue,
+            Message.KeyPressed({
+              key: event.key.length === 1 ? event.key.toLowerCase() : event.key,
+            }),
+          )
+        }
+        window.addEventListener('keydown', listener)
+        return listener
       }),
-      dependenciesToStream: (dependencies: { running: boolean; interval: number }) =>
-        dependencies.running
-          ? Stream.tick(dependencies.interval).pipe(Stream.map(() => Message.Ticked()))
-          : Stream.empty,
+      (listener) => Effect.sync(() => window.removeEventListener('keydown', listener)),
+    )
+    return yield* Effect.never
+  }),
+)
+
+export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+  tick: entry(
+    { running: Schema.Boolean },
+    {
+      modelToDependencies: (model: Model) => ({ running: model.route === 'lab' && !model.paused }),
+      dependenciesToStream: ({ running }: { running: boolean }) =>
+        running ? Stream.tick(TICK_MS).pipe(Stream.map(() => Message.Ticked())) : Stream.empty,
     },
   ),
 
-  /** Wall clock for the session, 15 to 30 minutes in the real thing. */
-  clock: entry(
-    {},
+  keys: entry(
+    { lab: Schema.Boolean },
     {
-      modelToDependencies: () => ({}),
-      dependenciesToStream: () => Stream.tick(1000).pipe(Stream.map(() => Message.SessionTicked())),
+      modelToDependencies: (model: Model) => ({ lab: model.route === 'lab' }),
+      dependenciesToStream: ({ lab }: { lab: boolean }) => (lab ? keys : Stream.empty),
     },
   ),
 }))
