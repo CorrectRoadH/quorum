@@ -1,9 +1,11 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Boxes,
+  Cable,
   ChartColumnIncreasing,
   ChartLine,
   Check,
+  FileArchive,
   Funnel,
   HeartPulse,
   type IconNode,
@@ -13,7 +15,9 @@ import {
   Rocket,
   ScrollText,
   SearchCode,
+  Shuffle,
   Siren,
+  Timer,
   TriangleAlert,
   Workflow,
 } from 'lucide'
@@ -211,6 +215,13 @@ const LOOKS: Record<ResearchId, Look> = {
   'fw-rails': { group: 'compute', logo: 'rails' },
   'fw-express': { group: 'compute', logo: 'express' },
   'fw-django': { group: 'compute', logo: 'django' },
+  'fw-symfony': { group: 'compute', logo: 'symfony' },
+  'fw-sinatra': { group: 'compute', logo: 'sinatra' },
+  'fw-flask': { group: 'compute', logo: 'flask' },
+  keepalive: { group: 'edge', glyph: Cable, hue: 200 },
+  gzip: { group: 'edge', glyph: FileArchive, hue: 95 },
+  timeouts: { group: 'edge', glyph: Timer, hue: 60 },
+  'lb-algorithms': { group: 'edge', glyph: Shuffle, hue: 240 },
 }
 
 /** The item's own colour: its group's, its brand's, or its hue. */

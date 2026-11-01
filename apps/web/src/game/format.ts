@@ -33,6 +33,18 @@ export const rate = (value: number): string =>
 export const ms = (value: number): string =>
   value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} s`
 
+/** What an alert rule pages on, at its threshold. */
+export const alertText = (rule: 'errors' | 'latency' | 'saturation', threshold: number): string =>
+  rule === 'errors'
+    ? `Error rate above ${threshold * 100}%`
+    : rule === 'latency'
+      ? `p99 above ${threshold}× the Apdex target`
+      : `A Node above ${Math.round(threshold * 100)}% load`
+
+/** A setting in seconds: 30 s, 5 min, 1 h. */
+export const duration = (seconds: number): string =>
+  seconds < 60 ? `${seconds} s` : seconds < 3600 ? `${seconds / 60} min` : `${seconds / 3600} h`
+
 export const clock = (seconds: number): string => {
   const whole = Math.floor(seconds)
   const hours = Math.floor(whole / 3600)

@@ -43,13 +43,51 @@ export type RequestProfile = Readonly<{
   orm: boolean
   /** KB the response sends over the network. */
   payloadKB: number
+  /** Gzip shrinks the response. */
+  compressible: boolean
 }>
 
 export const PROFILES: Record<RequestKind, RequestProfile> = {
-  page: { cpu: 4, native: false, apdex: 400, reads: 2, writes: 0, orm: true, payloadKB: 80 },
-  read: { cpu: 1.5, native: false, apdex: 200, reads: 1, writes: 0, orm: true, payloadKB: 4 },
-  write: { cpu: 2, native: false, apdex: 300, reads: 0, writes: 1, orm: false, payloadKB: 2 },
-  login: { cpu: 80, native: true, apdex: 800, reads: 1, writes: 0, orm: false, payloadKB: 1 },
+  page: {
+    cpu: 4,
+    native: false,
+    apdex: 400,
+    reads: 2,
+    writes: 0,
+    orm: true,
+    payloadKB: 80,
+    compressible: true,
+  },
+  read: {
+    cpu: 1.5,
+    native: false,
+    apdex: 200,
+    reads: 1,
+    writes: 0,
+    orm: true,
+    payloadKB: 4,
+    compressible: true,
+  },
+  write: {
+    cpu: 2,
+    native: false,
+    apdex: 300,
+    reads: 0,
+    writes: 1,
+    orm: false,
+    payloadKB: 2,
+    compressible: false,
+  },
+  login: {
+    cpu: 80,
+    native: true,
+    apdex: 800,
+    reads: 1,
+    writes: 0,
+    orm: false,
+    payloadKB: 1,
+    compressible: false,
+  },
 }
 
 /** CPU ms that one query costs a database. Stylized, so the database matters at Pre-seed volume. */
@@ -57,6 +95,13 @@ export const QUERY_CPU: Readonly<{ 'q-read': number; 'q-write': number }> = {
   'q-read': 8,
   'q-write': 25,
 }
+
+/** A user's downlink, for the time a response takes to arrive. Stylized. */
+export const USER_MBPS = 20
+/** Gzip leaves this share of a compressible response. */
+export const GZIP_RATIO = 0.3
+/** Gzip multiplies the app CPU of a compressible request. */
+export const GZIP_CPU = 1.1
 
 /** Login CPU, in reference ms, when an Auth Provider does the hashing. */
 export const LOGIN_DELEGATED_CPU = 2

@@ -1,13 +1,20 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
-import { filePostmortem, restart, setRuntime, setWorkers, type Action } from './actions.ts'
+import {
+  filePostmortem,
+  restart,
+  setAlertRule,
+  setRuntime,
+  setWorkers,
+  type Action,
+} from './actions.ts'
 import { newGame, preseedGame } from './company.ts'
-import { forceIncident } from './director.ts'
+import { directIncidents, forceIncident } from './director.ts'
 import type { StepEvent } from './events.ts'
 import { solve } from './solve.ts'
 import { DESIGN_TUNING, ERAS } from './catalog.ts'
 import type { Ledger } from './ledger.ts'
-import { growthOf, step } from './step.ts'
+import { growthOf, ignored, step } from './step.ts'
 import type { Game } from './state.ts'
 
 const ok = (action: Action): Game => {
@@ -119,7 +126,8 @@ describe('Pre-seed incidents', () => {
   test('a postmortem pays nothing and leaves its action item open until it is researched', () => {
     const due = { ...preseedGame(), nextIncidentAt: Number.MAX_SAFE_INTEGER, insight: 100 }
     const spiked = forceIncident(due, solve(due), 'spike') as Game
-    const { game } = run(spiked, 35)
+    // An unmitigated spike escalates halfway and runs 50% longer (11 "Escalation").
+    const { game } = run(spiked, 50)
     const postmortem = game.postmortems[0]
     // Pre-seed owns no spike prevention, so Caching (80) is the first.
     expect(postmortem?.action).toBe('caching')
@@ -218,5 +226,115 @@ describe('restarts and memory', () => {
     const swapping = ok(setWorkers(preseedGame(), 'server', 220))
     expect(solve(swapping).nodes.server?.swapping).toBe(true)
     expect(run(swapping, 5).events.some((event) => event._tag === 'OutOfMemory')).toBe(false)
+  })
+})
+
+describe('alert fatigue', () => {
+  // A saturated Pre-seed box with Alerting and no incident: every saturation page is false.
+  const busy = (): Game => ({
+    ...preseedGame(),
+    users: 6_000,
+    researched: [...preseedGame().researched, 'alerting'],
+    nextIncidentAt: Number.MAX_SAFE_INTEGER,
+  })
+  /** Fires the saturation alert once: the condition held 60 s, then cleared. */
+  const page = (game: Game) => {
+    const result = step({ ...game, alarms: { ...game.alarms, saturation: 59.9 } }, 0.25)
+    return {
+      game: { ...result.game, alarms: { ...result.game.alarms, saturation: 0 } },
+      events: result.events,
+    }
+  }
+
+  test('five false saturation alerts in one day mark the rule ignored, and a new threshold clears it', () => {
+    let game = busy()
+    expect(solve(game).nodes.server?.utilization ?? 0).toBeGreaterThan(0.95)
+    const tags: Array<string> = []
+    for (let index = 0; index < 6; index += 1) {
+      const paged = page(game)
+      game = paged.game
+      tags.push(...paged.events.map((event) => event._tag))
+    }
+    expect(tags.filter((tag) => tag === 'AlertFired')).toHaveLength(5)
+    expect(tags.filter((tag) => tag === 'AlertIgnored')).toHaveLength(1)
+    expect(ignored(game, 'saturation')).toBe(true)
+    const tuned = ok(setAlertRule(game, 'saturation', 0.95))
+    expect(ignored(tuned, 'saturation')).toBe(false)
+    expect(tuned.alertRules.saturation).toBe(0.95)
+  })
+
+  test('an alert during an incident is not false', () => {
+    let game = forceIncident(busy(), solve(busy()), 'spike') as Game
+    for (let index = 0; index < 6; index += 1)
+      game = { ...page(game).game, incident: game.incident }
+    expect(game.falseAlarms.saturation).toBe(0)
+  })
+})
+
+describe('Insight', () => {
+  test('the first served API write pays 20 Insight, once', () => {
+    const game: Game = {
+      ...preseedGame(),
+      nextIncidentAt: Number.MAX_SAFE_INTEGER,
+      servedKinds: ['page', 'read', 'login'],
+    }
+    expect(solve(game).kinds.write?.success ?? 0).toBeGreaterThan(0.5)
+    const first = step(game, 0.25).game
+    const second = step(first, 0.25).game
+    const earned = (from: Game, to: Game) => to.insight - from.insight - solve(from).insight * 0.25
+    expect(earned(game, first)).toBeCloseTo(20)
+    expect(earned(first, second)).toBeCloseTo(0)
+    expect(first.servedKinds).toContain('write')
+  })
+})
+
+describe('incidents per the GDD', () => {
+  const spiked = (seed: number, users = 1_050): Game =>
+    forceIncident({ ...preseedGame(seed), users }, solve(preseedGame(seed)), 'spike') as Game
+
+  test('a spike multiplies demand by 3 to 10, the same for the same seed', () => {
+    const magnitudes = [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => spiked(seed).incident?.magnitude ?? 0)
+    for (const magnitude of magnitudes) {
+      expect(magnitude).toBeGreaterThanOrEqual(3)
+      expect(magnitude).toBeLessThanOrEqual(10)
+    }
+    expect(new Set(magnitudes).size).toBeGreaterThan(4)
+    expect(spiked(3).incident?.magnitude).toBe(spiked(3).incident?.magnitude)
+    const game = spiked(3)
+    expect(solve(game).demand).toBeCloseTo(
+      solve({ ...game, incident: null }).demand * (game.incident?.magnitude ?? 0),
+    )
+  })
+
+  test('an unmitigated spike escalates halfway; a Design with headroom does not', () => {
+    const halfway = (game: Game) => run(game, 16).game.incident
+    // The Pre-seed box at 5,000 users fails under any spike.
+    const weak = halfway(spiked(3, 5_000))
+    expect(weak?.severity).toBe(2)
+    expect(weak?.magnitude).toBeCloseTo((spiked(3).incident?.magnitude ?? 0) * 1.5)
+    // A few users on the same box ride it out.
+    const strong = halfway(spiked(3, 30))
+    expect(strong?.severity).toBe(3)
+  })
+
+  test('incidents start about 12 minutes apart, ± 40%, at design pace', () => {
+    let game: Game = { ...preseedGame(), nextIncidentAt: 0 }
+    const ledger = solve(game)
+    const gaps: Array<number> = []
+    for (let index = 0; index < 40; index += 1) {
+      const directed = directIncidents(
+        { ...game, incident: null },
+        ledger,
+        DESIGN_TUNING.incidentGap,
+      )
+      gaps.push(directed.game.nextIncidentAt - game.time)
+      game = { ...directed.game, incident: null, time: directed.game.nextIncidentAt }
+    }
+    for (const gap of gaps) {
+      expect(gap).toBeGreaterThanOrEqual(12 * 60 * 0.6 - 1e-9)
+      expect(gap).toBeLessThanOrEqual(12 * 60 * 1.4 + 1e-9)
+    }
+    const mean = gaps.reduce((total, gap) => total + gap, 0) / gaps.length
+    expect(Math.abs(mean - 12 * 60)).toBeLessThan(12 * 60 * 0.15)
   })
 })

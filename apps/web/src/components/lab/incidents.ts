@@ -1,9 +1,11 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { BellRing, Check, ChevronRight, Gem, Timer, Users, Wallet, X } from 'lucide'
-import { ALERT_RULES, INCIDENTS, RESEARCH } from '@/game/engine/catalog.ts'
+import { BellOff, BellRing, Check, ChevronRight, Gem, Timer, Users, Wallet, X } from 'lucide'
+import { ALERT_RULES, ALERT_THRESHOLDS, INCIDENTS, RESEARCH } from '@/game/engine/catalog.ts'
+import type { AlertRule } from '@/game/engine/events.ts'
 import { has } from '@/game/engine/lookups.ts'
+import { ignored } from '@/game/engine/step.ts'
 import type { Game, Postmortem } from '@/game/engine/state.ts'
-import { compact, money } from '@/game/format.ts'
+import { alertText, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
@@ -17,38 +19,79 @@ import { EYEBROW, FIGURE, PANEL, WELL } from './bits.ts'
    the postmortems waiting to be written.
    ========================================================================== */
 
-const ALERT_TEXT = {
-  errors: 'Error rate above 1%',
-  latency: 'p99 above 4× the Apdex target',
-  saturation: 'A Node above 90% load',
-} as const
-
-/** Symptom-based pages, like real alerting: they name what users feel, not the cause. */
+/** Symptom-based pages, like real alerting: they name what users feel, not the cause. A rule
+ * that cried wolf too often today is ignored until the player changes its threshold. */
 export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
-  if (!has(model.game, 'alerting')) return h.empty
-  const firing = (Object.keys(ALERT_RULES) as Array<keyof typeof ALERT_RULES>).filter(
-    (rule) => model.game.alarms[rule] >= ALERT_RULES[rule].seconds,
+  const game = model.game
+  if (!has(game, 'alerting')) return h.empty
+  const rules = Object.keys(ALERT_RULES) as Array<AlertRule>
+  const firing = rules.filter(
+    (rule) => !ignored(game, rule) && game.alarms[rule] >= ALERT_RULES[rule].seconds,
   )
-  if (firing.length === 0) return h.empty
+  const muted = rules.filter((rule) => ignored(game, rule))
+  if (firing.length === 0 && muted.length === 0) return h.empty
   return h.div(
+    [h.Class('flex flex-col items-center gap-1.5')],
     [
-      h.Key('pager'),
-      h.DataAttribute('morph', 'notice'),
-      h.DataAttribute('exit', 'notice'),
-      h.Class(
-        'enter-down flex items-center gap-2.5 rounded-xl bg-danger px-3.5 py-2 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
-      ),
-    ],
-    [
-      icon(h, BellRing, 'ring size-4 shrink-0'),
-      // A new page swaps in; the pill morphs to its length.
-      h.span(
-        [
-          h.Key(firing.join()),
-          h.DataAttribute('exit', 'notice'),
-          h.Class('swap whitespace-nowrap'),
-        ],
-        [firing.map((rule) => ALERT_TEXT[rule]).join(' · ')],
+      firing.length > 0
+        ? h.div(
+            [
+              h.Key('pager'),
+              h.DataAttribute('morph', 'notice'),
+              h.DataAttribute('exit', 'notice'),
+              h.Class(
+                'enter-down flex items-center gap-2.5 rounded-xl bg-danger px-3.5 py-2 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
+              ),
+            ],
+            [
+              icon(h, BellRing, 'ring size-4 shrink-0'),
+              // A new page swaps in; the pill morphs to its length.
+              h.span(
+                [
+                  h.Key(firing.join()),
+                  h.DataAttribute('exit', 'notice'),
+                  h.Class('swap whitespace-nowrap'),
+                ],
+                [firing.map((rule) => alertText(rule, game.alertRules[rule])).join(' · ')],
+              ),
+            ],
+          )
+        : h.empty,
+      ...muted.map((rule) =>
+        h.div(
+          [
+            h.Key(`ignored-${rule}`),
+            h.Class(cn('flex items-center gap-2 py-1 pr-1 pl-3 text-[12.5px]', PANEL)),
+          ],
+          [
+            icon(h, BellOff, 'size-3.5 text-muted-foreground'),
+            h.span([h.Class('font-medium')], [alertText(rule, game.alertRules[rule])]),
+            badge({ variant: 'warn' }, ['Ignored'], h),
+            h.div(
+              [h.Class(cn('flex gap-[3px] rounded-lg p-[3px]', WELL))],
+              ALERT_THRESHOLDS[rule].map((threshold) =>
+                h.button(
+                  [
+                    h.Key(`${rule}-${threshold}`),
+                    h.Type('button'),
+                    h.AriaPressed(threshold === game.alertRules[rule] ? 'true' : 'false'),
+                    h.OnClick(Message.AlertRuleChosen({ rule, threshold })),
+                    h.Class(
+                      cn(
+                        FIGURE,
+                        'h-6 rounded-md px-2 text-[11.5px]',
+                        threshold === game.alertRules[rule]
+                          ? 'bg-raised text-foreground shadow-raised'
+                          : 'text-muted-foreground hover:text-foreground',
+                      ),
+                    ),
+                  ],
+                  [rule === 'latency' ? `${threshold}×` : `${Math.round(threshold * 1000) / 10}%`],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     ],
   )
@@ -128,8 +171,11 @@ const card = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Message>): Html
             'fold-chevron size-3.5 shrink-0 text-muted-foreground group-open:rotate-90',
           ),
           badge(
-            { variant: def.severity === 2 ? 'destructive' : 'warn', className: 'font-mono' },
-            [`SEV${def.severity}`],
+            {
+              variant: postmortem.severity <= 2 ? 'destructive' : 'warn',
+              className: 'font-mono',
+            },
+            [`SEV${postmortem.severity}`],
             h,
           ),
           h.span([h.Class('min-w-0 flex-1 truncate text-[12.5px] font-semibold')], [def.name]),

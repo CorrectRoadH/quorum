@@ -12,6 +12,7 @@ export type StepEvent = Data.TaggedEnum<{
   OutOfMemory: { readonly nodeId: string }
   CreditsExhausted: { readonly nodeId: string }
   AlertFired: { readonly rule: AlertRule }
+  AlertIgnored: { readonly rule: AlertRule }
 }>
 
 export const StepEvent = Data.taggedEnum<StepEvent>()

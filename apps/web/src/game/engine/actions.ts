@@ -1,13 +1,18 @@
 import { Data, Result } from 'effect'
 import {
+  ALERT_THRESHOLDS,
+  CACHE_TTLS,
   COMPONENTS,
+  CHECK_INTERVALS,
   CREDIT_CAP,
   DEFAULT_FPM_WORKERS,
+  DNS_TTLS,
   ERAS,
   FIRST_INCIDENT_AFTER,
   FRAMEWORKS,
   KINDS,
   LANGUAGES,
+  LB_POLICIES,
   POOL_LIMITS,
   REQUEST_KINDS,
   RESEARCH,
@@ -18,6 +23,7 @@ import {
   type FamilyId,
   type FrameworkId,
   type Kind,
+  type RequestKind,
   type ResearchId,
   type RuntimeId,
 } from './catalog.ts'
@@ -39,7 +45,9 @@ import {
   runtimeReady,
   vcpuOf,
 } from './lookups.ts'
-import type { Game, GameLink, GameNode } from './state.ts'
+import { link } from './company.ts'
+import type { AlertRule } from './events.ts'
+import type { CacheEngine, Game, GameLink, GameNode, LbPolicy, PmMode, Retries } from './state.ts'
 
 /* ==========================================================================
    Everything the player can do. Each action returns the next Game, or a
@@ -113,12 +121,21 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     workers: stack?.workers ?? DEFAULT_FPM_WORKERS,
     localDb: false,
     sample: 1,
+    sampleRate: 0.1,
     down: 0,
     downCause: 'restart',
     warm:
       type === 'server' || type === 'cache' || type === 'database' || type === 'replica' ? 0 : 1,
     credits: 0,
     leak: 0,
+    compress: stack?.compress ?? false,
+    downAt: 0,
+    policy: 'weighted',
+    checkEvery: 10,
+    deepCheck: false,
+    ttl: type === 'cache' ? 60 : 300,
+    engine: 'redis',
+    pm: 'static',
   }
 }
 
@@ -196,7 +213,7 @@ export const connect = (game: Game, from: string, to: string): Action => {
   if (targetDef.tap) {
     if (sourceDef.tap || source.type === 'payments')
       return notAllowed(`${sourceDef.name} has no traffic to sample.`)
-    return ok({ ...game, links: [...game.links, { from, to }] })
+    return ok({ ...game, links: [...game.links, link(from, to)] })
   }
   if (sourceDef.maxOut === 0 || emitsOf(source).length === 0)
     return notAllowed(`${sourceDef.name} sends nothing on. Link it into Analytics to sample it.`)
@@ -217,7 +234,7 @@ export const connect = (game: Game, from: string, to: string): Action => {
         : `${sourceDef.name} takes ${sourceDef.maxOut} links.`,
     )
   if (reaches(game.links, to, from)) return notAllowed('That link would make a loop.')
-  const linked: Game = { ...game, links: [...game.links, { from, to }] }
+  const linked: Game = { ...game, links: [...game.links, link(from, to)] }
   // Linking the first box to a Database moves Postgres off it, for good.
   return ok(
     source.localDb &&
@@ -225,6 +242,46 @@ export const connect = (game: Game, from: string, to: string): Action => {
       ? patch(linked, from, { localDb: false })
       : linked,
   )
+}
+
+/** Timeouts a Link can wait, in seconds. */
+export const LINK_TIMEOUTS = [1, 5, 30] as const
+
+/** Sets a Link's timeout or retry policy. Needs Timeouts and retries. */
+export const setLinkPolicy = (
+  game: Game,
+  from: string,
+  to: string,
+  change: Readonly<{ timeout?: number; retries?: Retries }>,
+): Action => {
+  const index = game.links.findIndex((entry) => entry.from === from && entry.to === to)
+  const current = game.links[index]
+  if (!current) return no(Refusal.Missing())
+  if (!has(game, 'timeouts'))
+    return no(Refusal.Locked({ what: 'Call policy', research: RESEARCH.timeouts.name }))
+  if (
+    change.timeout !== undefined &&
+    !(LINK_TIMEOUTS as ReadonlyArray<number>).includes(change.timeout)
+  )
+    return notAllowed('A timeout is 1, 5, or 30 seconds.')
+  const next = { ...current, ...change }
+  return ok({ ...game, links: game.links.map((entry, at) => (at === index ? next : entry)) })
+}
+
+/** Sets the request kinds a Load Balancer Link carries, or null for all of them. */
+export const setLinkKinds = (
+  game: Game,
+  from: string,
+  to: string,
+  kinds: ReadonlyArray<RequestKind> | null,
+): Action => {
+  const index = game.links.findIndex((entry) => entry.from === from && entry.to === to)
+  const current = game.links[index]
+  const source = game.nodes.find((node) => node.id === from)
+  if (!current || !source) return no(Refusal.Missing())
+  if (source.type !== 'lb') return notAllowed('Only a Load Balancer routes by request kind.')
+  const next = { ...current, kinds: kinds && REQUEST_KINDS.filter((kind) => kinds.includes(kind)) }
+  return ok({ ...game, links: game.links.map((entry, at) => (at === index ? next : entry)) })
 }
 
 export const disconnect = (game: Game, from: string, to: string): Game => ({
@@ -311,10 +368,94 @@ export const setWorkers = (game: Game, id: string, workers: number): Action =>
       : notAllowed(`${RUNTIMES[node.runtime].name} sizes its own pool.`),
   )
 
-export const setSample = (game: Game, id: string, sample: number): Action =>
+/** Turns gzip on or off for an App Server's page and read responses. Needs Compression. */
+export const setCompression = (game: Game, id: string, compress: boolean): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'server') return notAllowed('Only App Servers compress responses.')
+    if (!has(game, 'gzip'))
+      return no(Refusal.Locked({ what: 'Gzip', research: RESEARCH.gzip.name }))
+    return ok(node.compress === compress ? game : patch(game, id, { compress }))
+  })
+
+/** Chooses how a Load Balancer splits traffic. Least connections and two choices need research. */
+export const setPolicy = (game: Game, id: string, policy: LbPolicy): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'lb') return notAllowed('Only a Load Balancer has a policy.')
+    const research = LB_POLICIES[policy].research
+    if (research && !has(game, research))
+      return no(
+        Refusal.Locked({ what: LB_POLICIES[policy].label, research: RESEARCH[research].name }),
+      )
+    return ok(patch(game, id, { policy }))
+  })
+
+/** Sets a Load Balancer's health checks. Intervals other than 10 s and deep checks need Health checks. */
+export const setHealthCheck = (
+  game: Game,
+  id: string,
+  change: Readonly<{ checkEvery?: number; deepCheck?: boolean }>,
+): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'lb') return notAllowed('Only a Load Balancer runs health checks.')
+    if (
+      change.checkEvery !== undefined &&
+      !(CHECK_INTERVALS as ReadonlyArray<number>).includes(change.checkEvery)
+    )
+      return notAllowed('A health check runs every 2, 10, or 30 seconds.')
+    const tuned = (change.checkEvery ?? 10) !== 10 || change.deepCheck === true
+    if (tuned && !has(game, 'health-checks'))
+      return no(Refusal.Locked({ what: 'Health checks', research: RESEARCH['health-checks'].name }))
+    return ok(patch(game, id, change))
+  })
+
+/** Sets a Cache's TTL, or the DNS TTL. DNS needs Health checks, which make it drop dead hosts. */
+export const setTtl = (game: Game, id: string, ttl: number): Action =>
+  withNode(game, id, (node) => {
+    if (node.type === 'cache')
+      return CACHE_TTLS.some((entry) => entry.ttl === ttl)
+        ? ok(patch(game, id, { ttl }))
+        : notAllowed('A cache TTL is 10 seconds, 1 minute, or 1 hour.')
+    if (node.type !== 'dns') return notAllowed('Only DNS and Caches have a TTL.')
+    if (!(DNS_TTLS as ReadonlyArray<number>).includes(ttl))
+      return notAllowed('A TTL is 30 seconds, 5 minutes, or 1 hour.')
+    if (!has(game, 'health-checks'))
+      return no(Refusal.Locked({ what: 'TTL', research: RESEARCH['health-checks'].name }))
+    return ok(patch(game, id, { ttl }))
+  })
+
+/** Sets PHP-FPM's process manager. */
+export const setPm = (game: Game, id: string, pm: PmMode): Action =>
   withNode(game, id, (node) =>
-    node.type === 'analytics' && sample >= 0 && sample < SAMPLE_RATES.length
-      ? ok(patch(game, id, { sample }))
+    node.type === 'server' && node.runtime === 'php_fpm'
+      ? ok(node.pm === pm ? game : patch(game, id, { pm }))
+      : notAllowed('Only PHP-FPM has a process manager.'),
+  )
+
+/** Swaps a Cache's engine. The new one starts empty. */
+export const setCacheEngine = (game: Game, id: string, engine: CacheEngine): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'cache') return notAllowed('Only a Cache has an engine.')
+    return ok(node.engine === engine ? game : patch(game, id, { engine, warm: 0 }))
+  })
+
+/** Sets an alert rule's threshold. A new threshold is a fresh start: its false alarms are forgiven. */
+export const setAlertRule = (game: Game, rule: AlertRule, threshold: number): Action => {
+  if (!has(game, 'alerting'))
+    return no(Refusal.Locked({ what: 'Alert rules', research: RESEARCH.alerting.name }))
+  if (!(ALERT_THRESHOLDS[rule] as ReadonlyArray<number>).includes(threshold))
+    return notAllowed('That threshold is not on offer.')
+  if (game.alertRules[rule] === threshold) return ok(game)
+  return ok({
+    ...game,
+    alertRules: { ...game.alertRules, [rule]: threshold },
+    falseAlarms: { ...game.falseAlarms, [rule]: 0 },
+  })
+}
+
+export const setSample = (game: Game, id: string, sampleRate: number): Action =>
+  withNode(game, id, (node) =>
+    node.type === 'analytics' && (SAMPLE_RATES as ReadonlyArray<number>).includes(sampleRate)
+      ? ok(patch(game, id, { sampleRate }))
       : notAllowed('Only Analytics has a sample rate.'),
   )
 

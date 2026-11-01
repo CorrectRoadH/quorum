@@ -68,3 +68,9 @@ export const VM_RESTART_SECONDS = 1
 export const OOM_RATIO = 1.25
 /** Seconds a cold Node needs to warm up. */
 export const WARMUP_SECONDS = 15
+/** Milliseconds for one internal network hop in a zone. */
+export const HOP_MS = 0.5
+/** A new TCP connection per call costs a handshake, until Connection reuse (keep-alive). */
+export const HANDSHAKE_MS = 1
+/** Seconds a call waits before it gives up, until Timeouts and retries (04 "Timeouts"). */
+export const LINK_TIMEOUT = 30

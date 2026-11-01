@@ -23,11 +23,18 @@ export const SyncBoard = Command.define('SyncBoard', {
     bottleneck: Schema.NullOr(Schema.String),
     selected: Schema.NullOr(Schema.String),
     placing: Schema.NullOr(ComponentId),
+    history: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
   },
   messages: [Message.Synced],
-  execute: ({ game, bottleneck, selected, placing }) =>
+  execute: ({ game, bottleneck, selected, placing, history }) =>
     Effect.sync(() =>
-      setBoard('board', { game, ledger: { ...solveFlow(game), bottleneck }, selected, placing }),
+      setBoard('board', {
+        game,
+        ledger: { ...solveFlow(game), bottleneck },
+        selected,
+        placing,
+        history,
+      }),
     ).pipe(Effect.as(Message.Synced())),
 })
 

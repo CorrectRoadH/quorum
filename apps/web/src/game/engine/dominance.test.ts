@@ -1,12 +1,21 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
-import { connect, disconnect, place, setFamily, setFramework, setRuntime } from './actions.ts'
+import {
+  connect,
+  disconnect,
+  place,
+  setFamily,
+  setFramework,
+  setPm,
+  setRuntime,
+} from './actions.ts'
 import {
   DESIGN_TUNING,
   FAMILY_IDS,
   FRAMEWORKS,
   FRAMEWORK_IDS,
   FRAMEWORK_RESEARCH,
+  PM_MODES,
   LANGUAGE_IDS,
   LOCAL_DB_RAM,
   LOCAL_DB_RAM_PER_USER,
@@ -25,7 +34,7 @@ import { newGame, preseedGame } from './company.ts'
 import { ramOf, vcpuOf } from './lookups.ts'
 import { GUIDED, SANDBOX_IDS } from './sandbox.ts'
 import { solveFlow } from './solve.ts'
-import type { Game } from './state.ts'
+import type { Game, PmMode } from './state.ts'
 import { step } from './step.ts'
 
 /*
@@ -158,6 +167,25 @@ const familyOption =
   (game: Game): Game =>
     fit(onServers(game, (current, id) => ok(current, setFamily(current, id, family))))
 
+/**
+ * A PHP-FPM process manager on a pool twice the careful size: the case the modes exist for. Static
+ * keeps it all resident; dynamic and ondemand keep only what is busy, and pay spawn latency.
+ */
+const pmOption =
+  (pm: PmMode) =>
+  (game: Game): Game => {
+    const fitted = runtimeOption('php_fpm')(game)
+    const doubled: Game = {
+      ...fitted,
+      nodes: fitted.nodes.map((node) =>
+        node.type === 'server'
+          ? { ...node, workers: Math.min(POOL_LIMITS.max, node.workers * 2) }
+          : node,
+      ),
+    }
+    return onServers(doubled, (current, id) => ok(current, setPm(current, id, pm)))
+  }
+
 type OptionSet = Readonly<{
   name: string
   options: ReadonlyArray<readonly [string, (game: Game) => Game]>
@@ -172,6 +200,12 @@ const OPTION_SETS: ReadonlyArray<OptionSet> = [
     ).map((id) => [id, frameworkOption(language, id)] as const),
   })),
   { name: 'instance families', options: FAMILY_IDS.map((id) => [id, familyOption(id)] as const) },
+  {
+    name: 'PHP-FPM process managers',
+    options: (Object.keys(PM_MODES) as ReadonlyArray<PmMode>).map(
+      (pm) => [pm, pmOption(pm)] as const,
+    ),
+  },
 ]
 
 /** `a` beats `b` by at least 10% on this score. Lower is better for p99 and errors. */

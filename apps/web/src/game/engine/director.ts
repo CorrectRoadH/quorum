@@ -1,12 +1,15 @@
 import { Match } from 'effect'
 import {
   COMPONENTS,
+  ESCALATION,
   INCIDENTS,
   INCIDENT_GAP,
   INCIDENT_IDS,
   LEAK_RATE,
+  MIN_WEAKNESS,
   OPEN_ACTION_WEIGHT,
   RUNTIMES,
+  SPIKE_MAGNITUDE,
   type ComponentId,
   type IncidentId,
 } from './catalog.ts'
@@ -47,8 +50,13 @@ const leakTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
       busy(ledger, node),
   )
 
-/** How hard this incident would hit the current Design, from 0 (not at all) to 3. */
-export const weaknessOf = (game: Game, ledger: Ledger, kind: IncidentId): number =>
+/** How hard this incident would hit the current Design: 0 when it has nothing to hit, else 0.2 to 3. */
+export const weaknessOf = (game: Game, ledger: Ledger, kind: IncidentId): number => {
+  const weakness = rawWeakness(game, ledger, kind)
+  return weakness > 0 ? Math.max(MIN_WEAKNESS, weakness) : 0
+}
+
+const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number =>
   Match.value(kind).pipe(
     Match.when('spike', () => {
       const hottest = Math.max(
@@ -128,11 +136,18 @@ export const startIncident = (
     impaired: 0,
     lostRevenue: 0,
     failed: 0,
+    severity: INCIDENTS[kind].severity,
+    magnitude:
+      kind === 'spike'
+        ? SPIKE_MAGNITUDE[0] + (SPIKE_MAGNITUDE[1] - SPIKE_MAGNITUDE[0]) * roll
+        : SPIKE_MAGNITUDE[0],
   }
   const nodes =
     kind === 'instance' && target
       ? game.nodes.map((node) =>
-          node.id === target.id ? { ...node, down: -1, downCause: 'failure' as const } : node,
+          node.id === target.id
+            ? { ...node, down: -1, downCause: 'failure' as const, downAt: game.time }
+            : node,
         )
       : game.nodes
   return { game: { ...game, nodes, incident, lastIncident: kind }, incident }
@@ -183,6 +198,7 @@ const postmortemOf = (game: Game, incident: Incident): Postmortem => {
     lostUsers: Math.max(0, incident.usersAtStart - game.users),
     lostRevenue: incident.lostRevenue,
     failed: incident.failed,
+    severity: incident.severity,
     action: game.sandbox
       ? null
       : (INCIDENTS[incident.kind].actions.find((id) => !has(game, id) && researchReady(game, id)) ??
@@ -202,7 +218,7 @@ const resolve = (game: Game): Readonly<{ game: Game; events: ReadonlyArray<StepE
     if (node.id !== incident.nodeId) return node
     if (incident.kind === 'instance' && node.down === -1) return { ...node, ...restarted(node) }
     if (incident.kind === 'leak' && node.leak > 0)
-      return { ...node, ...restarted(node, 'oom'), leak: 0 }
+      return { ...node, ...restarted(node, 'oom'), leak: 0, downAt: game.time }
     return node
   })
   return {
@@ -232,13 +248,31 @@ export const advanceIncident = (
 ): Readonly<{ game: Game; events: ReadonlyArray<StepEvent> }> => {
   const incident = game.incident
   if (!incident) return { game, events: [] }
-  const tracked: Incident = {
+  const counted: Incident = {
     ...incident,
     remaining: incident.remaining - seconds,
     impaired: incident.impaired + (ledger.errorShare > 0.01 ? seconds : 0),
     lostRevenue: incident.lostRevenue + Math.max(0, incident.baseline - ledger.revenue) * seconds,
     failed: incident.failed + ledger.errorShare * ledger.demand * seconds,
   }
+  // Halfway through, an incident that has hurt users more than half the time steps up once.
+  const def = INCIDENTS[incident.kind]
+  const half = def.duration / 2
+  const elapsed = game.time - incident.startedAt
+  const escalates =
+    !game.sandbox &&
+    incident.severity === def.severity &&
+    elapsed >= half &&
+    elapsed - seconds < half &&
+    counted.impaired > elapsed / 2
+  const tracked: Incident = escalates
+    ? {
+        ...counted,
+        severity: def.escalatesTo,
+        remaining: counted.remaining * ESCALATION,
+        magnitude: incident.kind === 'spike' ? incident.magnitude * ESCALATION : incident.magnitude,
+      }
+    : counted
   const target = game.nodes.find((node) => node.id === incident.nodeId)
   const nodes =
     incident.kind === 'leak' && target

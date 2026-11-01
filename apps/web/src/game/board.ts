@@ -10,6 +10,7 @@ import {
   Coins,
   Gauge,
   Gem,
+  Hourglass,
   HandCoins,
   type IconNode,
   Inbox,
@@ -41,6 +42,7 @@ import {
   COMPONENTS,
   FRAMEWORKS,
   INSIGHT_YIELD,
+  LB_POLICIES,
   KINDS,
   RUNTIMES,
   SIZES,
@@ -84,6 +86,8 @@ export type BoardState = Readonly<{
   ledger: Ledger
   selected: string | null
   placing: ComponentId | null
+  /** Each Node's utilization, one point per 10 sim seconds. */
+  history: Readonly<Record<string, ReadonlyArray<number>>>
 }>
 
 export const CARD_W = 216
@@ -111,13 +115,15 @@ const layoutOf = (type: ComponentId): Layout => {
     case 'server':
       return { rows: 5, inRow: 0, outRow: 4, footer: true }
     case 'database':
-    case 'replica':
       return { rows: 4, inRow: 0, outRow: null, footer: true }
+    case 'replica':
+      return { rows: 5, inRow: 0, outRow: null, footer: true }
     case 'auth':
       return { rows: 3, inRow: 0, outRow: null, footer: false }
     case 'dns':
-    case 'lb':
       return { rows: 3, inRow: 0, outRow: 2, footer: false }
+    case 'lb':
+      return { rows: 4, inRow: 0, outRow: 3, footer: false }
     case 'cache':
     case 'pooler':
       return { rows: 4, inRow: 0, outRow: 3, footer: false }
@@ -678,6 +684,7 @@ const ROW_ICONS = {
   stack: Layers,
   connections: Cable,
   hits: Target,
+  lag: Hourglass,
   policy: Shuffle,
   logins: LogIn,
   cost: Coins,
@@ -703,6 +710,8 @@ type Row = Readonly<{
   logo?: StackLogoId
   /** A brand mark just before the value. */
   valueLogo?: StackLogoId
+  /** Recent values, drawn as a sparkline under the row. */
+  trend?: ReadonlyArray<number>
 }>
 type Footer = Readonly<{
   glyph: keyof typeof FOOT_ICONS
@@ -716,7 +725,12 @@ const pct = (value: number): string => `${Math.round(value * 100)}%`
 const outRate = (ledger: Ledger, id: string): number =>
   ledger.links.reduce((sum, link) => (link.from === id ? sum + link.rate : sum), 0)
 
-const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> => {
+const rowsOf = (
+  game: Game,
+  node: GameNode,
+  ledger: Ledger,
+  history: ReadonlyArray<number> = [],
+): ReadonlyArray<Row> => {
   const own = ledger.nodes[node.id]
   if (!own) return []
   const inbound: Row = {
@@ -734,8 +748,13 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
         : 'idle',
     tone: own.utilization >= 0.9 ? 'danger' : own.utilization >= 0.7 ? 'warn' : 'plain',
     bar: Math.min(own.utilization, 1),
+    ...(has(game, 'metrics') && history.length > 1 ? { trend: history } : {}),
   }
-  const latency: Row = { glyph: 'latency', name: 'Latency', value: ms(own.latency) }
+  const latency: Row = {
+    glyph: 'latency',
+    name: 'Latency',
+    value: has(game, 'percentiles') ? `${ms(own.latency)} · p99 ${ms(own.p99)}` : ms(own.latency),
+  }
   const out: Row = {
     glyph: own.stranded > 0.01 ? 'stranded' : 'out',
     name: own.stranded > 0.01 ? 'Stranded' : 'Out',
@@ -823,6 +842,7 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
                 : 'plain',
         },
         latency,
+        ...(own.lag === null ? [] : [{ glyph: 'lag', name: 'Lag', value: ms(own.lag) } as const]),
       ]
     }
     case 'cache':
@@ -835,7 +855,12 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
     case 'pooler':
       return [inbound, capacity, latency, out]
     case 'lb':
-      return [inbound, capacity, out]
+      return [
+        inbound,
+        capacity,
+        { glyph: 'policy', name: 'Policy', value: LB_POLICIES[node.policy].label },
+        out,
+      ]
     case 'dns':
       return [inbound, { glyph: 'policy', name: 'Policy', value: 'round robin' }, out]
     case 'auth':
@@ -1045,12 +1070,13 @@ class NodeView {
     selected: boolean,
     pressed: boolean,
     colors: Palette,
+    history: ReadonlyArray<number>,
   ): void {
     const own = ledger.nodes[node.id]
     if (!own) return
     const def = COMPONENTS[node.type]
     const layout = layoutOf(node.type)
-    const rows = rowsOf(game, node, ledger)
+    const rows = rowsOf(game, node, ledger, history)
     const footer = footerOf(game, node)
     this.target = { x: node.x, y: node.y }
     this.at ??= this.target
@@ -1244,7 +1270,24 @@ class NodeView {
         paintLogo(valueMark, row.valueLogo, colors.ink)
         valueMark.position.set(value.x - value.width - 18, rowMid(index) - 7.5)
       }
-      if (row.bar !== undefined) {
+      if (row.trend) {
+        // Load over the last day: a sparkline in place of the bar.
+        const bottom = rowTop(index) + ROW - 1
+        const width = CARD_W - 28
+        const points = row.trend
+        const at = (i: number) => {
+          const x = 14 + (width * i) / (points.length - 1)
+          return [x, bottom - 6 * Math.min(1, points[i] ?? 0)] as const
+        }
+        const [x0, y0] = at(0)
+        this.bars.moveTo(x0, y0)
+        for (let i = 1; i < points.length; i += 1) this.bars.lineTo(...at(i))
+        const peak = Math.max(...points)
+        this.bars.stroke({
+          color: peak > 0.95 ? colors.danger : peak > 0.8 ? colors.warn : colors.accent,
+          width: 1.25,
+        })
+      } else if (row.bar !== undefined) {
         const y = rowTop(index) + ROW - 4
         const tone = row.bar > 0.95 ? colors.danger : row.bar > 0.8 ? colors.warn : colors.accent
         const share = Math.max(0, Math.min(1, row.bar))
@@ -1860,6 +1903,7 @@ class BoardController {
         state.selected === node.id,
         this.pressed === node.id,
         colors,
+        state.history[node.id] ?? [],
       )
     }
     for (const [id, view] of this.views) {

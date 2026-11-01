@@ -170,7 +170,16 @@ export const POOL_LIMITS = { min: 1, max: 400 } as const
 /** PHP-FPM ships with pm.max_children = 5. */
 export const DEFAULT_FPM_WORKERS = 5
 
-export const FRAMEWORK_IDS = ['none', 'laravel', 'rails', 'express', 'django'] as const
+export const FRAMEWORK_IDS = [
+  'none',
+  'laravel',
+  'rails',
+  'express',
+  'django',
+  'symfony',
+  'sinatra',
+  'flask',
+] as const
 export type FrameworkId = (typeof FRAMEWORK_IDS)[number]
 
 export type FrameworkDef = Readonly<{
@@ -246,6 +255,39 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
     value: {},
     blurb: 'Ships features fast. 1.4× CPU and N+1 queries.',
   },
+  symfony: {
+    id: 'symfony',
+    name: 'Symfony',
+    language: 'php',
+    overhead: 1.5,
+    velocity: 1.25,
+    memory: 10,
+    orm: false,
+    value: {},
+    blurb: 'Strict structure. 1.5× CPU, no N+1 queries, and slower tech debt.',
+  },
+  sinatra: {
+    id: 'sinatra',
+    name: 'Sinatra',
+    language: 'ruby',
+    overhead: 1.1,
+    velocity: 1.1,
+    memory: 5,
+    orm: false,
+    value: {},
+    blurb: 'Light. 1.1× CPU.',
+  },
+  flask: {
+    id: 'flask',
+    name: 'Flask',
+    language: 'python',
+    overhead: 1.1,
+    velocity: 1.1,
+    memory: 10,
+    orm: false,
+    value: {},
+    blurb: 'Light. 1.1× CPU.',
+  },
 }
 
 /** N+1 queries multiply ORM reads. */
@@ -256,3 +298,13 @@ export const ORM_READS = 3
  * Stack ships more, which grows the market.
  */
 export const marketFor = (velocity: number): number => 0.7 + 0.3 * velocity
+
+/**
+ * PHP-FPM process managers (06): spare workers kept, the share of requests that wait for a fork,
+ * and how long they wait. Dynamic's spares absorb most of a fork, so its requests wait less.
+ */
+export const PM_MODES = {
+  static: { label: 'Static', spares: null, spawnShare: 0, spawnMs: 0 },
+  dynamic: { label: 'Dynamic', spares: 2, spawnShare: 0.02, spawnMs: 20 },
+  ondemand: { label: 'On demand', spares: 0, spawnShare: 0.1, spawnMs: 50 },
+} as const

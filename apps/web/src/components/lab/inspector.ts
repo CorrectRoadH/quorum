@@ -1,13 +1,19 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowUp, ChevronRight, Minus, Plus, RotateCcw, Trash2, X } from 'lucide'
 import {
+  CACHE_ENGINES,
+  CACHE_TTLS,
+  CHECK_INTERVALS,
   COMPONENTS,
   CREDIT_CAP,
+  DNS_TTLS,
   FAMILIES,
   FAMILY_IDS,
   FRAMEWORKS,
   FRAMEWORK_IDS,
   KINDS,
+  LB_POLICIES,
+  PM_MODES,
   OS_RAM,
   PROFILES,
   REQUEST_KINDS,
@@ -15,6 +21,7 @@ import {
   RUNTIME_IDS,
   SAMPLE_RATES,
   SIZES,
+  type RequestKind,
 } from '@/game/engine/catalog.ts'
 import type { Ledger } from '@/game/engine/ledger.ts'
 import {
@@ -31,8 +38,16 @@ import {
   sizeLabel as sizeLabelOf,
   vcpuOf,
 } from '@/game/engine/lookups.ts'
-import type { Game, GameNode } from '@/game/engine/state.ts'
-import { compact, money, ms, priceLabel, rate } from '@/game/format.ts'
+import { LINK_TIMEOUTS } from '@/game/engine/actions.ts'
+import type {
+  CacheEngine,
+  Game,
+  GameLink,
+  GameNode,
+  LbPolicy,
+  PmMode,
+} from '@/game/engine/state.ts'
+import { compact, duration, money, ms, priceLabel, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { COMPONENT_ICONS } from '@/game/icons.ts'
@@ -151,6 +166,39 @@ const choice = (
       ),
     ],
     children,
+  )
+
+const COLUMNS: Record<number, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+}
+
+/** One option set as a segmented control: each value with its label. */
+const picker = <T extends string | number | boolean>(
+  key: string,
+  values: ReadonlyArray<readonly [T, string]>,
+  current: T,
+  message: (value: T) => Message,
+  h: HtmlBuilder<Message>,
+  ready: (value: T) => boolean = () => true,
+  columns = COLUMNS[values.length] ?? 'grid-cols-4',
+): Html =>
+  segmented(
+    columns,
+    values.map(([value, label]) =>
+      choice(
+        `${key}-${String(value)}`,
+        value === current,
+        ready(value),
+        message(value),
+        [h.span([h.Class('w-full truncate text-center')], [label])],
+        label,
+        h,
+      ),
+    ),
+    h,
   )
 
 const smallButton = (
@@ -341,6 +389,7 @@ const stats = (
         row('Latency', ms(own.latency), 'plain', h),
         row('Dropped', `${rate(own.dropped)}/s`, own.dropped > 0.05 ? 'danger' : 'plain', h),
         ...(own.hitRatio !== null ? [row('Hit ratio', percent(own.hitRatio), 'plain', h)] : []),
+        ...(own.lag !== null ? [row('Lag', ms(own.lag), 'plain', h)] : []),
         row('Burn', `${money(burnOf(game, node))}/s`, 'plain', h),
       ]
     }
@@ -610,6 +659,45 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
       ],
       h,
     ),
+    ...(node.runtime === 'php_fpm'
+      ? [
+          section(
+            'Process manager',
+            [
+              picker(
+                'pm',
+                (Object.keys(PM_MODES) as ReadonlyArray<PmMode>).map(
+                  (pm) => [pm, PM_MODES[pm].label] as const,
+                ),
+                node.pm,
+                (pm) => Message.PmChosen({ nodeId: node.id, pm }),
+                h,
+              ),
+            ],
+            h,
+          ),
+        ]
+      : []),
+    ...(has(game, 'gzip')
+      ? [
+          section(
+            'Compression',
+            [
+              picker(
+                'gzip',
+                [
+                  [false, 'Off'],
+                  [true, 'Gzip'],
+                ],
+                node.compress,
+                (compress) => Message.CompressionChosen({ nodeId: node.id, compress }),
+                h,
+              ),
+            ],
+            h,
+          ),
+        ]
+      : []),
   ]
 }
 
@@ -618,13 +706,13 @@ const sampler = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html =>
     'Sample rate',
     [
       segmented(
-        'grid-cols-4',
-        SAMPLE_RATES.map((value, index) =>
+        'grid-cols-5',
+        SAMPLE_RATES.map((value) =>
           choice(
             String(value),
-            node.sample === index,
+            node.sampleRate === value,
             true,
-            Message.SampleChosen({ nodeId: node.id, sample: index }),
+            Message.SampleChosen({ nodeId: node.id, sampleRate: value }),
             [h.span([h.Class('w-full text-center')], [`${Math.round(value * 100)}%`])],
             'More samples: more Insight, more CPU on sampled Nodes, more storage Burn',
             h,
@@ -636,6 +724,195 @@ const sampler = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html =>
     h,
   )
 
+/** A Node's name, numbered when the Design has more than one of its kind. */
+const nameOf = (game: Game, node: GameNode): string => {
+  const same = game.nodes.filter((entry) => entry.type === node.type)
+  const name = COMPONENTS[node.type].name
+  return same.length > 1 ? `${name} ${same.indexOf(node) + 1}` : name
+}
+
+/** The routing Links out of a Node, with the Node at the far end. */
+const outbound = (game: Game, node: GameNode): ReadonlyArray<readonly [GameLink, GameNode]> =>
+  game.links.flatMap((link) => {
+    const target = game.nodes.find((entry) => entry.id === link.to)
+    return link.from === node.id && target && !COMPONENTS[target.type].tap
+      ? [[link, target] as const]
+      : []
+  })
+
+const caption = (text: string, h: HtmlBuilder<Message>): Html =>
+  h.span([h.Class('text-[12px] font-medium text-muted-foreground')], [text])
+
+const loadBalancer = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const checked = has(game, 'health-checks')
+  const policies = Object.entries(LB_POLICIES) as ReadonlyArray<
+    readonly [LbPolicy, (typeof LB_POLICIES)[LbPolicy]]
+  >
+  return [
+    section(
+      'Policy',
+      [
+        picker(
+          'policy',
+          policies.map(([policy, entry]) => [policy, entry.label] as const),
+          node.policy,
+          (policy) => Message.PolicyChosen({ nodeId: node.id, policy }),
+          h,
+          (policy) => {
+            const research = LB_POLICIES[policy].research
+            return research === null || has(game, research)
+          },
+          'grid-cols-2',
+        ),
+      ],
+      h,
+    ),
+    section(
+      'Health checks',
+      [
+        picker(
+          'check-every',
+          CHECK_INTERVALS.map((seconds) => [seconds, `${seconds} s`] as const),
+          node.checkEvery,
+          (checkEvery) => Message.HealthCheckChosen({ nodeId: node.id, checkEvery }),
+          h,
+          (seconds) => checked || seconds === 10,
+        ),
+        picker(
+          'deep-check',
+          [
+            [false, 'Shallow'],
+            [true, 'Deep'],
+          ],
+          node.deepCheck,
+          (deepCheck) => Message.HealthCheckChosen({ nodeId: node.id, deepCheck }),
+          h,
+          (deep) => checked || !deep,
+        ),
+      ],
+      h,
+    ),
+    section(
+      'Routes',
+      outbound(game, node).map(([link, target]) => {
+        const carried = link.kinds ?? REQUEST_KINDS
+        const toggled = (kind: RequestKind) => {
+          const next = carried.includes(kind)
+            ? carried.filter((entry) => entry !== kind)
+            : REQUEST_KINDS.filter((entry) => entry === kind || carried.includes(entry))
+          return next.length === REQUEST_KINDS.length ? null : next
+        }
+        return h.div(
+          [h.Key(link.to), h.Class('flex flex-col gap-1.5')],
+          [
+            caption(nameOf(game, target), h),
+            segmented(
+              'grid-cols-4',
+              REQUEST_KINDS.map((kind) => {
+                const next = toggled(kind)
+                return choice(
+                  `${link.to}-${kind}`,
+                  carried.includes(kind),
+                  next === null || next.length > 0,
+                  Message.LinkKindsChosen({ from: node.id, to: link.to, kinds: next }),
+                  [h.span([h.Class('w-full truncate text-center')], [KIND_SHORT[kind]])],
+                  KINDS[kind].label,
+                  h,
+                )
+              }),
+              h,
+            ),
+          ],
+        )
+      }),
+      h,
+    ),
+  ]
+}
+
+const KIND_SHORT: Record<RequestKind, string> = {
+  page: 'Page',
+  read: 'Read',
+  write: 'Write',
+  login: 'Login',
+}
+
+const dnsTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'TTL',
+    [
+      picker(
+        'ttl',
+        DNS_TTLS.map((ttl) => [ttl, duration(ttl)] as const),
+        node.ttl,
+        (ttl) => Message.TtlChosen({ nodeId: node.id, ttl }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+const cache = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Cache',
+    [
+      picker(
+        'engine',
+        (Object.keys(CACHE_ENGINES) as ReadonlyArray<CacheEngine>).map(
+          (engine) => [engine, CACHE_ENGINES[engine].name] as const,
+        ),
+        node.engine,
+        (engine) => Message.CacheEngineChosen({ nodeId: node.id, engine }),
+        h,
+      ),
+      picker(
+        'cache-ttl',
+        CACHE_TTLS.map((entry) => [entry.ttl, duration(entry.ttl)] as const),
+        node.ttl,
+        (ttl) => Message.TtlChosen({ nodeId: node.id, ttl }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+/** Timeout and retries on each call a Node makes. */
+const calls = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const links = outbound(game, node)
+  if (links.length === 0) return []
+  return [
+    section(
+      'Calls',
+      links.map(([link, target]) =>
+        h.div(
+          [h.Key(link.to), h.Class('flex flex-col gap-1.5')],
+          [
+            caption(nameOf(game, target), h),
+            picker(
+              `timeout-${link.to}`,
+              LINK_TIMEOUTS.map((seconds) => [seconds, `${seconds} s`] as const),
+              link.timeout,
+              (timeout) => Message.LinkPolicyChosen({ from: node.id, to: link.to, timeout }),
+              h,
+            ),
+            picker(
+              `retries-${link.to}`,
+              [
+                ['none', 'No retries'],
+                ['naive', 'Retry 3×'],
+              ],
+              link.retries,
+              (retries) => Message.LinkPolicyChosen({ from: node.id, to: link.to, retries }),
+              h,
+            ),
+          ],
+        ),
+      ),
+      h,
+    ),
+  ]
+}
+
 const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   const percentiles = has(game, 'percentiles')
   const kinds = REQUEST_KINDS.filter((kind) => ledger.kinds[kind])
@@ -646,7 +923,7 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
         const entry = ledger.kinds[kind]
         const failing = (entry?.success ?? 1) < 0.95
         const slow = (entry?.p99 ?? 0) > PROFILES[kind].apdex
-        return h.div(
+        const line = h.div(
           [h.Key(kind), h.Class('flex items-center gap-2 text-[12px]')],
           [
             h.span(
@@ -664,9 +941,26 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
                 ),
               ],
               [
-                `${rate(entry?.rate ?? 0)}/s · ${percent(entry?.success ?? 0)} ok · ${
-                  percentiles ? `p99 ${ms(entry?.p99 ?? 0)}` : ms(entry?.mean ?? 0)
+                `${rate(entry?.rate ?? 0)}/s · ${percent(entry?.success ?? 0)} ok${
+                  percentiles ? '' : ` · ${ms(entry?.mean ?? 0)}`
                 }`,
+              ],
+            ),
+          ],
+        )
+        if (!percentiles) return line
+        return h.div(
+          [h.Key(kind), h.Class('flex flex-col gap-0.5')],
+          [
+            line,
+            h.span(
+              [
+                h.Class(
+                  `${FIGURE} pl-4 text-[11.5px] ${slow ? 'text-warn' : 'text-muted-foreground'}`,
+                ),
+              ],
+              [
+                `p50 ${ms(entry?.p50 ?? 0)} · p95 ${ms(entry?.p95 ?? 0)} · p99 ${ms(entry?.p99 ?? 0)}`,
               ],
             ),
           ],
@@ -751,13 +1045,17 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
             [h.div([h.Class(NESTED)], stats(game, node, ledger, h))],
           ),
           ...(has(game, 'metrics') && history.length > 1 && !def.fixed
-            ? [section('Load, last 2 minutes', [sparkline(history, h)], h)]
+            ? [section('Load, last day', [sparkline(history, h)], h)]
             : []),
           ...resources(node, ledger, h),
           ...(node.type === 'users' ? traffic(game, ledger, h) : []),
           ...(def.sized ? [instance(game, node, h)] : []),
           ...(node.type === 'server' ? stack(game, node, h) : []),
           ...(node.type === 'analytics' ? [sampler(game, node, h)] : []),
+          ...(node.type === 'lb' ? loadBalancer(game, node, h) : []),
+          ...(node.type === 'cache' ? [cache(node, h)] : []),
+          ...(node.type === 'dns' && has(game, 'health-checks') ? [dnsTtl(node, h)] : []),
+          ...(has(game, 'timeouts') ? calls(game, node, h) : []),
         ],
       ),
       h.div(

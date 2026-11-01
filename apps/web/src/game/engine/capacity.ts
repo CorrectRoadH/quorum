@@ -3,6 +3,7 @@ import {
   APACHE_SPARE,
   BURST_BASELINE,
   FRAMEWORKS,
+  GZIP_CPU,
   LOCAL_DB_CONTENTION,
   LOCAL_DB_RAM,
   LOCAL_DB_RAM_PER_USER,
@@ -10,6 +11,7 @@ import {
   OPCACHE_SPEED,
   ORM_READS,
   OS_RAM,
+  PM_MODES,
   PROFILES,
   QUERY_CPU,
   REQUEST_KINDS,
@@ -18,7 +20,7 @@ import {
   RUNTIMES,
   type RequestKind,
 } from './catalog.ts'
-import { has, networkOf, ramOf, vcpuOf } from './lookups.ts'
+import { has, networkOf, payloadOf, ramOf, vcpuOf } from './lookups.ts'
 import type { Game, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -159,6 +161,7 @@ const cpuOf = (context: ServerContext, kind: RequestKind, calls: Calls): number 
       : profile.native
         ? profile.cpu * (kind === 'login' ? context.hashing : 1)
         : (profile.cpu * framework.overhead) / speed
+  if (node.compress && profile.compressible) cpu *= GZIP_CPU
   if (context.local)
     cpu +=
       (calls.reads * QUERY_CPU['q-read'] + calls.writes * QUERY_CPU['q-write']) *
@@ -190,9 +193,16 @@ export const serverModel = (context: ServerContext): NodeModel => {
           ? APACHE_MAX_WORKERS * context.boost
           : node.workers * context.boost
 
+  // PHP-FPM's process manager: static keeps the whole pool resident; dynamic and ondemand keep
+  // what is busy, plus spares, and make some requests wait for a fork (06 "PHP-FPM pool modes").
+  const pm = node.runtime === 'php_fpm' ? PM_MODES[node.pm] : PM_MODES.static
+  const resident =
+    pm.spares === null
+      ? processes
+      : Math.min(processes, Math.max(1, Math.ceil(context.inflight) + pm.spares))
   const ramUsed =
     OS_RAM +
-    (processes * (runtime.memory + framework.memory)) / 1024 +
+    (resident * (runtime.memory + framework.memory)) / 1024 +
     (context.local ? LOCAL_DB_RAM + game.users * LOCAL_DB_RAM_PER_USER : 0) +
     node.leak
   const swapping = ramUsed > ram
@@ -232,10 +242,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const slotWait = rate > 0 ? waitFor(slotWork / rate, slotUtilization, slots) : 0
 
   // Every response leaves through the box's network card: bandwidth over bytes per request.
-  const bytes = kinds.reduce(
-    (sum, kind) => sum + (arriving[kind] ?? 0) * PROFILES[kind].payloadKB,
-    0,
-  )
+  const bytes = kinds.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * payloadOf(node, kind), 0)
   const networkUtilization = bytes / (networkOf(node) * context.boost)
 
   const utilization = Math.max(cpuUtilization, slotUtilization, networkUtilization)
@@ -268,8 +275,9 @@ export const serverModel = (context: ServerContext): NodeModel => {
     0,
   )
   const loopBlock = loopWork > 0 ? loopSquares / loopWork : 0
-  const tailP = loopBlock > 0 ? LOOP_TAIL_SHARE : 0
-  const tailMs = loopBlock * Math.min(1, 2 * Math.min(1, cpuUtilization))
+  const tailP = loopBlock > 0 ? LOOP_TAIL_SHARE : pm.spawnShare
+  const tailMs =
+    loopBlock > 0 ? loopBlock * Math.min(1, 2 * Math.min(1, cpuUtilization)) : pm.spawnMs
 
   const service = Object.fromEntries(
     REQUEST_KINDS.map((kind) => [
@@ -287,7 +295,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
     service,
     tailP,
     tailMs,
-    processes,
+    processes: resident,
     inflight: (slotWork * share) / 1000,
     resources: {
       cpu: { used, total: cores },

@@ -29,17 +29,35 @@ export const RESEARCH_IDS = [
   'fw-rails',
   'fw-express',
   'fw-django',
+  'fw-symfony',
+  'fw-sinatra',
+  'fw-flask',
+  'keepalive',
+  'gzip',
+  'timeouts',
+  'lb-algorithms',
 ] as const
 export type ResearchId = (typeof RESEARCH_IDS)[number]
 
-export type ResearchTrack = 'infrastructure' | 'data' | 'observability' | 'runtimes' | 'frameworks'
+export type ResearchTrack =
+  | 'infrastructure'
+  | 'data'
+  | 'reliability'
+  | 'observability'
+  | 'performance'
+  | 'runtimes'
+  | 'frameworks'
+  | 'product'
 
 export const RESEARCH_TRACKS: ReadonlyArray<Readonly<{ key: ResearchTrack; label: string }>> = [
   { key: 'infrastructure', label: 'Infrastructure' },
   { key: 'data', label: 'Data' },
+  { key: 'reliability', label: 'Reliability' },
   { key: 'observability', label: 'Observability' },
+  { key: 'performance', label: 'Performance' },
   { key: 'runtimes', label: 'Runtimes' },
   { key: 'frameworks', label: 'Frameworks' },
+  { key: 'product', label: 'Product' },
 ]
 
 export type ResearchDef = Readonly<{
@@ -60,7 +78,7 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
   research({
     id: 'stripe',
     name: 'Stripe Billing',
-    track: 'infrastructure',
+    track: 'product',
     cost: 30,
     era: 0,
     requires: [],
@@ -90,7 +108,7 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     track: 'infrastructure',
     cost: 90,
     era: 1,
-    requires: ['dns-rr'],
+    requires: ['load-balancing'],
     blurb: 'DNS stops sending Users to a dead host.',
   }),
   research({
@@ -132,7 +150,7 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
   research({
     id: 'eager-loading',
     name: 'Eager loading',
-    track: 'data',
+    track: 'performance',
     cost: 100,
     era: 1,
     requires: [],
@@ -186,10 +204,10 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
   research({
     id: 'funnels',
     name: 'Funnel analytics',
-    track: 'observability',
+    track: 'product',
     cost: 150,
     era: 1,
-    requires: ['metrics'],
+    requires: [],
     blurb: 'See where sign-ups drop off and fix it: user growth +10%.',
   }),
   research({
@@ -286,10 +304,73 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     id: 'fw-django',
     name: 'Django',
     track: 'frameworks',
-    cost: 130,
+    cost: 150,
     era: 1,
     requires: ['lang-python'],
     blurb: FRAMEWORKS.django.blurb,
+  }),
+  research({
+    id: 'fw-symfony',
+    name: 'Symfony',
+    track: 'frameworks',
+    cost: 80,
+    era: 1,
+    requires: [],
+    blurb: FRAMEWORKS.symfony.blurb,
+  }),
+  research({
+    id: 'fw-sinatra',
+    name: 'Sinatra',
+    track: 'frameworks',
+    cost: 60,
+    era: 1,
+    requires: ['lang-ruby'],
+    blurb: FRAMEWORKS.sinatra.blurb,
+  }),
+  research({
+    id: 'fw-flask',
+    name: 'Flask',
+    track: 'frameworks',
+    cost: 100,
+    era: 1,
+    requires: ['lang-python'],
+    blurb: FRAMEWORKS.flask.blurb,
+  }),
+  research({
+    id: 'keepalive',
+    name: 'Connection reuse',
+    track: 'performance',
+    cost: 25,
+    era: 0,
+    requires: [],
+    blurb: 'Keep-alive: internal calls skip the TCP handshake, 1 ms each.',
+  }),
+  research({
+    id: 'gzip',
+    name: 'Compression',
+    track: 'performance',
+    cost: 30,
+    era: 0,
+    requires: [],
+    blurb: 'Gzip: page and read responses 70% smaller, for 10% more CPU.',
+  }),
+  research({
+    id: 'timeouts',
+    name: 'Timeouts and retries',
+    track: 'reliability',
+    cost: 60,
+    era: 1,
+    requires: [],
+    blurb: 'Set each call timeout to 1, 5 or 30 s, and retry failed calls.',
+  }),
+  research({
+    id: 'lb-algorithms',
+    name: 'Load balancing algorithms',
+    track: 'infrastructure',
+    cost: 120,
+    era: 1,
+    requires: ['load-balancing'],
+    blurb: 'Least connections and power of two choices.',
   }),
 ]
 
@@ -305,4 +386,7 @@ export const FRAMEWORK_RESEARCH: Record<FrameworkId, ResearchId | null> = {
   rails: 'fw-rails',
   express: 'fw-express',
   django: 'fw-django',
+  symfony: 'fw-symfony',
+  sinatra: 'fw-sinatra',
+  flask: 'fw-flask',
 }

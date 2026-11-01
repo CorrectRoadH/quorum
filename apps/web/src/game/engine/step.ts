@@ -1,13 +1,16 @@
 import {
+  ALERT_FATIGUE,
   ALERT_RULES,
   APDEX_WINDOW,
   CHURN,
   CREDIT_CAP,
   DECLINED_GROWTH,
+  FIRST_KIND_INSIGHT,
   FUNNEL_GROWTH,
   LIVE_TUNING,
   OOM_RATIO,
   PROFILES,
+  REQUEST_KINDS,
   RUNTIMES,
   WARMUP_SECONDS,
   type Tuning,
@@ -15,9 +18,9 @@ import {
 import { advanceIncident, directIncidents } from './director.ts'
 import { StepEvent, type AlertRule } from './events.ts'
 import type { Ledger } from './ledger.ts'
-import { drawerSize, eraOf, has, restarted, vcpuOf } from './lookups.ts'
-import { solveFlow } from './solve.ts'
-import type { Alarms, Game, GameNode, Sample } from './state.ts'
+import { drawerSize, eraOf, has, restarted, vcpuOf, warmAfterRestart } from './lookups.ts'
+import { calendarMinute, solveFlow } from './solve.ts'
+import type { Alarms, FalseAlarms, Game, GameNode, Sample } from './state.ts'
 
 /* ==========================================================================
    Time. `step` advances a Game by some seconds: money moves, credits drain,
@@ -52,6 +55,7 @@ export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): n
 
 const advanceNode = (
   node: GameNode,
+  time: number,
   ledger: Ledger,
   seconds: number,
   events: Array<StepEvent>,
@@ -62,7 +66,7 @@ const advanceNode = (
     next = {
       ...next,
       down,
-      warm: down === 0 ? 0 : node.warm,
+      warm: down === 0 ? warmAfterRestart(node) : node.warm,
       downCause: down === 0 ? 'restart' : node.downCause,
     }
   } else if (node.down === 0 && node.warm < 1) {
@@ -91,19 +95,24 @@ const advanceNode = (
     ram.used > ram.total * OOM_RATIO
   ) {
     events.push(StepEvent.OutOfMemory({ nodeId: node.id }))
-    next = { ...next, ...restarted(node, 'oom'), leak: 0 }
+    next = { ...next, ...restarted(node, 'oom'), leak: 0, downAt: time }
   }
   return next
 }
+
+/** Whether the player has stopped listening to a rule: too many false alarms today. */
+export const ignored = (game: Game, rule: AlertRule): boolean =>
+  game.falseAlarms[rule] >= ALERT_FATIGUE
 
 const advanceAlarms = (
   game: Game,
   ledger: Ledger,
   seconds: number,
   events: Array<StepEvent>,
-): Alarms => {
+): Readonly<{ alarms: Alarms; falseAlarms: FalseAlarms }> => {
+  const rules = game.alertRules
   const slowest = Object.entries(ledger.kinds).some(
-    ([kind, entry]) => entry.p99 > 4 * PROFILES[kind as keyof typeof PROFILES].apdex,
+    ([kind, entry]) => entry.p99 > rules.latency * PROFILES[kind as keyof typeof PROFILES].apdex,
   )
   const hottest = Math.max(
     0,
@@ -112,22 +121,32 @@ const advanceAlarms = (
       .map((node) => ledger.nodes[node.id]?.utilization ?? 0),
   )
   const next: Alarms = {
-    errors: ledger.errorShare > ALERT_RULES.errors.threshold ? game.alarms.errors + seconds : 0,
+    errors: ledger.errorShare > rules.errors ? game.alarms.errors + seconds : 0,
     latency: slowest ? game.alarms.latency + seconds : 0,
-    saturation: hottest > ALERT_RULES.saturation.threshold ? game.alarms.saturation + seconds : 0,
+    saturation: hottest > rules.saturation ? game.alarms.saturation + seconds : 0,
   }
-  if (has(game, 'alerting')) {
-    for (const rule of [
-      'errors',
-      'latency',
-      'saturation',
-    ] as const satisfies ReadonlyArray<AlertRule>) {
-      const limit = ALERT_RULES[rule].seconds
-      if (game.alarms[rule] < limit && next[rule] >= limit)
-        events.push(StepEvent.AlertFired({ rule }))
+  // A new calendar day forgives false alarms, except on rules the player already ignores.
+  const day = Math.floor(calendarMinute(game.time) / 1440)
+  const fresh = day !== game.falseAlarms.day
+  const counts: Record<AlertRule, number> = {
+    errors: game.falseAlarms.errors,
+    latency: game.falseAlarms.latency,
+    saturation: game.falseAlarms.saturation,
+  }
+  for (const rule of ['errors', 'latency', 'saturation'] as const) {
+    if (fresh && counts[rule] < ALERT_FATIGUE) counts[rule] = 0
+    if (!has(game, 'alerting')) continue
+    const limit = ALERT_RULES[rule].seconds
+    if (game.alarms[rule] >= limit || next[rule] < limit) continue
+    if (ignored(game, rule)) continue
+    events.push(StepEvent.AlertFired({ rule }))
+    // An alert with no incident behind it is a false alarm.
+    if (!game.incident) {
+      counts[rule] += 1
+      if (counts[rule] === ALERT_FATIGUE) events.push(StepEvent.AlertIgnored({ rule }))
     }
   }
-  return next
+  return { alarms: next, falseAlarms: { day, ...counts } }
 }
 
 export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING): StepResult => {
@@ -151,14 +170,19 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
   }
   if (!game.sandbox) cash -= ledger.burn * seconds
 
-  const nodes = game.nodes.map((node) => advanceNode(node, ledger, seconds, events))
+  const nodes = game.nodes.map((node) => advanceNode(node, game.time, ledger, seconds, events))
   const users = game.sandbox
     ? game.users
     : Math.max(20, game.users + growthOf(game, ledger, tuning.pace) * seconds)
   const apdex = game.apdex + (ledger.apdex - game.apdex) * Math.min(1, seconds / APDEX_WINDOW)
   // Sim time stays on a microsecond grid, so ten 0.1 s Steps make exactly one second.
   const time = Math.round((game.time + seconds) * 1e6) / 1e6
-  const alarms = advanceAlarms(game, ledger, seconds, events)
+  const { alarms, falseAlarms } = advanceAlarms(game, ledger, seconds, events)
+
+  // The first time users get a new kind of request through, the team learns from it, once.
+  const firsts = REQUEST_KINDS.filter(
+    (kind) => !game.servedKinds.includes(kind) && (ledger.kinds[kind]?.success ?? 0) > 0.5,
+  )
 
   const crossedSecond = Math.floor(time) > Math.floor(game.time)
   const sample: Sample = {
@@ -182,7 +206,9 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
     users,
     apdex,
     alarms,
-    insight: game.insight + ledger.insight * seconds,
+    falseAlarms,
+    insight: game.insight + ledger.insight * seconds + FIRST_KIND_INSIGHT * firsts.length,
+    servedKinds: firsts.length > 0 ? [...game.servedKinds, ...firsts] : game.servedKinds,
     time,
     earned: game.earned + earned,
     history: crossedSecond ? [...game.history, sample].slice(-HISTORY) : game.history,

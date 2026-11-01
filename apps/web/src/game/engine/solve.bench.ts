@@ -1,5 +1,5 @@
 import { test } from 'vitest'
-import { node, preseedGame } from './company.ts'
+import { link, node, preseedGame } from './company.ts'
 import { bottleneckOf, solveFlow } from './solve.ts'
 import type { Game, GameLink, GameNode } from './state.ts'
 
@@ -13,7 +13,7 @@ import type { Game, GameLink, GameNode } from './state.ts'
 /** Users → a Load Balancer → 6 Load Balancers × 30 App Servers → 6 Poolers → 6 Databases. */
 const bigBoard = (): Game => {
   const nodes: Array<GameNode> = [node('users', 'users', 0, 0), node('lb', 'lb', 100, 0)]
-  const links: Array<GameLink> = [{ from: 'users', to: 'lb' }]
+  const links: Array<GameLink> = [link('users', 'lb')]
   for (let group = 0; group < 6; group += 1) {
     const lb = `lb${group}`
     const pooler = `pool${group}`
@@ -23,7 +23,7 @@ const bigBoard = (): Game => {
       node(pooler, 'pooler', 400, group * 100),
       node(database, 'database', 500, group * 100, { size: 5 }),
     )
-    links.push({ from: 'lb', to: lb }, { from: pooler, to: database })
+    links.push(link('lb', lb), link(pooler, database))
     for (let index = 0; index < 30; index += 1) {
       const id = `s${group}-${index}`
       nodes.push(
@@ -33,7 +33,7 @@ const bigBoard = (): Game => {
           workers: 40,
         }),
       )
-      links.push({ from: lb, to: id }, { from: id, to: pooler })
+      links.push(link(lb, id), link(id, pooler))
     }
   }
   return {

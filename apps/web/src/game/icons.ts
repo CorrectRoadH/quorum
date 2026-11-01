@@ -17,12 +17,14 @@ import {
 import {
   siDjango,
   siExpress,
+  siFlask,
   siLaravel,
   siNodedotjs,
   siPhp,
   siPython,
   siRuby,
   siRubyonrails,
+  siSymfony,
 } from 'simple-icons'
 import type { BuildGroup, ComponentId, FrameworkId, LanguageId } from './engine/catalog.ts'
 
@@ -79,4 +81,8 @@ export const STACK_LOGOS: Record<StackLogoId, Readonly<{ path: string; color: st
   express: { path: siExpress.path, color: null },
   // Django's brand green is near black; its lighter secondary green reads on both themes.
   django: { path: siDjango.path, color: '#44B78B' },
+  symfony: { path: siSymfony.path, color: null },
+  // Simple Icons has no Sinatra mark: it wears Ruby's.
+  sinatra: { path: siRuby.path, color: '#B4302A' },
+  flask: { path: siFlask.path, color: `#${siFlask.hex}` },
 }

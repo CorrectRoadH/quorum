@@ -4,6 +4,7 @@ import {
   canRaise,
   collect,
   connect,
+  decline,
   disconnect,
   filePostmortem,
   place,
@@ -25,6 +26,7 @@ import {
   OS_RAM,
   POOL_LIMITS,
   RESEARCH,
+  RESEARCH_IDS,
   RUNTIMES,
   type ComponentId,
   type ResearchId,
@@ -40,9 +42,12 @@ import { step } from './step.ts'
 /* ==========================================================================
    Pacing bots (16 "Pacing model"): scripted players that run against the real
    Simulation, so balance changes show up as test failures. Pure: no Vitest,
-   no UI. M1 has the Balanced player and records margins; M2 adds Greedy,
-   Stubborn and Decliner and asserts the pacing targets.
+   no UI. Balanced plays the way the design expects; Greedy only buys bigger
+   boxes and the cheapest research; Stubborn never changes runtime or
+   framework; Decliner plays Balanced and turns every round down.
    ========================================================================== */
+
+export type Strategy = 'balanced' | 'greedy' | 'stubborn' | 'decliner'
 
 export type Milestone =
   | 'first-upgrade'
@@ -178,9 +183,20 @@ const addServer = (game: Game, ledger: Ledger, model: GameNode): Game => {
   return next
 }
 
-/** Puts a Connection Pooler between every App Server and the Database. */
-const addPooler = (game: Game, ledger: Ledger, database: GameNode): Game => {
-  const pooler = placed(game, ledger, 'pooler', database.x - 160, database.y + 120)
+/** Puts a Connection Pooler or a Cache between every App Server and the Database. */
+const inFront = (
+  game: Game,
+  ledger: Ledger,
+  database: GameNode,
+  type: 'pooler' | 'cache',
+): Game => {
+  const pooler = placed(
+    game,
+    ledger,
+    type,
+    database.x - 160,
+    database.y + (type === 'cache' ? -120 : 120),
+  )
   if (!pooler) return game
   let next = pooler[0]
   for (const link of next.links.filter((entry) => entry.to === database.id)) {
@@ -191,9 +207,14 @@ const addPooler = (game: Game, ledger: Ledger, database: GameNode): Game => {
 }
 
 /** What the Balanced player does about the Node that limits the Design. */
-const relieve = (game: Game, ledger: Ledger, node: GameNode): Game => {
+const relieve = (game: Game, ledger: Ledger, node: GameNode, strategy: Strategy): Game => {
   const limit = ledger.nodes[node.id]?.limit ?? 'none'
   const grow = (current: Game) => resize(current, node.id, 1)
+  // Greedy knows one move: a bigger box, or a box off Burstable once its credits run out.
+  if (strategy === 'greedy') {
+    if (limit === 'credits') return tried(game, setFamily(game, node.id, 'general'))
+    return affordable(game, ledger, grow)
+  }
   if (node.type === 'server') {
     if (limit === 'credits') return tried(game, setFamily(game, node.id, 'general'))
     if (node.localDb && (limit === 'memory' || limit === 'cpu'))
@@ -213,12 +234,21 @@ const relieve = (game: Game, ledger: Ledger, node: GameNode): Game => {
   if (node.type === 'database' && limit === 'connections' && has(game, 'pooling'))
     return game.nodes.some((entry) => entry.type === 'pooler')
       ? game
-      : addPooler(game, ledger, node)
+      : inFront(game, ledger, node, 'pooler')
+  // A busy Database gets a Cache in front before it gets a bigger box.
+  if (
+    node.type === 'database' &&
+    has(game, 'caching') &&
+    (ledger.nodes[node.id]?.resources.cpu?.used ?? 0) >
+      0.7 * (ledger.nodes[node.id]?.resources.cpu?.total ?? 1) &&
+    !game.nodes.some((entry) => entry.type === 'cache')
+  )
+    return inFront(game, ledger, node, 'cache')
   return affordable(game, ledger, grow)
 }
 
 /** Incidents, postmortems, the drawer, research, the Stack, and the Bottleneck. */
-const look = (game: Game, tuning: Tuning): Game => {
+const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   let next = game.pending > 0 ? collect(game) : game
 
   for (const postmortem of next.postmortems) {
@@ -233,14 +263,21 @@ const look = (game: Game, tuning: Tuning): Game => {
   if (incident?.kind === 'slow-query' && incident.nodeId)
     next = tried(next, addIndex(next, incident.nodeId))
 
-  const research = PRIORITY.find(
-    (id) => !has(next, id) && researchReady(next, id) && next.insight >= RESEARCH[id].cost,
-  )
-  if (research) next = tried(next, study(next, research))
+  const ready = (id: ResearchId) => !has(next, id) && researchReady(next, id)
+  const research =
+    strategy === 'greedy'
+      ? RESEARCH_IDS.filter(ready).toSorted((a, b) => RESEARCH[a].cost - RESEARCH[b].cost)[0]
+      : PRIORITY.find(ready)
+  if (research && next.insight >= RESEARCH[research].cost) next = tried(next, study(next, research))
 
   // PHP-FPM replaces Apache as soon as it is researched, with a pool that fits in RAM.
   for (const server of servers(next))
-    if (server.runtime === 'mod_php' && has(next, 'php-fpm')) {
+    if (
+      strategy !== 'stubborn' &&
+      strategy !== 'greedy' &&
+      server.runtime === 'mod_php' &&
+      has(next, 'php-fpm')
+    ) {
       next = tried(next, setRuntime(next, server.id, 'php_fpm'))
       const switched = byId(next, server.id)
       if (switched) next = tried(next, setWorkers(next, server.id, fittingWorkers(switched)))
@@ -255,9 +292,15 @@ const look = (game: Game, tuning: Tuning): Game => {
       .filter(([, utilization]) => utilization > BUSY)
       .toSorted((a, b) => b[1] - a[1])[0]?.[0]
   const node = target ? byId(next, target) : undefined
-  if (node) next = relieve(next, flow, node)
+  if (node) next = relieve(next, flow, node, strategy)
 
-  return canRaise(next) ? tried(next, raise(next, tuning.firstIncidentAfter)) : next
+  if (!canRaise(next)) return next
+  return tried(
+    next,
+    strategy === 'decliner'
+      ? decline(next, tuning.firstIncidentAfter)
+      : raise(next, tuning.firstIncidentAfter),
+  )
 }
 
 /** Which milestones a look reached, by comparing the Game before and after. */
@@ -276,10 +319,15 @@ const reached = (before: Game, after: Game): ReadonlyArray<Milestone> => {
 }
 
 /**
- * Plays a Company with the Balanced strategy in 1 s Steps until `until` sim
- * seconds or the Seed round. `tuning` defaults to the design's pacing.
+ * Plays a Company with a strategy in 1 s Steps until `until` sim seconds or
+ * the Seed round. `tuning` defaults to the design's pacing.
  */
-export const runBot = (seed: number, until: number, tuning: Tuning = DESIGN_TUNING): BotRun => {
+export const runBot = (
+  seed: number,
+  until: number,
+  tuning: Tuning = DESIGN_TUNING,
+  strategy: Strategy = 'balanced',
+): BotRun => {
   let game = newGame(seed)
   const milestones: Partial<Record<Milestone, number>> = {}
   const margins: Array<MarginRecord> = []
@@ -290,7 +338,7 @@ export const runBot = (seed: number, until: number, tuning: Tuning = DESIGN_TUNI
     if (Math.round(game.time) % LOOK_EVERY === 0) {
       const before = game
       const ledger = solveFlow(before)
-      game = look(before, tuning)
+      game = look(before, tuning, strategy)
       for (const milestone of reached(before, game)) mark(milestone)
       if (game.stage > before.stage)
         margins.push({

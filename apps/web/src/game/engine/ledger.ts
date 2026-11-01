@@ -18,6 +18,8 @@ export type NodeLedger = Readonly<{
   limit: Limit
   /** Mean milliseconds this Node adds to a request. */
   latency: number
+  /** 99th percentile of the milliseconds this Node adds, for its busiest kind. */
+  p99: number
   /** Requests per second dropped for lack of capacity. */
   dropped: number
   /** Queries per second refused for lack of connections. */
@@ -29,6 +31,8 @@ export type NodeLedger = Readonly<{
   connections: Readonly<{ used: number; max: number }> | null
   /** Cache hit ratio. */
   hitRatio: number | null
+  /** Milliseconds a replica lags behind the primary. */
+  lag: number | null
   /** The working set does not fit in RAM. */
   disk: boolean
   /** Requests per second sent on, by kind. */

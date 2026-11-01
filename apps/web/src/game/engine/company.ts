@@ -1,5 +1,17 @@
-import { CREDIT_CAP, ERAS, FIRST_INCIDENT_AFTER, type ComponentId } from './catalog.ts'
-import type { Game, GameNode } from './state.ts'
+import {
+  CREDIT_CAP,
+  ERAS,
+  FIRST_INCIDENT_AFTER,
+  LINK_TIMEOUT,
+  type ComponentId,
+} from './catalog.ts'
+import {
+  DEFAULT_ALERT_RULES,
+  NO_FALSE_ALARMS,
+  type Game,
+  type GameLink,
+  type GameNode,
+} from './state.ts'
 
 /* ==========================================================================
    A new Company: the Garage start the design describes, and a Pre-seed start
@@ -24,12 +36,30 @@ export const node = (
   workers: 5,
   localDb: false,
   sample: 1,
+  sampleRate: 0.1,
   down: 0,
   downCause: 'restart',
   warm: 1,
   credits: 0,
   leak: 0,
+  compress: false,
+  downAt: 0,
+  policy: 'weighted',
+  checkEvery: 10,
+  deepCheck: false,
+  ttl: type === 'cache' ? 60 : 300,
+  engine: 'redis',
+  pm: 'static',
   ...extra,
+})
+
+/** A Link with the default policy: 30 s timeout, no retries, every kind. */
+export const link = (from: string, to: string): GameLink => ({
+  from,
+  to,
+  timeout: LINK_TIMEOUT,
+  retries: 'none',
+  kinds: null,
 })
 
 export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
@@ -53,6 +83,9 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   postmortemSeq: 0,
   openActions: [],
   alarms: { errors: 0, latency: 0, saturation: 0 },
+  servedKinds: ['page', 'read'],
+  alertRules: DEFAULT_ALERT_RULES,
+  falseAlarms: NO_FALSE_ALARMS,
   earned: 0,
   history: [],
   sandbox: false,
@@ -74,10 +107,7 @@ export const newGame = (seed = 20_261_031): Game => ({
     node('analytics', 'analytics', 760, 520),
     node('payments', 'payments', 440, 540),
   ],
-  links: [
-    { from: 'users', to: 'server' },
-    { from: 'server', to: 'analytics' },
-  ],
+  links: [link('users', 'server'), link('server', 'analytics')],
 })
 
 /** Pre-seed with the Garage lessons already learned: Postgres split out, PHP-FPM, Stripe. */
@@ -92,11 +122,7 @@ export const preseedGame = (seed = 20_261_031): Game => {
       node('analytics', 'analytics', 760, 520),
       node('payments', 'payments', 440, 540),
     ],
-    links: [
-      { from: 'users', to: 'server' },
-      { from: 'server', to: 'database' },
-      { from: 'server', to: 'analytics' },
-    ],
+    links: [link('users', 'server'), link('server', 'database'), link('server', 'analytics')],
     cash: 300 + (garage?.grant ?? 0),
     insight: 40,
     users: 1_050,

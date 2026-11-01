@@ -1,11 +1,16 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 import {
+  CacheEngine,
   ComponentId,
   FamilyId,
   FrameworkId,
   IncidentId,
+  LbPolicy,
+  PmMode,
+  RequestKindId,
   ResearchId,
+  Retries,
   RuntimeId,
 } from './engine/state.ts'
 import { BuildGroupKey, Menu, Panel, SandboxId, Tone } from './model.ts'
@@ -57,7 +62,32 @@ export const Message = defineMessageUnion({
   RuntimeChosen: { nodeId: Schema.String, runtime: RuntimeId },
   FrameworkChosen: { nodeId: Schema.String, framework: FrameworkId },
   WorkersChosen: { nodeId: Schema.String, workers: Schema.Finite },
-  SampleChosen: { nodeId: Schema.String, sample: Schema.Finite },
+  PmChosen: { nodeId: Schema.String, pm: PmMode },
+  CompressionChosen: { nodeId: Schema.String, compress: Schema.Boolean },
+  PolicyChosen: { nodeId: Schema.String, policy: LbPolicy },
+  HealthCheckChosen: {
+    nodeId: Schema.String,
+    checkEvery: Schema.optional(Schema.Finite),
+    deepCheck: Schema.optional(Schema.Boolean),
+  },
+  AlertRuleChosen: {
+    rule: Schema.Literals(['errors', 'latency', 'saturation']),
+    threshold: Schema.Finite,
+  },
+  TtlChosen: { nodeId: Schema.String, ttl: Schema.Finite },
+  CacheEngineChosen: { nodeId: Schema.String, engine: CacheEngine },
+  LinkPolicyChosen: {
+    from: Schema.String,
+    to: Schema.String,
+    timeout: Schema.optional(Schema.Finite),
+    retries: Schema.optional(Retries),
+  },
+  LinkKindsChosen: {
+    from: Schema.String,
+    to: Schema.String,
+    kinds: Schema.NullOr(Schema.Array(RequestKindId)),
+  },
+  SampleChosen: { nodeId: Schema.String, sampleRate: Schema.Finite },
   ReplaceBought: { nodeId: Schema.String },
   RestartChosen: { nodeId: Schema.String },
   IndexAdded: { nodeId: Schema.String },

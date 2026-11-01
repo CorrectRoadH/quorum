@@ -1,20 +1,26 @@
 import {
   ANALYTICS_CAPACITY,
+  CACHE_ENGINES,
+  CACHE_OPS,
+  CACHE_TTLS,
   COMPONENTS,
   DIURNAL_AMPLITUDE,
   CALENDAR_START,
   FRAMEWORKS,
+  HOT_KB_PER_USER,
   INSIGHT_YIELD,
   KINDS,
   LANGUAGES,
   MAX_CONNECTIONS,
+  P2C_CAPACITY,
+  P2C_IMBALANCE,
   POOLER_CONNECTIONS,
   PROFILES,
   REQUEST_KINDS,
   RPS_PER_USER,
   RUNTIMES,
   SAMPLE_OVERHEAD,
-  SAMPLE_RATES,
+  LINK_TIMEOUT,
   WEEKEND_FACTOR,
   marketFor,
   type Kind,
@@ -34,6 +40,10 @@ import {
   ERROR_CAUSES,
   NO_FAILURES,
   answered,
+  attemptsFor,
+  heldFor,
+  retried,
+  timedOut,
   apdexOf,
   blend,
   failed,
@@ -45,8 +55,19 @@ import {
   type Outcome,
 } from './distribution.ts'
 import type { KindLedger, Ledger, LinkLedger, NodeLedger, NodeStatus } from './ledger.ts'
-import { burnOf, eraOf, flatScale, grown, has, isDown, languageOf } from './lookups.ts'
-import type { Game, GameNode } from './state.ts'
+import {
+  burnOf,
+  eraOf,
+  flatScale,
+  grown,
+  has,
+  hopMs,
+  isDown,
+  languageOf,
+  sampleIndex,
+  transferMs,
+} from './lookups.ts'
+import type { Game, GameLink, GameNode } from './state.ts'
 
 /* ==========================================================================
    The flow solve: turns a Design and the current demand into the Ledger.
@@ -59,10 +80,9 @@ import type { Game, GameNode } from './state.ts'
    ========================================================================== */
 
 const PASSES = 6
-/** Milliseconds for one internal network hop. */
-const HOP_MS = 0.5
-/** Share of cached reads a warm Redis answers before writes invalidate them. */
-const CACHE_HIT = 0.85
+/** Replication lag: a floor, plus milliseconds per write per second to replay (16 D12). */
+const REPLICA_LAG_MS = 20
+const REPLICA_LAG_PER_WRITE = 2
 
 type Rates = Partial<Record<Kind, number>>
 
@@ -135,7 +155,7 @@ export const weekly = (time: number): number => {
 
 export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const era = eraOf(game)
-  const spike = game.incident?.kind === 'spike' ? 3 : 1
+  const spike = game.incident?.kind === 'spike' ? game.incident.magnitude : 1
   const cycle = game.sandbox ? 1 : diurnal(game.time) * weekly(game.time)
   const total = game.users * RPS_PER_USER * cycle * spike
   const demand: Partial<Record<RequestKind, number>> = {}
@@ -153,12 +173,16 @@ const accepts = (node: GameNode, kind: Kind): boolean =>
 
 type Graph = Readonly<{
   byId: ReadonlyMap<string, GameNode>
+  /** Each routing Link, by `from>to`. */
+  links: ReadonlyMap<string, GameLink>
   routes: ReadonlyMap<string, ReadonlyArray<GameNode>>
   parents: ReadonlyMap<string, ReadonlyArray<GameNode>>
   taps: ReadonlyMap<string, ReadonlyArray<string>>
   order: ReadonlyArray<GameNode>
-  /** DNS answers only with live hosts. */
+  /** DNS drops dead hosts after its TTL, and Load Balancers check deep, only with Health checks. */
   healthChecked: boolean
+  /** Sim seconds, so a Load Balancer or DNS notices a dead Node late. */
+  time: number
 }>
 
 const graphOf = (game: Game): Graph => {
@@ -166,6 +190,7 @@ const graphOf = (game: Game): Graph => {
   const routes = new Map<string, Array<GameNode>>()
   const parents = new Map<string, Array<GameNode>>()
   const taps = new Map<string, Array<string>>()
+  const links = new Map<string, GameLink>()
   for (const link of game.links) {
     const from = byId.get(link.from)
     const to = byId.get(link.to)
@@ -173,6 +198,7 @@ const graphOf = (game: Game): Graph => {
     if (COMPONENTS[to.type].tap) {
       taps.set(to.id, [...(taps.get(to.id) ?? []), from.id])
     } else {
+      links.set(`${from.id}>${to.id}`, link)
       routes.set(from.id, [...(routes.get(from.id) ?? []), to])
       parents.set(to.id, [...(parents.get(to.id) ?? []), from])
     }
@@ -190,7 +216,28 @@ const graphOf = (game: Game): Graph => {
       if (left === 0) ready.push(child)
     }
   }
-  return { byId, routes, parents, taps, order, healthChecked: has(game, 'health-checks') }
+  return {
+    byId,
+    links,
+    routes,
+    parents,
+    taps,
+    order,
+    healthChecked: has(game, 'health-checks'),
+    time: game.time,
+  }
+}
+
+/** A Link's timeout in ms and whether it retries. Every Link waits 30 s and never retries until Timeouts and retries. */
+const policyOf = (
+  game: Game,
+  graph: Graph,
+  from: string,
+  to: string,
+): Readonly<{ timeout: number; naive: boolean }> => {
+  const link = graph.links.get(`${from}>${to}`)
+  if (!link || !has(game, 'timeouts')) return { timeout: LINK_TIMEOUT * 1000, naive: false }
+  return { timeout: link.timeout * 1000, naive: link.retries === 'naive' }
 }
 
 const delegates = (graph: Graph, node: GameNode): boolean =>
@@ -208,7 +255,7 @@ const samplingOf = (game: Game, graph: Graph, node: GameNode): number => {
   for (const [tapId, sources] of graph.taps) {
     if (!sources.includes(node.id)) continue
     const tap = graph.byId.get(tapId)
-    if (tap) overhead = Math.max(overhead, SAMPLE_OVERHEAD[tap.sample] ?? 0)
+    if (tap) overhead = Math.max(overhead, SAMPLE_OVERHEAD[sampleIndex(tap)] ?? 0)
   }
   return overhead
 }
@@ -219,9 +266,13 @@ type Pass = Readonly<{
   arriving: ReadonlyMap<string, Rates>
   models: ReadonlyMap<string, NodeModel & { disk?: boolean }>
   hits: ReadonlyMap<string, number>
+  /** Share of each Cache's hits that are stale. */
+  staleHits: ReadonlyMap<string, number>
   stranded: ReadonlyMap<string, Readonly<{ rate: number; kinds: ReadonlySet<Kind> }>>
   links: ReadonlyMap<string, Rates>
   connections: ReadonlyMap<string, Readonly<{ used: number; max: number }>>
+  /** Milliseconds replicas lag behind the primary. */
+  lag: number
   /** Share of replica reads that are stale. */
   staleShare: number
 }>
@@ -234,6 +285,12 @@ type Inputs = Readonly<{
   callLatency: ReadonlyMap<string, Calls>
   inflight: ReadonlyMap<string, number>
   weights: ReadonlyMap<string, number>
+  /** Share of calls that fail on each retrying Link, by `from>to:kind`, from the last pass. */
+  failures: ReadonlyMap<string, number>
+  /** Capacity each Node had on paper at the start of the solve: what a weighted split sees. */
+  nominal: ReadonlyMap<string, number>
+  /** App Servers whose database is down or overloaded: a deep health check takes them out. */
+  sick: ReadonlySet<string>
 }>
 
 const NO_CALLS: Calls = { reads: 0, writes: 0, auth: 0 }
@@ -266,9 +323,15 @@ const modelFor = (
     case 'replica':
       return databaseModel({ game, node, arriving, boost })
     case 'lb':
-      return flatModel(flatCapacity(node), arriving, { fixed: 1, variable: 0.1 }, boost)
+      return flatModel(
+        flatCapacity(node) *
+          (node.policy === 'p2c' && has(game, 'lb-algorithms') ? P2C_CAPACITY : 1),
+        arriving,
+        { fixed: 1, variable: 0.1 },
+        boost,
+      )
     case 'cache':
-      return flatModel(flatCapacity(node), arriving, { fixed: 0.5, variable: 0.2 }, boost)
+      return flatModel(cacheCapacity(node), arriving, { fixed: 0.5, variable: 0.2 }, boost)
     case 'pooler':
       return flatModel(flatCapacity(node), arriving, { fixed: 0.3, variable: 0 }, boost)
     case 'auth':
@@ -281,6 +344,24 @@ const modelFor = (
     case 'payments':
       return flatModel(Number.POSITIVE_INFINITY, {}, { fixed: 0, variable: 0 }, 1)
   }
+}
+
+/** Redis answers on one main thread; Memcached on every core of its box. */
+const cacheCapacity = (node: GameNode): number =>
+  CACHE_OPS * (CACHE_ENGINES[node.engine].scales ? Math.max(1, grown(1, 2, node.size - 3)) : 1)
+
+/** The TTL class a Cache's TTL falls in. */
+export const cacheTtlOf = (ttl: number) =>
+  ttl <= 10 ? CACHE_TTLS[0] : ttl < 3_600 ? CACHE_TTLS[1] : CACHE_TTLS[2]
+
+/** Share of read queries a Cache answers: sqrt(memory / hot data) × TTL × invalidation × warmth. */
+export const hitRatioOf = (game: Game, node: GameNode, writeShare: number): number => {
+  const memory = flatScale(node)
+  const hot = (game.users * HOT_KB_PER_USER) / 1_000_000
+  const fits = hot > 0 ? Math.min(1, memory / hot) : 1
+  return (
+    Math.sqrt(fits) * cacheTtlOf(node.ttl).factor * (1 - Math.min(0.5, 2 * writeShare)) * node.warm
+  )
 }
 
 /** Requests per second a Node could take with the Era's mix, for splitting traffic. */
@@ -299,15 +380,16 @@ const probeCapacity = (inputs: Inputs, node: GameNode): number => {
 }
 
 const forward = (inputs: Inputs): Pass => {
-  const { game, graph, demand, weights } = inputs
+  const { game, graph, demand } = inputs
   const arriving = new Map<string, Rates>(game.nodes.map((node) => [node.id, {}]))
   const models = new Map<string, NodeModel & { disk?: boolean }>()
   const hits = new Map<string, number>()
+  const staleHits = new Map<string, number>()
   const stranded = new Map<string, { rate: number; kinds: Set<Kind> }>()
   const links = new Map<string, Rates>()
 
   const split = (node: GameNode, kind: Kind): ReadonlyArray<readonly [GameNode, number]> =>
-    splitOf(graph, weights, node, kind)
+    splitOf(inputs, node, kind)
 
   const route = (node: GameNode, kind: Kind, rate: number) => {
     if (rate <= 0) return
@@ -320,12 +402,17 @@ const forward = (inputs: Inputs): Pass => {
       return
     }
     for (const [child, weight] of targets) {
-      const into = arriving.get(child.id) ?? {}
-      into[kind] = (into[kind] ?? 0) + rate * weight
-      arriving.set(child.id, into)
       const key = `${node.id}>${child.id}`
+      // Naive retries resend what failed, up to three times: the callee sees more.
+      const amplified = policyOf(game, graph, node.id, child.id).naive
+        ? attemptsFor(inputs.failures.get(`${key}:${kind}`) ?? 0)
+        : 1
+      const sent = rate * weight * amplified
+      const into = arriving.get(child.id) ?? {}
+      into[kind] = (into[kind] ?? 0) + sent
+      arriving.set(child.id, into)
       const carried = links.get(key) ?? {}
-      carried[kind] = (carried[kind] ?? 0) + rate * weight
+      carried[kind] = (carried[kind] ?? 0) + sent
       links.set(key, carried)
     }
   }
@@ -343,7 +430,8 @@ const forward = (inputs: Inputs): Pass => {
       const reads = rates['q-read'] ?? 0
       const writes = rates['q-write'] ?? 0
       const writeShare = reads + writes > 0 ? writes / (reads + writes) : 0
-      hits.set(node.id, CACHE_HIT * node.warm * (1 - Math.min(0.5, 2 * writeShare)))
+      hits.set(node.id, hitRatioOf(game, node, writeShare))
+      staleHits.set(node.id, cacheTtlOf(node.ttl).stale * writeShare)
     }
 
     for (const kind of Object.keys(rates) as Array<Kind>) {
@@ -417,41 +505,92 @@ const forward = (inputs: Inputs): Pass => {
     arriving,
     models,
     hits,
+    staleHits,
     stranded,
     links,
     connections,
-    staleShare: Math.min(0.15, 0.02 + 0.002 * writes),
+    lag: REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes,
+    staleShare: Math.min(0.15, (REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes) / 1000),
   }
 }
 
+/** Whether a Node is down and the router in front of it has noticed. Planned restarts drain first. */
+const noticed = (graph: Graph, child: GameNode, after: number): boolean =>
+  isDown(child) && (child.downCause === 'restart' || graph.time - child.downAt >= after)
+
+/** The kinds a Link carries: an L7 Load Balancer Link can carry only some. */
+const carries = (graph: Graph, node: GameNode, child: GameNode, kind: Kind): boolean => {
+  const kinds = graph.links.get(`${node.id}>${child.id}`)?.kinds
+  return node.type !== 'lb' || !kinds || (kinds as ReadonlyArray<Kind>).includes(kind)
+}
+
 const splitOf = (
-  graph: Graph,
-  weights: ReadonlyMap<string, number>,
+  inputs: Inputs,
   node: GameNode,
   kind: Kind,
 ): ReadonlyArray<readonly [GameNode, number]> => {
-  const takers = (graph.routes.get(node.id) ?? []).filter((child) => accepts(child, kind))
+  const { game, graph } = inputs
+  const takers = (graph.routes.get(node.id) ?? []).filter(
+    (child) => accepts(child, kind) && carries(graph, node, child, kind),
+  )
   if (takers.length === 0) return []
-  // Load Balancers skip dead hosts; DNS does so only with health checks.
-  const skips = node.type === 'lb' || (node.type === 'dns' && graph.healthChecked)
-  const live =
-    skips && takers.some((child) => !isDown(child))
-      ? takers.filter((child) => !isDown(child))
+  const even = (live: ReadonlyArray<GameNode>) =>
+    live.map((child) => [child, 1 / live.length] as const)
+  if (node.type === 'dns') {
+    // DNS round robin splits evenly. With health checks, a dead host leaves once its TTL runs out.
+    const live = graph.healthChecked
+      ? takers.filter((child) => !noticed(graph, child, node.ttl))
       : takers
-  // DNS round robin splits evenly.
-  if (node.type === 'dns') return live.map((child) => [child, 1 / live.length] as const)
-  const raw = live.map((child) => {
-    const weight = weights.get(child.id) ?? 1
+    return even(live.length > 0 ? live : takers)
+  }
+  if (node.type !== 'lb') return weighted(takers, (child) => inputs.weights.get(child.id))
+  // A Load Balancer notices a dead host at its next health check. A deep check also takes out
+  // servers whose database is down or overloaded, even when that leaves none.
+  const up = takers.filter((child) => !noticed(graph, child, node.checkEvery))
+  const checked = up.length > 0 ? up : takers
+  const healthy =
+    node.deepCheck && graph.healthChecked
+      ? checked.filter((child) => !inputs.sick.has(child.id))
+      : checked
+  if (healthy.length === 0) return []
+  // A dead host the checks have not caught yet still looks as big as it was.
+  const live = (child: GameNode) =>
+    isDown(child) ? inputs.nominal.get(child.id) : inputs.weights.get(child.id)
+  const policy =
+    has(game, 'lb-algorithms') || node.policy === 'round-robin' ? node.policy : 'weighted'
+  switch (policy) {
+    case 'round-robin':
+      return even(healthy)
+    case 'weighted':
+      return weighted(healthy, (child) => inputs.nominal.get(child.id))
+    case 'least-conn':
+      return weighted(healthy, live)
+    case 'p2c': {
+      const spread = 1 / healthy.length
+      return weighted(healthy, live).map(
+        ([child, share]) => [child, (1 - P2C_IMBALANCE) * share + P2C_IMBALANCE * spread] as const,
+      )
+    }
+  }
+}
+
+/** Shares proportional to each target's capacity. */
+const weighted = (
+  targets: ReadonlyArray<GameNode>,
+  weightOf: (child: GameNode) => number | undefined,
+): ReadonlyArray<readonly [GameNode, number]> => {
+  const raw = targets.map((child) => {
+    const weight = weightOf(child) ?? 1
     return Number.isFinite(weight) ? Math.max(weight, 1e-6) : 1e9
   })
   const sum = raw.reduce((total, weight) => total + weight, 0)
-  return live.map((child, index) => [child, (raw[index] ?? 0) / sum] as const)
+  return targets.map((child, index) => [child, (raw[index] ?? 0) / sum] as const)
 }
 
 /* ---------- outcomes ---------- */
 
 const outcomesOf = (inputs: Inputs, pass: Pass) => {
-  const { game, graph, weights } = inputs
+  const { game, graph } = inputs
   const memo = new Map<string, Outcome>()
 
   const ownHop = (node: GameNode, kind: Kind, value = 1) => {
@@ -467,14 +606,38 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     })
   }
 
+  /** One attempt on a Link: the callee's outcome cut at the Link's timeout. */
+  const attempt = (node: GameNode, child: GameNode, kind: Kind): Outcome =>
+    timedOut(outcome(child, kind), policyOf(game, graph, node.id, child.id).timeout)
+
+  /** A call on a Link: one attempt, and the retries if the Link retries. */
+  const call = (node: GameNode, child: GameNode, kind: Kind): Outcome => {
+    const policy = policyOf(game, graph, node.id, child.id)
+    const once = attempt(node, child, kind)
+    return policy.naive ? retried(once, policy.timeout) : once
+  }
+
+  /** Share of attempts that fail on a Link, which drives naive retries. */
+  const failureOn = (node: GameNode, child: GameNode, kind: Kind): number =>
+    1 - attempt(node, child, kind).success
+
   /** What one request of `kind` sent from `node` to its targets gets back. */
   const downstream = (node: GameNode, kind: Kind, extraHop = 0): Outcome => {
     const mixed = blend(
-      splitOf(graph, weights, node, kind).map(([child, weight]) => [outcome(child, kind), weight]),
+      splitOf(inputs, node, kind).map(([child, weight]) => [call(node, child, kind), weight]),
     )
     if (!mixed) return failed('stranded')
     return extraHop > 0 ? through(hop({ fixed: extraHop }), [[mixed, 1]]) : mixed
   }
+
+  /** Milliseconds a caller holds its slot for one call: E[min(X, T)] per attempt, times the attempts. */
+  const held = (node: GameNode, kind: Kind, extraHop = 0): number =>
+    splitOf(inputs, node, kind).reduce((total, [child, weight]) => {
+      const policy = policyOf(game, graph, node.id, child.id)
+      const attempts = policy.naive ? attemptsFor(failureOn(node, child, kind)) : 1
+      const each = heldFor(outcome(child, kind), policy.timeout) + extraHop
+      return total + weight * attempts * Math.min(policy.timeout, each)
+    }, 0)
 
   const outcome = (node: GameNode, kind: Kind): Outcome => {
     const key = `${node.id}:${kind}`
@@ -492,15 +655,17 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
           return through(ownHop(node, kind), [[downstream(node, kind), 1]])
         case 'server': {
           const requestKind = kind as RequestKind
-          const own = ownHop(node, kind, FRAMEWORKS[node.framework].value[requestKind] ?? 1)
+          const served = ownHop(node, kind, FRAMEWORKS[node.framework].value[requestKind] ?? 1)
+          // The response crosses the user's downlink: bytes over bandwidth.
+          const own = { ...served, fixed: served.fixed + transferMs(node, requestKind) }
           if (runsLocalDb(graph, node)) return through(own)
           const calls = callsOf(game, node, requestKind, delegates(graph, node))
           return through(
             own,
             [
-              [downstream(node, 'q-read', HOP_MS), calls.reads],
-              [downstream(node, 'q-write', HOP_MS), calls.writes],
-              [downstream(node, 'auth', HOP_MS), calls.auth],
+              [downstream(node, 'q-read', hopMs(game)), calls.reads],
+              [downstream(node, 'q-write', hopMs(game)), calls.writes],
+              [downstream(node, 'auth', hopMs(game)), calls.auth],
             ],
             requestKind === 'read',
           )
@@ -509,8 +674,8 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
           if (kind !== 'q-read') return through(ownHop(node, kind), [[downstream(node, kind), 1]])
           const hit = pass.hits.get(node.id) ?? 0
           const mixed = blend([
-            [answered(0, 0), hit],
-            [downstream(node, kind, HOP_MS), 1 - hit],
+            [{ ...answered(0, 0), stale: pass.staleHits.get(node.id) ?? 0 }, hit],
+            [downstream(node, kind, hopMs(game)), 1 - hit],
           ])
           return through(ownHop(node, kind), mixed ? [[mixed, 1]] : [])
         }
@@ -537,7 +702,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     return result
   }
 
-  return { outcome, downstream }
+  return { outcome, downstream, held, failureOn }
 }
 
 /* ---------- the solve ---------- */
@@ -558,6 +723,25 @@ const statusOf = (
           ? 'warn'
           : 'ok'
 
+/** A deep health check fails when a database behind the server is down or overloaded. */
+const databaseSick = (graph: Graph, pass: Pass, server: GameNode): boolean => {
+  const seen = new Set<string>()
+  const visit = (node: GameNode): boolean =>
+    (graph.routes.get(node.id) ?? []).some((child) => {
+      if (seen.has(child.id) || !(accepts(child, 'q-read') || accepts(child, 'q-write')))
+        return false
+      seen.add(child.id)
+      if (isDown(child)) return true
+      if (
+        (child.type === 'database' || child.type === 'replica') &&
+        (pass.models.get(child.id)?.utilization ?? 0) >= 1
+      )
+        return true
+      return visit(child)
+    })
+  return visit(server)
+}
+
 const sumRates = (rates: Rates): number =>
   Object.values(rates).reduce((total, rate) => total + (rate ?? 0), 0)
 
@@ -567,13 +751,39 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
   let callLatency = new Map<string, Calls>()
   let inflight = new Map<string, number>()
   let weights = new Map<string, number>()
-  const seed: Inputs = { game, graph, demand, boost, callLatency, inflight, weights }
-  for (const node of game.nodes) weights.set(node.id, probeCapacity(seed, node))
+  let failures = new Map<string, number>()
+  const nominal = new Map<string, number>()
+  const sick = new Set<string>()
+  const seed: Inputs = {
+    game,
+    graph,
+    demand,
+    boost,
+    callLatency,
+    inflight,
+    weights,
+    failures,
+    nominal,
+    sick,
+  }
+  for (const node of game.nodes) nominal.set(node.id, probeCapacity(seed, node))
+  weights = new Map(nominal)
 
   let pass: Pass | null = null
   let outcomes: ReturnType<typeof outcomesOf> | null = null
   for (let index = 0; index < PASSES; index += 1) {
-    const inputs: Inputs = { game, graph, demand, boost, callLatency, inflight, weights }
+    const inputs: Inputs = {
+      game,
+      graph,
+      demand,
+      boost,
+      callLatency,
+      inflight,
+      weights,
+      failures,
+      nominal,
+      sick: new Set(sick),
+    }
     pass = forward(inputs)
     outcomes = outcomesOf(inputs, pass)
     const nextLatency = new Map<string, Calls>()
@@ -590,9 +800,9 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       if (node.type !== 'server') continue
       const previous = callLatency.get(node.id) ?? NO_CALLS
       const fresh = {
-        reads: meanOf(outcomes.downstream(node, 'q-read', HOP_MS)),
-        writes: meanOf(outcomes.downstream(node, 'q-write', HOP_MS)),
-        auth: meanOf(outcomes.downstream(node, 'auth', HOP_MS)),
+        reads: outcomes.held(node, 'q-read', hopMs(game)),
+        writes: outcomes.held(node, 'q-write', hopMs(game)),
+        auth: outcomes.held(node, 'auth', hopMs(game)),
       }
       nextLatency.set(
         node.id,
@@ -605,9 +815,26 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
             },
       )
     }
+    // Failure shares on retrying Links, blended like the call latencies.
+    const nextFailures = new Map<string, number>()
+    for (const [key, carried] of pass.links) {
+      const [from, to] = key.split('>')
+      const source = graph.byId.get(from ?? '')
+      const target = graph.byId.get(to ?? '')
+      if (!source || !target || !policyOf(game, graph, source.id, target.id).naive) continue
+      for (const kind of Object.keys(carried) as Array<Kind>) {
+        const fresh = outcomes.failureOn(source, target, kind)
+        const previous = failures.get(`${key}:${kind}`)
+        nextFailures.set(`${key}:${kind}`, previous === undefined ? fresh : (previous + fresh) / 2)
+      }
+    }
+    // Once a deep check fails a server in a pass, it stays out for the solve: no flapping.
+    for (const node of game.nodes)
+      if (node.type === 'server' && databaseSick(graph, pass, node)) sick.add(node.id)
     callLatency = nextLatency
     inflight = nextInflight
     weights = nextWeights
+    failures = nextFailures
   }
   if (!pass || !outcomes) throw new Error('The solve ran no passes.')
   return ledgerOf(game, graph, demand, pass, outcomes)
@@ -681,6 +908,26 @@ const ledgerOf = (
             return total + (rates[kind] ?? 0) * (service ? service.fixed + service.variable : 0)
           }, 0) / inbound
         : 0
+    // The slowest 1% of this Node's own time, for its busiest kind.
+    const busiest = kindsHere.reduce<Kind | null>(
+      (best, kind) => (best === null || (rates[kind] ?? 0) > (rates[best] ?? 0) ? kind : best),
+      null,
+    )
+    const own = busiest && model?.service[busiest]
+    const p99 =
+      inbound > 0 && model && own
+        ? percentile(
+            through(
+              hop({
+                fixed: own.fixed,
+                variable: own.variable,
+                tailP: model.tailP,
+                tailMs: model.tailMs,
+              }),
+            ),
+            0.99,
+          )
+        : 0
     const utilization =
       refusedShare > 0
         ? Math.max(model?.utilization ?? 0, 1 / (1 - refusedShare))
@@ -691,12 +938,14 @@ const ledgerOf = (
       utilization,
       limit: refusedShare > 0 ? 'connections' : (model?.limit ?? 'none'),
       latency,
+      p99,
       dropped: inbound * (1 - share),
       refused: inbound * share * refusedShare,
       stranded: strand?.rate ?? 0,
       strandedKinds: strand ? [...strand.kinds] : [],
       connections: pool,
       hitRatio: node.type === 'cache' ? (pass.hits.get(node.id) ?? 0) : null,
+      lag: node.type === 'replica' ? pass.lag : null,
       disk: model?.disk ?? false,
       out,
       resources: model?.resources ?? NO_RESOURCES,
@@ -712,7 +961,7 @@ const ledgerOf = (
   for (const [tapId, sources] of graph.taps) {
     const tap = graph.byId.get(tapId)
     if (!tap) continue
-    const rate = SAMPLE_RATES[tap.sample] ?? 0.1
+    const rate = tap.sampleRate
     const volume = sources.reduce((total, source) => {
       const entry = nodes[source]
       return total + (entry ? entry.inbound - entry.dropped : 0)

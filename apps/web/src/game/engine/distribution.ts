@@ -214,6 +214,65 @@ export const slowerThan = (outcome: Outcome, ms: number): number => {
 export const meanOf = (outcome: Outcome): number =>
   outcome.fixed + outcome.variable + outcome.tailP * outcome.tailMs
 
+/* ---------- timeouts and retries ---------- */
+
+/**
+ * A call with a timeout: answers slower than `ms` fail as `timeout`. The
+ * answers left are the fast ones, so the exponential part shrinks to its mean
+ * below the cut: v − L·e^(−L/v) / (1 − e^(−L/v)), with L the room above the fixed part.
+ */
+export const timedOut = (outcome: Outcome, ms: number): Outcome => {
+  const late = slowerThan(outcome, ms)
+  if (late <= 1e-12 || outcome.success <= 0) return outcome
+  const room = ms - outcome.fixed
+  const v = outcome.variable
+  const cut = room > 0 && v > 0 ? decay(room / v) : 1
+  const variable = room > 0 && v > 0 && cut < 1 ? Math.max(0, v - (room * cut) / (1 - cut)) : 0
+  const tailKept = outcome.fixed + outcome.tailMs < ms
+  return {
+    ...outcome,
+    success: outcome.success * (1 - late),
+    variable,
+    tailP: tailKept ? outcome.tailP : 0,
+    tailMs: tailKept ? outcome.tailMs : 0,
+    fail: { ...outcome.fail, timeout: outcome.fail.timeout + outcome.success * late },
+  }
+}
+
+/** Attempts per call with naive retries (three retries) when a share `f` fails: 1 + f + f² + f³. */
+export const attemptsFor = (failure: number): number =>
+  1 + failure + failure * failure + failure * failure * failure
+
+/**
+ * A timed-out call with up to three naive retries: only f⁴ still fails, and the
+ * failed attempts add their time. A timeout costs the whole wait; a refusal
+ * costs only the fixed part.
+ */
+export const retried = (call: Outcome, ms: number): Outcome => {
+  const failure = 1 - call.success
+  if (failure <= 1e-12) return call
+  const still = failure * failure * failure * failure
+  const wasted = (call.fail.timeout * ms + (failure - call.fail.timeout) * call.fixed) / failure
+  return {
+    ...call,
+    success: 1 - still,
+    fixed: call.fixed + (attemptsFor(failure) - 1) * wasted,
+    fail: scaleFailures(call.fail, still / failure),
+  }
+}
+
+/**
+ * How long a caller holds its slot on one attempt: E[min(X, T)]. With T well
+ * above the latency this is the mean.
+ */
+export const heldFor = (outcome: Outcome, ms: number): number => {
+  const room = ms - outcome.fixed
+  if (room <= 0) return ms
+  const v = outcome.variable
+  const part = v > 0 ? v * (1 - decay(room / v)) : 0
+  return outcome.fixed + part + outcome.tailP * Math.min(outcome.tailMs, Math.max(0, room - part))
+}
+
 /** Apdex of the answered requests: satisfied plus half the tolerating. */
 export const apdexOf = (outcome: Outcome, target: number): number => {
   const slow = slowerThan(outcome, target)

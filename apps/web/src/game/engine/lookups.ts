@@ -1,4 +1,5 @@
 import {
+  CACHE_ENGINES,
   AUTH_PRICE_PER_USER,
   COMPONENTS,
   COMPONENT_IDS,
@@ -10,16 +11,23 @@ import {
   FRAMEWORK_RESEARCH,
   RESEARCH,
   RUNTIMES,
+  SAMPLE_RATES,
   SAMPLE_STORAGE,
+  GZIP_RATIO,
+  HANDSHAKE_MS,
+  HOP_MS,
+  PROFILES,
   RESTART_SECONDS,
   SELL_REFUND,
   SIZES,
   VCPU_PRICE,
+  USER_MBPS,
   VM_RESTART_SECONDS,
   type BuildGroup,
   type ComponentId,
   type EraDef,
   type FrameworkId,
+  type RequestKind,
   type ResearchId,
   type RuntimeId,
 } from './catalog.ts'
@@ -71,7 +79,24 @@ export const sizeLabel = (node: GameNode, size = node.size): string =>
 /** Capacity and Burn multiplier of a flat Component's size: each step doubles both. */
 export const flatScale = (node: GameNode): number => grown(1, 2, node.size - 1)
 
+/** Where an Analytics Node's sample rate sits on the ladder of rates. */
+export const sampleIndex = (node: GameNode): number => {
+  const index = (SAMPLE_RATES as ReadonlyArray<number>).indexOf(node.sampleRate)
+  return index === -1 ? 2 : index
+}
+
 export const vcpuOf = (node: GameNode): number => SIZES[node.size]?.vcpu ?? 1
+
+/** KB a response of this kind sends from this Node: gzip shrinks the compressible kinds. */
+export const payloadOf = (node: GameNode, kind: RequestKind): number =>
+  PROFILES[kind].payloadKB * (node.compress && PROFILES[kind].compressible ? GZIP_RATIO : 1)
+
+/** Milliseconds the response takes to reach the user over their downlink. */
+export const transferMs = (node: GameNode, kind: RequestKind): number =>
+  (payloadOf(node, kind) * 8) / USER_MBPS
+
+/** Milliseconds one internal call costs on the wire: a hop, plus a handshake without keep-alive. */
+export const hopMs = (game: Game): number => HOP_MS + (has(game, 'keepalive') ? 0 : HANDSHAKE_MS)
 
 /** KB per second the box's network card moves: Gbps × 125,000. */
 export const networkOf = (node: GameNode): number => (SIZES[node.size]?.gbps ?? 1) * 125_000
@@ -88,10 +113,14 @@ export const restartSeconds = (node: GameNode): number =>
     : RESTART_SECONDS
 
 /** The fields of a Node that restarts and comes back cold. */
+/** How warm a Node comes back from a restart: cold, except Redis, which reloads its data. */
+export const warmAfterRestart = (node: GameNode): number =>
+  node.type === 'cache' ? CACHE_ENGINES[node.engine].warmAfterRestart : 0
+
 export const restarted = (node: GameNode, cause: GameNode['downCause'] = 'restart') => ({
   down: restartSeconds(node),
   downCause: cause,
-  warm: 0,
+  warm: warmAfterRestart(node),
 })
 
 export const languageOf = (node: GameNode) => RUNTIMES[node.runtime].language
@@ -112,7 +141,7 @@ export const burnOf = (game: Game, node: GameNode): number => {
   const index = eraOf(game).costIndex
   if (def.sized) return vcpuOf(node) * VCPU_PRICE * FAMILIES[node.family].price * index
   if (node.type === 'analytics')
-    return def.burn * (SAMPLE_STORAGE[node.sample] ?? 1) * flatScale(node) * index
+    return def.burn * (SAMPLE_STORAGE[sampleIndex(node)] ?? 1) * flatScale(node) * index
   if (node.type === 'auth') return game.users * AUTH_PRICE_PER_USER
   return def.burn * flatScale(node) * index
 }

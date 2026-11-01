@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 import type { ComponentId, IncidentId, ResearchId } from './catalog.ts'
-import { company, node } from './company.ts'
+import { company, link, node } from './company.ts'
 import { forceIncident } from './director.ts'
 import type { Ledger } from './ledger.ts'
 import { RESEARCH_IDS } from './catalog.ts'
@@ -85,7 +85,7 @@ const board = (
   users,
   researched: ['stripe', 'logs', 'metrics', ...researched],
   nodes: [node('users', 'users', 120, 280), ...nodes],
-  links: links.map(([from, to]): GameLink => ({ from, to })),
+  links: links.map(([from, to]): GameLink => link(from, to)),
   nextId: 1,
 })
 
@@ -145,6 +145,12 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         users: 2_800,
         hold: 120,
         met: within(0.9, 0.16),
+      },
+      {
+        goal: 'Night traffic is back to the start. Keep Apdex above 0.9 with Burn at $0.11/s or less.',
+        users: 1_400,
+        hold: 90,
+        met: within(0.9, 0.11),
       },
     ],
   },

@@ -163,7 +163,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     name: 'Load Balancer',
     product: 'NGINX',
     group: 'edge',
-    blurb: 'Splits by capacity and stops sending to a dead host.',
+    blurb: 'Splits traffic across App Servers and drops a dead host at its next health check.',
     cost: 120,
     burn: 0.08,
     latency: 1,
@@ -191,7 +191,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     name: 'Cache',
     product: 'Redis',
     group: 'data',
-    blurb: 'Answers most read queries from memory. Writes pass through and invalidate.',
+    blurb:
+      'Answers read queries from memory while the hot data fits. Writes pass through and invalidate.',
     cost: 150,
     burn: 0.06,
     latency: 0.5,
@@ -228,14 +229,48 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
   }),
 }
 
+/** How a Load Balancer splits traffic, and the research each policy needs. */
+export const LB_POLICIES = {
+  weighted: { label: 'Weighted', research: null },
+  'round-robin': { label: 'Round robin', research: null },
+  'least-conn': { label: 'Least conn', research: 'lb-algorithms' },
+  p2c: { label: 'Two choices', research: 'lb-algorithms' },
+} as const
+/** Power of two choices keeps no global state: its LB handles this much more traffic... */
+export const P2C_CAPACITY = 1.5
+/** ...at the price of this share of traffic split evenly, whatever the load. */
+export const P2C_IMBALANCE = 0.1
+/** Seconds between a Load Balancer's health checks. All but 10 s need Health checks. */
+export const CHECK_INTERVALS = [2, 10, 30] as const
+/** DNS TTLs, in seconds. */
+export const DNS_TTLS = [30, 300, 3_600] as const
+
+/** Cache engines. Redis runs one main thread; Memcached uses every core. Redis reloads its data after a restart. */
+export const CACHE_ENGINES = {
+  redis: { name: 'Redis', scales: false, warmAfterRestart: 0.5 },
+  memcached: { name: 'Memcached', scales: true, warmAfterRestart: 0 },
+} as const
+/** Cache TTLs in seconds, with the share of hot reads each keeps and the share of hits it serves stale per unit of write share. */
+export const CACHE_TTLS = [
+  { ttl: 10, factor: 0.6, stale: 0.005 },
+  { ttl: 60, factor: 0.85, stale: 0.02 },
+  { ttl: 3_600, factor: 0.97, stale: 0.1 },
+] as const
+/** KB of hot data per user: 5,000 users is about 1 GB (16 D11). */
+export const HOT_KB_PER_USER = 200
+/** Operations per second one cache thread answers. */
+export const CACHE_OPS = 50_000
+
 /** Auth Provider price, in dollars per second per user. */
 export const AUTH_PRICE_PER_USER = 0.00006
 
-export const SAMPLE_RATES = [0.01, 0.1, 0.5, 1] as const
+export const SAMPLE_RATES = [0.01, 0.05, 0.1, 0.5, 1] as const
 /** CPU overhead on tapped Nodes, per sample rate. */
-export const SAMPLE_OVERHEAD = [0.001, 0.01, 0.03, 0.05] as const
+export const SAMPLE_OVERHEAD = [0.001, 0.005, 0.01, 0.03, 0.05] as const
 /** Storage Burn multiplier, per sample rate. */
-export const SAMPLE_STORAGE = [0.1, 1, 5, 10] as const
+export const SAMPLE_STORAGE = [0.1, 0.5, 1, 5, 10] as const
+/** Insight the first successful request of a new kind teaches, once (16 D14). */
+export const FIRST_KIND_INSIGHT = 20
 /** Insight per sampled request. Failed and slow requests teach twice as much. */
 export const INSIGHT_YIELD = 0.5
 /** Samples per second Analytics keeps at size 1. Each size step doubles it. */

@@ -4,6 +4,7 @@ import {
   FAMILY_IDS,
   FRAMEWORK_IDS,
   INCIDENT_IDS,
+  REQUEST_KINDS,
   RESEARCH_IDS,
   RUNTIME_IDS,
 } from './catalog.ts'
@@ -19,6 +20,17 @@ export const RuntimeId = Schema.Literals(RUNTIME_IDS)
 export const FrameworkId = Schema.Literals(FRAMEWORK_IDS)
 export const ResearchId = Schema.Literals(RESEARCH_IDS)
 export const IncidentId = Schema.Literals(INCIDENT_IDS)
+
+export const RequestKindId = Schema.Literals(REQUEST_KINDS)
+
+export const LbPolicy = Schema.Literals(['weighted', 'round-robin', 'least-conn', 'p2c'])
+export type LbPolicy = typeof LbPolicy.Type
+
+export const PmMode = Schema.Literals(['static', 'dynamic', 'ondemand'])
+export type PmMode = typeof PmMode.Type
+
+export const CacheEngine = Schema.Literals(['redis', 'memcached'])
+export type CacheEngine = typeof CacheEngine.Type
 
 export const DownCause = Schema.Literals(['restart', 'failure', 'oom'])
 export type DownCause = typeof DownCause.Type
@@ -38,8 +50,10 @@ export const GameNode = Schema.Struct({
   workers: Schema.Finite,
   /** Postgres runs on this App Server. Only the starting box has it. */
   localDb: Schema.Boolean,
-  /** Index into SAMPLE_RATES, for Analytics. */
+  /** Old saves' index into the sample rates. Unused: `sampleRate` holds the rate by value. */
   sample: Schema.Finite,
+  /** Share of requests Analytics samples. */
+  sampleRate: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0.1))),
   /** Seconds left down. Minus one means down until replaced. */
   down: Schema.Finite,
   /** Why the Node is down: a restart, a failure, or an out-of-memory kill. */
@@ -50,10 +64,40 @@ export const GameNode = Schema.Struct({
   credits: Schema.Finite,
   /** GB leaked by a memory leak. */
   leak: Schema.Finite,
+  /** The App Server gzips page and read responses. */
+  compress: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Sim time the Node last went down, so health checks and DNS notice it late. */
+  downAt: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** How a Load Balancer splits traffic. */
+  policy: LbPolicy.pipe(Schema.withDecodingDefaultKey(Effect.succeed('weighted' as const))),
+  /** Seconds between a Load Balancer's health checks. */
+  checkEvery: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(10))),
+  /** A deep health check also checks the server's database. */
+  deepCheck: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** DNS or Cache TTL, in seconds. */
+  ttl: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(300))),
+  /** PHP-FPM's process manager. */
+  pm: PmMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed('static' as const))),
+  /** The Cache's engine. */
+  engine: CacheEngine.pipe(Schema.withDecodingDefaultKey(Effect.succeed('redis' as const))),
 })
 export type GameNode = typeof GameNode.Type
 
-export const GameLink = Schema.Struct({ from: Schema.String, to: Schema.String })
+export const Retries = Schema.Literals(['none', 'naive'])
+export type Retries = typeof Retries.Type
+
+/** A directed network call, with its timeout, retry policy, and the kinds it carries. */
+export const GameLink = Schema.Struct({
+  from: Schema.String,
+  to: Schema.String,
+  /** Seconds before the caller gives up. */
+  timeout: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(30))),
+  retries: Retries.pipe(Schema.withDecodingDefaultKey(Effect.succeed('none' as const))),
+  /** The request kinds a Load Balancer sends on this link, or null for every kind. */
+  kinds: Schema.NullOr(Schema.Array(RequestKindId)).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+  ),
+})
 export type GameLink = typeof GameLink.Type
 
 export const Incident = Schema.Struct({
@@ -69,6 +113,10 @@ export const Incident = Schema.Struct({
   impaired: Schema.Finite,
   lostRevenue: Schema.Finite,
   failed: Schema.Finite,
+  /** SEV level now: it starts at the incident's own and can step up once. */
+  severity: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
+  /** How many times normal demand a spike sends. */
+  magnitude: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
 })
 export type Incident = typeof Incident.Type
 
@@ -83,6 +131,8 @@ export const Postmortem = Schema.Struct({
   failed: Schema.Finite,
   /** The research this postmortem opens as an action item. */
   action: Schema.NullOr(ResearchId),
+  /** The SEV level it ended at. */
+  severity: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
 })
 export type Postmortem = typeof Postmortem.Type
 
@@ -107,6 +157,26 @@ export const Alarms = Schema.Struct({
   saturation: Schema.Finite,
 })
 export type Alarms = typeof Alarms.Type
+
+/** Alert thresholds: error share, p99 as a multiple of the Apdex target, and Node load. */
+export const AlertRules = Schema.Struct({
+  errors: Schema.Finite,
+  latency: Schema.Finite,
+  saturation: Schema.Finite,
+})
+export type AlertRules = typeof AlertRules.Type
+
+/** Alerts that fired with no incident running, per rule, in the calendar day `day`. */
+export const FalseAlarms = Schema.Struct({
+  day: Schema.Finite,
+  errors: Schema.Finite,
+  latency: Schema.Finite,
+  saturation: Schema.Finite,
+})
+export type FalseAlarms = typeof FalseAlarms.Type
+
+export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
+export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
 export const Game = Schema.Struct({
   nodes: Schema.Array(GameNode),
@@ -138,6 +208,12 @@ export const Game = Schema.Struct({
   /** Action items from postmortems. Each stays open until its research is owned. */
   openActions: Schema.Array(ResearchId),
   alarms: Alarms,
+  /** Request kinds users have been served, so the first of each pays Insight once. */
+  servedKinds: Schema.Array(RequestKindId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(['page', 'read'] as const)),
+  ),
+  alertRules: AlertRules.pipe(Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_ALERT_RULES))),
+  falseAlarms: FalseAlarms.pipe(Schema.withDecodingDefaultKey(Effect.succeed(NO_FALSE_ALARMS))),
   earned: Schema.Finite,
   history: Schema.Array(Sample),
   /**

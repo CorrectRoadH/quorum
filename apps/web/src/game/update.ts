@@ -2,14 +2,18 @@ import { Option, Result, Schema } from 'effect'
 import type { Runtime, Update } from 'foldkit'
 import * as Actions from './engine/actions.ts'
 import {
+  ALERT_RULES,
   BUILD_GROUPS,
+  CACHE_ENGINES,
   COMPONENTS,
   FAMILIES,
   FRAMEWORKS,
   INCIDENTS,
+  KINDS,
+  LB_POLICIES,
+  PM_MODES,
   RESEARCH,
   RUNTIMES,
-  SAMPLE_RATES,
   SIZES,
   STEP_SECONDS,
 } from './engine/catalog.ts'
@@ -53,6 +57,7 @@ import {
   undoGame,
 } from './feedback.ts'
 import { cueOf } from './cues.ts'
+import { alertText, duration } from './format.ts'
 import { Message } from './message.ts'
 import { ledgerOf, Model, SandboxStore, type SandboxRun, type Tone } from './model.ts'
 import type { LogEntry } from './playlog.ts'
@@ -70,7 +75,9 @@ export const TICK_MS = 250
 const STEPS_PER_TICK = 2.5
 const SAVE_EVERY = 5
 const SAMPLE_EVERY = 10
-const HISTORY_POINTS = 120
+/** One calendar day of load: a point every 10 sim seconds. */
+const HISTORY_POINTS = 144
+const HISTORY_EVERY = 10
 export const SPEEDS = [1, 3, 10] as const
 
 /* ---------- init ---------- */
@@ -123,6 +130,7 @@ const sync = (model: Model): AnyCommand =>
     bottleneck: model.bottleneck,
     selected: model.selected,
     placing: model.placing,
+    history: model.nodeHistory,
   })
 
 /** The Model with a toast raised, and the Command that clears it later. */
@@ -244,12 +252,12 @@ const eventText = (event: StepEvent, game: Game): Note =>
       'warn',
     ],
     AlertFired: ({ rule }): Note => [
-      rule === 'errors'
-        ? 'Page: error rate above 1% for 30 s.'
-        : rule === 'latency'
-          ? 'Page: p99 above 4× the Apdex target for 30 s.'
-          : 'Page: a Node above 90% for 60 s.',
+      `Page: ${alertText(rule, game.alertRules[rule]).toLowerCase()} for ${ALERT_RULES[rule].seconds} s.`,
       'danger',
+    ],
+    AlertIgnored: ({ rule }): Note => [
+      `Five false alarms today: the team ignores “${alertText(rule, game.alertRules[rule])}”. Change its threshold.`,
+      'warn',
     ],
   })
 
@@ -261,6 +269,7 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
     OutOfMemory: ({ nodeId }) => ({ node: nodeId }),
     CreditsExhausted: ({ nodeId }) => ({ node: nodeId }),
     AlertFired: ({ rule }) => ({ rule }),
+    AlertIgnored: ({ rule }) => ({ rule }),
   })
 
 /* ---------- the clock ---------- */
@@ -349,8 +358,8 @@ const tick = (model: Model): Result => {
   if (deltaExpired(next)) next = { ...next, delta: null }
   if (next.undo && !undoAvailable(next)) next = { ...next, undo: null }
 
-  // Utilization history, once per sim second.
-  if (Math.floor(game.time) > Math.floor(model.game.time)) {
+  // Utilization history, once per 10 sim seconds.
+  if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.game.time / HISTORY_EVERY)) {
     const history: Record<string, ReadonlyArray<number>> = {}
     for (const node of game.nodes) {
       const past = next.nodeHistory[node.id] ?? []
@@ -793,11 +802,86 @@ const handle = (model: Model, message: Message): Result =>
         },
       ),
 
-    SampleChosen: ({ nodeId, sample }) =>
+    PmChosen: ({ nodeId, pm }) =>
+      act(model, `pm ${PM_MODES[pm].label}`, Actions.setPm(model.game, nodeId, pm), {
+        undoable: true,
+      }),
+
+    CompressionChosen: ({ nodeId, compress }) =>
       act(
         model,
-        `Sample ${Math.round((SAMPLE_RATES[sample] ?? 0) * 100)}%`,
-        Actions.setSample(model.game, nodeId, sample),
+        compress ? 'Gzip on' : 'Gzip off',
+        Actions.setCompression(model.game, nodeId, compress),
+        { undoable: true },
+      ),
+
+    PolicyChosen: ({ nodeId, policy }) =>
+      act(
+        model,
+        `Policy ${LB_POLICIES[policy].label}`,
+        Actions.setPolicy(model.game, nodeId, policy),
+        { undoable: true },
+      ),
+
+    HealthCheckChosen: ({ nodeId, checkEvery, deepCheck }) =>
+      act(
+        model,
+        checkEvery === undefined
+          ? deepCheck
+            ? 'Deep checks'
+            : 'Shallow checks'
+          : `Checks every ${checkEvery} s`,
+        Actions.setHealthCheck(model.game, nodeId, {
+          ...(checkEvery === undefined ? {} : { checkEvery }),
+          ...(deepCheck === undefined ? {} : { deepCheck }),
+        }),
+        { undoable: true },
+      ),
+
+    TtlChosen: ({ nodeId, ttl }) =>
+      act(model, `TTL ${duration(ttl)}`, Actions.setTtl(model.game, nodeId, ttl), {
+        undoable: true,
+      }),
+
+    CacheEngineChosen: ({ nodeId, engine }) =>
+      act(
+        model,
+        `Engine ${CACHE_ENGINES[engine].name}`,
+        Actions.setCacheEngine(model.game, nodeId, engine),
+        { undoable: true },
+      ),
+
+    LinkPolicyChosen: ({ from, to, timeout, retries }) =>
+      act(
+        model,
+        timeout === undefined
+          ? retries === 'naive'
+            ? 'Retries on'
+            : 'Retries off'
+          : `Timeout ${timeout} s`,
+        Actions.setLinkPolicy(model.game, from, to, {
+          ...(timeout === undefined ? {} : { timeout }),
+          ...(retries === undefined ? {} : { retries }),
+        }),
+        { undoable: true },
+      ),
+
+    LinkKindsChosen: ({ from, to, kinds }) =>
+      act(
+        model,
+        kinds ? `Routes ${kinds.map((kind) => KINDS[kind].label).join(', ')}` : 'Routes every kind',
+        Actions.setLinkKinds(model.game, from, to, kinds),
+        { undoable: true },
+      ),
+
+    AlertRuleChosen: ({ rule, threshold }) =>
+      act(model, alertText(rule, threshold), Actions.setAlertRule(model.game, rule, threshold)),
+
+    SampleChosen: ({ nodeId, sampleRate }) =>
+      act(
+        model,
+        `Sample ${Math.round(sampleRate * 100)}%`,
+        Actions.setSample(model.game, nodeId, sampleRate),
         {
           undoable: true,
         },
