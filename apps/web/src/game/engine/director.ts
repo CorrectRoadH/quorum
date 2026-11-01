@@ -5,14 +5,14 @@ import {
   INCIDENT_GAP,
   INCIDENT_IDS,
   LEAK_RATE,
-  POSTMORTEM_INSIGHT,
+  OPEN_ACTION_WEIGHT,
   RESTART_SECONDS,
   RUNTIMES,
   type IncidentId,
 } from './catalog.ts'
 import { StepEvent } from './events.ts'
 import type { Ledger } from './ledger.ts'
-import { has, isDown, ramOf } from './lookups.ts'
+import { has, isDown, ramOf, researchReady } from './lookups.ts'
 import { nextRandom, pickWeighted } from './random.ts'
 import type { Game, GameNode, Incident, Postmortem } from './state.ts'
 
@@ -83,8 +83,15 @@ export const weaknessOf = (game: Game, ledger: Ledger, kind: IncidentId): number
         : 0,
     ),
     Match.when('leak', () => (leakTargets(game, ledger).length > 0 ? 2 : 0)),
+    Match.when('slow-query', () =>
+      game.nodes.some((node) => node.type === 'database' && busy(ledger, node)) ? 1.5 : 0,
+    ),
     Match.exhaustive,
   )
+
+/** A postmortem opened an action item against this incident, and its research is not owned yet. */
+const unaddressed = (game: Game, kind: IncidentId): boolean =>
+  INCIDENTS[kind].actions.some((id) => game.openActions.includes(id) && !has(game, id))
 
 /** Starts an incident. Returns null when the Design has nothing it can hit. */
 export const startIncident = (
@@ -99,9 +106,12 @@ export const startIncident = (
       const targets = leakTargets(game, ledger)
       return targets[Math.floor(roll * targets.length)]
     }),
+    Match.when('slow-query', () =>
+      game.nodes.find((node) => node.type === 'database' && busy(ledger, node)),
+    ),
     Match.orElse(() => undefined),
   )
-  if ((kind === 'instance' || kind === 'leak') && !target) return null
+  if ((kind === 'instance' || kind === 'leak' || kind === 'slow-query') && !target) return null
   const incident: Incident = {
     kind,
     remaining: INCIDENTS[kind].duration,
@@ -140,7 +150,9 @@ export const directIncidents = (
       (id) =>
         [
           id,
-          weaknessOf(game, ledger, id) * (id === game.lastIncident ? REPEAT_WEIGHT : 1),
+          weaknessOf(game, ledger, id) *
+            (id === game.lastIncident ? REPEAT_WEIGHT : 1) *
+            (unaddressed(game, id) ? OPEN_ACTION_WEIGHT : 1),
         ] as const,
     ),
     roll,
@@ -152,7 +164,6 @@ export const directIncidents = (
 }
 
 const postmortemOf = (game: Game, incident: Incident): Postmortem => {
-  const severity = INCIDENTS[incident.kind].severity
   const target = game.nodes.find((node) => node.id === incident.nodeId)
   return {
     id: game.postmortemSeq + 1,
@@ -163,7 +174,9 @@ const postmortemOf = (game: Game, incident: Incident): Postmortem => {
     lostUsers: Math.max(0, incident.usersAtStart - game.users),
     lostRevenue: incident.lostRevenue,
     failed: incident.failed,
-    reward: Math.round(POSTMORTEM_INSIGHT[severity] * (1 + 1 / (1 + incident.impaired))),
+    action:
+      INCIDENTS[incident.kind].actions.find((id) => !has(game, id) && researchReady(game, id)) ??
+      null,
   }
 }
 
@@ -190,6 +203,10 @@ const resolve = (game: Game): Readonly<{ game: Game; events: ReadonlyArray<StepE
       incident: null,
       postmortems: [...game.postmortems, postmortem].slice(-4),
       postmortemSeq: postmortem.id,
+      openActions:
+        postmortem.action && !game.openActions.includes(postmortem.action)
+          ? [...game.openActions, postmortem.action]
+          : game.openActions,
     },
     events: [
       ...(killed ? [StepEvent.OutOfMemory({ nodeId: killed.id })] : []),

@@ -52,7 +52,7 @@ Ventures and Mutators, and the engineering glossary entries the player has disco
 | Time dilation           | 2      | 20, 80             | Unlocks 2× and then 4× speed                                                                 |
 | Playbooks               | 4      | 5, 15, 45, 135     | Playbook slots: 2, 5, 10, 25 ([Playbooks](#playbooks))                                       |
 | Autopilot               | 3      | 10, 30, 90         | Policies for upgrades, research queues, and hiring ([Interface](./15-ui-ux.md#bulk-actions)) |
-| War stories             | 3      | 8, 24, 72          | Postmortem Insight +50%                                                                      |
+| War stories             | 3      | 8, 24, 72          | Open action items raise incident odds by half as much                                        |
 | Head start              | 3      | 25, 75, 225        | Start the next company in the Pre-seed, Seed, or Series A Era with that Era's starter design |
 
 Costs grow so that a full shop needs about 8 to 12 Exits, which is the target for 80 to 150 hours.

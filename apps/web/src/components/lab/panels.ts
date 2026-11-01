@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Check, Download, Lock, Trash2, X } from 'lucide'
+import { Check, Download, Lock, TriangleAlert, Trash2, X } from 'lucide'
 import { offer } from '@/game/engine/actions.ts'
 import {
   ERAS,
@@ -109,6 +109,7 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
   const ready = researchReady(game, entry.id)
   const affordable = game.insight >= entry.cost
   const state = owned ? 'owned' : !ready ? 'locked' : affordable ? 'buy' : 'saving'
+  const open = !owned && game.openActions.includes(entry.id)
   const missing = entry.requires
     .filter((needed) => !has(game, needed))
     .map((needed) => RESEARCH[needed].name)
@@ -142,7 +143,22 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
           h.div(
             [h.Class('flex items-center justify-between gap-2')],
             [
-              h.span([h.Class('truncate text-[13px] font-semibold')], [entry.name]),
+              h.span(
+                [h.Class('flex min-w-0 items-center gap-1.5')],
+                [
+                  h.span([h.Class('truncate text-[13px] font-semibold')], [entry.name]),
+                  open
+                    ? h.span(
+                        [
+                          h.Class('shrink-0 text-warn'),
+                          h.Title('Open action item: the incident it prevents is twice as likely'),
+                          h.AriaLabel('Open action item'),
+                        ],
+                        [icon(h, TriangleAlert, 'size-3.5')],
+                      )
+                    : h.empty,
+                ],
+              ),
               owned
                 ? h.span([h.Class('text-ok')], [icon(h, Check, 'size-4')])
                 : badge(

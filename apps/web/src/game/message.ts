@@ -50,6 +50,7 @@ export const Message = defineMessageUnion({
   SampleChosen: { nodeId: Schema.String, sample: Schema.Finite },
   ReplaceBought: { nodeId: Schema.String },
   RestartChosen: { nodeId: Schema.String },
+  IndexAdded: { nodeId: Schema.String },
   NodeSold: { nodeId: Schema.String },
   Collected: {},
   UndoChosen: {},
@@ -57,7 +58,7 @@ export const Message = defineMessageUnion({
   ResearchBought: { id: ResearchId },
   RoundRaised: {},
   RoundDeclined: {},
-  PostmortemFiled: { id: Schema.Finite },
+  PostmortemFiled: { id: Schema.Finite, take: Schema.Boolean },
 
   PanelOpened: { panel: Panel },
   PanelClosed: {},

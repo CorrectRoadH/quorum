@@ -144,7 +144,7 @@ SIGNAL ──► TRIAGE ──► MITIGATE ──► RESOLVE ──► POSTMORTE
 | Triage       | The player finds the affected Node and the cause.                                                                                                               |
 | Mitigate     | A fast, temporary action: roll back, shed load, block traffic, fail over, or scale up.                                                                          |
 | Resolve      | The incident ends, or the cause is removed.                                                                                                                     |
-| Postmortem   | The player earns Insight. A faster response earns more ([Incidents](./11-incidents.md#postmortems)).                                                            |
+| Postmortem   | The postmortem opens an action item. Until its research is owned, the incident is twice as likely ([Incidents](./11-incidents.md#postmortems)).                 |
 | Action items | Optional Dev Hour tasks that prevent the same class of incident, such as idempotency keys or a runbook.                                                         |
 
 ## Pacing

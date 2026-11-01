@@ -587,6 +587,9 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
   }
 }
 
+/** The smallest zoom Fit uses, so card text stays readable. */
+const MIN_FIT_SCALE = 0.85
+
 class NodeView {
   readonly root = new Container()
   private readonly frame = new Graphics()
@@ -979,7 +982,11 @@ class BoardController {
     const top = 120
     const bottom = 210
     const room = Math.max(1, h - top - bottom)
-    const scale = Math.min(1.1, Math.min(w / (maxX - minX), room / (maxY - minY)))
+    // Below this zoom the card text is too small to read; pan to see the rest.
+    const scale = Math.max(
+      MIN_FIT_SCALE,
+      Math.min(1.1, Math.min(w / (maxX - minX), room / (maxY - minY))),
+    )
     this.world.scale.set(scale)
     this.world.position.set(
       w / 2 - ((minX + maxX) / 2) * scale,

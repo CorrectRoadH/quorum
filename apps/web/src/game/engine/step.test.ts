@@ -1,6 +1,6 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
-import { restart, setRuntime, type Action } from './actions.ts'
+import { filePostmortem, restart, setRuntime, type Action } from './actions.ts'
 import { newGame, preseedGame } from './company.ts'
 import { forceIncident } from './director.ts'
 import type { StepEvent } from './events.ts'
@@ -81,7 +81,37 @@ describe('Pre-seed incidents', () => {
     expect(started).toBeDefined()
     expect(resolved).toBeDefined()
     expect(game.postmortems.length).toBe(1)
-    expect(game.postmortems[0]?.reward ?? 0).toBeGreaterThan(0)
+  })
+
+  test('a postmortem pays nothing and leaves its action item open until it is researched', () => {
+    const due = { ...preseedGame(), nextIncidentAt: Number.MAX_SAFE_INTEGER, insight: 100 }
+    const spiked = forceIncident(due, solve(due), 'spike') as Game
+    const { game } = run(spiked, 35)
+    const postmortem = game.postmortems[0]
+    // Pre-seed owns no spike prevention, so Caching (80) is the first.
+    expect(postmortem?.action).toBe('caching')
+    expect(game.openActions).toEqual(['caching'])
+    const id = postmortem?.id ?? -1
+    const filed = ok(filePostmortem(game, id, false))
+    expect(filed.insight).toBe(game.insight)
+    expect(filed.openActions).toEqual(['caching'])
+    const taken = ok(filePostmortem(game, id, true))
+    expect(taken.insight).toBe(game.insight - 80)
+    expect(taken.researched).toContain('caching')
+  })
+
+  test('an open action item makes its incident come back more often', () => {
+    const count = (openActions: ReadonlyArray<'caching'>) => {
+      let spikes = 0
+      for (let seed = 1; seed <= 40; seed += 1) {
+        const base = { ...preseedGame(seed), openActions, nextIncidentAt: preseedGame().time }
+        const { events } = run(base, 1)
+        const started = events.find((event) => event._tag === 'IncidentStarted')
+        if (started?._tag === 'IncidentStarted' && started.incident.kind === 'spike') spikes += 1
+      }
+      return spikes
+    }
+    expect(count(['caching'])).toBeGreaterThan(count([]))
   })
 
   test('PHP shared nothing does not leak; a Node.js process leaks until it is restarted', () => {

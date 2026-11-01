@@ -4,6 +4,7 @@ import {
   CHURN,
   CREDIT_CAP,
   DECLINED_GROWTH,
+  FUNNEL_GROWTH,
   PLAYTEST_PACE,
   PROFILES,
   RESTART_SECONDS,
@@ -36,7 +37,11 @@ export const growthOf = (game: Game, ledger: Ledger): number => {
   const target = era.apdexTarget
   const health = Math.max(-1, Math.min(1, (game.apdex - target) / (1 - target)))
   if (health < 0) return CHURN * game.users * health
-  const rate = era.growth * PLAYTEST_PACE * (game.declined ? DECLINED_GROWTH : 1)
+  const rate =
+    era.growth *
+    PLAYTEST_PACE *
+    (game.declined ? DECLINED_GROWTH : 1) *
+    (has(game, 'funnels') ? FUNNEL_GROWTH : 1)
   return rate * game.users * Math.max(0, 1 - game.users / ledger.market) * health
 }
 

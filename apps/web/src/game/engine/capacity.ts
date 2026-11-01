@@ -13,6 +13,8 @@ import {
   PROFILES,
   QUERY_CPU,
   REQUEST_KINDS,
+  ROWS_PER_USER,
+  UNINDEXED_MS_PER_ROW,
   RUNTIMES,
   type RequestKind,
 } from './catalog.ts'
@@ -290,7 +292,10 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
   const cores = throttled ? BURST_BASELINE * vcpu : vcpu
   const perRequest = Math.min(1, cores)
   const warmth = 0.5 + 0.5 * node.warm
-  const readCpu = (QUERY_CPU['q-read'] * (disk ? 1.5 : 1)) / warmth
+  // A Slow query incident: every read scans the table until someone adds the index.
+  const scan =
+    game.incident?.kind === 'slow-query' ? game.users * ROWS_PER_USER * UNINDEXED_MS_PER_ROW : 0
+  const readCpu = ((QUERY_CPU['q-read'] + scan) * (disk ? 1.5 : 1)) / warmth
   const writeCpu = QUERY_CPU['q-write'] / warmth
   const reads = arriving['q-read'] ?? 0
   const writes = arriving['q-write'] ?? 0

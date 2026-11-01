@@ -148,7 +148,7 @@ The failures that the SLO allows. Spending it changes team velocity.
 _Avoid_: downtime allowance
 
 **Postmortem**:
-The card after an Incident that records its cost and grants Insight.
+The card after an Incident that records its cost and opens one action item: a prevention that, until researched, makes the Incident twice as likely.
 _Avoid_: report, summary, review
 
 **Runbook**:
@@ -196,7 +196,7 @@ Where Revenue waits until the player collects it, until research automates colle
 _Avoid_: collector, wallet, pending
 
 **Insight**:
-The research currency, earned from sampled traffic and Postmortems.
+The research currency, earned from sampled traffic.
 _Avoid_: science, research points, XP
 
 **Analytics**:

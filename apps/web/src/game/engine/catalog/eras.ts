@@ -80,6 +80,8 @@ export const DIURNAL_AMPLITUDE = 0.45
 export const CALENDAR_START = 14 * 60
 /** Users leave at this rate per second at the worst Apdex. */
 export const CHURN = 0.004
+/** Growth multiplier from Funnel analytics. */
+export const FUNNEL_GROWTH = 1.1
 /** Growth multiplier in an Era that began with a declined round. */
 export const DECLINED_GROWTH = 0.7
 /** The Apdex average covers one calendar hour. */

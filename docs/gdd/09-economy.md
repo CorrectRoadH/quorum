@@ -10,7 +10,7 @@ is for.
 | Currency  | Symbol | Main source                          | Main sink                   | Resets on Exit |
 | --------- | ------ | ------------------------------------ | --------------------------- | -------------- |
 | Cash      | $      | Served requests                      | Nodes, Burn, salaries       | Yes            |
-| Insight   | ◇      | Sampled traffic, postmortems         | Research                    | Yes            |
+| Insight   | ◇      | Sampled traffic                      | Research                    | Yes            |
 | Dev Hours | DH     | Engineers                            | Features, tasks, migrations | Yes            |
 | Equity    | %      | Starts at 100%; falls when you raise | Determines the Exit payout  | Yes            |
 | Legacy    | ★      | Exits                                | The Legacy shop             | No             |
@@ -191,7 +191,7 @@ Users ──requests──► Revenue ──► Payments ──collect──► 
   └── Apdex ◄── design quality ◄── capacity, research, features
 
 Sampled traffic ──► INSIGHT ──► Research ──► Components, variants, techniques, visibility
-Postmortems ─────┘
+Postmortems ──► action items (open until researched) ──┘
 
 Engineers ──► DEV HOURS ──► Features (more users, revenue, load)
                          ──► Tasks, migrations, debt paydown (cheaper and safer system)

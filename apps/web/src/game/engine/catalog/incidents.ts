@@ -1,6 +1,15 @@
 /* Incidents, postmortems and the alert rules. */
 
-export const INCIDENT_IDS = ['spike', 'instance', 'connections', 'loop', 'leak'] as const
+import type { ResearchId } from './research.ts'
+
+export const INCIDENT_IDS = [
+  'spike',
+  'instance',
+  'connections',
+  'loop',
+  'leak',
+  'slow-query',
+] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
 export type IncidentDef = Readonly<{
@@ -13,6 +22,8 @@ export type IncidentDef = Readonly<{
   cause: string
   /** What would prevent it, for the postmortem. */
   prevention: string
+  /** Research that prevents it, in order. The postmortem opens the first one not yet owned. */
+  actions: ReadonlyArray<ResearchId>
 }>
 
 export const INCIDENTS: Record<IncidentId, IncidentDef> = {
@@ -23,6 +34,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     duration: 30,
     cause: 'A big news site linked to you. Demand tripled.',
     prevention: 'Spare capacity, a cache, more App Servers.',
+    actions: ['caching', 'alerting'],
   },
   instance: {
     id: 'instance',
@@ -31,6 +43,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     duration: 60,
     cause: 'The host under a VM died.',
     prevention: 'A second copy behind a Load Balancer, which skips dead hosts.',
+    actions: ['load-balancing', 'health-checks'],
   },
   connections: {
     id: 'connections',
@@ -39,6 +52,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     duration: 40,
     cause: 'A deploy doubled every connection pool. Postgres refused the excess.',
     prevention: 'A Connection Pooler, or smaller pools.',
+    actions: ['pooling'],
   },
   loop: {
     id: 'loop',
@@ -47,6 +61,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     duration: 35,
     cause: 'Password hashing cost went from 10 to 12 rounds: 4× CPU per login.',
     prevention: 'The libuv thread pool, an Auth Provider, or a runtime without one event loop.',
+    actions: ['libuv-pool', 'auth-provider'],
   },
   leak: {
     id: 'leak',
@@ -55,11 +70,26 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     duration: 60,
     cause: 'A persistent process leaked memory until the kernel killed it.',
     prevention: 'Restart the service, or run PHP: it frees everything after each request.',
+    actions: ['metrics', 'alerting'],
+  },
+  'slow-query': {
+    id: 'slow-query',
+    name: 'Slow query',
+    severity: 3,
+    duration: 300,
+    cause: 'A new feature shipped a query with no index. Each read scans the whole table.',
+    prevention: 'Query analysis finds the missing index. A Cache keeps most reads off the table.',
+    actions: ['query-analysis', 'caching'],
   },
 }
 
-/** Insight for a postmortem, by severity. */
-export const POSTMORTEM_INSIGHT: Record<2 | 3, number> = { 2: 40, 3: 20 }
+/** An unindexed read costs this many CPU ms per table row (the GDD's table_rows × 0.0001). */
+export const UNINDEXED_MS_PER_ROW = 0.0001
+/** Table rows per user, for the size of the scanned table. */
+export const ROWS_PER_USER = 100
+
+/** An incident whose action item is still open is this many times as likely. */
+export const OPEN_ACTION_WEIGHT = 2
 /** Share of its RAM a leaking server gains per second. */
 export const LEAK_RATE = 1 / 40
 

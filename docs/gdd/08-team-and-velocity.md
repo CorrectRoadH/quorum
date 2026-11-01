@@ -56,13 +56,13 @@ calendar week (morale).
 
 Engineers belong to teams. The player creates teams and assigns engineers.
 
-| Team type     | Unlocked | Owns                                       | Effect                                                                                                               |
-| ------------- | -------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Product team  | Pre-seed | One or more services                       | Produces DH for features and engineering tasks on its services.                                                      |
-| Platform team | Series A | Kubernetes, CI/CD, the Service Mesh        | Removes the per-cluster DH tax. Halves deploy time.                                                                  |
-| SRE team      | Series A | On-call, runbooks, incident response       | MTTR −40%. Postmortem Insight +50%. Runbooks become automatic mitigations ([Incidents](./11-incidents.md#runbooks)). |
-| Data team     | Series B | The warehouse, CDC, the Vector Index       | `report` and `ai` features cost −30% DH. Pipelines have half the lag.                                                |
-| Security team | Pre-IPO  | WAF rules, dependency scanning, compliance | Required for the SOC 2 milestone. Lowers supply-chain and breach incident chances.                                   |
+| Team type     | Unlocked | Owns                                       | Effect                                                                                                                                             |
+| ------------- | -------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product team  | Pre-seed | One or more services                       | Produces DH for features and engineering tasks on its services.                                                                                    |
+| Platform team | Series A | Kubernetes, CI/CD, the Service Mesh        | Removes the per-cluster DH tax. Halves deploy time.                                                                                                |
+| SRE team      | Series A | On-call, runbooks, incident response       | MTTR −40%. Open action items raise incident odds by half as much. Runbooks become automatic mitigations ([Incidents](./11-incidents.md#runbooks)). |
+| Data team     | Series B | The warehouse, CDC, the Vector Index       | `report` and `ai` features cost −30% DH. Pipelines have half the lag.                                                                              |
+| Security team | Pre-IPO  | WAF rules, dependency scanning, compliance | Required for the SOC 2 milestone. Lowers supply-chain and breach incident chances.                                                                 |
 
 ## Coordination
 

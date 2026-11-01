@@ -76,7 +76,8 @@ export const Postmortem = Schema.Struct({
   lostUsers: Schema.Finite,
   lostRevenue: Schema.Finite,
   failed: Schema.Finite,
-  reward: Schema.Finite,
+  /** The research this postmortem opens as an action item. */
+  action: Schema.NullOr(ResearchId),
 })
 export type Postmortem = typeof Postmortem.Type
 
@@ -129,6 +130,8 @@ export const Game = Schema.Struct({
   nextIncidentAt: Schema.Finite,
   postmortems: Schema.Array(Postmortem),
   postmortemSeq: Schema.Finite,
+  /** Action items from postmortems. Each stays open until its research is owned. */
+  openActions: Schema.Array(ResearchId),
   alarms: Alarms,
   earned: Schema.Finite,
   history: Schema.Array(Sample),

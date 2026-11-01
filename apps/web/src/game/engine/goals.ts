@@ -59,6 +59,10 @@ export const nextGoal = (game: Game, ledger: Ledger): string => {
   const restarting = game.nodes.find((node) => node.down > 0)
   if (restarting)
     return `${COMPONENTS[restarting.type].name} is restarting. Requests fail until it is up.`
+  if (game.incident?.kind === 'slow-query')
+    return has(game, 'query-analysis')
+      ? 'A query has no index and the Database scans whole tables. Select it and click Add index.'
+      : 'A query has no index and the Database scans whole tables. Research Query analysis, or put a Cache in front.'
   const failing = ledger.failing[0]
   if (failing) return `${KINDS[failing].label} requests fail. ${strandedHint(failing)}`
   const stranded = game.nodes.find((node) => (ledger.nodes[node.id]?.stranded ?? 0) > 0.01)

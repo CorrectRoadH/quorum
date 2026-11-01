@@ -45,7 +45,7 @@ critical path has a single Node and 0.2 when every Node on it has a redundant co
 This makes the director a teacher: it shows the player their weakest point.
 
 **Severity.** SEV3 affects one Node or one kind. SEV2 affects a service or a zone. SEV1 affects the
-whole company or a region. Severity sets the postmortem reward. An arrow in the catalog, such as
+whole company or a region. An arrow in the catalog, such as
 "3→1", means that the incident escalates to the second severity if the player does not mitigate it.
 The director never starts an incident above the Era's highest starting severity.
 
@@ -175,16 +175,16 @@ handled the incident by hand at least once before writing its runbook.
 
 ## Postmortems
 
-When an incident resolves, a postmortem card appears.
+When an incident resolves, a postmortem card appears. It names the incident, the timeline, and the
+cost (users lost, revenue lost). It is blameless, like the practice it models.
 
-```text
-insight_reward = base(severity) × (1 + 1 / (1 + MTTR_minutes)) × (1.5 with an SRE team)
-MTTR_minutes   = calendar minutes, which equal sim seconds
-```
-
-The card names the incident, the timeline, the cost (users lost, revenue lost), and suggested action
-items, each linked to a task or research item. Writing the postmortem is one click. It is blameless,
-like the practice it models.
+A postmortem pays no Insight. A flat reward made incidents a source of income, so a weak design that
+failed often researched faster than a strong one. Instead, the postmortem opens one **action item**: the
+first research in the incident's prevention list that the player does not own and can study now.
+The card can research it at its normal price. Filing without it leaves the item open, and while any
+prevention of an incident is open and not owned, the director picks that incident twice as often. An
+unfixed root cause comes back. A player short on Insight is never blocked; the item stays open until
+they can pay. When the design already has every prevention, the card opens no action item.
 
 ## SLOs and error budgets
 

@@ -244,6 +244,30 @@ const warnings = (
       ),
     )
   }
+  if (node.type === 'database' && game.incident?.kind === 'slow-query') {
+    const analysed = has(game, 'query-analysis')
+    list.push(
+      callout(
+        analysed
+          ? 'A new query has no index. Every read scans the table.'
+          : 'A new query has no index. Research Query analysis to find it.',
+        'danger',
+        analysed
+          ? button(
+              {
+                onClick: Message.IndexAdded({ nodeId: node.id }),
+                variant: 'outline',
+                size: 'sm',
+                className: 'self-start text-danger',
+              },
+              ['Add index'],
+              h,
+            )
+          : null,
+        h,
+      ),
+    )
+  }
   return list
 }
 

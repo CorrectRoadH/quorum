@@ -43,7 +43,7 @@ import {
   type Outcome,
 } from './distribution.ts'
 import type { KindLedger, Ledger, LinkLedger, NodeLedger, NodeStatus } from './ledger.ts'
-import { burnOf, eraOf, isDown, languageOf } from './lookups.ts'
+import { burnOf, eraOf, has, isDown, languageOf } from './lookups.ts'
 import type { Game, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -107,6 +107,8 @@ type Graph = Readonly<{
   parents: ReadonlyMap<string, ReadonlyArray<GameNode>>
   taps: ReadonlyMap<string, ReadonlyArray<string>>
   order: ReadonlyArray<GameNode>
+  /** DNS answers only with live hosts. */
+  healthChecked: boolean
 }>
 
 const graphOf = (game: Game): Graph => {
@@ -138,7 +140,7 @@ const graphOf = (game: Game): Graph => {
       if (left === 0) ready.push(child)
     }
   }
-  return { byId, routes, parents, taps, order }
+  return { byId, routes, parents, taps, order, healthChecked: has(game, 'health-checks') }
 }
 
 const delegates = (graph: Graph, node: GameNode): boolean =>
@@ -376,12 +378,14 @@ const splitOf = (
 ): ReadonlyArray<readonly [GameNode, number]> => {
   const takers = (graph.routes.get(node.id) ?? []).filter((child) => accepts(child, kind))
   if (takers.length === 0) return []
-  // DNS round robin splits evenly and cannot see a dead host.
-  if (node.type === 'dns') return takers.map((child) => [child, 1 / takers.length] as const)
+  // Load Balancers skip dead hosts; DNS does so only with health checks.
+  const skips = node.type === 'lb' || (node.type === 'dns' && graph.healthChecked)
   const live =
-    node.type === 'lb' && takers.some((child) => !isDown(child))
+    skips && takers.some((child) => !isDown(child))
       ? takers.filter((child) => !isDown(child))
       : takers
+  // DNS round robin splits evenly.
+  if (node.type === 'dns') return live.map((child) => [child, 1 / live.length] as const)
   const raw = live.map((child) => {
     const weight = weights.get(child.id) ?? 1
     return Number.isFinite(weight) ? Math.max(weight, 1e-6) : 1e9

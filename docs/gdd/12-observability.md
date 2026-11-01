@@ -46,12 +46,11 @@ improves the deal by keeping the interesting traces.
 
 ### Other Insight sources
 
-| Source              | Amount                                                            |
-| ------------------- | ----------------------------------------------------------------- |
-| Postmortems         | By severity and MTTR ([Incidents](./11-incidents.md#postmortems)) |
-| Load tests          | A one-time grant per test                                         |
-| Chaos experiments   | A grant per experiment that finds a weakness                      |
-| First time per kind | A one-time grant the first time the design serves a new kind      |
+| Source              | Amount                                                       |
+| ------------------- | ------------------------------------------------------------ |
+| Load tests          | A one-time grant per test                                    |
+| Chaos experiments   | A grant per experiment that finds a weakness                 |
+| First time per kind | A one-time grant the first time the design serves a new kind |
 
 ## The visibility ladder
 

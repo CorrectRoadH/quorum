@@ -1,8 +1,8 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { BellRing, ChevronRight, FileText, Gem, Timer, Users, Wallet } from 'lucide'
-import { ALERT_RULES, INCIDENTS } from '@/game/engine/catalog.ts'
+import { BellRing, Check, ChevronRight, Gem, Timer, Users, Wallet, X } from 'lucide'
+import { ALERT_RULES, INCIDENTS, RESEARCH } from '@/game/engine/catalog.ts'
 import { has } from '@/game/engine/lookups.ts'
-import type { Postmortem } from '@/game/engine/state.ts'
+import type { Game, Postmortem } from '@/game/engine/state.ts'
 import { compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
@@ -43,11 +43,60 @@ export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
   )
 }
 
-/** A postmortem: one compact row to file it, with the details folded away. */
-const card = (postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
+/** The action item: research the prevention now, or file the postmortem and leave it open. */
+const actionButtons = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
+  const action = postmortem.action && !has(game, postmortem.action) ? postmortem.action : null
+  if (!action)
+    return button(
+      {
+        onClick: Message.PostmortemFiled({ id: postmortem.id, take: false }),
+        size: 'sm',
+        variant: 'outline',
+      },
+      ['File'],
+      h,
+    )
+  const price = RESEARCH[action].cost
+  return h.div(
+    [h.Class('flex items-center gap-1')],
+    [
+      button(
+        {
+          onClick: Message.PostmortemFiled({ id: postmortem.id, take: true }),
+          isDisabled: game.insight < price,
+          size: 'sm',
+          attributes: [h.Title(`Action item: ${RESEARCH[action].blurb}`)],
+        },
+        [
+          icon(h, Check, 'size-3.5'),
+          RESEARCH[action].name,
+          h.span([h.Class(cn(FIGURE, 'opacity-75'))], [`${price}`]),
+          icon(h, Gem, 'size-3'),
+        ],
+        h,
+      ),
+      button(
+        {
+          onClick: Message.PostmortemFiled({ id: postmortem.id, take: false }),
+          size: 'sm',
+          variant: 'ghost',
+          attributes: [
+            h.Title('File and leave the action item open: this incident stays twice as likely'),
+            h.AriaLabel('File'),
+          ],
+        },
+        [icon(h, X, 'size-3.5')],
+        h,
+      ),
+    ],
+  )
+}
+
+/** A postmortem: one compact row with its action item, the details folded away. */
+const card = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
   const def = INCIDENTS[postmortem.kind]
   return h.details(
-    [h.Key(`pm-${postmortem.id}`), h.Class(`fold enter-left group w-[340px] ${PANEL}`)],
+    [h.Key(`pm-${postmortem.id}`), h.Class(`fold enter-left group w-[380px] ${PANEL}`)],
     [
       h.summary(
         [
@@ -68,20 +117,7 @@ const card = (postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
             h,
           ),
           h.span([h.Class('min-w-0 flex-1 truncate text-[12.5px] font-semibold')], [def.name]),
-          button(
-            {
-              onClick: Message.PostmortemFiled({ id: postmortem.id }),
-              size: 'sm',
-              attributes: [h.Title('Write postmortem')],
-            },
-            [
-              icon(h, FileText, 'size-3.5'),
-              'Write',
-              h.span([h.Class(cn(FIGURE, 'opacity-75'))], [`+${postmortem.reward}`]),
-              icon(h, Gem, 'size-3'),
-            ],
-            h,
-          ),
+          actionButtons(game, postmortem, h),
         ],
       ),
       h.div(
@@ -124,5 +160,5 @@ export const postmortems = (model: Model, h: HtmlBuilder<Message>): Html =>
     ? h.empty
     : h.div(
         [h.Class('absolute bottom-3 left-3 z-20 flex flex-col gap-2')],
-        model.game.postmortems.slice(-3).map((entry) => card(entry, h)),
+        model.game.postmortems.slice(-3).map((entry) => card(model.game, entry, h)),
       )

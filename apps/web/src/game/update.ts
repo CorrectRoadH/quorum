@@ -178,9 +178,13 @@ const eventText = (event: StepEvent, game: Game): Note =>
     IncidentStarted: ({ incident }): Note =>
       incident.kind === 'instance' && incident.nodeId
         ? [`${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`, 'danger']
-        : null,
+        : incident.kind === 'slow-query'
+          ? ['A new query has no index. Every read scans the table.', 'danger']
+          : null,
     IncidentResolved: ({ postmortem }): Note => [
-      `${INCIDENTS[postmortem.kind].name} is over. Write the postmortem for ${postmortem.reward} Insight.`,
+      postmortem.action
+        ? `${INCIDENTS[postmortem.kind].name} is over. Action item: ${RESEARCH[postmortem.action].name}. Until then it is twice as likely.`
+        : `${INCIDENTS[postmortem.kind].name} is over.`,
       'primary',
     ],
     DrawerFull: (): Note => ['The Payments drawer is full. Revenue is spilling.', 'warn'],
@@ -575,6 +579,8 @@ const route = (model: Model, message: Message): Result =>
     RestartChosen: ({ nodeId }) =>
       act(model, `Restarted ${nodeName(model.game, nodeId)}`, Actions.restart(model.game, nodeId)),
 
+    IndexAdded: ({ nodeId }) => act(model, 'Added an index', Actions.addIndex(model.game, nodeId)),
+
     NodeSold: ({ nodeId }) =>
       act(model, `Sold ${nodeName(model.game, nodeId)}`, Actions.sell(model.game, nodeId), {
         undoable: true,
@@ -613,11 +619,11 @@ const route = (model: Model, message: Message): Result =>
     RoundDeclined: () =>
       act(model, 'Declined a round', Actions.decline(model.game), { patch: afterRound }),
 
-    PostmortemFiled: ({ id }) => {
-      const postmortem = model.game.postmortems.find((entry) => entry.id === id)
-      return act(model, 'Postmortem', Actions.filePostmortem(model.game, id), {
+    PostmortemFiled: ({ id, take }) => {
+      const action = model.game.postmortems.find((entry) => entry.id === id)?.action
+      return act(model, 'Postmortem', Actions.filePostmortem(model.game, id, take), {
         note: () =>
-          postmortem ? [`Postmortem filed: +${postmortem.reward} Insight.`, 'primary'] : null,
+          take && action ? [`Action item done: ${RESEARCH[action].name}.`, 'primary'] : null,
       })
     },
 

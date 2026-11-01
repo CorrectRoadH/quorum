@@ -342,14 +342,32 @@ export const restart = (game: Game, id: string): Action =>
         : ok(patch(game, id, { down: 1, warm: 0, leak: 0 })),
   )
 
-export const filePostmortem = (game: Game, id: number): Action => {
+/** Adds the missing index: ends a Slow query incident. Needs Query analysis to find it. */
+export const addIndex = (game: Game, id: string): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'database') return notAllowed('Indexes live on the Database.')
+    if (!has(game, 'query-analysis'))
+      return no(Refusal.Locked({ what: 'Add index', research: RESEARCH['query-analysis'].name }))
+    const incident = game.incident
+    if (incident?.kind !== 'slow-query') return notAllowed('Every query has an index.')
+    return ok({ ...game, incident: { ...incident, remaining: 0 } })
+  })
+
+/**
+ * Files a postmortem. Taking its action item researches the prevention at its
+ * normal price. Filing without it leaves the item open, and the incident it
+ * prevents stays twice as likely until the research is owned.
+ */
+export const filePostmortem = (game: Game, id: number, take: boolean): Action => {
   const postmortem = game.postmortems.find((entry) => entry.id === id)
   if (!postmortem) return no(Refusal.Missing())
-  return ok({
+  const filed: Game = {
     ...game,
-    insight: game.insight + postmortem.reward,
     postmortems: game.postmortems.filter((entry) => entry.id !== id),
-  })
+  }
+  const action = postmortem.action
+  if (!take || !action || has(game, action)) return ok(filed)
+  return study(filed, action)
 }
 
 /* ---------- research and money ---------- */

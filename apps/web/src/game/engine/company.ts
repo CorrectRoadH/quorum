@@ -50,6 +50,7 @@ const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   nextIncidentAt: Number.MAX_SAFE_INTEGER,
   postmortems: [],
   postmortemSeq: 0,
+  openActions: [],
   alarms: { errors: 0, latency: 0, saturation: 0 },
   earned: 0,
   history: [],
