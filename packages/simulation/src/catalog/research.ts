@@ -36,6 +36,9 @@ export const RESEARCH_IDS = [
   'gzip',
   'timeouts',
   'lb-algorithms',
+  'ci',
+  'code-review',
+  'testing-culture',
 ] as const
 export type ResearchId = (typeof RESEARCH_IDS)[number]
 
@@ -371,6 +374,33 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['load-balancing'],
     blurb: 'Least connections and power of two choices.',
+  }),
+  research({
+    id: 'ci',
+    name: 'Continuous delivery',
+    track: 'reliability',
+    cost: 100,
+    era: 1,
+    requires: [],
+    blurb: 'A pipeline deploys in 5 minutes, not 30, and can roll a bad deploy back.',
+  }),
+  research({
+    id: 'code-review',
+    name: 'Code review',
+    track: 'product',
+    cost: 120,
+    era: 1,
+    requires: [],
+    blurb: 'Shows the hidden costs of a Feature before it ships. Bad deploys −20%.',
+  }),
+  research({
+    id: 'testing-culture',
+    name: 'Automated tests',
+    track: 'product',
+    cost: 150,
+    era: 1,
+    requires: ['ci'],
+    blurb: 'The pipeline runs tests before each deploy. Bad deploys −30%.',
   }),
 ]
 

@@ -1,13 +1,17 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
+import { TASK_IDS } from '@template/simulation/catalog'
 import {
   CacheEngine,
   ComponentId,
   FamilyId,
+  FeatureId,
   FrameworkId,
   IncidentId,
   LbPolicy,
   PmMode,
+  PolicyId,
+  PoolerMode,
   RequestKindId,
   ResearchId,
   Retries,
@@ -64,6 +68,7 @@ export const Message = defineMessageUnion({
   FrameworkChosen: { nodeId: Schema.String, framework: FrameworkId },
   WorkersChosen: { nodeId: Schema.String, workers: Schema.Finite },
   PmChosen: { nodeId: Schema.String, pm: PmMode },
+  PoolerModeChosen: { nodeId: Schema.String, mode: PoolerMode },
   CompressionChosen: { nodeId: Schema.String, compress: Schema.Boolean },
   PolicyChosen: { nodeId: Schema.String, policy: LbPolicy },
   HealthCheckChosen: {
@@ -105,6 +110,23 @@ export const Message = defineMessageUnion({
 
   ResearchFocused: { id: ResearchId },
   ResearchBought: { id: ResearchId },
+  /** The Team panel: engineers, teams, the backlog, migrations, and deploys. */
+  HireChosen: {},
+  LayoffChosen: { engineerId: Schema.String },
+  TeamCreated: {},
+  TeamRemoved: { teamId: Schema.String },
+  EngineerAssigned: { engineerId: Schema.String, teamId: Schema.String },
+  TeamPolicyChosen: { teamId: Schema.String, policy: PolicyId },
+  FeatureQueued: { id: FeatureId },
+  TaskQueued: { id: Schema.Literals(TASK_IDS) },
+  WorkMoved: { id: Schema.Finite, direction: Schema.Literals([1, -1]) },
+  WorkCancelled: { id: Schema.Finite },
+  WorkRushed: { id: Schema.Finite },
+  AutopilotToggled: {},
+  MigrationShifted: {},
+  MigrationCancelled: {},
+  RolledBack: {},
+
   RoundRaised: {},
   RoundDeclined: {},
   PostmortemFiled: { id: Schema.Finite, take: Schema.Boolean },

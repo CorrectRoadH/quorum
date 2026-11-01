@@ -11,13 +11,26 @@ export type LanguageDef = Readonly<{
   name: string
   /** Velocity: how fast this language ships features. */
   velocity: number
+  /** Salary relative to the base (06 "Hiring and salaries"). */
+  salary: number
+  /** Time to hire relative to one calendar day. */
+  hireTime: number
+  /** Minutes one build takes (06 "Language profiles"). */
+  buildMinutes: number
 }>
 
 export const LANGUAGES: Record<LanguageId, LanguageDef> = {
-  php: { id: 'php', name: 'PHP', velocity: 1.2 },
-  ruby: { id: 'ruby', name: 'Ruby', velocity: 1.1 },
-  node: { id: 'node', name: 'Node.js', velocity: 1.15 },
-  python: { id: 'python', name: 'Python', velocity: 1.15 },
+  php: { id: 'php', name: 'PHP', velocity: 1.2, salary: 0.85, hireTime: 1, buildMinutes: 0.5 },
+  ruby: { id: 'ruby', name: 'Ruby', velocity: 1.1, salary: 1.1, hireTime: 1.5, buildMinutes: 1 },
+  node: { id: 'node', name: 'Node.js', velocity: 1.15, salary: 1, hireTime: 1, buildMinutes: 3 },
+  python: {
+    id: 'python',
+    name: 'Python',
+    velocity: 1.15,
+    salary: 1.05,
+    hireTime: 1,
+    buildMinutes: 1,
+  },
 }
 
 export const RUNTIME_IDS = [
@@ -338,12 +351,6 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
 
 /** N+1 queries multiply ORM reads. */
 export const ORM_READS = 3
-
-/**
- * Velocity stands in for features until the Team system exists: a faster
- * Stack ships more, which grows the market.
- */
-export const marketFor = (velocity: number): number => 0.7 + 0.3 * velocity
 
 /**
  * PHP-FPM process managers (06): spare workers kept, the share of requests that wait for a fork,

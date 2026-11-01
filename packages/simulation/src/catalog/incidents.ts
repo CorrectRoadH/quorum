@@ -9,6 +9,7 @@ export const INCIDENT_IDS = [
   'loop',
   'leak',
   'slow-query',
+  'bad-deploy',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -88,6 +89,16 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     cause: 'A new feature shipped a query with no index. Each read scans the whole table.',
     prevention: 'Query analysis finds the missing index. A Cache keeps most reads off the table.',
     actions: ['query-analysis', 'caching'],
+  },
+  'bad-deploy': {
+    id: 'bad-deploy',
+    name: 'Bad deploy',
+    severity: 3,
+    escalatesTo: 2,
+    duration: 120,
+    cause: 'A deploy shipped a bug. Requests to the App Servers fail.',
+    prevention: 'A pipeline that can roll back, automated tests, and smaller deploys.',
+    actions: ['ci', 'testing-culture'],
   },
 }
 

@@ -1,6 +1,5 @@
 import { Result } from 'effect'
 import {
-  addIndex,
   canRaise,
   collect,
   connect,
@@ -21,15 +20,19 @@ import {
 import {
   COMPONENTS,
   DESIGN_COST_INDEX,
+  DESIGN_SALARY_INDEX,
   DESIGN_TUNING,
   FRAMEWORKS,
+  LANGUAGES,
   OS_RAM,
   POOL_LIMITS,
   RESEARCH,
   RESEARCH_IDS,
   RUNTIMES,
+  SALARY_BASE,
   type ComponentId,
   type ResearchId,
+  type RuntimeId,
   type Tuning,
 } from './catalog.ts'
 import { newGame } from './company.ts'
@@ -38,16 +41,20 @@ import { burnOf, eraOf, has, isDown, ramOf, researchReady } from './lookups.ts'
 import { bottleneckOf, solveFlow } from './solve.ts'
 import type { Game, GameNode } from './state.ts'
 import { step } from './step.ts'
+import { languageOfService, salaryOf, serviceOf, signingOf, stackOf } from './team.ts'
+import { addIndex, changeStack, hire, moveItem, queueTask, rushItem } from './work.ts'
 
 /* ==========================================================================
    Pacing bots (16 "Pacing model"): scripted players that run against the real
    Simulation, so balance changes show up as test failures. Pure: no Vitest,
    no UI. Balanced plays the way the design expects; Greedy only buys bigger
-   boxes and the cheapest research; Stubborn never changes runtime or
-   framework; Decliner plays Balanced and turns every round down.
+   boxes and the cheapest research, and never hires; Stubborn never changes
+   runtime or framework; Decliner plays Balanced and turns every round down;
+   Polyglot plays Balanced and migrates to each new language it researches.
+   Every bot leaves the Team's autopilot on, so Features ship.
    ========================================================================== */
 
-export type Strategy = 'balanced' | 'greedy' | 'stubborn' | 'decliner'
+export type Strategy = 'balanced' | 'greedy' | 'stubborn' | 'decliner' | 'polyglot'
 
 export type Milestone =
   | 'first-upgrade'
@@ -56,6 +63,8 @@ export type Milestone =
   | 'second-server'
   | 'preseed'
   | 'first-incident'
+  | 'first-hire'
+  | 'first-feature'
   | 'seed'
 
 /** Margin when an Era ends: `live` at the build's prices, `design` at the design's cost index. */
@@ -93,6 +102,26 @@ const PRIORITY: ReadonlyArray<ResearchId> = [
   'funnels',
 ]
 
+/** Polyglot researches the languages right after the basics. */
+const POLYGLOT_PRIORITY: ReadonlyArray<ResearchId> = [
+  ...PRIORITY.slice(0, 3),
+  'lang-python',
+  'lang-ruby',
+  'lang-node',
+  ...PRIORITY.slice(3),
+]
+
+/** The language research Polyglot moves to, and the runtime it moves to. */
+const LANGUAGE_RESEARCH: ReadonlyArray<readonly [ResearchId, RuntimeId]> = [
+  ['lang-python', 'gunicorn'],
+  ['lang-ruby', 'puma'],
+  ['lang-node', 'node'],
+]
+
+/** The Balanced player hires while payroll stays under this share of revenue, up to a headcount. */
+const PAYROLL_SHARE = 0.25
+const MAX_HIRES = 4
+
 /** Seconds of Burn the player keeps in Cash before spending. */
 const RESERVE_SECONDS = 30
 /** The player looks at the board this often, in sim seconds. */
@@ -103,13 +132,17 @@ const BUSY = 0.8
 const tried = (game: Game, action: Action): Game =>
   Result.isSuccess(action) ? action.success : game
 
-/** Burn at a cost index, so margins can be read at the design's prices. */
-export const burnAt = (game: Game, index: number): number =>
+/** Burn at a cost index and a salary index, so margins can be read at the design's prices. */
+export const burnAt = (game: Game, index: number, salaryIndex: number): number =>
   game.nodes.reduce((total, node) => {
     const burn = burnOf(game, node)
     // The Auth Provider charges per user, not by the cost index.
     return total + (node.type === 'auth' ? burn : (burn / eraOf(game).costIndex) * index)
-  }, 0)
+  }, 0) +
+  game.engineers.reduce(
+    (total, engineer) => total + SALARY_BASE * salaryIndex * LANGUAGES[engineer.language].salary,
+    0,
+  )
 
 const marginOf = (revenue: number, burn: number): number =>
   revenue > 0 ? (revenue - burn) / revenue : -1
@@ -267,21 +300,53 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   const research =
     strategy === 'greedy'
       ? RESEARCH_IDS.filter(ready).toSorted((a, b) => RESEARCH[a].cost - RESEARCH[b].cost)[0]
-      : PRIORITY.find(ready)
+      : (strategy === 'polyglot' ? POLYGLOT_PRIORITY : PRIORITY).find(ready)
   if (research && next.insight >= RESEARCH[research].cost) next = tried(next, study(next, research))
 
-  // PHP-FPM replaces Apache as soon as it is researched, with a pool that fits in RAM.
+  // PHP-FPM replaces Apache as soon as it is researched. Polyglot moves to the language it
+  // researched last. Either way it is a migration, which the autopilot shifts step by step.
+  const first = servers(next)[0]
+  if (strategy !== 'stubborn' && strategy !== 'greedy' && first && !serviceOf(next).migration) {
+    const latest = next.researched.findLast((id) => LANGUAGE_RESEARCH.some(([lang]) => lang === id))
+    const polyglot = LANGUAGE_RESEARCH.find(([id]) => id === latest)?.[1]
+    const target =
+      strategy === 'polyglot' && polyglot
+        ? polyglot
+        : stackOf(next).runtime === 'mod_php' && has(next, 'php-fpm')
+          ? 'php_fpm'
+          : null
+    if (target && stackOf(next).runtime !== target)
+      next = tried(next, changeStack(next, first.id, { runtime: target }))
+  }
+  // A server the strangler just moved restarts with the default pool: size it to its RAM.
   for (const server of servers(next))
-    if (
-      strategy !== 'stubborn' &&
-      strategy !== 'greedy' &&
-      server.runtime === 'mod_php' &&
-      has(next, 'php-fpm')
-    ) {
-      next = tried(next, setRuntime(next, server.id, 'php_fpm'))
-      const switched = byId(next, server.id)
-      if (switched) next = tried(next, setWorkers(next, server.id, fittingWorkers(switched)))
+    if (RUNTIMES[server.runtime].pool && server.down > 0 && server.workers < fittingWorkers(server))
+      next = tried(next, setWorkers(next, server.id, fittingWorkers(server)))
+
+  // Transaction pooling breaks session state: drop it, first in line, rushed from the pool.
+  if (next.nodes.some((node) => node.type === 'pooler')) {
+    const queued = tried(next, queueTask(next, 'session-state'))
+    const task = queued.backlog.find((item) => item.ref === 'session-state')
+    if (task) {
+      let top = queued
+      for (let index = queued.backlog.indexOf(task); index > 0; index -= 1)
+        top = tried(top, moveItem(top, task.id, -1))
+      next = tried(top, rushItem(top, task.id))
     }
+  }
+
+  // Hire while payroll, the new hire included, stays a modest share of revenue.
+  if (strategy !== 'greedy' && next.stage >= 1) {
+    const flow = solveFlow(next)
+    const language = languageOfService(next)
+    const headcount = next.engineers.length + next.hires.length
+    if (
+      headcount < MAX_HIRES &&
+      salaryOf(next, language) * (headcount + 1) <= flow.revenue * PAYROLL_SHARE &&
+      next.cash - signingOf(next, language) >= flow.burn * RESERVE_SECONDS
+    )
+      next = tried(next, hire(next, tuning))
+  }
 
   const flow = solveFlow(next)
   const target =
@@ -314,6 +379,7 @@ const reached = (before: Game, after: Game): ReadonlyArray<Milestone> => {
   if (after.nodes.some((node) => node.type === 'database')) found.push('db-split')
   if (servers(after).length > 1) found.push('second-server')
   if (after.stage >= 1) found.push('preseed')
+  if (after.hires.length + after.engineers.length > 0) found.push('first-hire')
   if (after.stage >= 2) found.push('seed')
   return found
 }
@@ -345,12 +411,20 @@ export const runBot = (
           stage: before.stage,
           time: game.time,
           live: marginOf(ledger.revenue, ledger.burn),
-          design: marginOf(ledger.revenue, burnAt(before, DESIGN_COST_INDEX[game.stage] ?? 1)),
+          design: marginOf(
+            ledger.revenue,
+            burnAt(
+              before,
+              DESIGN_COST_INDEX[game.stage] ?? 1,
+              DESIGN_SALARY_INDEX[game.stage] ?? 1,
+            ),
+          ),
         })
     }
     const result = step(game, 1, tuning)
     game = result.game
     if (result.events.some((event) => event._tag === 'IncidentStarted')) mark('first-incident')
+    if (result.events.some((event) => event._tag === 'Deployed')) mark('first-feature')
   }
   return { game, milestones, margins }
 }

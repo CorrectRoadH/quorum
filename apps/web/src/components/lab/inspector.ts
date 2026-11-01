@@ -368,7 +368,13 @@ const stats = (
         row('Drawer size', money(drawerSize(game, ledger.revenue)), 'plain', h),
         row('Spilled', money(game.spilled), game.spilled > 0 ? 'warn' : 'plain', h),
         row('Revenue', `${money(ledger.revenue)}/s`, 'ok', h),
+        ...(ledger.subscriptions > 0
+          ? [row('Subscriptions', `${money(ledger.subscriptions)}/s`, 'ok', h)]
+          : []),
         row('Burn', `${money(ledger.burn)}/s`, 'plain', h),
+        ...(ledger.salaries > 0
+          ? [row('Salaries', `${money(ledger.salaries)}/s`, 'plain', h)]
+          : []),
       ]
     case 'analytics':
       return [
@@ -884,6 +890,24 @@ const cache = (node: GameNode, h: HtmlBuilder<Message>): Html =>
     h,
   )
 
+const pooler = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Pooling mode',
+    [
+      picker(
+        'pooler-mode',
+        [
+          ['session', 'Session'],
+          ['transaction', 'Transaction'],
+        ],
+        node.mode,
+        (mode) => Message.PoolerModeChosen({ nodeId: node.id, mode }),
+        h,
+      ),
+    ],
+    h,
+  )
+
 /** Timeout and retries on each call a Node makes. */
 const calls = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   const links = outbound(game, node)
@@ -1062,6 +1086,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...(node.type === 'analytics' ? [sampler(game, node, h)] : []),
           ...(node.type === 'lb' ? loadBalancer(game, node, h) : []),
           ...(node.type === 'cache' ? [cache(node, h)] : []),
+          ...(node.type === 'pooler' ? [pooler(node, h)] : []),
           ...(node.type === 'dns' && has(game, 'health-checks') ? [dnsTtl(node, h)] : []),
           ...(has(game, 'timeouts') ? calls(game, node, h) : []),
         ],

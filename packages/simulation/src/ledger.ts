@@ -83,12 +83,18 @@ export type Ledger = Readonly<{
   p99: number
   /** Apdex of all requests; failures count as frustrated. */
   apdex: number
+  /** Dollars per second: requests, plus subscriptions. */
   revenue: number
+  /** Dollars per second from paid plans, included in `revenue`. */
+  subscriptions: number
   insight: number
+  /** Dollars per second: the cloud bill, plus salaries. */
   burn: number
-  /** The Era's market times the Stack's velocity. */
+  /** Dollars per second of payroll, included in `burn`. */
+  salaries: number
+  /** Most users the market holds: the Era's, grown by Features. */
   market: number
-  /** Traffic-weighted velocity of the App Servers. */
+  /** Traffic-weighted velocity of the App Servers' Stacks: language × framework. */
   velocity: number
   /** Request kinds that mostly have no route, for hints. */
   failing: ReadonlyArray<RequestKind>

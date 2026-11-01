@@ -21,6 +21,11 @@ export type EraDef = Readonly<{
    * the slice raises Pre-seed so Cash still forces choices.
    */
   costIndex: number
+  /**
+   * Multiplies engineer salaries and signing costs. The design keeps 1 until Seed;
+   * the slice follows the raised Pre-seed cost index so payroll is a real share of Burn.
+   */
+  salaryIndex: number
   /** Share of each request kind in the traffic. Sums to 1. */
   mix: Partial<Record<RequestKind, number>>
   /** What the Era asks, shown on its card. */
@@ -39,6 +44,7 @@ export const ERAS: ReadonlyArray<EraDef> = [
     growth: 0.004,
     apdexTarget: 0.85,
     costIndex: 1,
+    salaryIndex: 1,
     mix: { page: 0.6, read: 0.4 },
     question: 'How far does one box go?',
     arrivals: 'Page views and API reads.',
@@ -52,10 +58,10 @@ export const ERAS: ReadonlyArray<EraDef> = [
     growth: 0.0022,
     apdexTarget: 0.86,
     costIndex: 4,
+    salaryIndex: 4,
     mix: { page: 0.45, read: 0.35, write: 0.15, login: 0.05 },
     question: 'What happens when the database is the bottleneck?',
-    arrivals:
-      'Writes contend for the database. Logins hash passwords: 80 ms of CPU each. Incidents begin.',
+    arrivals: 'Writes contend for the database. Hiring opens. Incidents begin.',
   },
   {
     name: 'Seed',
@@ -66,6 +72,7 @@ export const ERAS: ReadonlyArray<EraDef> = [
     growth: 0.0016,
     apdexTarget: 0.88,
     costIndex: 4,
+    salaryIndex: 4,
     mix: { page: 0.45, read: 0.35, write: 0.15, login: 0.05 },
     question: 'The slice ends here.',
     arrivals: 'Seed content is not built yet. Keep playing to stress your design.',

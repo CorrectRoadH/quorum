@@ -36,7 +36,9 @@ describe('the Balanced bot at the design pace', { timeout: 60_000 }, () => {
           `first research ${minutes(milestones['first-research'])}, first upgrade ` +
           `${minutes(milestones['first-upgrade'])}, DB split ${minutes(milestones['db-split'])}, ` +
           `second server ${milestones['second-server'] === undefined ? 'never' : minutes(milestones['second-server'])}, ` +
-          `first incident ${minutes(milestones['first-incident'])}; margin at Seed entry ` +
+          `first incident ${minutes(milestones['first-incident'])}, first Feature live ` +
+          `${minutes(milestones['first-feature'])}, first hire ${minutes(milestones['first-hire'])}, ` +
+          `${run.game.engineers.length} engineers and ${run.game.shipped.length} Features at Seed; margin at Seed entry ` +
           `${((preseed?.live ?? 0) * 100).toFixed(0)}% live, ` +
           `${((preseed?.design ?? 0) * 100).toFixed(0)}% at cost index 25`,
       )

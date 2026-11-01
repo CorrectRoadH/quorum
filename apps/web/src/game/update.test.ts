@@ -69,16 +69,30 @@ describe('Tradeoff cards', () => {
     expect(pinned.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
     // Leaving the option keeps a pinned card open.
     expect(send(pinned, Message.OptionLeft()).tradeoff?.pinned).toBe(true)
+    // In a Company, Confirm starts a migration: Dev Hours first, then the strangler.
     const confirmed = send(pinned, Message.OptionConfirmed())
     expect(confirmed.tradeoff).toBeNull()
     expect(confirmed.seenTradeoffs).toEqual(['runtime'])
-    expect(confirmed.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('node_cluster')
+    expect(confirmed.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
+    expect(confirmed.game.services[0]?.migration?.runtime).toBe('node_cluster')
+    expect(confirmed.game.backlog.some((item) => item.kind === 'migration')).toBe(true)
     expect(confirmed.change).not.toBeNull()
-    const back = send(
-      confirmed,
-      Message.OptionChosen({ nodeId: 'server', option: { kind: 'runtime', id: 'php_fpm' } }),
+    // The second time, a click applies at once.
+    const fresh = { ...ready(), seenTradeoffs: confirmed.seenTradeoffs }
+    const clicked = send(fresh, Message.OptionChosen({ nodeId: 'server', option }))
+    expect(clicked.tradeoff).toBeNull()
+    expect(clicked.game.services[0]?.migration?.runtime).toBe('node_cluster')
+  })
+
+  test('a Sandbox swaps the Stack at once', () => {
+    const start = ready()
+    const sandboxed = { ...start, game: { ...start.game, sandbox: true } }
+    const applied = send(
+      sandboxed,
+      Message.OptionChosen({ nodeId: 'server', option }),
+      Message.OptionConfirmed(),
     )
-    expect(back.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
+    expect(applied.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('node_cluster')
   })
 
   test('Escape and Cancel close the card without changing anything', () => {

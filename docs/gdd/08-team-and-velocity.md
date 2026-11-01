@@ -19,7 +19,8 @@ DH per sim second = Σ_teams effective_engineers(team) × velocity(team) × 1/60
 ```
 
 One engineer produces one DH per calendar hour, which is one DH per real minute. The founder produces
-0.8 DH per calendar hour, because the founder also runs the company.
+0.8 DH per calendar hour, because the founder also runs the company. The live game runs the Team's calendar 24× faster than the board's (see the
+[divergence log](./16-balancing.md#divergence-log)).
 
 | Term                  | Source                                                                                                               |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------- |

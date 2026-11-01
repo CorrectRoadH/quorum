@@ -2,11 +2,16 @@ import { Effect, Schema } from 'effect'
 import {
   COMPONENT_IDS,
   FAMILY_IDS,
+  FEATURE_IDS,
+  FIXES,
   FRAMEWORK_IDS,
   INCIDENT_IDS,
+  LANGUAGE_IDS,
+  POLICY_IDS,
   REQUEST_KINDS,
   RESEARCH_IDS,
   RUNTIME_IDS,
+  START_KLOC,
 } from './catalog.ts'
 
 /* ==========================================================================
@@ -22,6 +27,10 @@ export const ResearchId = Schema.Literals(RESEARCH_IDS)
 export const IncidentId = Schema.Literals(INCIDENT_IDS)
 
 export const RequestKindId = Schema.Literals(REQUEST_KINDS)
+export const LanguageId = Schema.Literals(LANGUAGE_IDS)
+export const PolicyId = Schema.Literals(POLICY_IDS)
+export const FeatureId = Schema.Literals(FEATURE_IDS)
+export const FixId = Schema.Literals(FIXES)
 
 export const LbPolicy = Schema.Literals(['weighted', 'round-robin', 'least-conn', 'p2c'])
 export type LbPolicy = typeof LbPolicy.Type
@@ -34,6 +43,9 @@ export type CacheEngine = typeof CacheEngine.Type
 
 export const DownCause = Schema.Literals(['restart', 'failure', 'oom'])
 export type DownCause = typeof DownCause.Type
+
+export const PoolerMode = Schema.Literals(['session', 'transaction'])
+export type PoolerMode = typeof PoolerMode.Type
 
 /** One placed Component. */
 export const GameNode = Schema.Struct({
@@ -80,6 +92,8 @@ export const GameNode = Schema.Struct({
   pm: PmMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed('static' as const))),
   /** The Cache's engine. */
   engine: CacheEngine.pipe(Schema.withDecodingDefaultKey(Effect.succeed('redis' as const))),
+  /** The Connection Pooler's mode. Saves from before modes pooled by transaction. */
+  mode: PoolerMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed('transaction' as const))),
 })
 export type GameNode = typeof GameNode.Type
 
@@ -175,6 +189,113 @@ export const FalseAlarms = Schema.Struct({
 })
 export type FalseAlarms = typeof FalseAlarms.Type
 
+/* ---------- the Team (08) ---------- */
+
+/** An engineer on the payroll. The founder is not one: every Company has them. */
+export const Engineer = Schema.Struct({
+  id: Schema.String,
+  team: Schema.String,
+  /** The language they were hired for, which sets their salary. */
+  language: LanguageId,
+  /** Sim time they joined, for the ramp-up. */
+  hiredAt: Schema.Finite,
+})
+export type Engineer = typeof Engineer.Type
+
+/** An offer accepted: the engineer joins at `readyAt`. */
+export const Hire = Schema.Struct({
+  id: Schema.String,
+  team: Schema.String,
+  language: LanguageId,
+  readyAt: Schema.Finite,
+})
+export type Hire = typeof Hire.Type
+
+export const Team = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  policy: PolicyId,
+  /** The policy in force until a calendar day after `since`. */
+  previous: PolicyId,
+  since: Schema.Finite,
+})
+export type Team = typeof Team.Type
+
+/** A Stack change in progress (08 "Migrations"): the strangler moves App Servers over in steps. */
+export const Migration = Schema.Struct({
+  runtime: RuntimeId,
+  framework: FrameworkId,
+  fromRuntime: RuntimeId,
+  fromFramework: FrameworkId,
+  /** Dev Hours for the whole migration. */
+  total: Schema.Finite,
+  /** Steps shifted so far, 0 to 4. */
+  step: Schema.Finite,
+  /** The next step's Dev Hours are built: traffic can shift. */
+  ready: Schema.Boolean,
+  /** The new Stack fails some requests until Fix bugs ships. */
+  bugs: Schema.Boolean,
+})
+export type Migration = typeof Migration.Type
+
+/** A codebase with its own deploys. The slice has one: the monolith. */
+export const Service = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  /** Tech debt, 0 to 1. */
+  debt: Schema.Finite,
+  /** Thousands of lines: what a migration has to move. */
+  codebase: Schema.Finite,
+  /** Engineering tasks that changed the code for good. */
+  fixes: Schema.Array(FixId),
+  /** Query shapes with no index. */
+  shapes: Schema.Finite,
+  migration: Schema.NullOr(Migration),
+  nextDeployAt: Schema.Finite,
+  /** What the last deploy shipped, so a rollback can take it back. */
+  lastDeploy: Schema.Array(FeatureId),
+})
+export type Service = typeof Service.Type
+
+export const WorkKind = Schema.Literals(['feature', 'task', 'migration'])
+export type WorkKind = typeof WorkKind.Type
+
+/** One backlog item. `ref` is a Feature or task id; a migration item names its step. */
+export const WorkItem = Schema.Struct({
+  id: Schema.Finite,
+  kind: WorkKind,
+  ref: Schema.String,
+  cost: Schema.Finite,
+  spent: Schema.Finite,
+})
+export type WorkItem = typeof WorkItem.Type
+
+export const CORE_TEAM: Team = {
+  id: 'core',
+  name: 'Core',
+  policy: 'balanced',
+  previous: 'balanced',
+  since: 0,
+}
+
+export const monolith = (fixes: ReadonlyArray<typeof FixId.Type>): Service => ({
+  id: 'monolith',
+  name: 'Monolith',
+  debt: 0,
+  codebase: START_KLOC,
+  fixes,
+  shapes: 0,
+  migration: null,
+  nextDeployAt: 0,
+  lastDeploy: [],
+})
+
+/**
+ * A save from before the Team plays as it did: its code already loads eagerly
+ * once researched, and its poolers already ran in transaction mode.
+ */
+const OLD_MONOLITH = monolith(['eager-loading', 'session-state'])
+
 export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
 export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
@@ -221,5 +342,25 @@ export const Game = Schema.Struct({
    * placing costs nothing, and incidents come only from the Sandbox's script.
    */
   sandbox: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Dev Hours no backlog item took, ready to rush any item. */
+  devHours: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  engineers: Schema.Array(Engineer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  hires: Schema.Array(Hire).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  teams: Schema.Array(Team).pipe(Schema.withDecodingDefaultKey(Effect.succeed([CORE_TEAM]))),
+  /** Sim time a layoff's hit to morale ends. */
+  moraleUntil: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  services: Schema.Array(Service).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([OLD_MONOLITH])),
+  ),
+  /** Work in priority order: each team takes the first item no team ahead of it has. */
+  backlog: Schema.Array(WorkItem).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  workSeq: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  shipped: Schema.Array(FeatureId).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  /** Features built and waiting for the next deploy. */
+  awaiting: Schema.Array(FeatureId).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  /** Idle teams pick the next Feature, shift migrations, and pay down debt on their own. */
+  autopilot: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+  deploys: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  badDeploys: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
 })
 export type Game = typeof Game.Type

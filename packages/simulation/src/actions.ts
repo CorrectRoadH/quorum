@@ -47,7 +47,16 @@ import {
 } from './lookups.ts'
 import { link } from './company.ts'
 import type { AlertRule } from './events.ts'
-import type { CacheEngine, Game, GameLink, GameNode, LbPolicy, PmMode, Retries } from './state.ts'
+import type {
+  CacheEngine,
+  Game,
+  GameLink,
+  GameNode,
+  LbPolicy,
+  PmMode,
+  PoolerMode,
+  Retries,
+} from './state.ts'
 
 /* ==========================================================================
    Everything the player can do. Each action returns the next Game, or a
@@ -136,6 +145,7 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     ttl: type === 'cache' ? 60 : 300,
     engine: 'redis',
     pm: 'static',
+    mode: 'transaction',
   }
 }
 
@@ -431,6 +441,14 @@ export const setPm = (game: Game, id: string, pm: PmMode): Action =>
       : notAllowed('Only PHP-FPM has a process manager.'),
   )
 
+/** Sets a Connection Pooler's mode: session holds a server connection per client, transaction shares a few. */
+export const setPoolerMode = (game: Game, id: string, mode: PoolerMode): Action =>
+  withNode(game, id, (node) =>
+    node.type === 'pooler'
+      ? ok(node.mode === mode ? game : patch(game, id, { mode }))
+      : notAllowed('Only a Connection Pooler has a mode.'),
+  )
+
 /** Swaps a Cache's engine. The new one starts empty. */
 export const setCacheEngine = (game: Game, id: string, engine: CacheEngine): Action =>
   withNode(game, id, (node) => {
@@ -480,17 +498,6 @@ export const restart = (game: Game, id: string): Action =>
         ? notAllowed('It is already down.')
         : ok(patch(game, id, { ...restarted(node), leak: 0 })),
   )
-
-/** Adds the missing index: ends a Slow query incident. Needs Query analysis to find it. */
-export const addIndex = (game: Game, id: string): Action =>
-  withNode(game, id, (node) => {
-    if (node.type !== 'database') return notAllowed('Indexes live on the Database.')
-    if (!has(game, 'query-analysis'))
-      return no(Refusal.Locked({ what: 'Add index', research: RESEARCH['query-analysis'].name }))
-    const incident = game.incident
-    if (incident?.kind !== 'slow-query') return notAllowed('Every query has an index.')
-    return ok({ ...game, incident: { ...incident, remaining: 0 } })
-  })
 
 /**
  * Files a postmortem. Taking its action item researches the prevention at its

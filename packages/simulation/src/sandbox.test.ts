@@ -18,6 +18,7 @@ import {
   type SandboxId,
 } from './sandbox.ts'
 import { solve } from './solve.ts'
+import { addIndex } from './work.ts'
 import { step } from './step.ts'
 import type { Game } from './state.ts'
 
@@ -48,7 +49,7 @@ const play = (
   for (; elapsed < seconds && !passedAll(sandbox, progress); elapsed += STEP) {
     game = step(game, STEP).game
     if (index && game.incident?.kind === 'slow-query' && game.time - game.incident.startedAt > 15)
-      game = ok(Actions.addIndex(game, 'database'))
+      game = ok(addIndex(game, 'database'))
     const next = advanceSandbox(sandbox, progress, game, solve(game), STEP)
     game = next.game
     progress = next.progress

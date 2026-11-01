@@ -17,6 +17,7 @@ import type { Game, GameNode } from './state.ts'
 
 const game: Game = {
   ...preseedGame(),
+  shipped: ['password-login'],
   researched: [...preseedGame().researched, 'opcache', 'lang-node', 'node-cluster'],
 }
 
@@ -85,7 +86,12 @@ describe('runtime balance targets', () => {
 
     test('the solve adds the stall to the p99 of `read`, and the libuv pool takes the login part away', () => {
       const design = (researched: Game['researched']): Game => {
-        const base = { ...preseedGame(), users: 2_500, time: 6 * 60 }
+        const base: Game = {
+          ...preseedGame(),
+          shipped: ['password-login'],
+          users: 2_500,
+          time: 6 * 60,
+        }
         const start: Game = {
           ...base,
           researched: [...base.researched, 'lang-node', ...researched],

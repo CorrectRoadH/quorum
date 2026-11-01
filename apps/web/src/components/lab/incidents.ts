@@ -1,5 +1,17 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { BellOff, BellRing, Check, ChevronRight, Gem, Timer, Users, Wallet, X } from 'lucide'
+import {
+  BellOff,
+  BellRing,
+  Check,
+  ChevronRight,
+  Gem,
+  Lock,
+  Timer,
+  Undo2,
+  Users,
+  Wallet,
+  X,
+} from 'lucide'
 import { ALERT_RULES, ALERT_THRESHOLDS, INCIDENTS, RESEARCH } from '@template/simulation/catalog'
 import type { AlertRule } from '@template/simulation/events'
 import { has } from '@template/simulation/lookups'
@@ -92,6 +104,35 @@ export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
             ),
           ],
         ),
+      ),
+    ],
+  )
+}
+
+/** A bad deploy on screen: App Servers crash until it is rolled back or runs its course. */
+export const badDeploy = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  if (game.incident?.kind !== 'bad-deploy') return h.empty
+  const ready = has(game, 'ci')
+  return h.div(
+    [
+      h.Key('bad-deploy'),
+      h.Class(
+        'pointer-events-auto enter-down flex items-center gap-2.5 rounded-xl bg-danger py-1.5 pr-1.5 pl-3.5 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
+      ),
+    ],
+    [
+      h.span([], [INCIDENTS['bad-deploy'].name]),
+      button(
+        {
+          onClick: Message.RolledBack(),
+          isDisabled: !ready,
+          size: 'sm',
+          variant: 'outline',
+          attributes: [h.Title(ready ? 'Roll back' : `Research ${RESEARCH.ci.name} to roll back`)],
+        },
+        [icon(h, ready ? Undo2 : Lock, 'size-3.5'), 'Roll back'],
+        h,
       ),
     ],
   )

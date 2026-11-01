@@ -18,6 +18,7 @@ import type { Ledger } from './ledger.ts'
 import { has, isDown, ramOf, researchReady, restarted } from './lookups.ts'
 import { nextRandom, pickWeighted } from './random.ts'
 import type { Game, GameNode, Incident, Postmortem } from './state.ts'
+import { fixed, serviceOf } from './team.ts'
 
 /* ==========================================================================
    The incident director. It attacks the Design, not the player: each
@@ -90,10 +91,18 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number =>
         ? 3
         : 0,
     ),
-    Match.when('leak', () => (leakTargets(game, ledger).length > 0 ? 2 : 0)),
-    Match.when('slow-query', () =>
-      game.nodes.some((node) => node.type === 'database' && busy(ledger, node)) ? 1.5 : 0,
+    // Fix memory leak keeps the code from leaking until the next Feature ships.
+    Match.when('leak', () =>
+      leakTargets(game, ledger).length > 0 && !(fixed(game, 'fix-leak') && !game.sandbox) ? 2 : 0,
     ),
+    // Each query shape with no index makes a Slow query likelier.
+    Match.when('slow-query', () =>
+      game.nodes.some((node) => node.type === 'database' && busy(ledger, node))
+        ? 1.5 * (1 + serviceOf(game).shapes)
+        : 0,
+    ),
+    // Only a deploy ships a bug: the director never picks one.
+    Match.when('bad-deploy', () => 0),
     Match.exhaustive,
   )
 
@@ -175,6 +184,8 @@ export const directIncidents = (
         [
           id,
           weaknessOf(game, ledger, id) *
+            // Tech debt makes every incident likelier (08 "Tech debt").
+            (1 + serviceOf(game).debt) *
             (id === game.lastIncident ? REPEAT_WEIGHT : 1) *
             (unaddressed(game, id) ? OPEN_ACTION_WEIGHT : 1),
         ] as const,

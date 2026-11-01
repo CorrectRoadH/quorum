@@ -20,7 +20,9 @@ import {
   RUNTIMES,
   type RequestKind,
 } from './catalog.ts'
+import { payloadFactor } from './features.ts'
 import { has, networkOf, payloadOf, ramOf, vcpuOf } from './lookups.ts'
+import { fixed } from './team.ts'
 import type { Game, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -113,7 +115,11 @@ export const callsOf = (
 ): Calls => {
   const profile = PROFILES[kind]
   if (kind === 'login' && delegated) return { reads: 0, writes: 0, auth: 1 }
-  const orm = profile.orm && FRAMEWORKS[node.framework].orm && !has(game, 'eager-loading')
+  // Eager loading: the research shows the N+1 queries, and the task removes them.
+  const orm =
+    profile.orm &&
+    FRAMEWORKS[node.framework].orm &&
+    !(has(game, 'eager-loading') && fixed(game, 'eager-loading'))
   return { reads: profile.reads * (orm ? ORM_READS : 1), writes: profile.writes, auth: 0 }
 }
 
@@ -242,7 +248,11 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const slotWait = rate > 0 ? waitFor(slotWork / rate, slotUtilization, slots) : 0
 
   // Every response leaves through the box's network card: bandwidth over bytes per request.
-  const bytes = kinds.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * payloadOf(node, kind), 0)
+  const bytes = kinds.reduce(
+    (sum, kind) =>
+      sum + (arriving[kind] ?? 0) * payloadOf(node, kind) * payloadFactor(context.game, kind),
+    0,
+  )
   const networkUtilization = bytes / (networkOf(node) * context.boost)
 
   const utilization = Math.max(cpuUtilization, slotUtilization, networkUtilization)

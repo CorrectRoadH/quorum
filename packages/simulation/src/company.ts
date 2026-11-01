@@ -6,8 +6,10 @@ import {
   type ComponentId,
 } from './catalog.ts'
 import {
+  CORE_TEAM,
   DEFAULT_ALERT_RULES,
   NO_FALSE_ALARMS,
+  monolith,
   type Game,
   type GameLink,
   type GameNode,
@@ -50,6 +52,7 @@ export const node = (
   ttl: type === 'cache' ? 60 : 300,
   engine: 'redis',
   pm: 'static',
+  mode: 'transaction',
   ...extra,
 })
 
@@ -89,6 +92,19 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   earned: 0,
   history: [],
   sandbox: false,
+  devHours: 0,
+  engineers: [],
+  hires: [],
+  teams: [CORE_TEAM],
+  moraleUntil: 0,
+  services: [monolith([])],
+  backlog: [],
+  workSeq: 0,
+  shipped: [],
+  awaiting: [],
+  autopilot: true,
+  deploys: 0,
+  badDeploys: 0,
 })
 
 /**

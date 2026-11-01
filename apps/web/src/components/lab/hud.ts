@@ -4,6 +4,7 @@ import {
   Expand,
   FlaskConical,
   Gem,
+  Hammer,
   type IconNode,
   Lightbulb,
   Menu,
@@ -17,6 +18,7 @@ import {
   Redo2,
   Undo2,
   Users,
+  UsersRound,
   Wallet,
 } from 'lucide'
 import { researchList } from '@template/simulation/catalog'
@@ -24,6 +26,8 @@ import { canRaise } from '@template/simulation/actions'
 import type { Ledger } from '@template/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@template/simulation/lookups'
 import { clockOf } from '@template/simulation/solve'
+import { devHoursRate } from '@template/simulation/team'
+import { itemName } from '@template/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
@@ -159,6 +163,53 @@ const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
   )
 }
 
+/** What the Team builds now: the top of the backlog, and how fast. Opens the Team panel. */
+const building = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  const item = game.backlog[0]
+  const rate = devHoursRate(game, ledger) * 60
+  const ready = game.awaiting.length
+  return h.button(
+    [
+      h.Key('building'),
+      h.Type('button'),
+      h.Title('Team (T)'),
+      h.OnClick(Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' })),
+      h.Class(
+        cn(
+          'flex flex-col gap-1.5 rounded-xl px-2.5 py-2 text-left hover:bg-foreground/5 compact:hidden',
+        ),
+      ),
+    ],
+    [
+      h.div(
+        [h.Class('flex items-center gap-2 text-[12px]')],
+        [
+          icon(h, Hammer, 'size-3.5 shrink-0 text-muted-foreground'),
+          h.span(
+            [
+              h.Class(
+                cn('min-w-0 flex-1 truncate', item ? 'font-medium' : 'text-muted-foreground'),
+              ),
+            ],
+            [item ? itemName(item) : 'Idle'],
+          ),
+          ready > 0
+            ? h.span(
+                [h.Class(cn(FIGURE, 'text-[10.5px] text-primary-strong'))],
+                [`${ready} to deploy`],
+              )
+            : h.span(
+                [h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))],
+                [`${rate < 10 ? rate.toFixed(1) : Math.round(rate)} DH/min`],
+              ),
+        ],
+      ),
+      item ? meter(item.spent / item.cost, 'bg-ok', h) : h.empty,
+    ],
+  )
+}
+
 export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   const income = has(game, 'stripe') ? ledger.revenue : 0
@@ -239,6 +290,7 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
           ),
         ],
       ),
+      building(model, ledger, h),
     ],
   )
 }
@@ -339,6 +391,38 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 : h.empty,
             ],
           ),
+      model.sandbox
+        ? h.empty
+        : h.button(
+            [
+              h.Key('team'),
+              h.Type('button'),
+              h.Title('Team (T)'),
+              h.AriaLabel('Team'),
+              h.AriaPressed(model.panel === 'team' ? 'true' : 'false'),
+              h.OnClick(Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' })),
+              h.Class(
+                cn(
+                  tool(model.panel === 'team'),
+                  'flex w-auto gap-2 px-3 text-[13px] font-medium compact:size-9 compact:px-0 max-2xl:w-9 max-2xl:px-0 max-2xl:justify-center',
+                ),
+              ),
+            ],
+            [
+              icon(h, UsersRound, 'size-[18px]'),
+              h.span([h.Class('compact:hidden max-2xl:hidden')], ['Team']),
+              game.backlog.length === 0
+                ? h.span(
+                    [
+                      h.Class(
+                        'enter-badge absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-warn shadow-raised',
+                      ),
+                    ],
+                    [],
+                  )
+                : h.empty,
+            ],
+          ),
       toolButton(
         'How to play (H)',
         CircleHelp,
@@ -383,7 +467,7 @@ const pill = `flex max-w-[480px] compact:max-w-none items-center gap-2.5 rounded
 /** The pill stays and its text swaps, so a new goal morphs in rather than snapping. */
 export const goalBar = (text: string, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Key('goal'), h.DataAttribute('morph', 'notice'), h.Class(`${pill} short:hidden`)],
+    [h.Key('goal'), h.DataAttribute('morph', 'notice'), h.Class(`${pill} short:hidden max-2xl:max-w-[380px]`)],
     [
       icon(h, Lightbulb, 'size-3.5 shrink-0 text-warn'),
       h.span([h.Key(text), h.DataAttribute('exit', 'notice'), h.Class('swap')], [text]),

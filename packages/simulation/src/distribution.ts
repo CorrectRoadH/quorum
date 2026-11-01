@@ -18,6 +18,7 @@ export const ERROR_CAUSES = [
   'stale',
   'oom',
   'timeout',
+  'crash',
 ] as const
 export type ErrorCause = (typeof ERROR_CAUSES)[number]
 export type Failures = Readonly<Record<ErrorCause, number>>
@@ -66,6 +67,16 @@ export const failed = (cause: ErrorCause): Outcome => ({
   value: 1,
   fail: { ...NO_FAILURES, [cause]: 1 },
 })
+
+/** The same outcome with a share of its answered requests failing for `cause` instead. */
+export const failSome = (outcome: Outcome, share: number, cause: ErrorCause): Outcome =>
+  share <= 0
+    ? outcome
+    : {
+        ...outcome,
+        success: outcome.success * (1 - share),
+        fail: addFailures(outcome.fail, { ...NO_FAILURES, [cause]: outcome.success * share }),
+      }
 
 /** Every request is answered here. */
 export const answered = (fixed: number, variable: number): Outcome => ({

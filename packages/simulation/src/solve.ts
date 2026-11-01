@@ -15,14 +15,15 @@ import {
   P2C_CAPACITY,
   P2C_IMBALANCE,
   POOLER_CONNECTIONS,
+  MIGRATION_BUGS,
   PROFILES,
   REQUEST_KINDS,
   RPS_PER_USER,
   RUNTIMES,
   SAMPLE_OVERHEAD,
   LINK_TIMEOUT,
+  SESSION_STATE_CRASHES,
   WEEKEND_FACTOR,
-  marketFor,
   type Kind,
   type RequestKind,
 } from './catalog.ts'
@@ -47,6 +48,7 @@ import {
   apdexOf,
   blend,
   failed,
+  failSome,
   hop,
   meanOf,
   percentile,
@@ -54,10 +56,10 @@ import {
   type ErrorCause,
   type Outcome,
 } from './distribution.ts'
+import { marketOf, mixOf, payloadFactor, subscriptionsOf, valueFactor } from './features.ts'
 import type { KindLedger, Ledger, LinkLedger, NodeLedger, NodeStatus } from './ledger.ts'
 import {
   burnOf,
-  eraOf,
   flatScale,
   grown,
   has,
@@ -67,7 +69,9 @@ import {
   sampleIndex,
   transferMs,
 } from './lookups.ts'
+import { buggy } from './migration.ts'
 import type { Game, GameLink, GameNode } from './state.ts'
+import { badDeployShare, fixed, payrollOf } from './team.ts'
 
 /* ==========================================================================
    The flow solve: turns a Design and the current demand into the Ledger.
@@ -154,13 +158,13 @@ export const weekly = (time: number): number => {
 }
 
 export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
-  const era = eraOf(game)
+  const mix = mixOf(game)
   const spike = game.incident?.kind === 'spike' ? game.incident.magnitude : 1
   const cycle = game.sandbox ? 1 : diurnal(game.time) * weekly(game.time)
   const total = game.users * RPS_PER_USER * cycle * spike
   const demand: Partial<Record<RequestKind, number>> = {}
   for (const kind of REQUEST_KINDS) {
-    const share = era.mix[kind] ?? 0
+    const share = mix[kind] ?? 0
     if (share > 0) demand[kind] = total * share
   }
   return demand
@@ -366,7 +370,7 @@ export const hitRatioOf = (game: Game, node: GameNode, writeShare: number): numb
 
 /** Requests per second a Node could take with the Era's mix, for splitting traffic. */
 const probeCapacity = (inputs: Inputs, node: GameNode): number => {
-  const mix = eraOf(inputs.game).mix
+  const mix = mixOf(inputs.game)
   const probe: Rates =
     node.type === 'server'
       ? Object.fromEntries(REQUEST_KINDS.map((kind) => [kind, mix[kind] ?? 0]))
@@ -476,8 +480,11 @@ const forward = (inputs: Inputs): Pass => {
       }
       case 'cache':
         return connectionsIn.get(node.id) ?? 0
+      // Session mode holds a server connection per client; transaction mode shares a few.
       case 'pooler':
-        return Math.min(POOLER_CONNECTIONS, connectionsIn.get(node.id) ?? 0)
+        return node.mode === 'session'
+          ? (connectionsIn.get(node.id) ?? 0)
+          : Math.min(POOLER_CONNECTIONS, connectionsIn.get(node.id) ?? 0)
       default:
         return 0
     }
@@ -652,22 +659,40 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
         case 'lb':
           return through(ownHop(node, kind), [[downstream(node, kind), 1]])
         case 'pooler':
-          return through(ownHop(node, kind), [[downstream(node, kind), 1]])
+          // Transaction pooling breaks code that keeps session state, until a task removes it.
+          return failSome(
+            through(ownHop(node, kind), [[downstream(node, kind), 1]]),
+            node.mode === 'transaction' && !fixed(game, 'session-state')
+              ? SESSION_STATE_CRASHES
+              : 0,
+            'crash',
+          )
         case 'server': {
           const requestKind = kind as RequestKind
           const served = ownHop(node, kind, FRAMEWORKS[node.framework].value[requestKind] ?? 1)
           // The response crosses the user's downlink: bytes over bandwidth.
-          const own = { ...served, fixed: served.fixed + transferMs(node, requestKind) }
-          if (runsLocalDb(graph, node)) return through(own)
+          const own = {
+            ...served,
+            fixed: served.fixed + transferMs(node, requestKind) * payloadFactor(game, requestKind),
+          }
+          // A bad deploy, or a migration's bugs, make the code itself fail some requests.
+          const crashes =
+            (game.incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0) +
+            (buggy(game, node) ? MIGRATION_BUGS : 0)
+          if (runsLocalDb(graph, node)) return failSome(through(own), crashes, 'crash')
           const calls = callsOf(game, node, requestKind, delegates(graph, node))
-          return through(
-            own,
-            [
-              [downstream(node, 'q-read', hopMs(game)), calls.reads],
-              [downstream(node, 'q-write', hopMs(game)), calls.writes],
-              [downstream(node, 'auth', hopMs(game)), calls.auth],
-            ],
-            requestKind === 'read',
+          return failSome(
+            through(
+              own,
+              [
+                [downstream(node, 'q-read', hopMs(game)), calls.reads],
+                [downstream(node, 'q-write', hopMs(game)), calls.writes],
+                [downstream(node, 'auth', hopMs(game)), calls.auth],
+              ],
+              requestKind === 'read',
+            ),
+            crashes,
+            'crash',
           )
         }
         case 'cache': {
@@ -867,7 +892,8 @@ const ledgerOf = (
     rateTotal += rate
     served += rate * result.success
     satisfied += rate * result.success * apdex
-    revenue += rate * result.success * apdex * KINDS[kind].value * result.value
+    revenue +=
+      rate * result.success * apdex * KINDS[kind].value * result.value * valueFactor(game, kind)
     latencyWeight += rate * result.success * meanOf(result)
     for (const cause of ERROR_CAUSES) errors[cause] += rate * result.fail[cause]
     if (result.success > 0) mixture.push([result, rate * result.success])
@@ -1006,7 +1032,7 @@ const ledgerOf = (
     }
   })
 
-  // Velocity stands in for features: a Stack that ships faster grows the market.
+  // Velocity: how fast the Stack ships, which sets the Team's Dev Hours.
   const servers = game.nodes.filter((node) => node.type === 'server')
   const traffic = servers.reduce((total, node) => total + (nodes[node.id]?.inbound ?? 0), 0)
   const velocity =
@@ -1020,6 +1046,8 @@ const ledgerOf = (
           )
         }, 0)
 
+  const subscriptions = subscriptionsOf(game)
+  const salaries = payrollOf(game)
   const errorTotal = ERROR_CAUSES.reduce((total, cause) => total + errors[cause], 0)
   return {
     nodes,
@@ -1034,10 +1062,12 @@ const ledgerOf = (
     p95: overall ? percentile(overall, 0.95) : 0,
     p99: overall ? percentile(overall, 0.99) : 0,
     apdex,
-    revenue,
+    revenue: revenue + subscriptions,
+    subscriptions,
     insight,
-    burn: game.nodes.reduce((total, node) => total + burnOf(game, node), 0),
-    market: eraOf(game).market * marketFor(velocity),
+    burn: game.nodes.reduce((total, node) => total + burnOf(game, node), 0) + salaries,
+    salaries,
+    market: marketOf(game),
     velocity,
     failing,
     bottleneck: null,

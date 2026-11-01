@@ -118,6 +118,7 @@ const STEPS: ReadonlyArray<readonly [string, string]> = [
 const KEYS: ReadonlyArray<readonly [string, string]> = [
   ['1–4', 'Build group'],
   ['R', 'Research'],
+  ['T', 'Team'],
   ['U', 'Resize selected'],
   ['Z', 'Undo'],
   ['Shift+Z', 'Redo'],

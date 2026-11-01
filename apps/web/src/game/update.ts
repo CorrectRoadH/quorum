@@ -7,8 +7,11 @@ import {
   CACHE_ENGINES,
   COMPONENTS,
   FAMILIES,
+  FEATURES,
   FRAMEWORKS,
   INCIDENTS,
+  MIGRATION_STEPS,
+  POLICIES,
   KINDS,
   LB_POLICIES,
   PM_MODES,
@@ -16,6 +19,7 @@ import {
   RUNTIMES,
   SIZES,
   STEP_SECONDS,
+  TASKS,
 } from '@template/simulation/catalog'
 import { newGame, preseedGame } from '@template/simulation/company'
 import { forceIncident } from '@template/simulation/director'
@@ -35,6 +39,8 @@ import { previewOf } from '@template/simulation/preview'
 import { bottleneckOf, solveFlow } from '@template/simulation/solve'
 import { Game } from '@template/simulation/state'
 import { step } from '@template/simulation/step'
+import { serviceOf } from '@template/simulation/team'
+import * as Work from '@template/simulation/work'
 import {
   AppendLog,
   ClearLog,
@@ -229,6 +235,22 @@ const nodeName = (game: Game, id: string): string => {
   return node ? COMPONENTS[node.type].name : 'A Node'
 }
 
+const percent = (share: number): string => `${Math.round(share * 100)}%`
+
+/** A Stack choice on this Node starts a migration rather than swapping at once. */
+const migrates = (game: Game, nodeId: string): boolean =>
+  !game.sandbox && game.nodes.some((node) => node.id === nodeId && node.type === 'server')
+
+/** What the player hears when a Stack choice started a migration. */
+const migrationNote = (before: Game, after: Game): Note => {
+  const migration = serviceOf(after).migration
+  if (!migration || serviceOf(before).migration === migration) return null
+  return [
+    `Migration queued: ${Math.round(migration.total)} DH. Shift traffic as steps finish.`,
+    'primary',
+  ]
+}
+
 /* ---------- Tradeoff cards ---------- */
 
 /** The action an option stands for. */
@@ -348,11 +370,13 @@ type Note = readonly [string, Tone] | null
 const eventText = (event: StepEvent, game: Game): Note =>
   StepEvent.$match(event, {
     IncidentStarted: ({ incident }): Note =>
-      incident.kind === 'instance' && incident.nodeId
-        ? [`${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`, 'danger']
-        : incident.kind === 'slow-query'
-          ? ['A new query has no index. Every read scans the table.', 'danger']
-          : null,
+      incident.kind === 'bad-deploy'
+        ? null
+        : incident.kind === 'instance' && incident.nodeId
+          ? [`${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`, 'danger']
+          : incident.kind === 'slow-query'
+            ? ['A new query has no index. Every read scans the table.', 'danger']
+            : null,
     IncidentResolved: ({ postmortem }): Note => [
       postmortem.action
         ? `${INCIDENTS[postmortem.kind].name} is over. Action item: ${RESEARCH[postmortem.action].name}. Until then it is twice as likely.`
@@ -376,6 +400,19 @@ const eventText = (event: StepEvent, game: Game): Note =>
       `Five false alarms today: the team ignores “${alertText(rule, game.alertRules[rule])}”. Change its threshold.`,
       'warn',
     ],
+    Hired: (): Note => ['An engineer joined the team.', 'ok'],
+    WorkFinished: ({ item }): Note =>
+      item.kind === 'task' ? [`${Work.itemName(item)} is done.`, 'ok'] : null,
+    Deployed: ({ features, bad }): Note => {
+      const names = features.map((id) => FEATURES[id].name).join(', ')
+      return bad
+        ? [`Deployed ${names} with a bug. App Servers are crashing.`, 'danger']
+        : [`Deployed ${names}.`, 'primary']
+    },
+    MigrationShifted: ({ step }): Note => [
+      `${percent(MIGRATION_STEPS[step - 1] ?? 0)} of App Servers moved to the new Stack.`,
+      'primary',
+    ],
   })
 
 const eventLog = (event: StepEvent): Record<string, unknown> =>
@@ -387,6 +424,10 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
     CreditsExhausted: ({ nodeId }) => ({ node: nodeId }),
     AlertFired: ({ rule }) => ({ rule }),
     AlertIgnored: ({ rule }) => ({ rule }),
+    Hired: ({ engineerId }) => ({ engineer: engineerId }),
+    WorkFinished: ({ item }) => ({ kind: item.kind, ref: item.ref, cost: item.cost }),
+    Deployed: ({ features, bad }) => ({ features, bad }),
+    MigrationShifted: ({ step }) => ({ step }),
   })
 
 /* ---------- the clock ---------- */
@@ -770,6 +811,12 @@ const handle = (model: Model, message: Message): Result =>
             model,
             Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
           )
+        case 't':
+          if (model.sandbox) return { model }
+          return route(
+            model,
+            Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
+          )
         case '?':
         case 'h':
           return route(
@@ -929,10 +976,14 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Runtime ${RUNTIMES[runtime].name}`,
-        Actions.setRuntime(model.game, nodeId, runtime),
+        Work.changeStack(model.game, nodeId, { runtime }),
         {
-          undoable: true,
-          note: () => [`Now running ${RUNTIMES[runtime].name}. It restarts cold.`, 'ok'],
+          undoable: !migrates(model.game, nodeId),
+          note: (game) =>
+            migrationNote(model.game, game) ?? [
+              `Now running ${RUNTIMES[runtime].name}. It restarts cold.`,
+              'ok',
+            ],
         },
       ),
 
@@ -940,9 +991,10 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Framework ${FRAMEWORKS[framework].name}`,
-        Actions.setFramework(model.game, nodeId, framework),
+        Work.changeStack(model.game, nodeId, { framework }),
         {
-          undoable: true,
+          undoable: !migrates(model.game, nodeId),
+          note: (game) => migrationNote(model.game, game),
         },
       ),
 
@@ -958,6 +1010,11 @@ const handle = (model: Model, message: Message): Result =>
 
     PmChosen: ({ nodeId, pm }) =>
       act(model, `pm ${PM_MODES[pm].label}`, Actions.setPm(model.game, nodeId, pm), {
+        undoable: true,
+      }),
+
+    PoolerModeChosen: ({ nodeId, mode }) =>
+      act(model, `${mode} pooling`, Actions.setPoolerMode(model.game, nodeId, mode), {
         undoable: true,
       }),
 
@@ -1047,7 +1104,13 @@ const handle = (model: Model, message: Message): Result =>
     RestartChosen: ({ nodeId }) =>
       act(model, `Restarted ${nodeName(model.game, nodeId)}`, Actions.restart(model.game, nodeId)),
 
-    IndexAdded: ({ nodeId }) => act(model, 'Added an index', Actions.addIndex(model.game, nodeId)),
+    IndexAdded: ({ nodeId }) =>
+      act(model, 'Added an index', Work.addIndex(model.game, nodeId), {
+        note: (game) =>
+          game.backlog[0]?.ref === 'add-index'
+            ? ['Add index is at the top of the backlog.', 'plain']
+            : null,
+      }),
 
     NodeSold: ({ nodeId }) =>
       act(model, `Sold ${nodeName(model.game, nodeId)}`, Actions.sell(model.game, nodeId), {
@@ -1072,6 +1135,53 @@ const handle = (model: Model, message: Message): Result =>
     ResearchBought: ({ id }) =>
       act(model, `Researched ${RESEARCH[id].name}`, Actions.study(model.game, id), {
         note: () => [`Researched ${RESEARCH[id].name}.`, 'primary'],
+      }),
+
+    HireChosen: () =>
+      act(model, 'Hired', Work.hire(model.game), {
+        note: () => ['Offer accepted. They start soon.', 'ok'],
+      }),
+    LayoffChosen: ({ engineerId }) =>
+      act(model, 'Laid off', Work.layoff(model.game, engineerId), {
+        note: () => ['Laid off. The team is shaken for a week.', 'warn'],
+      }),
+    TeamCreated: () => act(model, 'New team', Work.createTeam(model.game)),
+    TeamRemoved: ({ teamId }) => act(model, 'Removed a team', Work.removeTeam(model.game, teamId)),
+    EngineerAssigned: ({ engineerId, teamId }) =>
+      act(model, 'Moved an engineer', Work.assign(model.game, engineerId, teamId)),
+    TeamPolicyChosen: ({ teamId, policy }) =>
+      act(
+        model,
+        `${POLICIES[policy].label} policy`,
+        Work.setTeamPolicy(model.game, teamId, policy),
+      ),
+    FeatureQueued: ({ id }) =>
+      act(model, `Queued ${FEATURES[id].name}`, Work.queueFeature(model.game, id)),
+    TaskQueued: ({ id }) => act(model, `Queued ${TASKS[id].name}`, Work.queueTask(model.game, id)),
+    WorkMoved: ({ id, direction }) =>
+      act(model, 'Reordered the backlog', Work.moveItem(model.game, id, direction)),
+    WorkCancelled: ({ id }) => act(model, 'Cancelled work', Work.cancelItem(model.game, id)),
+    WorkRushed: ({ id }) => act(model, 'Rushed work', Work.rushItem(model.game, id)),
+    AutopilotToggled: () => {
+      const game = Work.setAutopilot(model.game, !model.game.autopilot)
+      return { model: { ...model, game } }
+    },
+    MigrationShifted: () =>
+      act(model, 'Shifted traffic', Work.shiftMigration(model.game), {
+        note: (game) => {
+          const migration = serviceOf(game).migration
+          return migration
+            ? [`${percent(MIGRATION_STEPS[migration.step - 1] ?? 0)} of App Servers moved.`, 'ok']
+            : ['Migration done.', 'ok']
+        },
+      }),
+    MigrationCancelled: () =>
+      act(model, 'Cancelled the migration', Work.cancelMigration(model.game), {
+        note: () => ['Migration cancelled. App Servers are back on the old Stack.', 'plain'],
+      }),
+    RolledBack: () =>
+      act(model, 'Rolled back', Work.rollback(model.game), {
+        note: () => ['Rolled back. The Features ship again with the next deploy.', 'ok'],
       }),
 
     RoundRaised: () =>

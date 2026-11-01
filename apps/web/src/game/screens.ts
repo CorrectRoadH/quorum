@@ -1,10 +1,11 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { dock } from '@/components/lab/dock.ts'
 import { changeBar, goalBar, hud, toolbar } from '@/components/lab/hud.ts'
-import { pager, postmortems } from '@/components/lab/incidents.ts'
+import { badDeploy, pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
 import { devPanel, endPanel, eraPanel, helpPanel, offerPanel } from '@/components/lab/panels.ts'
 import { researchPanel } from '@/components/lab/research.ts'
+import { teamPanel } from '@/components/lab/team.ts'
 import { objectiveBar, passedPanel, sandboxHud } from '@/components/lab/sandbox.ts'
 import { tradeoffCard } from '@/components/lab/tradeoff.ts'
 import { Pause } from 'lucide'
@@ -44,6 +45,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
             ],
             [
               pager(model, h),
+              badDeploy(model, h),
               model.sandbox ? objectiveBar(model, h) : goalBar(nextGoal(model.game, ledger), h),
               changeBar(model, h),
               model.paused
@@ -67,6 +69,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       postmortems(model, h),
       dock(model, h),
       model.panel === 'research' ? researchPanel(model, h) : h.empty,
+      model.panel === 'team' ? teamPanel(model, h) : h.empty,
       model.panel === 'help' ? helpPanel(h) : h.empty,
       model.panel === 'offer' ? offerPanel(model, h) : h.empty,
       model.panel === 'era' ? eraPanel(model, h) : h.empty,

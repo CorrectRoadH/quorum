@@ -26,6 +26,7 @@ export type Route = typeof Route.Type
 export const Panel = Schema.Literals([
   'none',
   'research',
+  'team',
   'help',
   'offer',
   'era',

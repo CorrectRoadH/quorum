@@ -14,7 +14,9 @@ import { SIM_VERSION } from './version.ts'
  */
 
 const GOLDEN_STEPS = 10_000
-const GOLDEN_HASH = '0eddbf86'
+// SIM_VERSION 2 (M4): the founder now builds Features with Dev Hours and each
+// deploy rolls for a bad deploy, so the Pre-seed replay's demand and seed move.
+const GOLDEN_HASH = 'a49590af'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {

@@ -17,10 +17,12 @@ import {
 } from './catalog.ts'
 import { advanceIncident, directIncidents } from './director.ts'
 import { StepEvent, type AlertRule } from './events.ts'
+import { churnFactor, growthFactor } from './features.ts'
 import type { Ledger } from './ledger.ts'
 import { drawerSize, eraOf, has, restarted, vcpuOf, warmAfterRestart } from './lookups.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
 import type { Alarms, FalseAlarms, Game, GameNode, Sample } from './state.ts'
+import { advanceTeam } from './work.ts'
 
 /* ==========================================================================
    Time. `step` advances a Game by some seconds: money moves, credits drain,
@@ -39,15 +41,17 @@ const HISTORY = 600
 /**
  * Users grow along an S-curve while Apdex beats the Era's target, and leave fast
  * when it does not. `pace` multiplies `g`: the live game plays faster than the design.
+ * Shipped Features raise growth and the market, and lower churn.
  */
 export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): number => {
   const era = eraOf(game)
   const target = era.apdexTarget
   const health = Math.max(-1, Math.min(1, (game.apdex - target) / (1 - target)))
-  if (health < 0) return CHURN * game.users * health
+  if (health < 0) return CHURN * churnFactor(game) * game.users * health
   const rate =
     era.growth *
     pace *
+    growthFactor(game) *
     (game.declined ? DECLINED_GROWTH : 1) *
     (has(game, 'funnels') ? FUNNEL_GROWTH : 1)
   return rate * game.users * Math.max(0, 1 - game.users / ledger.market) * health
@@ -217,6 +221,9 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
   const running = advanceIncident(next, ledger, seconds)
   next = running.game
   events.push(...running.events)
+  const team = advanceTeam(next, ledger, seconds, tuning)
+  next = team.game
+  events.push(...team.events)
   const directed = directIncidents(next, ledger, tuning.incidentGap)
   next = directed.game
   events.push(...directed.events)

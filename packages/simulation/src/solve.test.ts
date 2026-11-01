@@ -35,9 +35,10 @@ const tune = (game: Game, id: string, change: Partial<GameNode>): Game => ({
 /** The id of the Node placed last. */
 const last = (game: Game): string => game.nodes.at(-1)?.id ?? ''
 
-/** Pre-seed with a split database, at the given users and research. */
+/** Pre-seed with a split database and Password login shipped, at the given users and research. */
 const preseed = (users: number, researched: Game['researched'] = []): Game => ({
   ...rich(preseedGame()),
+  shipped: ['password-login'],
   users,
   researched: [...preseedGame().researched, ...researched],
 })

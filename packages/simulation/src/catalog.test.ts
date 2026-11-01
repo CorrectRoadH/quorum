@@ -65,9 +65,6 @@ const GDD_IDS: ReadonlyArray<string> = [
   'auth-provider',
 ]
 
-/** Deploys, CI/CD and Dev Hours arrive in M4. */
-const DEFERRED: ReadonlyArray<string> = ['ci', 'code-review', 'testing-culture']
-
 describe('the research catalog', () => {
   test('every cost sits inside its Era’s band', () => {
     for (const entry of researchList) {
@@ -102,9 +99,9 @@ describe('the research catalog', () => {
     }
   })
 
-  test('every Garage and Pre-seed id in the design exists, except the M4 ones', () => {
+  test('every Garage and Pre-seed id in the design exists', () => {
     const missing = GDD_IDS.filter((id) => !(RESEARCH_IDS as ReadonlyArray<string>).includes(id))
-    expect(missing).toEqual(DEFERRED)
+    expect(missing).toEqual([])
     for (const id of RESEARCH_IDS) expect(RESEARCH[id]?.id).toBe(id)
   })
 })
