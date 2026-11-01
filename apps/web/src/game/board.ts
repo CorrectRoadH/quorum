@@ -26,6 +26,7 @@ import {
   Users,
   Wallet,
 } from 'lucide'
+import { play } from './sound.ts'
 import {
   Application,
   Container,
@@ -341,8 +342,18 @@ const cubicBezier =
 const easeOut = cubicBezier(0.23, 1, 0.32, 1)
 const ENTER_S = 0.2
 const EXIT_S = 0.15
+/** A new link draws out of its port, then glows a moment; a cut one fades. */
+const DRAW_IN_S = 0.22
+const GLOW_S = 0.6
+const CUT_S = 0.18
+const RETRACT_S = 0.18
 
 const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/** How far toward its target a followed value moves this frame. A follow keeps its
+ *  speed when the target changes mid-way, so drags and selections never restart. */
+const follow = (seconds: number, rate: number): number =>
+  reducedMotion() ? 1 : 1 - Math.exp(-rate * seconds)
 
 const glyphs = new Map<IconNode, Texture>()
 const GLYPH_PX = 96
@@ -584,6 +595,34 @@ const laneUnder = (from: GameNode, toBottom: number): number =>
 
 const routeOf = (from: GameNode, to: GameNode): Route =>
   route(outPort(from), inPort(to), laneUnder(from, to.y + heightOf(to.type)))
+
+/** The first `t` of a path, by length. */
+const partOf = (path: Route, t: number): Route => {
+  const out: Array<Pt> = []
+  let left = lengthOf(path) * Math.max(0, Math.min(1, t))
+  for (let index = 0; index < path.length; index += 1) {
+    const point = path[index]
+    const previous = path[index - 1]
+    if (!point) continue
+    if (!previous) {
+      out.push(point)
+      continue
+    }
+    const span = gap(previous, point)
+    if (left >= span) {
+      out.push(point)
+      left -= span
+      continue
+    }
+    const k = span > 0 ? left / span : 0
+    out.push({
+      x: previous.x + (point.x - previous.x) * k,
+      y: previous.y + (point.y - previous.y) * k,
+    })
+    break
+  }
+  return out
+}
 
 const traceOf = (graphics: Graphics, path: Route): Graphics => {
   const [first, ...rest] = path
@@ -838,6 +877,10 @@ const MIN_FIT_SCALE_PHONE = 0.7
 
 class NodeView {
   readonly root = new Container()
+  /** A deeper shadow, shown while the card is lifted. */
+  private readonly shadow = new Graphics()
+  /** The selection ring, outside the card's edge. */
+  private readonly ring = new Graphics()
   private readonly frame = new Graphics()
   private readonly bars = new Graphics()
   private readonly ports = new Graphics()
@@ -857,6 +900,20 @@ class NodeView {
   private leaving = -1
 
   private readonly group: BuildGroup
+  private readonly height: number
+  /** Where the card is drawn. It follows its Node, so a move, a drop on the grid
+   *  and an undo glide instead of jumping. */
+  at: Pt | null = null
+  private target: Pt = { x: 0, y: 0 }
+  /** Picked up by a drag: the card rises, grows a little and casts a deeper shadow. */
+  lifted = false
+  private lift = 0
+  /** Pressed: the card sinks a little under the pointer. */
+  held = false
+  private hold = 0
+  private selected = false
+  private selection = 0
+  private accent = 0
 
   constructor(
     readonly type: ComponentId,
@@ -864,14 +921,18 @@ class NodeView {
   ) {
     const layout = layoutOf(type)
     this.group = COMPONENTS[type].group
+    this.height = heightOf(type)
     // Scale around the card's center, so it grows in place.
-    this.root.pivot.set(CARD_W / 2, heightOf(type) / 2)
+    this.root.pivot.set(CARD_W / 2, this.height / 2)
     if (enter) {
       this.age = 0
       this.root.alpha = 0
       if (!reducedMotion()) this.root.scale.set(0.96)
     }
+    this.shadow.alpha = 0
     this.root.addChild(
+      this.shadow,
+      this.ring,
       this.frame,
       this.bars,
       this.ports,
@@ -911,23 +972,62 @@ class NodeView {
     this.leaving = 0
   }
 
-  /** Entrance 200ms and exit 150ms on --ease-out, from 0.96 scale. False once the exit ends. */
+  /** Entrance 200ms and exit 150ms on --ease-out, from 0.96 scale; the follow,
+   *  lift, press and selection ring on top. False once the exit ends. */
   tick(seconds: number): boolean {
     const still = reducedMotion()
+    let scale = 1
     if (this.leaving >= 0) {
       this.leaving += seconds
       const t = easeOut(Math.min(1, this.leaving / EXIT_S))
       this.root.alpha = 1 - t
-      if (!still) this.root.scale.set(1 - 0.04 * t)
-      return this.leaving < EXIT_S
-    }
-    if (this.age < ENTER_S) {
+      scale = 1 - 0.04 * t
+    } else if (this.age < ENTER_S) {
       this.age += seconds
       const t = easeOut(Math.min(1, this.age / ENTER_S))
       this.root.alpha = t
-      this.root.scale.set(still ? 1 : 0.96 + 0.04 * t)
+      scale = 0.96 + 0.04 * t
     }
-    return true
+    // A held card stays under the pointer; a released one eases into its grid cell.
+    const at = this.at ?? this.target
+    const k = follow(seconds, this.lifted ? 38 : 16)
+    const x = at.x + (this.target.x - at.x) * k
+    const y = at.y + (this.target.y - at.y) * k
+    this.at = {
+      x: Math.abs(this.target.x - x) < 0.1 ? this.target.x : x,
+      y: Math.abs(this.target.y - y) < 0.1 ? this.target.y : y,
+    }
+    this.root.position.set(this.at.x + CARD_W / 2, this.at.y + this.height / 2)
+    this.lift += ((this.lifted ? 1 : 0) - this.lift) * follow(seconds, 20)
+    this.hold += ((this.held ? 1 : 0) - this.hold) * follow(seconds, 32)
+    this.shadow.alpha = this.lift
+    if (!still) scale *= 1 + 0.03 * this.lift - 0.02 * this.hold
+    this.root.scale.set(still ? 1 : scale)
+    // Selection: the ring closes in from a little way out and comes up to full strength.
+    const selection =
+      this.selection + ((this.selected ? 1 : 0) - this.selection) * follow(seconds, 24)
+    if (Math.abs(selection - this.selection) > 0.001) {
+      this.selection =
+        Math.abs(selection - (this.selected ? 1 : 0)) < 0.01 ? (this.selected ? 1 : 0) : selection
+      this.drawRing()
+    }
+    return this.leaving < EXIT_S
+  }
+
+  private drawRing(): void {
+    const e = this.selection
+    this.ring.clear()
+    this.ring.alpha = e
+    if (e <= 0) return
+    const pad = 2.5 + 5 * (1 - e)
+    silhouette(this.ring, this.group, 0, 0, CARD_W, this.height, pad + 2).fill({
+      color: this.accent,
+      alpha: 0.07,
+    })
+    silhouette(this.ring, this.group, 0, 0, CARD_W, this.height, pad).stroke({
+      color: this.accent,
+      width: 2,
+    })
   }
 
   update(
@@ -944,7 +1044,13 @@ class NodeView {
     const layout = layoutOf(node.type)
     const rows = rowsOf(game, node, ledger)
     const footer = footerOf(game, node)
-    this.root.position.set(node.x + CARD_W / 2, node.y + heightOf(node.type) / 2)
+    this.target = { x: node.x, y: node.y }
+    this.at ??= this.target
+    if (this.selected !== selected || this.accent !== colors.accent) {
+      this.selected = selected
+      this.accent = colors.accent
+      this.drawRing()
+    }
     const digest = JSON.stringify([
       pressed,
       rows,
@@ -977,11 +1083,8 @@ class NodeView {
           : own.status === 'ok'
             ? colors.ok
             : colors.border
-    const edge = selected
-      ? colors.accent
-      : own.status === 'danger' || own.status === 'down'
-        ? colors.danger
-        : colors.border
+    // Selection is the ring outside the card (drawRing), so the edge keeps its status.
+    const edge = own.status === 'danger' || own.status === 'down' ? colors.danger : colors.border
 
     const group = this.group
     const hue = colors.groups[group]
@@ -1077,9 +1180,19 @@ class NodeView {
     }
     silhouette(this.frame, group, 0, 0, CARD_W, height).stroke({
       color: edge,
-      width: selected ? 2 : 1,
+      width: 1,
       alignment: 1,
-      alpha: selected ? 1 : 0.8,
+      alpha: 0.8,
+    })
+    // The lifted shadow: drawn once, faded in by the lift.
+    this.shadow.clear()
+    silhouette(this.shadow, group, 6, 18, CARD_W - 12, height - 6, 10).fill({
+      color: colors.ink,
+      alpha: 0.05,
+    })
+    silhouette(this.shadow, group, 2, 9, CARD_W - 4, height - 2, 3).fill({
+      color: colors.ink,
+      alpha: 0.08,
     })
 
     paint(this.mark, COMPONENT_ICONS[node.type], 0xffffff)
@@ -1192,7 +1305,21 @@ class BoardController {
   private coarse = false
   /** Local positions while a node is dragged, ahead of the Model. */
   private dragged: Readonly<{ id: string; x: number; y: number }> | null = null
+  private droppedAt = 0
   private ghostType: ComponentId | null = null
+  /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
+  private wireEnd: Pt | null = null
+  /** The Node a pulled wire is snapped to, and how far its highlight has come in. */
+  private snapTo: string | null = null
+  private snapGlow = 0
+  /** A wire let go over nothing, drawing back into its port. */
+  private retract: { path: Route; t: number } | null = null
+  /** Links that just arrived, by key, with their age in seconds. */
+  private readonly fresh = new Map<string, number>()
+  /** The link the last wire drag asked for: it is already drawn, so it does not draw in. */
+  private wired: string | null = null
+  /** Links that just left, fading where they were. */
+  private cuts: Array<{ path: Route; t: number }> = []
   private readonly abort = new AbortController()
   private readonly resize: ResizeObserver
   private phase = 0
@@ -1248,11 +1375,41 @@ class BoardController {
   }
 
   draw(state: BoardState): void {
+    if (this.started && this.seeded) this.diffLinks(state)
     this.state = state
+    const dragged = this.dragged
+    if (dragged && this.gesture?.kind !== 'node') {
+      const node = state.game.nodes.find((entry) => entry.id === dragged.id)
+      // If the move was refused, the card goes back once the drop is old news.
+      const stale = performance.now() - this.droppedAt > 250
+      if (!node || (node.x === dragged.x && node.y === dragged.y) || stale) this.dragged = null
+    }
     if (!this.started) return
     if (!this.fitted) this.fit()
     this.syncCards()
     this.syncGhost()
+  }
+
+  /** New links draw in from their port; removed ones fade where they were. */
+  private diffLinks(next: BoardState): void {
+    const keyOf = (link: Readonly<{ from: string; to: string }>) => `${link.from}>${link.to}`
+    const before = this.state?.game.links ?? []
+    const was = new Set(before.map(keyOf))
+    const now = new Set(next.game.links.map(keyOf))
+    for (const link of next.game.links) {
+      const key = keyOf(link)
+      if (was.has(key)) continue
+      // A wire the player just drew is already on screen: it only glows.
+      this.fresh.set(key, key === this.wired ? DRAW_IN_S : 0)
+    }
+    this.wired = null
+    const shown = this.shown()
+    for (const link of before) {
+      if (now.has(keyOf(link))) continue
+      const from = shown.get(link.from)
+      const to = shown.get(link.to)
+      if (from && to) this.cuts.push({ path: routeOf(from, to), t: 0 })
+    }
   }
 
   destroy(): void {
@@ -1331,6 +1488,16 @@ class BoardController {
           node.id === dragged.id ? { ...node, x: dragged.x, y: dragged.y } : node,
         )
       : nodes
+  }
+
+  /** The Nodes where their cards are drawn, so wires stay attached while cards glide. */
+  private shown(): Map<string, GameNode> {
+    return new Map(
+      this.nodes().map((node) => {
+        const at = this.views.get(node.id)?.at
+        return [node.id, at ? { ...node, x: at.x, y: at.y } : node]
+      }),
+    )
   }
 
   private nodeAt(point: Pt): GameNode | null {
@@ -1414,6 +1581,7 @@ class BoardController {
           canvas.setPointerCapture(event.pointerId)
           if (this.touches.size === 2) {
             // A second finger turns the gesture into a pinch.
+            this.letGo()
             this.gesture = null
             this.dragged = null
             if (this.pressed) {
@@ -1440,7 +1608,12 @@ class BoardController {
         }
         const port = this.outPortAt(point)
         if (port) {
+          this.hoverLink = null
           this.gesture = { kind: 'link', from: port.id, at: point }
+          this.wireEnd = outPort(this.shown().get(port.id) ?? port)
+          this.snapTo = null
+          this.snapGlow = 0
+          play('pull', 1, true)
           return
         }
         const node = this.nodeAt(point)
@@ -1448,6 +1621,9 @@ class BoardController {
           if (inFooter(node, point)) {
             this.pressed = node.id
             this.syncCards()
+          } else {
+            const view = this.views.get(node.id)
+            if (view) view.held = true
           }
           this.gesture = {
             kind: 'node',
@@ -1508,18 +1684,36 @@ class BoardController {
             Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < 4
           )
             return
+          const view = this.views.get(gesture.id)
+          if (!gesture.moved && view) {
+            // Picked up: it rises above the other cards.
+            view.held = false
+            view.lifted = true
+            this.cards.addChild(view.root)
+            play('lift', 1, true)
+          }
           gesture.moved = true
+          const last = this.dragged
           this.dragged = {
             id: gesture.id,
             x: Math.round((point.x - gesture.dx) / 8) * 8,
             y: Math.round((point.y - gesture.dy) / 8) * 8,
           }
+          // Each grid line it crosses is a faint detent.
+          if (last && (last.x !== this.dragged.x || last.y !== this.dragged.y)) play('detent')
           this.syncCards()
           canvas.style.cursor = 'grabbing'
           return
         }
         if (gesture?.kind === 'link') {
           gesture.at = point
+          const target = this.nodeAt(point)
+          const next = target && target.id !== gesture.from ? target.id : null
+          if (next !== this.snapTo) {
+            if (next) play('snap')
+            else play('detent', 0.7)
+            this.snapTo = next
+          }
           canvas.style.cursor = 'crosshair'
           return
         }
@@ -1527,7 +1721,8 @@ class BoardController {
           canvas.style.cursor = 'copy'
           return
         }
-        this.hoverLink = this.nodeAt(point) ? null : this.linkAt(point)
+        // A port wins over the link leaving it: pulling a wire is not a cut.
+        this.hoverLink = this.nodeAt(point) || this.outPortAt(point) ? null : this.linkAt(point)
         canvas.style.cursor = this.outPortAt(point)
           ? 'crosshair'
           : this.nodeAt(point)
@@ -1551,6 +1746,7 @@ class BoardController {
       }
       const gesture = this.gesture
       this.gesture = null
+      this.letGo()
       if (this.pressed) {
         this.pressed = null
         this.syncCards()
@@ -1558,6 +1754,7 @@ class BoardController {
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
       canvas.style.cursor = 'grab'
       if (!gesture || cancelled) {
+        if (gesture?.kind === 'link') this.springBack(gesture.from)
         this.dragged = null
         return
       }
@@ -1568,15 +1765,25 @@ class BoardController {
       }
       if (gesture.kind === 'node') {
         const node = this.nodes().find((entry) => entry.id === gesture.id)
-        if (gesture.moved && this.dragged)
+        // A dropped card keeps its place until the Model has it (see draw), so it
+        // does not glide back toward where it was for a frame.
+        if (gesture.moved && this.dragged) {
+          this.droppedAt = performance.now()
           this.events.onNodeMove(gesture.id, this.dragged.x, this.dragged.y)
-        else if (node && inFooter(node, point)) this.events.onFooter(gesture.id)
-        else this.events.onNodeTap(gesture.id)
-        this.dragged = null
+        } else {
+          this.dragged = null
+          if (node && inFooter(node, point)) this.events.onFooter(gesture.id)
+          else this.events.onNodeTap(gesture.id)
+        }
       }
       if (gesture.kind === 'link') {
         const target = this.nodeAt(point)
-        if (target && target.id !== gesture.from) this.events.onLink(gesture.from, target.id)
+        if (target && target.id !== gesture.from) {
+          this.wired = `${gesture.from}>${target.id}`
+          this.wireEnd = null
+          this.snapTo = null
+          this.events.onLink(gesture.from, target.id)
+        } else this.springBack(gesture.from)
       }
     }
     canvas.addEventListener('pointerup', (event) => finish(event, false), { signal })
@@ -1600,6 +1807,26 @@ class BoardController {
       },
       { signal, passive: false },
     )
+  }
+
+  /** Puts down whatever card is held or lifted. */
+  private letGo(): void {
+    for (const view of this.views.values()) {
+      view.held = false
+      view.lifted = false
+    }
+  }
+
+  /** A wire let go over nothing draws back into its port. */
+  private springBack(fromId: string): void {
+    const from = this.shown().get(fromId)
+    const end = this.wireEnd
+    this.wireEnd = null
+    this.snapTo = null
+    if (!from || !end) return
+    const lane = laneUnder(from, end.y)
+    this.retract = { path: route(outPort(from), end, lane), t: 0 }
+    play('release', 1, true)
   }
 
   /* ---------- drawing ---------- */
@@ -1674,7 +1901,10 @@ class BoardController {
       view.root.destroy({ children: true })
       return false
     })
-    const byId = new Map(this.nodes().map((node) => [node.id, node]))
+    const byId = this.shown()
+    for (const [key, age] of this.fresh)
+      if (age >= GLOW_S) this.fresh.delete(key)
+      else this.fresh.set(key, age + seconds)
     const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 
     this.wires.clear()
@@ -1684,7 +1914,11 @@ class BoardController {
       const from = byId.get(link.from)
       const to = byId.get(link.to)
       if (!from || !to) continue
-      const path = routeOf(from, to)
+      const age = this.fresh.get(`${link.from}>${link.to}`)
+      const whole = routeOf(from, to)
+      // A new link draws out of its port before anything flows along it.
+      const drawn = age === undefined ? 1 : easeOut(Math.min(1, age / DRAW_IN_S))
+      const path = drawn < 1 ? partOf(whole, drawn) : whole
       const flow = rates.get(`${link.from}>${link.to}`)
       const tap = COMPONENTS[to.type].tap
       const hovered = this.hoverLink?.from === link.from && this.hoverLink.to === link.to
@@ -1717,6 +1951,21 @@ class BoardController {
           .moveTo(mid.x + 3.5, mid.y - 3.5)
           .lineTo(mid.x - 3.5, mid.y + 3.5)
         this.overlay.stroke({ color: colors.card, width: 2 })
+      }
+      if (age !== undefined) {
+        const glow = 1 - easeOut(Math.min(1, age / GLOW_S))
+        traceOf(this.overlay, path).stroke({
+          color: colors.accent,
+          width: 2 + 6 * glow,
+          alpha: 0.35 * glow,
+          cap: 'round',
+          join: 'round',
+        })
+        if (drawn < 1) {
+          const tip = path[path.length - 1]
+          if (tip) this.overlay.circle(tip.x, tip.y, 4).fill(colors.accent)
+          continue
+        }
       }
       if (!flow || !busy) continue
       const length = lengthOf(path)
@@ -1759,31 +2008,68 @@ class BoardController {
       this.bottleneckTag.visible = false
     }
 
+    // Cut links fade where they were, in the colour that warned before the cut.
+    this.cuts = this.cuts.filter((cut) => {
+      cut.t += seconds
+      const fade = 1 - easeOut(Math.min(1, cut.t / CUT_S))
+      traceOf(this.overlay, cut.path).stroke({
+        color: colors.danger,
+        width: 2.5,
+        alpha: 0.9 * fade,
+        cap: 'round',
+        join: 'round',
+      })
+      return cut.t < CUT_S
+    })
+
+    // A wire let go over nothing draws back into its port.
+    const retract = this.retract
+    if (retract) {
+      retract.t += seconds
+      const left = 1 - easeOut(Math.min(1, retract.t / RETRACT_S))
+      const path = partOf(retract.path, left)
+      traceOf(this.overlay, path).stroke({
+        color: colors.accent,
+        width: 2.5,
+        cap: 'round',
+        join: 'round',
+      })
+      const tip = path[path.length - 1]
+      if (tip) this.overlay.circle(tip.x, tip.y, 5 * Math.max(0.4, left)).fill(colors.accent)
+      if (retract.t >= RETRACT_S) this.retract = null
+    }
+
     const gesture = this.gesture
+    const snapped = gesture?.kind === 'link' && this.snapTo ? byId.get(this.snapTo) : undefined
+    this.snapGlow += ((snapped ? 1 : 0) - this.snapGlow) * follow(seconds, 26)
     if (gesture?.kind === 'link') {
       const from = byId.get(gesture.from)
       if (from) {
-        const target = this.nodeAt(gesture.at)
-        const snapped = target && target.id !== from.id
-        const end = snapped ? inPort(target) : gesture.at
-        const lane = laneUnder(from, snapped ? target.y + heightOf(target.type) : gesture.at.y)
-        traceOf(this.overlay, route(outPort(from), end, lane)).stroke({
+        // Free, the end rides the pointer; near a port it is pulled onto it.
+        const aim = snapped ? inPort(snapped) : gesture.at
+        const end = this.wireEnd ?? aim
+        const k = follow(seconds, snapped ? 30 : 60)
+        this.wireEnd = { x: end.x + (aim.x - end.x) * k, y: end.y + (aim.y - end.y) * k }
+        const lane = laneUnder(from, snapped ? snapped.y + heightOf(snapped.type) : this.wireEnd.y)
+        traceOf(this.overlay, route(outPort(from), this.wireEnd, lane)).stroke({
           color: colors.accent,
           width: 2.5,
           cap: 'round',
           join: 'round',
         })
-        this.overlay.circle(end.x, end.y, 5).fill(colors.accent)
-        if (target && target.id !== from.id) {
+        this.overlay
+          .circle(this.wireEnd.x, this.wireEnd.y, 5 + 1.5 * this.snapGlow)
+          .fill(colors.accent)
+        if (snapped) {
           silhouette(
             this.overlay,
-            COMPONENTS[target.type].group,
-            target.x,
-            target.y,
+            COMPONENTS[snapped.type].group,
+            snapped.x,
+            snapped.y,
             CARD_W,
-            heightOf(target.type),
-            3,
-          ).stroke({ color: colors.accent, width: 2 })
+            heightOf(snapped.type),
+            3 + 5 * (1 - this.snapGlow),
+          ).stroke({ color: colors.accent, width: 2, alpha: this.snapGlow })
         }
       }
     }

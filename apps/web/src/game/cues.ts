@@ -48,6 +48,10 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
       return next.nodes.length > game.nodes.length ? gesture('place') : null
     case 'NodeTapped':
       return after.selected !== before.selected ? gesture('tick') : null
+    case 'EmptyTapped':
+      return after.selected !== before.selected ? gesture('tick', 0.8) : null
+    case 'NodeMoved':
+      return gesture('drop')
     case 'LinkRequested':
       return next.links.length > game.links.length ? gesture('connect') : null
     case 'LinkCut':

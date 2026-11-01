@@ -55,6 +55,24 @@ const SOUNDS = {
   ],
 
   /* ---- the board ---- */
+  /** A card lifts off the board under the pointer. */
+  lift: [[0, [0.13, 0, 520, 0.004, 0.01, 0.045, 0, 1, 7]]],
+  /** A dragged card crosses a grid line: a detent, barely there. */
+  detent: [[0, [0.045, 0.1, 2300, 0, 0.002, 0.008, 1, 2]]],
+  /** A card settles back onto the board. */
+  drop: [
+    [0, [0.26, 0.05, 190, 0, 0.012, 0.07, 0, 1, -4]],
+    [0, [0.05, 0, 1700, 0, 0.002, 0.012, 4, 1]],
+  ],
+  /** A wire is pulled out of a port. */
+  pull: [[0, [0.11, 0, 880, 0, 0.006, 0.035, 0, 1, 10]]],
+  /** A wire's end finds a port: a magnetic double click. */
+  snap: [
+    [0, [0.13, 0, 1900, 0, 0.002, 0.014, 1, 2]],
+    [14, [0.1, 0, 1450, 0, 0.002, 0.016, 1, 2]],
+  ],
+  /** A wire let go over nothing springs back into its port. */
+  release: [[0, [0.11, 0, 760, 0.004, 0.02, 0.07, 0, 1, -18]]],
   /** A Node lands: a soft, low thunk with a little grit. */
   place: [
     [0, [0.55, 0.05, 150, 0, 0.02, 0.13, 0, 1, -5, 0, 0, 0, 0, 0.15]],
