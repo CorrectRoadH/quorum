@@ -101,7 +101,7 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.div(
     [
       h.Class(
-        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-stretch gap-1 p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0`,
+        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-stretch p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0`,
       ),
     ],
     [
