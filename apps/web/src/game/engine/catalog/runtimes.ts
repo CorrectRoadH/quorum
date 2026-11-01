@@ -9,16 +9,15 @@ export type LanguageId = (typeof LANGUAGE_IDS)[number]
 export type LanguageDef = Readonly<{
   id: LanguageId
   name: string
-  mark: string
   /** Velocity: how fast this language ships features. */
   velocity: number
 }>
 
 export const LANGUAGES: Record<LanguageId, LanguageDef> = {
-  php: { id: 'php', name: 'PHP', mark: 'php', velocity: 1.2 },
-  ruby: { id: 'ruby', name: 'Ruby', mark: 'rb', velocity: 1.1 },
-  node: { id: 'node', name: 'Node.js', mark: 'js', velocity: 1.15 },
-  python: { id: 'python', name: 'Python', mark: 'py', velocity: 1.15 },
+  php: { id: 'php', name: 'PHP', velocity: 1.2 },
+  ruby: { id: 'ruby', name: 'Ruby', velocity: 1.1 },
+  node: { id: 'node', name: 'Node.js', velocity: 1.15 },
+  python: { id: 'python', name: 'Python', velocity: 1.15 },
 }
 
 export const RUNTIME_IDS = [

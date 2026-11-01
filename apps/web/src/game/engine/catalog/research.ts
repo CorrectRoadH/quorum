@@ -52,8 +52,6 @@ export type ResearchDef = Readonly<{
   era: number
   requires: ReadonlyArray<ResearchId>
   blurb: string
-  /** What it unlocks, for the card's mark: a Component code or a glyph. */
-  mark: string
 }>
 
 const research = (entry: ResearchDef): ResearchDef => entry
@@ -67,7 +65,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'Payments collect themselves.',
-    mark: 'pay',
   }),
   research({
     id: 'dns-rr',
@@ -77,7 +74,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'Unlocks DNS: spread Users over up to 8 hosts.',
-    mark: 'dns',
   }),
   research({
     id: 'load-balancing',
@@ -87,7 +83,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'Unlocks the Load Balancer: split by capacity, skip dead hosts.',
-    mark: 'lb',
   }),
   research({
     id: 'health-checks',
@@ -97,7 +92,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['dns-rr'],
     blurb: 'DNS stops sending Users to a dead host.',
-    mark: 'hc',
   }),
   research({
     id: 'auth-provider',
@@ -107,7 +101,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: [],
     blurb: 'Unlocks the Auth Provider. Logins stop costing your CPU.',
-    mark: 'idp',
   }),
   research({
     id: 'caching',
@@ -117,7 +110,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: [],
     blurb: 'Unlocks Redis. Most read queries never reach the database.',
-    mark: 'kv',
   }),
   research({
     id: 'pooling',
@@ -127,7 +119,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: [],
     blurb: 'Unlocks PgBouncer. App connections share a few database connections.',
-    mark: 'pool',
   }),
   research({
     id: 'replication',
@@ -137,7 +128,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: [],
     blurb: 'Unlocks the Read Replica.',
-    mark: 'rep',
   }),
   research({
     id: 'eager-loading',
@@ -147,7 +137,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: [],
     blurb: 'Fixes N+1 queries: ORM frameworks send 1 read query, not 3.',
-    mark: 'n+1',
   }),
   research({
     id: 'query-analysis',
@@ -157,7 +146,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'EXPLAIN finds queries with no index. Add the index from the Database card.',
-    mark: 'idx',
   }),
   research({
     id: 'logs',
@@ -167,7 +155,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'Errors split by cause: stranded, dropped, refused, down, stale.',
-    mark: 'log',
   }),
   research({
     id: 'metrics',
@@ -177,7 +164,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'History graphs for every Node.',
-    mark: 'mx',
   }),
   research({
     id: 'percentiles',
@@ -187,7 +173,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['metrics'],
     blurb: 'p50, p95 and p99 next to the mean. See how much the mean hides.',
-    mark: 'p99',
   }),
   research({
     id: 'alerting',
@@ -197,7 +182,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['metrics'],
     blurb: 'A pager banner when errors, p99 or saturation cross a threshold.',
-    mark: '!',
   }),
   research({
     id: 'funnels',
@@ -207,7 +191,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['metrics'],
     blurb: 'See where sign-ups drop off and fix it: user growth +10%.',
-    mark: 'fnl',
   }),
   research({
     id: 'php-fpm',
@@ -217,7 +200,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: 'A worker pool instead of Apache processes. You set the pool size.',
-    mark: 'fpm',
   }),
   research({
     id: 'opcache',
@@ -227,7 +209,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: ['php-fpm'],
     blurb: 'PHP stops compiling scripts on every request: 2.5× CPU speed.',
-    mark: 'op',
   }),
   research({
     id: 'lang-ruby',
@@ -237,7 +218,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: RUNTIMES.puma.blurb,
-    mark: 'rb',
   }),
   research({
     id: 'lang-node',
@@ -247,7 +227,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: RUNTIMES.node.blurb,
-    mark: 'js',
   }),
   research({
     id: 'lang-python',
@@ -257,7 +236,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: [],
     blurb: RUNTIMES.gunicorn.blurb,
-    mark: 'py',
   }),
   research({
     id: 'node-cluster',
@@ -267,7 +245,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['lang-node'],
     blurb: RUNTIMES.node_cluster.blurb,
-    mark: 'pm2',
   }),
   research({
     id: 'libuv-pool',
@@ -277,7 +254,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['lang-node'],
     blurb: 'Password hashing moves off the event loop, so logins stop stalling other requests.',
-    mark: 'uv',
   }),
   research({
     id: 'fw-laravel',
@@ -287,7 +263,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: [],
     blurb: FRAMEWORKS.laravel.blurb,
-    mark: 'php',
   }),
   research({
     id: 'fw-rails',
@@ -297,7 +272,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: ['lang-ruby'],
     blurb: FRAMEWORKS.rails.blurb,
-    mark: 'rb',
   }),
   research({
     id: 'fw-express',
@@ -307,7 +281,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 0,
     requires: ['lang-node'],
     blurb: FRAMEWORKS.express.blurb,
-    mark: 'js',
   }),
   research({
     id: 'fw-django',
@@ -317,7 +290,6 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     era: 1,
     requires: ['lang-python'],
     blurb: FRAMEWORKS.django.blurb,
-    mark: 'py',
   }),
 ]
 

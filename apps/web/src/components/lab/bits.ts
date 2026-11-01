@@ -8,7 +8,7 @@ import { icon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 /* ==========================================================================
-   Small pieces every lab surface shares: the surfaces, the language marks,
+   Small pieces every lab surface shares: the surfaces, group badges, brand marks,
    labels, figures, and the toast. Depth comes from the four elevations in
    styles.css: well, raised, card, float.
    ========================================================================== */
@@ -47,20 +47,6 @@ export const toneText = (tone: Tone): string =>
         ? 'text-ok'
         : 'text-foreground'
 
-/** A monogram for a Component, language, framework or technique, sunk into its surface. */
-export const mark = (text: string, className: string, h: HtmlBuilder<Message>): Html =>
-  h.span(
-    [
-      h.Class(
-        cn(
-          'grid shrink-0 place-items-center rounded-md bg-well font-mono font-semibold text-foreground shadow-well',
-          className,
-        ),
-      ),
-    ],
-    [text],
-  )
-
 export const GROUP_TEXT: Record<BuildGroup, string> = {
   edge: 'text-group-edge',
   compute: 'text-group-compute',
@@ -71,12 +57,20 @@ export const GROUP_TEXT: Record<BuildGroup, string> = {
 /** Glyph scale inside each badge shape; a diamond has the least room. */
 const GLYPH_SCALE: Record<GroupShape, number> = {
   hexagon: 0.5,
-  chip: 0.56,
+  chip: 0.48,
   disc: 0.52,
   diamond: 0.42,
 }
 
-const shapeOf = (shape: GroupShape, h: HtmlBuilder<Message>): Html => {
+/** A chip's pins: three short legs on each side of its body. */
+const CHIP_PINS = [7.5, 12, 16.5].flatMap((at) => [
+  [0.5, at - 0.9, 3.5, 1.8],
+  [20, at - 0.9, 3.5, 1.8],
+  [at - 0.9, 0.5, 1.8, 3.5],
+  [at - 0.9, 20, 1.8, 3.5],
+])
+
+const shapeOf = (shape: GroupShape, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   // A stroke in the fill colour with round joins softens the polygon corners.
   const soft = [
     h.Fill('currentColor'),
@@ -86,32 +80,62 @@ const shapeOf = (shape: GroupShape, h: HtmlBuilder<Message>): Html => {
   ]
   switch (shape) {
     case 'hexagon':
-      return h.polygon(
-        [h.Points('12,1.5 21.1,6.75 21.1,17.25 12,22.5 2.9,17.25 2.9,6.75'), ...soft],
-        [],
-      )
+      return [
+        h.polygon(
+          [h.Points('12,1.5 21.1,6.75 21.1,17.25 12,22.5 2.9,17.25 2.9,6.75'), ...soft],
+          [],
+        ),
+      ]
     case 'diamond':
-      return h.polygon([h.Points('12,1.5 22.5,12 12,22.5 1.5,12'), ...soft], [])
+      return [h.polygon([h.Points('12,1.5 22.5,12 12,22.5 1.5,12'), ...soft], [])]
     case 'chip':
-      return h.rect(
-        [h.X('1.5'), h.Y('1.5'), h.Width('21'), h.Height('21'), h.Rx('6'), h.Fill('currentColor')],
-        [],
-      )
+      return [
+        ...CHIP_PINS.map(([x = 0, y = 0, w = 0, ht = 0]) =>
+          h.rect(
+            [
+              h.X(String(x)),
+              h.Y(String(y)),
+              h.Width(String(w)),
+              h.Height(String(ht)),
+              h.Rx('0.6'),
+              h.Fill('currentColor'),
+              h.Opacity('0.75'),
+            ],
+            [],
+          ),
+        ),
+        h.rect(
+          [
+            h.X('3.5'),
+            h.Y('3.5'),
+            h.Width('17'),
+            h.Height('17'),
+            h.Rx('3'),
+            h.Fill('currentColor'),
+          ],
+          [],
+        ),
+      ]
     case 'disc':
-      return h.circle([h.Cx('12'), h.Cy('12'), h.R('11'), h.Fill('currentColor')], [])
+      return [h.circle([h.Cx('12'), h.Cy('12'), h.R('11'), h.Fill('currentColor')], [])]
   }
 }
 
+/** What sits on a badge: a lucide glyph, or a filled brand path. */
+export type BadgeContent = IconNode | Readonly<{ path: string }>
+
 /**
- * A Component glyph on its build group's badge: the group's colour and shape,
- * with the glyph knocked out in white. Grey when `muted`, for locked entries.
+ * A glyph on a shaped badge, knocked out in white. The shape says what part
+ * of the system it belongs to: Edge hexagons, Compute chips, Data discs, Ops
+ * diamonds. `color` overrides the group's colour; grey when `muted`.
  */
 export const groupBadge = (
   group: BuildGroup,
-  glyph: IconNode,
+  content: BadgeContent,
   className: string,
   h: HtmlBuilder<Message>,
   muted = false,
+  color?: string,
 ): Html => {
   const shape = GROUP_SHAPES[group]
   const scale = GLYPH_SCALE[shape]
@@ -124,17 +148,20 @@ export const groupBadge = (
       h.Class(
         cn(
           'shrink-0 overflow-visible drop-shadow-[0_1px_1px_oklch(0_0_0/0.18)]',
-          muted ? 'text-muted-foreground/35' : GROUP_TEXT[group],
+          muted ? 'text-muted-foreground/35' : color ? '' : GROUP_TEXT[group],
           className,
         ),
       ),
+      ...(color && !muted ? [h.Style({ color })] : []),
     ],
     [
-      shapeOf(shape, h),
+      ...shapeOf(shape, h),
       h.g(
         [h.Transform(`translate(${offset} ${offset}) scale(${scale})`)],
         // A nested 24-unit svg; its currentColor is white.
-        [icon(h, glyph, 'size-6 text-white')],
+        'path' in content
+          ? [h.path([h.D(content.path), h.Fill('white')], [])]
+          : [icon(h, content, 'size-6 text-white')],
       ),
     ],
   )

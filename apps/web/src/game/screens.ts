@@ -3,14 +3,8 @@ import { dock } from '@/components/lab/dock.ts'
 import { changeBar, goalBar, hud, toolbar } from '@/components/lab/hud.ts'
 import { pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
-import {
-  devPanel,
-  endPanel,
-  eraPanel,
-  helpPanel,
-  offerPanel,
-  researchPanel,
-} from '@/components/lab/panels.ts'
+import { devPanel, endPanel, eraPanel, helpPanel, offerPanel } from '@/components/lab/panels.ts'
+import { researchPanel } from '@/components/lab/research.ts'
 import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'

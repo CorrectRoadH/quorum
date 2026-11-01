@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 import { BUILD_GROUPS, type BuildGroup } from './engine/catalog.ts'
-import { ComponentId, Game } from './engine/state.ts'
+import { ComponentId, Game, ResearchId } from './engine/state.ts'
 
 /* ==========================================================================
    Quorum — what the UI holds. The Game is the saved company; everything else
@@ -76,6 +76,8 @@ export const Model = Schema.Struct({
   selected: Schema.NullOr(Schema.String),
   placing: Schema.NullOr(ComponentId),
   panel: Panel,
+  /** The research item the Research panel shows in its side pane; null picks one. */
+  researchFocus: Schema.NullOr(ResearchId),
   /** The open build tray, or null when the dock shows only its group icons. */
   buildGroup: Schema.NullOr(BuildGroupKey),
   speed: Schema.Finite,

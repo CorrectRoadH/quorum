@@ -292,8 +292,19 @@ const badgeShape = (g: Graphics, group: BuildGroup, x: number, y: number, r: num
       return g.roundPoly(x, y, r * 1.04, 6, r * 0.22)
     case 'diamond':
       return g.roundPoly(x, y, r * 1.12, 4, r * 0.24)
-    case 'chip':
-      return g.roundRect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8, r * 0.5)
+    case 'chip': {
+      // A body with three pins on each side.
+      const body = r * 0.74
+      const pin = r * 0.15
+      for (const at of [-0.42, 0, 0.42]) {
+        const k = at * r
+        g.rect(x - r, y + k - pin / 2, r - body, pin)
+        g.rect(x + body, y + k - pin / 2, r - body, pin)
+        g.rect(x + k - pin / 2, y - r, pin, r - body)
+        g.rect(x + k - pin / 2, y + body, pin, r - body)
+      }
+      return g.roundRect(x - body, y - body, body * 2, body * 2, r * 0.22)
+    }
     case 'disc':
       return g.circle(x, y, r * 0.95)
   }
@@ -301,7 +312,9 @@ const badgeShape = (g: Graphics, group: BuildGroup, x: number, y: number, r: num
 
 /** Glyph size inside a badge of radius `r`; a diamond has the least room. */
 const badgeGlyph = (group: BuildGroup, r: number): number =>
-  Math.round(r * (GROUP_SHAPES[group] === 'diamond' ? 0.9 : 1.1))
+  Math.round(
+    r * (GROUP_SHAPES[group] === 'diamond' ? 0.9 : GROUP_SHAPES[group] === 'chip' ? 0.95 : 1.1),
+  )
 
 /** A cached left-to-right gradient. */
 const gradientX = (left: number, right: number): FillGradient => gradient(left, right, true)

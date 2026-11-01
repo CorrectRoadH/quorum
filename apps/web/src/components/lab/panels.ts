@@ -1,47 +1,24 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Check, Download, Lock, TriangleAlert, Trash2, X } from 'lucide'
+import { Download, Trash2, X } from 'lucide'
 import { offer } from '@/game/engine/actions.ts'
-import {
-  COMPONENTS,
-  COMPONENT_IDS,
-  ERAS,
-  INCIDENTS,
-  INCIDENT_IDS,
-  RESEARCH,
-  RESEARCH_TRACKS,
-  researchList,
-  type ResearchDef,
-  type ResearchId,
-} from '@/game/engine/catalog.ts'
-import { eraOf, has, researchReady } from '@/game/engine/lookups.ts'
+import { INCIDENTS, INCIDENT_IDS } from '@/game/engine/catalog.ts'
+import { eraOf } from '@/game/engine/lookups.ts'
 import { clock, compact, money } from '@/game/format.ts'
-import { COMPONENT_ICONS, type StackLogoId } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { SPEEDS } from '@/game/update.ts'
 import { icon } from '@/lib/icons'
-import { badge } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
-import {
-  EYEBROW,
-  FIGURE,
-  FLOAT,
-  NESTED,
-  SCROLL,
-  WELL,
-  groupBadge,
-  mark,
-  stackLogo,
-} from './bits.ts'
+import { EYEBROW, FIGURE, FLOAT, NESTED, SCROLL, WELL } from './bits.ts'
 
 /* ==========================================================================
-   The panels over the board: Research, How to play, the funding offer, the
+   The panels over the board: How to play, the funding offer, the
    Era card, the end of the slice, and the playtest panel.
    ========================================================================== */
 
-const shell = (
+export const shell = (
   title: string,
   right: ReadonlyArray<Html>,
   body: ReadonlyArray<Html>,
@@ -113,177 +90,6 @@ const stat = (name: string, value: string, h: HtmlBuilder<Message>) =>
 
 const stats = (columns: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
   h.div([h.Class(cn('grid w-full divide-x divide-hairline', WELL, columns))], children)
-
-/* ---------- research ---------- */
-
-const RESEARCH_LOGOS: Partial<Record<ResearchId, StackLogoId>> = {
-  'lang-ruby': 'ruby',
-  'lang-node': 'node',
-  'lang-python': 'python',
-  'fw-laravel': 'laravel',
-  'fw-rails': 'rails',
-  'fw-express': 'express',
-  'fw-django': 'django',
-}
-
-/** The Component badge or brand logo a research item unlocks, else its monogram. */
-const researchMark = (entry: ResearchDef, locked: boolean, h: HtmlBuilder<Message>): Html => {
-  const component = COMPONENT_IDS.find((id) => COMPONENTS[id].unlock === entry.id)
-  if (component)
-    return h.span(
-      [h.Class('grid size-10 place-items-center')],
-      [groupBadge(COMPONENTS[component].group, COMPONENT_ICONS[component], 'size-9', h, locked)],
-    )
-  const logo = RESEARCH_LOGOS[entry.id]
-  if (logo)
-    return h.span(
-      [
-        h.Class(
-          cn(
-            'grid size-10 place-items-center rounded-lg bg-well shadow-well',
-            locked ? 'opacity-40 grayscale' : '',
-          ),
-        ),
-      ],
-      [stackLogo(logo, 'size-5', h)],
-    )
-  return mark(
-    entry.mark,
-    cn('size-10 rounded-lg text-[11px] lowercase', locked ? 'opacity-40' : ''),
-    h,
-  )
-}
-
-const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
-  const owned = has(game, entry.id)
-  const early = entry.era > game.stage
-  const ready = researchReady(game, entry.id)
-  const affordable = game.insight >= entry.cost
-  const state = owned ? 'owned' : !ready ? 'locked' : affordable ? 'buy' : 'saving'
-  const open = !owned && game.openActions.includes(entry.id)
-  const missing = entry.requires
-    .filter((needed) => !has(game, needed))
-    .map((needed) => RESEARCH[needed].name)
-  return h.button(
-    [
-      h.Key(entry.id),
-      h.Type('button'),
-      h.Disabled(state !== 'buy'),
-      h.OnClick(Message.ResearchBought({ id: entry.id })),
-      h.Class(
-        `group grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3 rounded-xl p-2.5 text-left transition-[filter,box-shadow] ${
-          state === 'owned'
-            ? 'bg-nested shadow-[inset_0_0_0_1px_var(--hairline-soft)]'
-            : state === 'buy'
-              ? 'bg-raised shadow-[var(--elev-raised),0_0_0_1.5px_var(--primary-strong)] hover:brightness-[0.985]'
-              : state === 'saving'
-                ? 'bg-raised shadow-raised'
-                : 'border border-dashed border-border'
-        }`,
-      ),
-    ],
-    [
-      researchMark(entry, state === 'locked', h),
-      h.div(
-        [h.Class('flex min-w-0 flex-col gap-0.5')],
-        [
-          h.div(
-            [h.Class('flex items-center justify-between gap-2')],
-            [
-              h.span(
-                [h.Class('flex min-w-0 items-center gap-1.5')],
-                [
-                  h.span([h.Class('truncate text-[13px] font-semibold')], [entry.name]),
-                  open
-                    ? h.span(
-                        [
-                          h.Class('shrink-0 text-warn'),
-                          h.Title('Open action item: the incident it prevents is twice as likely'),
-                          h.AriaLabel('Open action item'),
-                        ],
-                        [icon(h, TriangleAlert, 'size-3.5')],
-                      )
-                    : h.empty,
-                ],
-              ),
-              owned
-                ? h.span([h.Class('text-ok')], [icon(h, Check, 'size-4')])
-                : badge(
-                    {
-                      variant: state === 'buy' ? 'default' : 'secondary',
-                      className: cn(FIGURE, 'shrink-0'),
-                    },
-                    [`${compact(entry.cost)} ◆`],
-                    h,
-                  ),
-            ],
-          ),
-          h.span(
-            [h.Class('line-clamp-2 text-[11.5px] leading-snug text-muted-foreground')],
-            [
-              state === 'locked'
-                ? h.span(
-                    [h.Class('inline-flex items-center gap-1')],
-                    [
-                      icon(h, Lock, 'size-3'),
-                      early
-                        ? `Opens in ${ERAS[entry.era]?.name ?? ''}`
-                        : `Needs ${missing.join(', ')}`,
-                    ],
-                  )
-                : entry.blurb,
-            ],
-          ),
-        ],
-      ),
-    ],
-  )
-}
-
-export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
-  shell(
-    'Research',
-    [
-      h.span(
-        [h.Class(cn(FIGURE, 'flex items-baseline gap-1.5 text-[15px]'))],
-        [
-          compact(model.game.insight),
-          h.span([h.Class('text-[11px] text-muted-foreground')], ['Insight ◆']),
-        ],
-      ),
-    ],
-    [
-      h.div(
-        [h.Class(`grid min-h-0 grid-cols-5 gap-3 px-5 pt-1 pb-5 ${SCROLL}`)],
-        RESEARCH_TRACKS.map((track) => {
-          const entries = researchList.filter((entry) => entry.track === track.key)
-          return h.div(
-            [h.Key(track.key), h.Class('flex flex-col gap-2')],
-            [
-              h.div(
-                [h.Class('flex items-baseline justify-between pb-1')],
-                [
-                  h.span([h.Class(EYEBROW)], [track.label]),
-                  h.span(
-                    [h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))],
-                    [
-                      `${entries.filter((entry) => has(model.game, entry.id)).length} / ${entries.length}`,
-                    ],
-                  ),
-                ],
-              ),
-              ...entries
-                .toSorted((a, b) => a.era - b.era || a.cost - b.cost)
-                .map((entry) => researchCard(model, entry, h)),
-            ],
-          )
-        }),
-      ),
-    ],
-    'max-w-[1240px]',
-    h,
-  )
 
 /* ---------- how to play ---------- */
 

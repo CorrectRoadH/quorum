@@ -55,6 +55,7 @@ export const Message = defineMessageUnion({
   Collected: {},
   UndoChosen: {},
 
+  ResearchFocused: { id: ResearchId },
   ResearchBought: { id: ResearchId },
   RoundRaised: {},
   RoundDeclined: {},

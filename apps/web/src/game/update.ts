@@ -68,6 +68,7 @@ export const initialModel = (): Model =>
     selected: null,
     placing: null,
     panel: 'none',
+    researchFocus: null,
     buildGroup: null,
     speed: 1,
     paused: false,
@@ -608,6 +609,8 @@ const route = (model: Model, message: Message): Result =>
       return withToast(next, `Undid: ${label}.`, 'plain', [sync(next)])
     },
 
+    ResearchFocused: ({ id }) => ({ model: { ...model, researchFocus: id } }),
+
     ResearchBought: ({ id }) =>
       act(model, `Researched ${RESEARCH[id].name}`, Actions.study(model.game, id), {
         note: () => [`Researched ${RESEARCH[id].name}.`, 'primary'],
@@ -627,7 +630,9 @@ const route = (model: Model, message: Message): Result =>
       })
     },
 
-    PanelOpened: ({ panel }) => ({ model: { ...model, panel, placing: null } }),
+    PanelOpened: ({ panel }) => ({
+      model: { ...model, panel, placing: null, researchFocus: null },
+    }),
     PanelClosed: () => ({ model: { ...model, panel: 'none' } }),
 
     CheatCash: () => {
