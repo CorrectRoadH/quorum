@@ -5,6 +5,7 @@ import { fitBoard, setBoard } from './board.ts'
 import { solve } from './engine/solve.ts'
 import { ComponentId, Game } from './engine/state.ts'
 import { Message } from './message.ts'
+import { SandboxStore } from './model.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 
 /* ==========================================================================
@@ -13,6 +14,7 @@ import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
    ========================================================================== */
 
 export const SAVE_KEY = 'quorum.save.v2'
+export const SANDBOX_KEY = 'quorum.sandbox.v1'
 
 export const SyncBoard = Command.define('SyncBoard', {
   args: { game: Game, selected: Schema.NullOr(Schema.String), placing: Schema.NullOr(ComponentId) },
@@ -53,6 +55,33 @@ export const WriteSave = Command.define('WriteSave', {
         // A full or blocked storage loses the save, not the game.
       }
       return Message.Saved()
+    }),
+})
+
+export const LoadSandboxStore = Command.define('LoadSandboxStore', {
+  args: {},
+  messages: [Message.SandboxStoreLoaded],
+  execute: () =>
+    Effect.sync(() => {
+      try {
+        return Message.SandboxStoreLoaded({ json: window.localStorage.getItem(SANDBOX_KEY) })
+      } catch {
+        return Message.SandboxStoreLoaded({ json: null })
+      }
+    }),
+})
+
+export const WriteSandboxStore = Command.define('WriteSandboxStore', {
+  args: { store: SandboxStore },
+  messages: [Message.Synced],
+  execute: ({ store }) =>
+    Effect.sync(() => {
+      try {
+        window.localStorage.setItem(SANDBOX_KEY, JSON.stringify(store))
+      } catch {
+        // A full or blocked storage loses Sandbox progress, not the game.
+      }
+      return Message.Synced()
     }),
 })
 

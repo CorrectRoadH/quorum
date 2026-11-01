@@ -249,37 +249,42 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.nav(
     [h.Class(`absolute top-3 right-3 z-20 flex items-center gap-1 p-1.5 ${PANEL}`)],
     [
-      h.button(
-        [
-          h.Key('research'),
-          h.Type('button'),
-          h.Title('Research (R)'),
-          h.AriaPressed(model.panel === 'research' ? 'true' : 'false'),
-          h.OnClick(
-            Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
+      model.sandbox
+        ? h.empty
+        : h.button(
+            [
+              h.Key('research'),
+              h.Type('button'),
+              h.Title('Research (R)'),
+              h.AriaPressed(model.panel === 'research' ? 'true' : 'false'),
+              h.OnClick(
+                Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
+              ),
+              h.Class(
+                cn(
+                  tool(model.panel === 'research'),
+                  'flex w-auto gap-2 px-3 text-[13px] font-medium',
+                ),
+              ),
+            ],
+            [
+              icon(h, FlaskConical, 'size-[18px]'),
+              'Research',
+              affordable > 0
+                ? h.span(
+                    [
+                      h.Class(
+                        cn(
+                          FIGURE,
+                          'enter-badge absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[9.5px] leading-none font-semibold text-white shadow-raised',
+                        ),
+                      ),
+                    ],
+                    [String(affordable)],
+                  )
+                : h.empty,
+            ],
           ),
-          h.Class(
-            cn(tool(model.panel === 'research'), 'flex w-auto gap-2 px-3 text-[13px] font-medium'),
-          ),
-        ],
-        [
-          icon(h, FlaskConical, 'size-[18px]'),
-          'Research',
-          affordable > 0
-            ? h.span(
-                [
-                  h.Class(
-                    cn(
-                      FIGURE,
-                      'enter-badge absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[9.5px] leading-none font-semibold text-white shadow-raised',
-                    ),
-                  ),
-                ],
-                [String(affordable)],
-              )
-            : h.empty,
-        ],
-      ),
       toolButton(
         'How to play (H)',
         CircleHelp,

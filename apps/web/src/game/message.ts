@@ -8,7 +8,7 @@ import {
   ResearchId,
   RuntimeId,
 } from './engine/state.ts'
-import { BuildGroupKey, Panel, Tone } from './model.ts'
+import { BuildGroupKey, Menu, Panel, SandboxId, Tone } from './model.ts'
 
 /* ==========================================================================
    Every gesture in Quorum becomes one of these.
@@ -22,6 +22,16 @@ export const Message = defineMessageUnion({
   NewCompanyStarted: {},
   PreseedStarted: {},
   TitleOpened: {},
+  MenuChosen: { menu: Menu },
+
+  /** Guided and free Sandboxes, and the Sandbox store read once at boot. */
+  SandboxStoreLoaded: { json: Schema.NullOr(Schema.String) },
+  GuidedStarted: { id: SandboxId },
+  FreeSandboxStarted: {},
+  FreeSandboxReset: {},
+  CompanyCopied: {},
+  DemandStepped: { direction: Schema.Literals([1, -1]) },
+  MixChosen: { stage: Schema.Finite },
 
   Ticked: {},
   SpeedCycled: {},

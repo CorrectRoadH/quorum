@@ -1,5 +1,6 @@
 import { Schema } from 'effect'
 import { BUILD_GROUPS, type BuildGroup } from './engine/catalog.ts'
+import { Progress, SANDBOX_IDS } from './engine/sandbox.ts'
 import { ComponentId, Game, ResearchId } from './engine/state.ts'
 
 /* ==========================================================================
@@ -11,12 +12,41 @@ import { ComponentId, Game, ResearchId } from './engine/state.ts'
 export const Route = Schema.Literals(['title', 'lab'])
 export type Route = typeof Route.Type
 
-export const Panel = Schema.Literals(['none', 'research', 'help', 'offer', 'era', 'end', 'dev'])
+export const Panel = Schema.Literals([
+  'none',
+  'research',
+  'help',
+  'offer',
+  'era',
+  'end',
+  'dev',
+  'passed',
+])
 export type Panel = typeof Panel.Type
 
 export const BuildGroupKey = Schema.Literals(
   BUILD_GROUPS.map((group) => group.key) as [BuildGroup, ...Array<BuildGroup>],
 )
+
+/** The title menu's page. */
+export const Menu = Schema.Literals(['main', 'sandbox'])
+export type Menu = typeof Menu.Type
+
+export const SandboxId = Schema.Literals(SANDBOX_IDS)
+
+/** The Sandbox on the board: a guided one and its progress, or the free one when `id` is null. */
+export const SandboxRun = Schema.Struct({
+  id: Schema.NullOr(SandboxId),
+  progress: Progress,
+})
+export type SandboxRun = typeof SandboxRun.Type
+
+/** What the Sandbox keeps in localStorage, apart from the Company save. */
+export const SandboxStore = Schema.Struct({
+  passed: Schema.Array(SandboxId),
+  free: Schema.NullOr(Game),
+})
+export type SandboxStore = typeof SandboxStore.Type
 
 export const Tone = Schema.Literals(['plain', 'ok', 'warn', 'danger', 'primary'])
 export type Tone = typeof Tone.Type
@@ -70,9 +100,19 @@ export type Undo = typeof Undo.Type
 
 export const Model = Schema.Struct({
   route: Route,
+  menu: Menu,
+  /** The Company, or the Sandbox while one is open. */
   game: Game,
   /** A saved company exists, so the title screen offers Continue. */
   saved: Schema.Boolean,
+  /** The open Sandbox, or null in a Company. */
+  sandbox: Schema.NullOr(SandboxRun),
+  /** The Company, kept aside while a Sandbox is open. */
+  company: Schema.NullOr(Game),
+  /** Guided Sandboxes the player has passed. */
+  passed: Schema.Array(SandboxId),
+  /** The free Sandbox as the player left it. */
+  freeBoard: Schema.NullOr(Game),
   selected: Schema.NullOr(Schema.String),
   placing: Schema.NullOr(ComponentId),
   panel: Panel,

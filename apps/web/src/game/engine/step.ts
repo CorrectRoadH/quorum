@@ -120,7 +120,9 @@ export const step = (game: Game, seconds: number): StepResult => {
   let cash = game.cash
   let pending = game.pending
   let spilled = game.spilled
-  if (has(game, 'stripe')) {
+  if (game.sandbox) {
+    // A Sandbox has no money: placing is free, and revenue and Burn are only figures.
+  } else if (has(game, 'stripe')) {
     cash += earned
   } else {
     const room = Math.max(0, drawerSize(game, ledger.revenue) - pending)
@@ -128,10 +130,12 @@ export const step = (game: Game, seconds: number): StepResult => {
     pending += Math.min(room, earned)
     spilled += Math.max(0, earned - room)
   }
-  cash -= ledger.burn * seconds
+  if (!game.sandbox) cash -= ledger.burn * seconds
 
   const nodes = game.nodes.map((node) => advanceNode(node, ledger, seconds, events))
-  const users = Math.max(20, game.users + growthOf(game, ledger) * seconds)
+  const users = game.sandbox
+    ? game.users
+    : Math.max(20, game.users + growthOf(game, ledger) * seconds)
   const apdex = game.apdex + (ledger.apdex - game.apdex) * Math.min(1, seconds / APDEX_WINDOW)
   const time = game.time + seconds
   const alarms = advanceAlarms(game, ledger, seconds, events)

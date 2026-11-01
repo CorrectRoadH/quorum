@@ -31,7 +31,7 @@ import {
   vcpuOf,
 } from '@/game/engine/lookups.ts'
 import type { Game, GameNode } from '@/game/engine/state.ts'
-import { compact, money, ms, rate } from '@/game/format.ts'
+import { compact, money, ms, priceLabel, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { COMPONENT_ICONS } from '@/game/icons.ts'
@@ -214,7 +214,7 @@ const warnings = (
             size: 'sm',
             className: 'self-start text-danger',
           },
-          ['Replace', h.span([h.Class(FIGURE)], [money(price)])],
+          ['Replace', h.span([h.Class(FIGURE)], [priceLabel(game.sandbox, price)])],
           h,
         ),
         h,
@@ -464,7 +464,7 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
             [`${SIZES[node.size]?.name ?? ''} · ${vcpuOf(node)} vCPU · ${ramOf(node)} GB`],
           ),
           smallButton(
-            price === null ? 'Largest size' : `Larger · ${money(price)}`,
+            price === null ? 'Largest size' : game.sandbox ? 'Larger' : `Larger · ${money(price)}`,
             Plus,
             Message.ResizeChosen({ nodeId: node.id, direction: 1 }),
             price !== null && game.cash >= price,
@@ -798,7 +798,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                           : 'More samples',
                     ],
                   ),
-                  h.span([h.Class(FIGURE)], [money(price)]),
+                  h.span([h.Class(FIGURE)], [priceLabel(game.sandbox, price)]),
                 ],
                 h,
               )

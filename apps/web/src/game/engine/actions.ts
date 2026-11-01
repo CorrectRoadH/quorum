@@ -398,7 +398,7 @@ export const collect = (game: Game): Game => ({
 })
 
 export const canRaise = (game: Game): boolean =>
-  !isFinalEra(game) && game.users >= eraOf(game).raiseAt
+  !game.sandbox && !isFinalEra(game) && game.users >= eraOf(game).raiseAt
 
 const advanceEra = (game: Game, raised: boolean): Action => {
   if (!canRaise(game)) {

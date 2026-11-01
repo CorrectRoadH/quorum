@@ -79,7 +79,7 @@ const tile = (model: Model, type: ComponentId, h: HtmlBuilder<Message>): Html =>
             ),
           ),
         ],
-        [unlocked ? money(price) : 'Locked'],
+        [unlocked ? (model.game.sandbox ? '' : money(price)) : 'Locked'],
       ),
     ],
   )

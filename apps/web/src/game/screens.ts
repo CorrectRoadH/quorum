@@ -5,6 +5,7 @@ import { pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
 import { devPanel, endPanel, eraPanel, helpPanel, offerPanel } from '@/components/lab/panels.ts'
 import { researchPanel } from '@/components/lab/research.ts'
+import { objectiveBar, passedPanel, sandboxHud } from '@/components/lab/sandbox.ts'
 import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'
@@ -23,7 +24,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
     [h.Class('relative h-full overflow-hidden bg-canvas')],
     [
       boardHost(h),
-      hud(model, ledger, h),
+      model.sandbox ? sandboxHud(model, ledger, h) : hud(model, ledger, h),
       toolbar(model, h),
       h.div(
         [
@@ -33,7 +34,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
         ],
         [
           pager(model, h),
-          goalBar(nextGoal(model.game, ledger), h),
+          model.sandbox ? objectiveBar(model, h) : goalBar(nextGoal(model.game, ledger), h),
           changeBar(model, h),
           model.paused
             ? h.div(
@@ -57,6 +58,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       model.panel === 'era' ? eraPanel(model, h) : h.empty,
       model.panel === 'end' ? endPanel(model, h) : h.empty,
       model.panel === 'dev' ? devPanel(model, h) : h.empty,
+      model.panel === 'passed' ? passedPanel(model, h) : h.empty,
     ],
   )
 }

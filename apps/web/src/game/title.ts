@@ -1,9 +1,11 @@
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { ArrowRight, Download } from 'lucide'
+import { ArrowLeft, ArrowRight, Check, Download, Lock } from 'lucide'
 import { icon } from '@/lib/icons'
+import { ERAS } from './engine/catalog.ts'
 import { eraOf } from './engine/lookups.ts'
+import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from './engine/sandbox.ts'
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
@@ -207,6 +209,78 @@ const item = (
     ],
   )
 
+/** A guided Sandbox in the Sandbox menu: passed ones show a check, closed ones a lock. */
+const guidedItem = (model: Model, id: SandboxId, h: HtmlBuilder<Message>): Html => {
+  const open = sandboxOpen(id, model.passed)
+  const passed = model.passed.includes(id)
+  return h.button(
+    [
+      h.Key(id),
+      h.Type('button'),
+      h.Disabled(!open),
+      h.OnClick(Message.GuidedStarted({ id })),
+      h.DataAttribute('aim', open ? 'server' : ''),
+      h.Class(
+        `press group relative flex h-[2.3cqw] w-full items-center justify-between gap-4 rounded-[1cqw] px-[1.5cqw] text-left text-[max(13px,1.05cqw)] font-medium ${
+          open
+            ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            : 'cursor-not-allowed text-muted-foreground/45'
+        }`,
+      ),
+    ],
+    [
+      open ? h.span([h.Class('title-marker')], []) : h.empty,
+      h.span([], [GUIDED[id].name]),
+      passed
+        ? icon(h, Check, 'size-4 text-ok')
+        : open
+          ? h.span(
+              [h.Class('opacity-0 transition-opacity duration-150 group-hover:opacity-60')],
+              [icon(h, ArrowRight, 'size-4')],
+            )
+          : icon(h, Lock, 'size-3.5'),
+    ],
+  )
+}
+
+const trackLabel = (text: string, h: HtmlBuilder<Message>): Html =>
+  h.span(
+    [
+      h.Key(`track-${text}`),
+      h.Class(
+        'px-[1.5cqw] pt-[0.6cqw] pb-[0.1cqw] font-mono text-[max(10px,0.72cqw)] tracking-[0.1em] text-muted-foreground uppercase',
+      ),
+    ],
+    [text],
+  )
+
+const sandboxMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  h.button(
+    [
+      h.Key('back'),
+      h.Type('button'),
+      h.OnClick(Message.MenuChosen({ menu: 'main' })),
+      h.Class(
+        'press flex h-[2.6cqw] shrink-0 items-center gap-2 rounded-[1cqw] px-[1.5cqw] text-[max(13px,1.05cqw)] font-semibold hover:bg-muted',
+      ),
+    ],
+    [icon(h, ArrowLeft, 'size-4 text-muted-foreground'), 'Sandbox'],
+  ),
+  ...TRACKS.flatMap((track) => [
+    trackLabel(ERAS[track.stage]?.name ?? '', h),
+    ...track.sandboxes.map((id) => guidedItem(model, id, h)),
+  ]),
+  h.div([h.Key('rule'), h.Class('mx-[1.5cqw] my-[0.4cqw] h-px shrink-0 bg-hairline')], []),
+  item(
+    'Free Sandbox',
+    '',
+    'users lb server cache database',
+    Message.FreeSandboxStarted(),
+    false,
+    h,
+  ),
+]
+
 const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   return h.nav(
@@ -222,29 +296,32 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
         padding: x(MENU.pad),
       }),
     ],
-    [
-      ...(model.saved
-        ? [
-            item(
-              'Continue',
-              `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
-              'users lb server cache database',
-              Message.Continued(),
-              true,
-              h,
-            ),
-          ]
-        : []),
-      item(
-        model.saved ? 'New company' : 'Start a company',
-        '',
-        'users',
-        Message.NewCompanyStarted(),
-        !model.saved,
-        h,
-      ),
-      item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
-    ],
+    model.menu === 'sandbox'
+      ? sandboxMenu(model, h)
+      : [
+          ...(model.saved
+            ? [
+                item(
+                  'Continue',
+                  `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+                  'users lb server cache database',
+                  Message.Continued(),
+                  true,
+                  h,
+                ),
+              ]
+            : []),
+          item(
+            model.saved ? 'New company' : 'Start a company',
+            '',
+            'users',
+            Message.NewCompanyStarted(),
+            !model.saved,
+            h,
+          ),
+          item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
+          item('Sandbox', '', 'cache database', Message.MenuChosen({ menu: 'sandbox' }), false, h),
+        ],
   )
 }
 

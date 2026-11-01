@@ -8,6 +8,7 @@ import {
   OPEN_ACTION_WEIGHT,
   RESTART_SECONDS,
   RUNTIMES,
+  type ComponentId,
   type IncidentId,
 } from './catalog.ts'
 import { StepEvent } from './events.ts'
@@ -99,9 +100,15 @@ export const startIncident = (
   ledger: Ledger,
   kind: IncidentId,
   roll: number,
+  only?: ComponentId,
 ): Readonly<{ game: Game; incident: Incident }> | null => {
   const target = Match.value(kind).pipe(
-    Match.when('instance', () => pickWeighted(instanceTargets(game, ledger), roll)),
+    Match.when('instance', () =>
+      pickWeighted(
+        instanceTargets(game, ledger).filter(([node]) => !only || node.type === only),
+        roll,
+      ),
+    ),
     Match.when('leak', () => {
       const targets = leakTargets(game, ledger)
       return targets[Math.floor(roll * targets.length)]
@@ -135,7 +142,7 @@ export const directIncidents = (
   game: Game,
   ledger: Ledger,
 ): Readonly<{ game: Game; events: ReadonlyArray<StepEvent> }> => {
-  if (game.incident || game.stage < 1 || game.time < game.nextIncidentAt)
+  if (game.sandbox || game.incident || game.stage < 1 || game.time < game.nextIncidentAt)
     return { game, events: [] }
   const [roll, afterRoll] = nextRandom(game.seed)
   const [gap, afterGap] = nextRandom(afterRoll)
@@ -174,9 +181,10 @@ const postmortemOf = (game: Game, incident: Incident): Postmortem => {
     lostUsers: Math.max(0, incident.usersAtStart - game.users),
     lostRevenue: incident.lostRevenue,
     failed: incident.failed,
-    action:
-      INCIDENTS[incident.kind].actions.find((id) => !has(game, id) && researchReady(game, id)) ??
-      null,
+    action: game.sandbox
+      ? null
+      : (INCIDENTS[incident.kind].actions.find((id) => !has(game, id) && researchReady(game, id)) ??
+        null),
   }
 }
 
@@ -201,7 +209,7 @@ const resolve = (game: Game): Readonly<{ game: Game; events: ReadonlyArray<StepE
       ...game,
       nodes,
       incident: null,
-      postmortems: [...game.postmortems, postmortem].slice(-4),
+      postmortems: game.sandbox ? game.postmortems : [...game.postmortems, postmortem].slice(-4),
       postmortemSeq: postmortem.id,
       openActions:
         postmortem.action && !game.openActions.includes(postmortem.action)
@@ -247,9 +255,14 @@ export const advanceIncident = (
   return tracked.remaining <= 0 || fixed ? resolve(next) : { game: next, events: [] }
 }
 
-/** Starts an incident on demand, for the playtest panel. */
-export const forceIncident = (game: Game, ledger: Ledger, kind: IncidentId): Game | null => {
+/** Starts an incident on demand, for the playtest panel and Sandbox scripts. */
+export const forceIncident = (
+  game: Game,
+  ledger: Ledger,
+  kind: IncidentId,
+  only?: ComponentId,
+): Game | null => {
   if (game.incident) return null
   const [roll, seed] = nextRandom(game.seed)
-  return startIncident({ ...game, seed }, ledger, kind, roll)?.game ?? null
+  return startIncident({ ...game, seed }, ledger, kind, roll, only)?.game ?? null
 }

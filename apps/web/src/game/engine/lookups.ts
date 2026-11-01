@@ -78,13 +78,16 @@ export const burnOf = (game: Game, node: GameNode): number => {
   return def.burn * index
 }
 
+/* A Sandbox has no money: every price below is 0 there. */
+
 export const priceOf = (game: Game, type: ComponentId): number => {
+  if (game.sandbox) return 0
   const count = game.nodes.filter((node) => node.type === type).length
   return Math.round(COMPONENTS[type].cost * COPY_PRICE_GROWTH ** count * eraOf(game).costIndex)
 }
 
 export const refundOf = (game: Game, node: GameNode): number =>
-  Math.round(COMPONENTS[node.type].cost * SELL_REFUND * eraOf(game).costIndex)
+  game.sandbox ? 0 : Math.round(COMPONENTS[node.type].cost * SELL_REFUND * eraOf(game).costIndex)
 
 export const maxSize = (node: GameNode): number => {
   if (COMPONENTS[node.type].sized) return SIZES.length - 1
@@ -95,6 +98,7 @@ export const maxSize = (node: GameNode): number => {
 /** Cash for the next size step, or null at the largest size. */
 export const resizePrice = (game: Game, node: GameNode): number | null => {
   if (node.size >= maxSize(node)) return null
+  if (game.sandbox) return 0
   const index = eraOf(game).costIndex
   if (node.type === 'payments') return Math.round(40 * 3 ** (node.size - 1) * index)
   if (node.type === 'analytics') return Math.round(40 * 2 ** node.size * index)
@@ -103,7 +107,7 @@ export const resizePrice = (game: Game, node: GameNode): number | null => {
 
 /** Cash to replace a failed Node. */
 export const replacePrice = (game: Game, node: GameNode): number =>
-  Math.round(COMPONENTS[node.type].cost * 0.5 * eraOf(game).costIndex)
+  game.sandbox ? 0 : Math.round(COMPONENTS[node.type].cost * 0.5 * eraOf(game).costIndex)
 
 /** The drawer holds about a minute of revenue; each size step doubles it. */
 export const drawerSize = (game: Game, revenue: number): number => {

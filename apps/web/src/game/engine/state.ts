@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import {
   COMPONENT_IDS,
   FAMILY_IDS,
@@ -135,5 +135,10 @@ export const Game = Schema.Struct({
   alarms: Alarms,
   earned: Schema.Finite,
   history: Schema.Array(Sample),
+  /**
+   * A Board outside any Company: demand is flat, users do not grow or leave,
+   * placing costs nothing, and incidents come only from the Sandbox's script.
+   */
+  sandbox: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 })
 export type Game = typeof Game.Type

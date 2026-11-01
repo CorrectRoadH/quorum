@@ -87,7 +87,7 @@ export const diurnal = (time: number): number => {
 export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const era = eraOf(game)
   const spike = game.incident?.kind === 'spike' ? 3 : 1
-  const total = game.users * RPS_PER_USER * diurnal(game.time) * spike
+  const total = game.users * RPS_PER_USER * (game.sandbox ? 1 : diurnal(game.time)) * spike
   const demand: Partial<Record<RequestKind, number>> = {}
   for (const kind of REQUEST_KINDS) {
     const share = era.mix[kind] ?? 0

@@ -22,6 +22,9 @@ export const money = (value: number): string => {
   return `${sign}$${rest < 1000 ? (rest < 10 ? rest.toFixed(2) : Math.round(rest)) : compact(rest)}`
 }
 
+/** A price on a button. A Sandbox has no money, so it shows none. */
+export const priceLabel = (sandbox: boolean, value: number): string => (sandbox ? '' : money(value))
+
 /** Requests per second: one decimal under 100, compact above. */
 export const rate = (value: number): string =>
   value === Number.POSITIVE_INFINITY ? '∞' : value < 100 ? value.toFixed(1) : compact(value)

@@ -18,6 +18,14 @@ import { StepEvent } from './engine/events.ts'
 import { nextGoal } from './engine/goals.ts'
 import type { Ledger } from './engine/ledger.ts'
 import { eraOf, has, isFinalEra } from './engine/lookups.ts'
+import {
+  advanceSandbox,
+  freeSandbox,
+  GUIDED,
+  passedAll,
+  sandboxOf,
+  START,
+} from './engine/sandbox.ts'
 import { solve } from './engine/solve.ts'
 import { Game } from './engine/state.ts'
 import { step } from './engine/step.ts'
@@ -27,9 +35,11 @@ import {
   ClearToast,
   ExportLog,
   FitBoard,
+  LoadSandboxStore,
   LoadSave,
   SyncBoard,
   ToggleFullscreen,
+  WriteSandboxStore,
   WriteSave,
 } from './commands.ts'
 import {
@@ -41,7 +51,7 @@ import {
   undoGame,
 } from './feedback.ts'
 import { Message } from './message.ts'
-import { Model, type Tone } from './model.ts'
+import { Model, SandboxStore, type SandboxRun, type Tone } from './model.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
 
@@ -63,8 +73,13 @@ export const SPEEDS = [1, 3, 10] as const
 export const initialModel = (): Model =>
   Model.make({
     route: 'title',
+    menu: 'main',
     game: newGame(),
     saved: false,
+    sandbox: null,
+    company: null,
+    passed: [],
+    freeBoard: null,
     selected: null,
     placing: null,
     panel: 'none',
@@ -86,7 +101,7 @@ export const initialModel = (): Model =>
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: initialModel(),
-  commands: [LoadSave({})],
+  commands: [LoadSave({}), LoadSandboxStore({})],
 })
 
 /* ---------- helpers ---------- */
@@ -161,6 +176,22 @@ const nodeName = (game: Game, id: string): string => {
 }
 
 const decodeGame = Schema.decodeUnknownOption(Game)
+const decodeStore = Schema.decodeUnknownOption(SandboxStore)
+
+const parseStore = (json: string | null): Option.Option<SandboxStore> => {
+  if (json === null) return Option.none()
+  try {
+    return decodeStore(JSON.parse(json))
+  } catch {
+    return Option.none()
+  }
+}
+
+/** What the Sandbox store holds for this Model. */
+const storeOf = (model: Model): SandboxStore => ({
+  passed: model.passed,
+  free: model.freeBoard,
+})
 
 const parseSave = (json: string | null): Option.Option<Game> => {
   if (json === null) return Option.none()
@@ -228,12 +259,44 @@ const tick = (model: Model): Result => {
     game = result.game
     events.push(...result.events)
   }
+  // A guided Sandbox checks its objective, and may script an incident or change demand.
+  const guided = model.sandbox?.id ? GUIDED[model.sandbox.id] : null
+  let run = model.sandbox
+  let advanced = false
+  if (run && guided && !passedAll(guided, run.progress)) {
+    const advance = advanceSandbox(guided, run.progress, game, solve(game), steps * STEP_SECONDS)
+    if (advance.game.incident && advance.game.incident !== game.incident)
+      events.push(StepEvent.IncidentStarted({ incident: advance.game.incident }))
+    game = advance.game
+    run = { ...run, progress: advance.progress }
+    advanced = advance.advanced
+  }
   const ledger = solve(game)
   // An incident drops the clock to 1×, so the player has time to respond.
   const incident = events.some((event) => event._tag === 'IncidentStarted')
-  let next: Model = { ...model, game, speed: incident ? 1 : model.speed }
+  let next: Model = { ...model, game, sandbox: run, speed: incident ? 1 : model.speed }
   const commands: Array<AnyCommand> = [sync(next)]
   const logs: Array<LogEntry> = []
+
+  if (run && guided && advanced) {
+    const done = passedAll(guided, run.progress)
+    logs.push(
+      line(game.time, 'ObjectivePassed', { sandbox: guided.id, objective: run.progress.objective }),
+    )
+    if (done) {
+      const passed = next.passed.includes(guided.id) ? next.passed : [...next.passed, guided.id]
+      next = { ...next, passed, panel: 'passed', placing: null }
+      commands.push(WriteSandboxStore({ store: storeOf(next) }))
+    } else {
+      const [raised, clear] = toasted(
+        next,
+        `Objective ${run.progress.objective} of ${guided.objectives.length} done.`,
+        'ok',
+      )
+      next = raised
+      commands.push(clear)
+    }
+  }
 
   for (const event of events) {
     logs.push(line(game.time, event._tag, eventLog(event)))
@@ -280,7 +343,11 @@ const tick = (model: Model): Result => {
   }
   if (game.time - model.savedAt >= SAVE_EVERY) {
     next = { ...next, savedAt: game.time }
-    commands.push(WriteSave({ game }))
+    if (!next.sandbox) commands.push(WriteSave({ game }))
+    else if (next.sandbox.id === null) {
+      next = { ...next, freeBoard: game }
+      commands.push(WriteSandboxStore({ store: storeOf(next) }))
+    }
   }
   if (logs.length > 0) commands.push(AppendLog({ entries: logs }))
   return { model: next, commands }
@@ -299,6 +366,8 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
     route: 'lab',
     game,
     saved: true,
+    passed: model.passed,
+    freeBoard: model.freeBoard,
     panel,
     savedAt: game.time,
     sampledAt: game.time,
@@ -323,6 +392,63 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
     ],
   }
 }
+
+/** Opens a Sandbox on the board. The Company waits aside until the title screen. */
+const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
+  const next: Model = {
+    ...initialModel(),
+    route: 'lab',
+    game,
+    sandbox: run,
+    company: model.sandbox ? model.company : model.game,
+    saved: model.saved,
+    passed: model.passed,
+    freeBoard: model.freeBoard,
+    savedAt: game.time,
+    sampledAt: game.time,
+  }
+  return {
+    model: next,
+    commands: [
+      sync(next),
+      FitBoard({}),
+      AppendLog({ entries: [line(game.time, 'SandboxStarted', { sandbox: run.id ?? 'free' })] }),
+    ],
+  }
+}
+
+/** Swaps the free Sandbox's Game, keeping the player's view. */
+const replaceFree = (model: Model, game: Game, text: string): Result => {
+  if (model.sandbox?.id !== null) return { model }
+  const next: Model = {
+    ...model,
+    game,
+    freeBoard: game,
+    selected: null,
+    placing: null,
+    undo: null,
+    change: null,
+    delta: null,
+    nodeHistory: {},
+    savedAt: game.time,
+    sampledAt: game.time,
+  }
+  return withToast(next, text, 'plain', [
+    sync(next),
+    FitBoard({}),
+    WriteSandboxStore({ store: storeOf(next) }),
+  ])
+}
+
+/** Changes the free Sandbox's demand or mix in place. */
+const tuneFree = (model: Model, game: Game): Result => {
+  if (model.sandbox?.id !== null) return { model }
+  const next: Model = { ...model, game }
+  return { model: next, commands: [sync(next)] }
+}
+
+/** Demand steps on the free Sandbox, in users. */
+const DEMAND_STEPS = [100, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000]
 
 /** After a round: the Era card, or the end of the slice. */
 const afterRound = (model: Model, game: Game): Partial<Model> => ({
@@ -358,10 +484,50 @@ const route = (model: Model, message: Message): Result =>
     NewCompanyStarted: () => startCompany(model, newGame(model.game.seed + 7919), 'help'),
     PreseedStarted: () => startCompany(model, preseedGame(model.game.seed + 7919), 'era'),
 
-    TitleOpened: () => ({
-      model: { ...model, route: 'title', panel: 'none', placing: null },
-      commands: [WriteSave({ game: model.game })],
-    }),
+    TitleOpened: () => {
+      if (!model.sandbox)
+        return {
+          model: { ...model, route: 'title', menu: 'main', panel: 'none', placing: null },
+          commands: [WriteSave({ game: model.game })],
+        }
+      const freeBoard = model.sandbox.id === null ? model.game : model.freeBoard
+      const next: Model = {
+        ...model,
+        route: 'title',
+        menu: 'sandbox',
+        panel: 'none',
+        placing: null,
+        selected: null,
+        game: model.company ?? newGame(),
+        sandbox: null,
+        company: null,
+        freeBoard,
+      }
+      return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
+    },
+    MenuChosen: ({ menu }) => ({ model: { ...model, menu } }),
+
+    SandboxStoreLoaded: ({ json }) =>
+      Option.match(parseStore(json), {
+        onNone: () => ({ model }),
+        onSome: (store) => ({ model: { ...model, passed: store.passed, freeBoard: store.free } }),
+      }),
+    GuidedStarted: ({ id }) => enterSandbox(model, GUIDED[id].start(), { id, progress: START }),
+    FreeSandboxStarted: () =>
+      enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START }),
+    FreeSandboxReset: () => replaceFree(model, freeSandbox(), 'The free Sandbox is reset.'),
+    CompanyCopied: () =>
+      model.company && model.saved
+        ? replaceFree(model, sandboxOf(model.company), 'Copied the Company Design.')
+        : withToast(model, 'There is no Company to copy.', 'plain'),
+    DemandStepped: ({ direction }) => {
+      const index = DEMAND_STEPS.findIndex((users) => users >= model.game.users)
+      const at = index === -1 ? DEMAND_STEPS.length - 1 : index
+      const users =
+        DEMAND_STEPS[Math.max(0, Math.min(DEMAND_STEPS.length - 1, at + direction))] ?? 1_000
+      return tuneFree(model, { ...model.game, users })
+    },
+    MixChosen: ({ stage }) => tuneFree(model, { ...model.game, stage }),
 
     Ticked: () => tick(model),
 
@@ -390,6 +556,7 @@ const route = (model: Model, message: Message): Result =>
           return { model: next, commands: [sync(next)] }
         }
         case 'r':
+          if (model.sandbox) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
@@ -650,6 +817,12 @@ const route = (model: Model, message: Message): Result =>
       })
     },
     IncidentForced: ({ kind }) => {
+      if (model.game.incident)
+        return withToast(
+          model,
+          `${INCIDENTS[model.game.incident.kind].name} is still running.`,
+          'warn',
+        )
       const game = forceIncident(model.game, solve(model.game), kind)
       if (!game)
         return withToast(model, `${INCIDENTS[kind].name} has no target in this Design.`, 'warn')

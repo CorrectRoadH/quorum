@@ -6,7 +6,7 @@ import type { Game, GameNode } from './state.ts'
    for playtests that want to skip straight to the database problems.
    ========================================================================== */
 
-const node = (
+export const node = (
   id: string,
   type: ComponentId,
   x: number,
@@ -31,7 +31,7 @@ const node = (
   ...extra,
 })
 
-const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
+export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   nextId: 1,
   cash: 300,
   insight: 0,
@@ -54,6 +54,7 @@ const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   alarms: { errors: 0, latency: 0, saturation: 0 },
   earned: 0,
   history: [],
+  sandbox: false,
 })
 
 /**
