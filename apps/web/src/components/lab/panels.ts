@@ -28,7 +28,7 @@ export const shell = (
   h.div(
     [
       h.Class(
-        'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] enter-backdrop',
+        'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] enter-backdrop compact:p-3 compact:pt-[max(12px,env(safe-area-inset-top))] compact:pb-[max(12px,env(safe-area-inset-bottom))]',
       ),
     ],
     [
@@ -94,7 +94,10 @@ const stats = (columns: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Me
 /* ---------- how to play ---------- */
 
 const STEPS: ReadonlyArray<readonly [string, string]> = [
-  ['Wire it', 'Drag from a Node’s blue output port to another Node. Click a link to cut it.'],
+  [
+    'Wire it',
+    'Drag from a Node’s blue output port to another Node. Click or tap a link to cut it. Drag empty space to pan; scroll or pinch to zoom.',
+  ],
   [
     'Collect',
     'Revenue waits in Payments. Click it before the drawer fills. Stripe Billing collects for you.',
@@ -130,10 +133,14 @@ export const helpPanel = (h: HtmlBuilder<Message>): Html =>
     [],
     [
       h.div(
-        [h.Class(`grid min-h-0 grid-cols-[minmax(0,1fr)_230px] gap-4 px-5 pt-1 pb-5 ${SCROLL}`)],
+        [
+          h.Class(
+            `grid min-h-0 grid-cols-[minmax(0,1fr)_230px] gap-4 px-5 pt-1 pb-5 compact:grid-cols-1 ${SCROLL}`,
+          ),
+        ],
         [
           h.ol(
-            [h.Class('grid grid-cols-2 gap-2')],
+            [h.Class('grid grid-cols-2 gap-2 narrow:grid-cols-1')],
             STEPS.map(([title, body], index) =>
               h.li(
                 [
@@ -154,7 +161,7 @@ export const helpPanel = (h: HtmlBuilder<Message>): Html =>
             ),
           ),
           h.div(
-            [h.Class('flex flex-col gap-2')],
+            [h.Class('flex flex-col gap-2 compact:hidden')],
             [
               h.span([h.Class(EYEBROW)], ['Keys']),
               h.div(
@@ -189,7 +196,7 @@ export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
     [],
     [
       h.div(
-        [h.Class('grid grid-cols-2 gap-3 px-5 pt-1 pb-5')],
+        [h.Class('grid grid-cols-2 gap-3 px-5 pt-1 pb-5 narrow:grid-cols-1')],
         [
           h.div(
             [h.Class('flex flex-col gap-3 rounded-xl bg-raised p-4 shadow-raised')],
@@ -280,12 +287,20 @@ export const endPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
     [],
     [
       h.div(
-        [h.Class('flex flex-col items-center gap-5 px-8 pt-4 pb-8')],
         [
-          h.img([h.Src('/art/hero.svg'), h.Alt(''), h.Class('w-full max-w-[520px]')]),
+          h.Class(
+            'flex flex-col items-center gap-5 px-8 pt-4 pb-8 compact:gap-3 compact:px-5 compact:pb-5',
+          ),
+        ],
+        [
+          h.img([
+            h.Src('/art/hero.svg'),
+            h.Alt(''),
+            h.Class('w-full max-w-[520px] short:max-h-[30dvh] short:w-auto'),
+          ]),
           h.span([h.Class('text-[30px] font-semibold tracking-[-0.035em]')], ['Seed reached.']),
           stats(
-            'max-w-[640px] grid-cols-4',
+            'max-w-[640px] grid-cols-4 narrow:grid-cols-2 narrow:[&>:nth-child(n+3)]:border-t',
             [
               stat('Time', clock(model.game.time), h),
               stat('Users', compact(model.game.users), h),

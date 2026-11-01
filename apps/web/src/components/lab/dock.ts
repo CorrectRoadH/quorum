@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Lock } from 'lucide'
+import { Lock, X } from 'lucide'
 import {
   BUILD_GROUPS,
   COMPONENTS,
@@ -93,18 +93,27 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.div(
     [
       h.Class(
-        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2 p-1.5 ${PANEL}`,
+        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2 p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0 compact:items-stretch`,
       ),
     ],
     [
       open
         ? h.div(
-            [h.Key('tray'), h.Class('enter-pop flex gap-1.5')],
+            [
+              h.Key('tray'),
+              h.Class(
+                'enter-pop flex gap-1.5 compact:overflow-x-auto compact:[scrollbar-width:none]',
+              ),
+            ],
             items.map((type) => tile(model, type, h)),
           )
         : h.empty,
       h.div(
-        [h.Class('flex items-center gap-1'), h.Role('group'), h.AriaLabel('Build')],
+        [
+          h.Class('flex items-center gap-1 compact:justify-between'),
+          h.Role('group'),
+          h.AriaLabel('Build'),
+        ],
         [
           ...BUILD_GROUPS.map((group, index) => {
             const active = group.key === open
@@ -116,12 +125,20 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
                 h.AriaLabel(group.label),
                 h.AriaPressed(active ? 'true' : 'false'),
                 h.OnClick(Message.BuildGroupChosen({ group: group.key })),
-                h.Class(cn(tool(active), 'flex w-auto gap-2 px-3 text-[13px] font-medium')),
+                h.Class(
+                  cn(
+                    tool(active),
+                    'flex w-auto gap-2 px-3 text-[13px] font-medium compact:gap-1.5 compact:px-2.5',
+                  ),
+                ),
               ],
               [
                 groupBadge(group.key, GROUP_ICONS[group.key], 'size-5', h),
                 group.label,
-                h.span([h.Class(cn(FIGURE, 'text-[10px] opacity-55'))], [String(index + 1)]),
+                h.span(
+                  [h.Class(cn(FIGURE, 'text-[10px] opacity-55 compact:hidden'))],
+                  [String(index + 1)],
+                ),
               ],
             )
           }),
@@ -135,7 +152,18 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
                     'size-4',
                     h,
                   ),
-                  Kbd({}, ['Esc'], h),
+                  h.span([h.Class('compact:hidden')], [Kbd({}, ['Esc'], h)]),
+                  h.button(
+                    [
+                      h.Type('button'),
+                      h.AriaLabel('Stop placing'),
+                      h.OnClick(Message.PlacingChosen({ type: null })),
+                      h.Class(
+                        'press hidden size-9 place-items-center rounded-xl bg-well compact:grid',
+                      ),
+                    ],
+                    [icon(h, X, 'size-4')],
+                  ),
                 ],
               )
             : h.empty,

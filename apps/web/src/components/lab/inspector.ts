@@ -712,7 +712,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
     [
       h.Key('inspector'),
       h.Class(
-        `absolute top-[76px] right-3 bottom-3 z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} enter-panel`,
+        `absolute top-[76px] right-3 bottom-3 z-20 flex w-[348px] flex-col overflow-hidden ${PANEL} enter-panel compact:inset-x-2 compact:top-auto compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:z-30 compact:max-h-[62%] compact:w-auto short:inset-x-auto short:top-[132px] short:right-[max(8px,env(safe-area-inset-right))] short:w-[320px] short:max-h-none`,
       ),
     ],
     [

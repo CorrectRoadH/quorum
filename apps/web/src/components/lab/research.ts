@@ -581,7 +581,9 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
   return h.aside(
     [
       h.Key('detail'),
-      h.Class('flex w-[300px] shrink-0 flex-col border-l border-hairline bg-nested'),
+      h.Class(
+        'flex w-[300px] shrink-0 flex-col border-l border-hairline bg-nested narrow:max-h-[46%] narrow:w-auto narrow:border-t narrow:border-l-0',
+      ),
     ],
     [
       h.div(
@@ -672,9 +674,12 @@ export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
     ],
     [
       h.div(
-        [h.Class('flex min-h-0 flex-1 border-t border-hairline')],
+        [h.Class('flex min-h-0 flex-1 border-t border-hairline narrow:flex-col')],
         [
-          h.div([h.Class(`min-w-0 flex-1 px-5 pt-2 pb-5 ${SCROLL}`)], [tree(model, focus, h)]),
+          h.div(
+            [h.Class(`min-h-0 min-w-0 flex-1 px-5 pt-2 pb-5 ${SCROLL}`)],
+            [tree(model, focus, h)],
+          ),
           detail(model, focus, h),
         ],
       ),

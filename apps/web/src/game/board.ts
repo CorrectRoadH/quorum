@@ -50,6 +50,7 @@ import type { Ledger } from './engine/ledger.ts'
 import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
+import { isPhone } from './viewport.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
 
 /* ==========================================================================
@@ -832,6 +833,8 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
 
 /** The smallest zoom Fit uses, so card text stays readable. */
 const MIN_FIT_SCALE = 0.85
+/** A phone has pinch-zoom, so fit may go smaller to show the whole Design. */
+const MIN_FIT_SCALE_PHONE = 0.7
 
 class NodeView {
   readonly root = new Container()
@@ -1149,7 +1152,14 @@ class NodeView {
 /* ---------- the controller ---------- */
 
 type Gesture =
-  | { kind: 'pan'; x: number; y: number; moved: boolean }
+  /** `cut` is the link under a finger that went down on it: a tap cuts it, a drag only pans. */
+  | {
+      kind: 'pan'
+      x: number
+      y: number
+      moved: boolean
+      cut: Readonly<{ from: string; to: string }> | null
+    }
   | { kind: 'node'; id: string; dx: number; dy: number; x: number; y: number; moved: boolean }
   | { kind: 'link'; from: string; at: Pt }
   | null
@@ -1175,6 +1185,11 @@ class BoardController {
   private gesture: Gesture = null
   private hoverLink: Readonly<{ from: string; to: string }> | null = null
   private pointer: Pt = { x: 0, y: 0 }
+  /** Fingers and pens on the board, in client coordinates. Two of them pinch. */
+  private readonly touches = new Map<number, Pt>()
+  private pinch: Readonly<{ distance: number; center: Pt }> | null = null
+  /** The last pointer to move was a finger or a pen, which has no hover and a wide tip. */
+  private coarse = false
   /** Local positions while a node is dragged, ahead of the Model. */
   private dragged: Readonly<{ id: string; x: number; y: number }> | null = null
   private ghostType: ComponentId | null = null
@@ -1267,19 +1282,21 @@ class BoardController {
     const maxX = Math.max(...nodes.map((node) => node.x + CARD_W)) + 80
     const maxY = Math.max(...nodes.map((node) => node.y + heightOf(node.type))) + 80
     // Keep clear of the HUD above and the build dock below.
-    const top = 120
-    const bottom = 210
+    const phone = isPhone()
+    const short = matchMedia('(max-height: 499px)').matches
+    const top = short ? 120 : phone ? 160 : 120
+    const bottom = short ? 70 : phone ? 90 : 210
     const room = Math.max(1, h - top - bottom)
     // Below this zoom the card text is too small to read; pan to see the rest.
     const scale = Math.max(
-      MIN_FIT_SCALE,
+      phone ? MIN_FIT_SCALE_PHONE : MIN_FIT_SCALE,
       Math.min(1.1, Math.min(w / (maxX - minX), room / (maxY - minY))),
     )
     this.world.scale.set(scale)
-    this.world.position.set(
-      w / 2 - ((minX + maxX) / 2) * scale,
-      top + room / 2 - ((minY + maxY) / 2) * scale,
-    )
+    // A Design wider than the phone starts at its left edge, where the Users are.
+    const x =
+      phone && (maxX - minX) * scale > w ? -minX * scale : w / 2 - ((minX + maxX) / 2) * scale
+    this.world.position.set(x, top + room / 2 - ((minY + maxY) / 2) * scale)
     this.fitted = true
     this.drawGrid()
   }
@@ -1329,7 +1346,7 @@ class BoardController {
   }
 
   private outPortAt(point: Pt): GameNode | null {
-    const reach = PORT_R + 6 / this.world.scale.x
+    const reach = PORT_R + (this.coarse ? 16 : 6) / this.world.scale.x
     return (
       this.nodes().findLast((node) => {
         if (layoutOf(node.type).outRow === null) return false
@@ -1341,7 +1358,7 @@ class BoardController {
 
   private linkAt(point: Pt): Readonly<{ from: string; to: string }> | null {
     const byId = new Map(this.nodes().map((node) => [node.id, node]))
-    const reach = 7 / this.world.scale.x
+    const reach = (this.coarse ? 14 : 7) / this.world.scale.x
     for (const link of this.state?.game.links ?? []) {
       const from = byId.get(link.from)
       const to = byId.get(link.to)
@@ -1353,6 +1370,35 @@ class BoardController {
 
   /* ---------- pointer ---------- */
 
+  /** The two fingers on the board: how far apart, and where between them. */
+  private pinchOf(): Readonly<{ distance: number; center: Pt }> {
+    const [a, b] = [...this.touches.values()]
+    if (!a || !b) return this.pinch ?? { distance: 1, center: { x: 0, y: 0 } }
+    return {
+      distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    }
+  }
+
+  /** Zoom by how the fingers spread and pan by how their midpoint moved. */
+  private zoomTo(next: Readonly<{ distance: number; center: Pt }>): void {
+    const last = this.pinch
+    this.pinch = next
+    if (!last) return
+    const rect = this.host.getBoundingClientRect()
+    const from = this.world.toLocal(new Point(last.center.x - rect.left, last.center.y - rect.top))
+    const scale = Math.min(
+      1.6,
+      Math.max(0.25, (this.world.scale.x * next.distance) / last.distance),
+    )
+    this.world.scale.set(scale)
+    this.world.position.set(
+      next.center.x - rect.left - from.x * scale,
+      next.center.y - rect.top - from.y * scale,
+    )
+    this.drawGrid()
+  }
+
   private bindPointer(): void {
     const canvas = this.app.canvas
     const { signal } = this.abort
@@ -1362,6 +1408,23 @@ class BoardController {
     canvas.addEventListener(
       'pointerdown',
       (event) => {
+        this.coarse = event.pointerType !== 'mouse'
+        if (this.coarse) {
+          this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+          canvas.setPointerCapture(event.pointerId)
+          if (this.touches.size === 2) {
+            // A second finger turns the gesture into a pinch.
+            this.gesture = null
+            this.dragged = null
+            if (this.pressed) {
+              this.pressed = null
+              this.syncCards()
+            }
+            this.pinch = this.pinchOf()
+            return
+          }
+          if (this.touches.size > 2) return
+        }
         const point = this.toWorld(event)
         this.pointer = point
         if (event.button === 2) {
@@ -1402,7 +1465,13 @@ class BoardController {
           this.hoverLink = null
           return
         }
-        this.gesture = { kind: 'pan', x: event.clientX, y: event.clientY, moved: false }
+        this.gesture = {
+          kind: 'pan',
+          x: event.clientX,
+          y: event.clientY,
+          moved: false,
+          cut: this.coarse ? this.linkAt(point) : null,
+        }
       },
       { signal },
     )
@@ -1410,6 +1479,13 @@ class BoardController {
     canvas.addEventListener(
       'pointermove',
       (event) => {
+        if (this.touches.has(event.pointerId)) {
+          this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+          if (this.pinch) {
+            this.zoomTo(this.pinchOf())
+            return
+          }
+        }
         const point = this.toWorld(event)
         this.pointer = point
         const gesture = this.gesture
@@ -1466,6 +1542,13 @@ class BoardController {
     )
 
     const finish = (event: PointerEvent, cancelled: boolean) => {
+      this.touches.delete(event.pointerId)
+      if (this.pinch) {
+        // The pinch ends with its first finger; the other one does nothing until it lifts.
+        if (this.touches.size < 2) this.pinch = null
+        if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
+        return
+      }
       const gesture = this.gesture
       this.gesture = null
       if (this.pressed) {
@@ -1479,7 +1562,10 @@ class BoardController {
         return
       }
       const point = this.toWorld(event)
-      if (gesture.kind === 'pan' && !gesture.moved) this.events.onEmptyTap()
+      if (gesture.kind === 'pan' && !gesture.moved) {
+        if (gesture.cut) this.events.onUnlink(gesture.cut.from, gesture.cut.to)
+        else this.events.onEmptyTap()
+      }
       if (gesture.kind === 'node') {
         const node = this.nodes().find((entry) => entry.id === gesture.id)
         if (gesture.moved && this.dragged)

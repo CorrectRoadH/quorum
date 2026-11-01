@@ -25,6 +25,10 @@ export const NESTED =
   'divide-y divide-hairline rounded-xl bg-nested shadow-[inset_0_0_0_1px_var(--hairline-soft)]'
 /** A sunken strip: tracks, segmented controls, figure rows. */
 export const WELL = 'rounded-xl bg-well shadow-well'
+/** A phone shows the figures as one row of chips that scrolls sideways. */
+export const CHIPS =
+  'compact:flex-row compact:divide-x compact:divide-y-0 compact:overflow-x-auto compact:[scrollbar-width:none]'
+
 export const FIGURE = 'font-mono tabular-nums tracking-[-0.01em]'
 
 /** A square icon control inside a panel: flat at rest, a raised ink fill when on. */
@@ -264,7 +268,7 @@ export const toast = (value: Toast | null, h: HtmlBuilder<Message>): Html =>
           h.Key(`toast-${value.id}`),
           h.Role('status'),
           h.Class(
-            `pointer-events-none fixed bottom-[176px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float enter-toast`,
+            `pointer-events-none fixed bottom-[176px] left-1/2 z-50 flex max-w-[calc(100%-16px)] -translate-x-1/2 items-center gap-2.5 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float enter-toast compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+84px)]`,
           ),
         ],
         [

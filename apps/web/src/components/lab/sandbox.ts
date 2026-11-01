@@ -1,6 +1,7 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Check,
+  ChevronRight,
   Copy,
   Flag,
   Gauge,
@@ -20,11 +21,12 @@ import { has } from '@/game/engine/lookups.ts'
 import { GUIDED, TRACKS, type SandboxId } from '@/game/engine/sandbox.ts'
 import { clock, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
+import { isPhone } from '@/game/viewport.ts'
 import type { Model, SandboxRun } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, PANEL, WELL, meter, toneText, type Tone } from './bits.ts'
+import { CHIPS, EYEBROW, FIGURE, PANEL, WELL, meter, toneText, type Tone } from './bits.ts'
 import { shell } from './panels.ts'
 
 /* ==========================================================================
@@ -46,14 +48,24 @@ const figureRow = (
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
-    [h.Key(name), h.Class('flex h-8 items-center gap-2.5 px-2.5')],
+    [
+      h.Key(name),
+      h.Class('flex h-8 items-center gap-2.5 px-2.5 compact:shrink-0 compact:gap-1.5 compact:px-3'),
+    ],
     [
       icon(h, glyph, 'size-3.5 shrink-0 text-muted-foreground'),
-      h.span([h.Class('w-[52px] shrink-0 text-[11.5px] text-muted-foreground')], [name]),
+      h.span(
+        [h.Class('w-[52px] shrink-0 text-[11.5px] text-muted-foreground compact:hidden')],
+        [name],
+      ),
       h.span(
         [
           h.Class(
-            cn(FIGURE, 'ml-auto text-[13.5px] leading-none whitespace-nowrap', toneText(tone)),
+            cn(
+              FIGURE,
+              'ml-auto text-[13.5px] leading-none whitespace-nowrap compact:ml-0',
+              toneText(tone),
+            ),
           ),
         ],
         [value],
@@ -65,7 +77,7 @@ const figures = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =>
   const errors = ledger.errorShare * 100
   const percentiles = has(model.game, 'percentiles')
   return h.div(
-    [h.Class(`flex flex-col divide-y divide-hairline ${WELL}`)],
+    [h.Class(`flex flex-col divide-y divide-hairline ${WELL} ${CHIPS}`)],
     [
       figureRow('Demand', Gauge, `${rate(ledger.demand)}/s`, 'plain', h),
       figureRow('Burn', Wallet, `${money(ledger.burn)}/s`, 'plain', h),
@@ -90,7 +102,11 @@ const figures = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =>
 
 const header = (title: string, aside: Html, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Class('flex items-center gap-2 px-2.5 pt-1.5 pb-2')],
+    [
+      h.Class(
+        'flex min-h-9 items-center gap-2 px-2.5 pt-1.5 pb-2 compact:pb-1 compact:pr-[var(--toolbar-w)]',
+      ),
+    ],
     [
       button(
         {
@@ -149,7 +165,7 @@ export const objectiveBar = (model: Model, h: HtmlBuilder<Message>): Html => {
     [
       h.Key(`objective-${run.progress.objective}`),
       h.Class(
-        'enter-down flex w-[420px] flex-col gap-2 rounded-xl bg-surface px-3 py-2.5 text-[12.5px] shadow-card',
+        'enter-down flex w-[420px] flex-col gap-2 compact:w-auto rounded-xl bg-surface px-3 py-2.5 text-[12.5px] shadow-card',
       ),
     ],
     [
@@ -184,7 +200,31 @@ const tiny = (label: string, message: Message, h: HtmlBuilder<Message>, active =
     h,
   )
 
+/** On a phone the controls fold away under their name; on a desktop they stay open. */
 const controls = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.details(
+    [h.Key('controls'), h.Open(!isPhone()), h.Class('fold group')],
+    [
+      h.summary(
+        [
+          h.Class(
+            'hidden h-9 cursor-pointer list-none items-center gap-2 px-2.5 text-[12.5px] font-medium compact:flex [&::-webkit-details-marker]:hidden',
+          ),
+        ],
+        [
+          icon(
+            h,
+            ChevronRight,
+            'fold-chevron size-3.5 shrink-0 text-muted-foreground group-open:rotate-90',
+          ),
+          'Controls',
+        ],
+      ),
+      controlsBody(model, h),
+    ],
+  )
+
+const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('flex flex-col gap-2.5 px-2.5 pt-2.5 pb-1.5')],
     [
@@ -281,7 +321,11 @@ export const sandboxHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>
   const run = model.sandbox
   if (!run) return h.empty
   return h.header(
-    [h.Class(`absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-1 p-1.5 ${PANEL}`)],
+    [
+      h.Class(
+        `absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-1 p-1.5 ${PANEL} compact:pointer-events-auto compact:static compact:w-auto compact:p-1`,
+      ),
+    ],
     [
       run.id
         ? header(GUIDED[run.id].name, steps(run, run.id, h), h)

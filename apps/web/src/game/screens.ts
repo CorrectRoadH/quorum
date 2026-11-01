@@ -18,35 +18,45 @@ import type { Model } from './model.ts'
    The lab is the game, fullscreen. The title screen is in title.ts.
    ========================================================================== */
 
+/** Display-contents on a desktop, so the HUD, toolbar and goals keep their own corners. */
+const TOP =
+  'contents compact:pointer-events-none compact:absolute compact:inset-x-0 compact:top-0 compact:z-20 compact:flex compact:flex-col compact:gap-1.5 compact:[--toolbar-w:196px] compact:pt-[max(8px,env(safe-area-inset-top))] compact:pr-[max(8px,env(safe-area-inset-right))] compact:pb-0 compact:pl-[max(8px,env(safe-area-inset-left))]'
+
 export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
   const ledger = solve(model.game)
   return h.main(
     [h.Class('relative h-full overflow-hidden bg-canvas')],
     [
       boardHost(h),
-      model.sandbox ? sandboxHud(model, ledger, h) : hud(model, ledger, h),
-      toolbar(model, h),
+      // On a desktop these three float on their own; on a phone they stack at the top.
       h.div(
+        [h.Class(TOP)],
         [
-          h.Class(
-            'pointer-events-none absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2',
+          model.sandbox ? sandboxHud(model, ledger, h) : hud(model, ledger, h),
+          toolbar(model, h),
+          h.div(
+            [
+              h.Class(
+                'pointer-events-none absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2 compact:static compact:translate-x-0 compact:items-stretch compact:gap-1.5',
+              ),
+            ],
+            [
+              pager(model, h),
+              model.sandbox ? objectiveBar(model, h) : goalBar(nextGoal(model.game, ledger), h),
+              changeBar(model, h),
+              model.paused
+                ? h.div(
+                    [
+                      h.Key('paused'),
+                      h.Class(
+                        'flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 compact:hidden font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground shadow-card',
+                      ),
+                    ],
+                    [icon(h, Pause, 'size-3'), 'Paused'],
+                  )
+                : h.empty,
+            ],
           ),
-        ],
-        [
-          pager(model, h),
-          model.sandbox ? objectiveBar(model, h) : goalBar(nextGoal(model.game, ledger), h),
-          changeBar(model, h),
-          model.paused
-            ? h.div(
-                [
-                  h.Key('paused'),
-                  h.Class(
-                    'flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground shadow-card',
-                  ),
-                ],
-                [icon(h, Pause, 'size-3'), 'Paused'],
-              )
-            : h.empty,
         ],
       ),
       inspector(model, ledger, h),

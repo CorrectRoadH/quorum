@@ -3,6 +3,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* A phone: narrow in portrait, short in landscape. The lab and the title
+   switch to their compact layouts here. */
+@custom-variant narrow (@media (max-width: 639px));
+@custom-variant short (@media (max-height: 499px));
+@custom-variant compact {
+  @media (max-width: 639px) {
+    @slot;
+  }
+  @media (max-height: 499px) {
+    @slot;
+  }
+}
+
 /* ==========================================================================
    Quorum — the shipped palette: Graphite.
    Near-neutral greys with a faint cool cast · ink primary · soft depth ·
@@ -301,6 +314,10 @@
     font-size: 13px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
+    /* A game, not a page: no pull-to-refresh, no double-tap zoom, no grey tap flash. */
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1,
@@ -332,6 +349,18 @@
 
 :root {
   interpolate-size: allow-keywords;
+}
+
+/* A finger is wider than a pointer: widen every button's hit area without moving it. */
+@media (pointer: coarse) {
+  [data-slot='button'] {
+    position: relative;
+  }
+  [data-slot='button']::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
 }
 
 /* A pressable control sinks a little under the pointer. */
@@ -558,6 +587,17 @@ details.fold[open]::details-content {
   aspect-ratio: 16 / 10;
   container-type: inline-size;
   --title-lift: -6px;
+  /* The menu's unit: 1% of the stage, so it scales with the bench. */
+  --u: 1cqw;
+}
+.title-art,
+.title-ui {
+  position: absolute;
+  inset: 0;
+}
+/* The bench floats by a share of its own width. */
+.title-art {
+  container-type: inline-size;
 }
 .title-bench svg {
   display: block;
@@ -698,6 +738,82 @@ details.fold[open]::details-content {
     --callout: var(--signal);
     filter: drop-shadow(0 7px 6px oklch(0 0 0 / 0.55))
       drop-shadow(0 0 10px color-mix(in oklch, var(--signal) 35%, transparent));
+  }
+}
+
+/* On a phone the 16:10 stage does not fit. The bench fills the top, cropped
+   by the edge, and the wordmark and menu stack at the foot at a fixed unit.
+   The wordmark and menu carry inline stage coordinates, hence !important. */
+@media (max-width: 639px), (max-height: 499px) {
+  .title-stage {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    aspect-ratio: auto;
+    container-type: normal;
+    --u: 14px;
+  }
+  .title-ui {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 18px;
+    padding: 0 28px 76px;
+    pointer-events: none;
+  }
+  .title-ui > * {
+    pointer-events: auto;
+  }
+  .title-ui .title-wordmark {
+    position: static !important;
+    width: 168px !important;
+    flex: none;
+  }
+  .title-ui .title-menu {
+    position: static !important;
+    width: 100% !important;
+    max-height: 100%;
+    padding: 6px !important;
+    overflow-y: auto;
+  }
+  .title-ui .title-overlay,
+  .title-ui .title-overlay * {
+    display: none;
+  }
+  .title-art {
+    inset: auto;
+    top: 12dvh;
+    width: 130vw;
+    left: calc(50vw - 91vw);
+    aspect-ratio: 16 / 10;
+  }
+  .title-bench {
+    animation-name: title-float-compact;
+  }
+}
+@media (max-height: 499px) and (min-width: 640px) {
+  .title-ui {
+    width: 330px;
+    padding: 24px 0 56px 40px;
+    gap: 12px;
+    justify-content: flex-start;
+  }
+  .title-ui .title-wordmark {
+    width: 128px !important;
+  }
+  .title-ui .title-menu {
+    min-height: 0;
+  }
+  .title-art {
+    top: 50%;
+    width: 125vh;
+    left: 30vw;
+    translate: 0 -45%;
+  }
+}
+@keyframes title-float-compact {
+  50% {
+    translate: 0 -4px;
   }
 }
 

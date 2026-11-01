@@ -177,10 +177,10 @@ const item = (
       h.OnClick(message),
       h.DataAttribute('aim', aim),
       h.Class(
-        `press group relative flex w-full items-center justify-between gap-4 rounded-[1cqw] px-[1.5cqw] text-left ${
+        `press group relative flex w-full items-center justify-between gap-4 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-left ${
           primary
-            ? 'h-[4cqw] bg-primary-fill text-on-primary-fill shadow-primary hover:brightness-105'
-            : 'h-[3cqw] text-muted-foreground hover:bg-muted hover:text-foreground'
+            ? 'h-[calc(var(--u)*4)] bg-primary-fill text-on-primary-fill shadow-primary hover:brightness-105'
+            : 'h-[calc(var(--u)*3)] text-muted-foreground hover:bg-muted hover:text-foreground'
         }`,
       ),
     ],
@@ -189,10 +189,10 @@ const item = (
       h.span(
         [h.Class('flex flex-col')],
         [
-          h.span([h.Class('text-[max(13px,1.05cqw)] font-medium')], [label]),
+          h.span([h.Class('text-[max(13px,calc(var(--u)*1.05))] font-medium')], [label]),
           detail
             ? h.span(
-                [h.Class('font-mono text-[max(11px,0.78cqw)] tabular-nums opacity-60')],
+                [h.Class('font-mono text-[max(11px,calc(var(--u)*0.78))] tabular-nums opacity-60')],
                 [detail],
               )
             : h.empty,
@@ -221,7 +221,7 @@ const guidedItem = (model: Model, id: SandboxId, h: HtmlBuilder<Message>): Html 
       h.OnClick(Message.GuidedStarted({ id })),
       h.DataAttribute('aim', open ? 'server' : ''),
       h.Class(
-        `press group relative flex h-[2.3cqw] w-full items-center justify-between gap-4 rounded-[1cqw] px-[1.5cqw] text-left text-[max(13px,1.05cqw)] font-medium ${
+        `press group relative flex h-[calc(var(--u)*2.3)] w-full items-center justify-between gap-4 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-left text-[max(13px,calc(var(--u)*1.05))] font-medium ${
           open
             ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
             : 'cursor-not-allowed text-muted-foreground/45'
@@ -248,7 +248,7 @@ const trackLabel = (text: string, h: HtmlBuilder<Message>): Html =>
     [
       h.Key(`track-${text}`),
       h.Class(
-        'px-[1.5cqw] pt-[0.6cqw] pb-[0.1cqw] font-mono text-[max(10px,0.72cqw)] tracking-[0.1em] text-muted-foreground uppercase',
+        'px-[calc(var(--u)*1.5)] pt-[calc(var(--u)*0.6)] pb-[calc(var(--u)*0.1)] font-mono text-[max(10px,calc(var(--u)*0.72))] tracking-[0.1em] text-muted-foreground uppercase',
       ),
     ],
     [text],
@@ -261,7 +261,7 @@ const sandboxMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html>
       h.Type('button'),
       h.OnClick(Message.MenuChosen({ menu: 'main' })),
       h.Class(
-        'press flex h-[2.6cqw] shrink-0 items-center gap-2 rounded-[1cqw] px-[1.5cqw] text-[max(13px,1.05cqw)] font-semibold hover:bg-muted',
+        'press flex h-[calc(var(--u)*2.6)] shrink-0 items-center gap-2 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-[max(13px,calc(var(--u)*1.05))] font-semibold hover:bg-muted',
       ),
     ],
     [icon(h, ArrowLeft, 'size-4 text-muted-foreground'), 'Sandbox'],
@@ -270,7 +270,13 @@ const sandboxMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html>
     trackLabel(ERAS[track.stage]?.name ?? '', h),
     ...track.sandboxes.map((id) => guidedItem(model, id, h)),
   ]),
-  h.div([h.Key('rule'), h.Class('mx-[1.5cqw] my-[0.4cqw] h-px shrink-0 bg-hairline')], []),
+  h.div(
+    [
+      h.Key('rule'),
+      h.Class('mx-[calc(var(--u)*1.5)] my-[calc(var(--u)*0.4)] h-px shrink-0 bg-hairline'),
+    ],
+    [],
+  ),
   item(
     'Free Sandbox',
     '',
@@ -287,7 +293,7 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
     [
       h.AriaLabel('Main menu'),
       h.Class(
-        'title-menu absolute flex flex-col gap-[0.25cqw] rounded-[1.5cqw] bg-surface shadow-card',
+        'title-menu absolute flex flex-col gap-[calc(var(--u)*0.25)] rounded-[calc(var(--u)*1.5)] bg-surface shadow-card',
       ),
       h.Style({
         left: x(MENU.left),
@@ -444,23 +450,26 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.div(
         [h.Class('title-stage relative')],
         [
-          h.svg(
+          h.div(
+            [h.Class('title-art')],
             [
-              h.ViewBox('0 0 1600 1000'),
-              h.Class('pointer-events-none absolute inset-0 size-full overflow-visible'),
-              h.AriaHidden(true),
+              h.svg(
+                [
+                  h.ViewBox('0 0 1600 1000'),
+                  h.Class('pointer-events-none absolute inset-0 size-full overflow-visible'),
+                  h.AriaHidden(true),
+                ],
+                [h.polygon([h.Class('title-floor'), h.Points(FLOOR)])],
+              ),
+              h.div([
+                h.Key('bench'),
+                h.Class('title-bench absolute'),
+                h.Style({ left: x(BENCH.left), top: y(BENCH.top), width: x(BENCH.width) }),
+                h.OnMount(BenchMounted()),
+              ]),
             ],
-            [h.polygon([h.Class('title-floor'), h.Points(FLOOR)])],
           ),
-          h.div([
-            h.Key('bench'),
-            h.Class('title-bench absolute'),
-            h.Style({ left: x(BENCH.left), top: y(BENCH.top), width: x(BENCH.width) }),
-            h.OnMount(BenchMounted()),
-          ]),
-          wordmark(h),
-          menu(model, h),
-          overlay(h),
+          h.div([h.Class('title-ui')], [wordmark(h), menu(model, h), overlay(h)]),
         ],
       ),
       stamp(h),

@@ -96,7 +96,10 @@ const actionButtons = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Messag
 const card = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Message>): Html => {
   const def = INCIDENTS[postmortem.kind]
   return h.details(
-    [h.Key(`pm-${postmortem.id}`), h.Class(`fold enter-left group w-[380px] ${PANEL}`)],
+    [
+      h.Key(`pm-${postmortem.id}`),
+      h.Class(`fold enter-left group w-[380px] compact:w-auto ${PANEL}`),
+    ],
     [
       h.summary(
         [
@@ -159,6 +162,10 @@ export const postmortems = (model: Model, h: HtmlBuilder<Message>): Html =>
   model.game.postmortems.length === 0
     ? h.empty
     : h.div(
-        [h.Class('absolute bottom-3 left-3 z-20 flex flex-col gap-2')],
+        [
+          h.Class(
+            'absolute bottom-3 left-3 z-20 flex flex-col gap-2 compact:right-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+68px)] compact:left-2',
+          ),
+        ],
         model.game.postmortems.slice(-3).map((entry) => card(model.game, entry, h)),
       )
