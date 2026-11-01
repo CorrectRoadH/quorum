@@ -120,6 +120,7 @@ const KEYS: ReadonlyArray<readonly [string, string]> = [
   ['R', 'Research'],
   ['U', 'Resize selected'],
   ['Z', 'Undo'],
+  ['Shift+Z', 'Redo'],
   ['Del', 'Sell selected'],
   ['C', 'Collect'],
   ['S', 'Speed'],

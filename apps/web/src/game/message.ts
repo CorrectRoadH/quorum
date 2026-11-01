@@ -13,7 +13,7 @@ import {
   Retries,
   RuntimeId,
 } from './engine/state.ts'
-import { BuildGroupKey, Menu, Panel, SandboxId, Tone } from './model.ts'
+import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 
 /* ==========================================================================
    Every gesture in Quorum becomes one of these.
@@ -31,6 +31,7 @@ export const Message = defineMessageUnion({
 
   /** Guided and free Sandboxes, and the Sandbox store read once at boot. */
   SandboxStoreLoaded: { json: Schema.NullOr(Schema.String) },
+  PrefsLoaded: { json: Schema.NullOr(Schema.String) },
   GuidedStarted: { id: SandboxId },
   FreeSandboxStarted: {},
   FreeSandboxReset: {},
@@ -93,7 +94,14 @@ export const Message = defineMessageUnion({
   IndexAdded: { nodeId: Schema.String },
   NodeSold: { nodeId: Schema.String },
   Collected: {},
+  /** Hovering an option opens its Tradeoff card; clicking pins it, or applies it once seen. */
+  OptionPreviewed: { nodeId: Schema.String, option: TradeoffOption },
+  OptionLeft: {},
+  OptionChosen: { nodeId: Schema.String, option: TradeoffOption },
+  OptionConfirmed: {},
+  TradeoffClosed: {},
   UndoChosen: {},
+  RedoChosen: {},
 
   ResearchFocused: { id: ResearchId },
   ResearchBought: { id: ResearchId },

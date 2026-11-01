@@ -26,7 +26,13 @@ const keys = Stream.callback<KeyMessage>((queue) =>
           Queue.offerUnsafe(
             queue,
             Message.KeyPressed({
-              key: event.key.length === 1 ? event.key.toLowerCase() : event.key,
+              // Single keys arrive lower case, except Shift+Z, which is redo.
+              key:
+                event.key.length !== 1
+                  ? event.key
+                  : event.shiftKey && event.key.toLowerCase() === 'z'
+                    ? 'Z'
+                    : event.key.toLowerCase(),
             }),
           )
         }

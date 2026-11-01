@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
+import glossary from '../../../../../docs/gdd/glossary.md?raw'
 import {
+  AXES,
+  RUNTIMES,
+  RUNTIME_IDS,
+  type Axes,
   FRAMEWORKS,
   FRAMEWORK_IDS,
   FRAMEWORK_RESEARCH,
@@ -99,5 +104,57 @@ describe('the research catalog', () => {
     const missing = GDD_IDS.filter((id) => !(RESEARCH_IDS as ReadonlyArray<string>).includes(id))
     expect(missing).toEqual(DEFERRED)
     for (const id of RESEARCH_IDS) expect(RESEARCH[id]?.id).toBe(id)
+  })
+})
+
+/* 06 "The six axes": the data behind the Tradeoff card's radar. */
+describe('the six axes', () => {
+  const runtimes = RUNTIME_IDS.map((id) => [id, RUNTIMES[id]] as const)
+  const frameworks = FRAMEWORK_IDS.map((id) => [id, FRAMEWORKS[id]] as const)
+
+  test('every runtime and framework has six axes, each from 1 to 5', () => {
+    for (const [, def] of [...runtimes, ...frameworks]) {
+      expect(Object.keys(def.axes).toSorted()).toEqual([...AXES].toSorted())
+      for (const axis of AXES) {
+        expect(def.axes[axis]).toBeGreaterThanOrEqual(1)
+        expect(def.axes[axis]).toBeLessThanOrEqual(5)
+      }
+    }
+  })
+
+  /** A static form of pillar 2: no option is at least as good as a sibling on all six axes. */
+  const undominated = (options: ReadonlyArray<readonly [string, { axes: Axes }]>) => {
+    const dominated: Array<string> = []
+    for (const [a, first] of options)
+      for (const [b, second] of options)
+        if (a !== b && AXES.every((axis) => first.axes[axis] >= second.axes[axis]))
+          dominated.push(`${a} is at least ${b} on every axis`)
+    return dominated
+  }
+
+  test('no runtime is at least as good as another on every axis', () => {
+    expect(undominated(runtimes)).toEqual([])
+  })
+
+  test('no framework is at least as good as a sibling in its language on every axis', () => {
+    for (const language of Object.keys(LANGUAGES))
+      expect(
+        undominated(
+          frameworks.filter(([, def]) => def.language === language || def.language === null),
+        ),
+      ).toEqual([])
+  })
+
+  test('every glossary term names a heading in the glossary', () => {
+    const anchors = new Set(
+      [...glossary.matchAll(/^## (.+)$/gm)].map(([, title]) =>
+        (title ?? '')
+          .toLowerCase()
+          .replace(/[^a-z0-9 -]/g, '')
+          .replace(/ /g, '-'),
+      ),
+    )
+    for (const [, def] of [...runtimes, ...frameworks])
+      for (const term of def.glossary) expect(anchors).toContain(term)
   })
 })

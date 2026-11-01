@@ -5,7 +5,7 @@ import { fitBoard, setBoard } from './board.ts'
 import { solveFlow } from './engine/solve.ts'
 import { ComponentId, Game } from './engine/state.ts'
 import { Message } from './message.ts'
-import { SandboxStore } from './model.ts'
+import { Prefs, SandboxStore } from './model.ts'
 import { play, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 
@@ -16,6 +16,7 @@ import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 
 export const SAVE_KEY = 'quorum.save.v2'
 export const SANDBOX_KEY = 'quorum.sandbox.v1'
+export const PREFS_KEY = 'quorum.prefs.v1'
 
 export const SyncBoard = Command.define('SyncBoard', {
   args: {
@@ -93,6 +94,33 @@ export const WriteSandboxStore = Command.define('WriteSandboxStore', {
         window.localStorage.setItem(SANDBOX_KEY, JSON.stringify(store))
       } catch {
         // A full or blocked storage loses Sandbox progress, not the game.
+      }
+      return Message.Synced()
+    }),
+})
+
+export const LoadPrefs = Command.define('LoadPrefs', {
+  args: {},
+  messages: [Message.PrefsLoaded],
+  execute: () =>
+    Effect.sync(() => {
+      try {
+        return Message.PrefsLoaded({ json: window.localStorage.getItem(PREFS_KEY) })
+      } catch {
+        return Message.PrefsLoaded({ json: null })
+      }
+    }),
+})
+
+export const WritePrefs = Command.define('WritePrefs', {
+  args: { prefs: Prefs },
+  messages: [Message.Synced],
+  execute: ({ prefs }) =>
+    Effect.sync(() => {
+      try {
+        window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+      } catch {
+        // Blocked storage only means the cards stay full size.
       }
       return Message.Synced()
     }),

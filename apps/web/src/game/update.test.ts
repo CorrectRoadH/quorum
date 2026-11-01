@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { newGame } from './engine/company.ts'
+import { newGame, preseedGame } from './engine/company.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { initialModel, update } from './update.ts'
@@ -34,5 +34,63 @@ describe('the clock', () => {
     const acted = update(second, Message.ResizeChosen({ nodeId: 'server', direction: 1 })).model
     expect(acted.bottleneckAt).toBe(-1)
     expect(tick(acted).bottleneckAt).toBe(Math.floor(tick(acted).game.time))
+  })
+})
+
+describe('Tradeoff cards', () => {
+  const option = { kind: 'runtime', id: 'node_cluster' } as const
+  const ready = (): Model => ({
+    ...initialModel(),
+    route: 'lab',
+    selected: 'server',
+    game: {
+      ...preseedGame(),
+      users: 4_000,
+      researched: [...preseedGame().researched, 'lang-node', 'node-cluster'],
+    },
+  })
+  const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
+    messages.reduce((current, message) => update(current, message).model, model)
+
+  test('hovering previews; leaving closes; the Game does not change', () => {
+    const start = ready()
+    const hovered = send(start, Message.OptionPreviewed({ nodeId: 'server', option }))
+    expect(hovered.tradeoff?.pinned).toBe(false)
+    expect(hovered.tradeoff?.preview?.after.revenue).toBeGreaterThan(
+      hovered.tradeoff?.preview?.before.revenue ?? Infinity,
+    )
+    expect(hovered.game).toBe(start.game)
+    expect(send(hovered, Message.OptionLeft()).tradeoff).toBeNull()
+  })
+
+  test('the first click pins the card; Confirm applies it; the second time a click applies it', () => {
+    const pinned = send(ready(), Message.OptionChosen({ nodeId: 'server', option }))
+    expect(pinned.tradeoff?.pinned).toBe(true)
+    expect(pinned.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
+    // Leaving the option keeps a pinned card open.
+    expect(send(pinned, Message.OptionLeft()).tradeoff?.pinned).toBe(true)
+    const confirmed = send(pinned, Message.OptionConfirmed())
+    expect(confirmed.tradeoff).toBeNull()
+    expect(confirmed.seenTradeoffs).toEqual(['runtime'])
+    expect(confirmed.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('node_cluster')
+    expect(confirmed.change).not.toBeNull()
+    const back = send(
+      confirmed,
+      Message.OptionChosen({ nodeId: 'server', option: { kind: 'runtime', id: 'php_fpm' } }),
+    )
+    expect(back.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
+  })
+
+  test('Escape and Cancel close the card without changing anything', () => {
+    const pinned = send(ready(), Message.OptionChosen({ nodeId: 'server', option }))
+    expect(send(pinned, Message.KeyPressed({ key: 'Escape' })).tradeoff).toBeNull()
+    expect(send(pinned, Message.TradeoffClosed()).game).toBe(pinned.game)
+  })
+
+  test('a locked option shows why, and Confirm does nothing', () => {
+    const locked = { ...ready(), game: preseedGame() }
+    const pinned = send(locked, Message.OptionChosen({ nodeId: 'server', option }))
+    expect(pinned.tradeoff?.refusal).toBeTruthy()
+    expect(send(pinned, Message.OptionConfirmed()).game.nodes).toEqual(locked.game.nodes)
   })
 })

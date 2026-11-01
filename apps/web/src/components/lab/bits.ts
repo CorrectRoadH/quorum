@@ -291,3 +291,40 @@ export const toast = (value: Toast | null, h: HtmlBuilder<Message>): Html =>
         ],
       )
     : h.empty
+
+/** A progress ring, from 0 to 1, drawn clockwise from the top. */
+export const ring = (share: number, className: string, h: HtmlBuilder<Message>): Html => {
+  const radius = 6
+  const length = 2 * Math.PI * radius
+  return h.svg(
+    [
+      h.AriaHidden(true),
+      h.Class(className),
+      h.Xmlns('http://www.w3.org/2000/svg'),
+      h.ViewBox('0 0 16 16'),
+      h.Fill('none'),
+    ],
+    [
+      h.circle([
+        h.Cx('8'),
+        h.Cy('8'),
+        h.R(String(radius)),
+        h.Stroke('currentColor'),
+        h.StrokeWidth('2'),
+        h.Attribute('opacity', '0.2'),
+      ]),
+      h.circle([
+        h.Cx('8'),
+        h.Cy('8'),
+        h.R(String(radius)),
+        h.Stroke('currentColor'),
+        h.StrokeWidth('2'),
+        h.StrokeLinecap('round'),
+        h.Attribute('stroke-dasharray', `${length}`),
+        h.Attribute('stroke-dashoffset', `${length * (1 - Math.max(0, Math.min(1, share)))}`),
+        h.Attribute('transform', 'rotate(-90 8 8)'),
+        h.Class('transition-[stroke-dashoffset] duration-200 ease-out'),
+      ]),
+    ],
+  )
+}

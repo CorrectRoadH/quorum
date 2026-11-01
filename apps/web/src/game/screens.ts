@@ -6,6 +6,7 @@ import { inspector } from '@/components/lab/inspector.ts'
 import { devPanel, endPanel, eraPanel, helpPanel, offerPanel } from '@/components/lab/panels.ts'
 import { researchPanel } from '@/components/lab/research.ts'
 import { objectiveBar, passedPanel, sandboxHud } from '@/components/lab/sandbox.ts'
+import { tradeoffCard } from '@/components/lab/tradeoff.ts'
 import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'
@@ -62,6 +63,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
         ],
       ),
       inspector(model, ledger, h),
+      tradeoffCard(model, h),
       postmortems(model, h),
       dock(model, h),
       model.panel === 'research' ? researchPanel(model, h) : h.empty,

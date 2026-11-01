@@ -146,6 +146,8 @@ const choice = (
   children: ReadonlyArray<Html | string>,
   title: string,
   h: HtmlBuilder<Message>,
+  /** Hovering previews the option on a Tradeoff card. */
+  hover?: Message,
 ) =>
   h.button(
     [
@@ -155,6 +157,9 @@ const choice = (
       h.Disabled(!ready),
       h.AriaPressed(selected ? 'true' : 'false'),
       h.OnClick(message),
+      ...(hover && !selected && ready
+        ? [h.OnMouseEnter(hover), h.OnMouseLeave(Message.OptionLeft())]
+        : []),
       h.Class(
         `flex h-8 min-w-0 items-center gap-2 rounded-lg px-2 text-left text-[12px] font-medium transition-colors ${
           selected
@@ -529,10 +534,11 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
             id,
             node.family === id,
             true,
-            Message.FamilyChosen({ nodeId: node.id, family: id }),
+            Message.OptionChosen({ nodeId: node.id, option: { kind: 'family', id } }),
             [h.span([h.Class('w-full text-center')], [FAMILIES[id].name])],
             FAMILIES[id].blurb,
             h,
+            Message.OptionPreviewed({ nodeId: node.id, option: { kind: 'family', id } }),
           ),
         ),
         h,
@@ -565,7 +571,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               id,
               node.runtime === id,
               runtimeReady(game, id),
-              Message.RuntimeChosen({ nodeId: node.id, runtime: id }),
+              Message.OptionChosen({ nodeId: node.id, option: { kind: 'runtime', id } }),
               [
                 stackLogo(RUNTIMES[id].language, 'size-4', h),
                 h.span([h.Class('truncate')], [RUNTIMES[id].name]),
@@ -574,6 +580,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
                 ? RUNTIMES[id].blurb
                 : `Research ${RUNTIMES[id].name} to unlock`,
               h,
+              Message.OptionPreviewed({ nodeId: node.id, option: { kind: 'runtime', id } }),
             ),
           ),
           h,
@@ -639,7 +646,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               id,
               node.framework === id,
               frameworkReady(game, id),
-              Message.FrameworkChosen({ nodeId: node.id, framework: id }),
+              Message.OptionChosen({ nodeId: node.id, option: { kind: 'framework', id } }),
               [
                 id === 'none' ? h.empty : stackLogo(id, 'size-4', h),
                 h.span([h.Class('truncate')], [FRAMEWORKS[id].name]),
@@ -648,6 +655,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
                 ? FRAMEWORKS[id].blurb
                 : `Research ${FRAMEWORKS[id].name} to unlock`,
               h,
+              Message.OptionPreviewed({ nodeId: node.id, option: { kind: 'framework', id } }),
             ),
           ),
           h,

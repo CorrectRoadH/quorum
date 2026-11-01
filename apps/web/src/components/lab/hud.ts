@@ -14,6 +14,7 @@ import {
   Smile,
   Timer,
   TriangleAlert,
+  Redo2,
   Undo2,
   Users,
   Wallet,
@@ -23,15 +24,14 @@ import { canRaise } from '@/game/engine/actions.ts'
 import type { Ledger } from '@/game/engine/ledger.ts'
 import { eraOf, has, nextEra, researchReady } from '@/game/engine/lookups.ts'
 import { clockOf } from '@/game/engine/solve.ts'
-import { describeDelta, undoAvailable } from '@/game/feedback.ts'
+import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
-import { spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
-import { CHIPS, FIGURE, PANEL, WELL, type Tone, meter, tool, toneText } from './bits.ts'
+import { CHIPS, FIGURE, PANEL, WELL, type Tone, meter, ring, tool, toneText } from './bits.ts'
 
 /* ==========================================================================
    The HUD: the company at a glance on the left, the controls on the right,
@@ -264,6 +264,27 @@ const toolButton = (
     [icon(h, glyph, 'size-[18px]'), extra],
   )
 
+/** Undo or redo: dimmed when its stack is empty. */
+const historyButton = (
+  label: string,
+  glyph: IconNode,
+  message: Message,
+  ready: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.button(
+    [
+      h.Key(label),
+      h.Type('button'),
+      h.Title(label),
+      h.AriaLabel(label),
+      h.Disabled(!ready),
+      h.OnClick(message),
+      h.Class(cn(tool(false), 'compact:size-9 disabled:opacity-35 disabled:pointer-events-none')),
+    ],
+    [icon(h, glyph, 'size-[18px]')],
+  )
+
 const divider = (h: HtmlBuilder<Message>): Html =>
   h.div([h.Class('mx-0.5 h-6 w-px bg-hairline compact:hidden')], [])
 
@@ -326,6 +347,9 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
         h,
       ),
       divider(h),
+      historyButton('Undo (Z)', Undo2, Message.UndoChosen(), undoAvailable(model), h),
+      historyButton('Redo (Shift+Z)', Redo2, Message.RedoChosen(), redoAvailable(model), h),
+      divider(h),
       toolButton(
         model.paused ? 'Resume (Space)' : 'Pause (Space)',
         model.paused ? Play : Pause,
@@ -377,7 +401,7 @@ const undoButton = (danger: boolean, h: HtmlBuilder<Message>): Html =>
       attributes: [
         h.Key('undo'),
         h.DataAttribute('exit', 'notice'),
-        h.Title('Undo (Z), full refund'),
+        h.Title('Undo (Z)'),
         h.AriaLabel('Undo'),
       ],
     },
@@ -399,7 +423,7 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.Class('swap flex items-center gap-2.5 whitespace-nowrap'),
         ],
         [
-          spinner({ className: 'size-3.5 text-muted-foreground' }, h),
+          ring(settleProgress(model), 'size-3.5 shrink-0 text-muted-foreground', h),
           h.span(
             [h.Class('text-muted-foreground')],
             [model.change.count > 1 ? `${model.change.count} changes` : model.change.label],
@@ -421,6 +445,12 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
             [h.Class(cn(FIGURE, 'text-[11.5px]'))],
             [delta ? describeDelta(delta, has(model.game, 'percentiles')) : ''],
           ),
+          model.stableTicks > 0
+            ? h.span(
+                [h.Key('stable'), h.Class('enter-badge text-[11.5px] font-medium text-ok')],
+                ['Stable'],
+              )
+            : h.empty,
         ],
       )
   return h.div(

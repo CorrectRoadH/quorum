@@ -81,7 +81,14 @@ The Factorio pleasure of watching a system settle is a feature
 5. If the change made things worse, the toast is red and offers Undo.
 
 Undo and redo cover every board action for the last 50 actions. Undo refunds the full cost if the
-action was less than 30 seconds ago, so experimenting is cheap.
+action was less than 30 seconds ago, so experimenting is cheap. After 30 seconds, undo settles Cash
+at normal prices: a Node it removes refunds like a sale, a Node it brings back costs its price, and a
+resize refunds nothing. Undo and redo never gain Cash. Undo keeps what time did to each Node, such as
+credits, a leak, or an incident outage.
+
+Rates count as stopped when revenue and served requests agree within 1%, and the error share within
+0.1 points, over 12 UI ticks (about 3 seconds). A change that has not settled after 30 sim seconds
+shows its delta anyway.
 
 ## Tradeoff cards
 
@@ -108,6 +115,15 @@ replication mode, a deploy strategy, a pricing model.
 - The card names the real behavior behind each axis and links to the
   [engineering glossary](./glossary.md).
 - After the first time, the card collapses to one line with the preview numbers.
+- The preview shows the settled effect: the changed Nodes start up and warm. The restart is stated
+  on its own, as "restarts cold for N s".
+- Hovering an option shows its card. Clicking pins it with Confirm and Cancel. Once an option set
+  has been confirmed, a click applies the option at once.
+- The radar is drawn for Stack choices only (runtimes and frameworks), where
+  [Runtimes](./06-runtimes.md) defines the six axes. Other option sets, such as the instance family,
+  show the preview and cost lines.
+- Until the in-game glossary (M9), glossary terms show as text that names their glossary entry on
+  hover.
 
 ## Bulk actions
 

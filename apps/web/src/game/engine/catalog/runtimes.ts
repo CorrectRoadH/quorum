@@ -32,8 +32,23 @@ export type RuntimeId = (typeof RUNTIME_IDS)[number]
 
 export type ConcurrencyModel = 'process' | 'threads' | 'loop'
 
+/** The six axes of a Stack choice (06 "The six axes"), 1 to 5; higher is better, so 5 memory is lean. */
+export const AXES = [
+  'throughput',
+  'tail',
+  'memory',
+  'velocity',
+  'resilience',
+  'operability',
+] as const
+export type Axis = (typeof AXES)[number]
+export type Axes = Readonly<Record<Axis, 1 | 2 | 3 | 4 | 5>>
+
 export type RuntimeDef = Readonly<{
   id: RuntimeId
+  axes: Axes
+  /** Anchors in docs/gdd/glossary.md for the behavior behind the axes. */
+  glossary: ReadonlyArray<string>
   language: LanguageId
   name: string
   model: ConcurrencyModel
@@ -60,6 +75,8 @@ export type RuntimeDef = Readonly<{
 export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
   mod_php: {
     id: 'mod_php',
+    axes: { throughput: 1, tail: 3, memory: 1, velocity: 4, resilience: 5, operability: 5 },
+    glossary: ['process-per-request', 'shared-nothing'],
     language: 'php',
     name: 'Apache mod_php',
     model: 'process',
@@ -77,6 +94,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
   },
   php_fpm: {
     id: 'php_fpm',
+    axes: { throughput: 2, tail: 4, memory: 3, velocity: 4, resilience: 5, operability: 4 },
+    glossary: ['process-per-request', 'shared-nothing'],
     language: 'php',
     name: 'PHP-FPM',
     model: 'process',
@@ -94,6 +113,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
   },
   puma: {
     id: 'puma',
+    axes: { throughput: 3, tail: 3, memory: 2, velocity: 3, resilience: 4, operability: 2 },
+    glossary: ['gil-global-interpreter-lock', 'cold-start'],
     language: 'ruby',
     name: 'Puma',
     model: 'threads',
@@ -111,6 +132,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
   },
   node: {
     id: 'node',
+    axes: { throughput: 4, tail: 2, memory: 4, velocity: 4, resilience: 2, operability: 4 },
+    glossary: ['event-loop', 'blast-radius'],
     language: 'node',
     name: 'Node.js',
     model: 'loop',
@@ -128,6 +151,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
   },
   node_cluster: {
     id: 'node_cluster',
+    axes: { throughput: 5, tail: 2, memory: 3, velocity: 4, resilience: 3, operability: 4 },
+    glossary: ['event-loop', 'vertical-and-horizontal-scaling'],
     language: 'node',
     name: 'Node.js cluster',
     model: 'loop',
@@ -144,6 +169,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
   },
   gunicorn: {
     id: 'gunicorn',
+    axes: { throughput: 2, tail: 4, memory: 2, velocity: 5, resilience: 5, operability: 3 },
+    glossary: ['process-per-request', 'gil-global-interpreter-lock'],
     language: 'python',
     name: 'Gunicorn',
     model: 'process',
@@ -184,6 +211,9 @@ export type FrameworkId = (typeof FRAMEWORK_IDS)[number]
 
 export type FrameworkDef = Readonly<{
   id: FrameworkId
+  axes: Axes
+  /** Anchors in docs/gdd/glossary.md for the behavior behind the axes. */
+  glossary: ReadonlyArray<string>
   name: string
   language: LanguageId | null
   /** CPU overhead per request. */
@@ -202,6 +232,8 @@ export type FrameworkDef = Readonly<{
 export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   none: {
     id: 'none',
+    axes: { throughput: 5, tail: 4, memory: 5, velocity: 1, resilience: 2, operability: 5 },
+    glossary: ['tech-debt'],
     name: 'No framework',
     language: null,
     overhead: 1,
@@ -213,6 +245,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   laravel: {
     id: 'laravel',
+    axes: { throughput: 2, tail: 3, memory: 4, velocity: 5, resilience: 3, operability: 3 },
+    glossary: ['n1-query'],
     name: 'Laravel',
     language: 'php',
     overhead: 1.8,
@@ -224,6 +258,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   rails: {
     id: 'rails',
+    axes: { throughput: 3, tail: 3, memory: 2, velocity: 5, resilience: 3, operability: 3 },
+    glossary: ['n1-query'],
     name: 'Rails',
     language: 'ruby',
     overhead: 1.5,
@@ -235,6 +271,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   express: {
     id: 'express',
+    axes: { throughput: 4, tail: 4, memory: 4, velocity: 3, resilience: 2, operability: 4 },
+    glossary: ['tech-debt'],
     name: 'Express',
     language: 'node',
     overhead: 1.1,
@@ -246,6 +284,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   django: {
     id: 'django',
+    axes: { throughput: 3, tail: 3, memory: 3, velocity: 5, resilience: 3, operability: 3 },
+    glossary: ['n1-query'],
     name: 'Django',
     language: 'python',
     overhead: 1.4,
@@ -257,6 +297,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   symfony: {
     id: 'symfony',
+    axes: { throughput: 3, tail: 3, memory: 4, velocity: 4, resilience: 4, operability: 3 },
+    glossary: ['tech-debt'],
     name: 'Symfony',
     language: 'php',
     overhead: 1.5,
@@ -268,6 +310,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   sinatra: {
     id: 'sinatra',
+    axes: { throughput: 4, tail: 4, memory: 5, velocity: 3, resilience: 3, operability: 4 },
+    glossary: [],
     name: 'Sinatra',
     language: 'ruby',
     overhead: 1.1,
@@ -279,6 +323,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
   },
   flask: {
     id: 'flask',
+    axes: { throughput: 4, tail: 4, memory: 4, velocity: 3, resilience: 3, operability: 4 },
+    glossary: [],
     name: 'Flask',
     language: 'python',
     overhead: 1.1,

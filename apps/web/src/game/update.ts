@@ -31,6 +31,7 @@ import {
   sandboxOf,
   START,
 } from './engine/sandbox.ts'
+import { previewOf } from './engine/preview.ts'
 import { bottleneckOf, solveFlow } from './engine/solve.ts'
 import { Game } from './engine/state.ts'
 import { step } from './engine/step.ts'
@@ -40,26 +41,41 @@ import {
   ClearToast,
   ExportLog,
   FitBoard,
+  LoadPrefs,
   LoadSandboxStore,
   LoadSave,
   PlaySound,
   SyncBoard,
   ToggleFullscreen,
+  WritePrefs,
   WriteSandboxStore,
   WriteSave,
 } from './commands.ts'
 import {
+  STABLE_TICKS,
   advanceChange,
   beginChange,
   deltaExpired,
   figuresOf,
-  undoAvailable,
+  pushUndo,
+  redoGame,
+  snapshotOf,
   undoGame,
+  type Reversal,
 } from './feedback.ts'
 import { cueOf } from './cues.ts'
 import { alertText, duration } from './format.ts'
 import { Message } from './message.ts'
-import { ledgerOf, Model, SandboxStore, type SandboxRun, type Tone } from './model.ts'
+import {
+  ledgerOf,
+  Model,
+  Prefs,
+  SandboxStore,
+  type SandboxRun,
+  type Tone,
+  type Tradeoff,
+  type TradeoffOption,
+} from './model.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
 
@@ -106,7 +122,11 @@ export const initialModel = (): Model =>
     toastSeq: 0,
     change: null,
     delta: null,
-    undo: null,
+    stableTicks: 0,
+    tradeoff: null,
+    seenTradeoffs: [],
+    undo: [],
+    redo: [],
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
@@ -116,7 +136,7 @@ export const initialModel = (): Model =>
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: initialModel(),
-  commands: [LoadSave({}), LoadSandboxStore({})],
+  commands: [LoadSave({}), LoadSandboxStore({}), LoadPrefs({})],
 })
 
 /* ---------- helpers ---------- */
@@ -150,7 +170,7 @@ const withToast = (
 }
 
 type ActOptions = Readonly<{
-  /** Board actions can be undone for 30 seconds. */
+  /** Board actions go on the undo stack. */
   undoable?: boolean
   patch?: (model: Model, game: Game) => Partial<Model>
   note?: (game: Game) => readonly [string, Tone] | null
@@ -177,14 +197,12 @@ const act = (
         game,
         // The Design changed: search for the Bottleneck again on the next tick.
         bottleneckAt: -1,
-        undo: options.undoable
-          ? {
-              label,
-              game: model.game,
-              cash: game.cash - model.game.cash,
-              at: model.game.time,
-            }
-          : model.undo,
+        ...(options.undoable
+          ? pushUndo(
+              model,
+              snapshotOf(label, model.game, game.cash - model.game.cash, model.game.time),
+            )
+          : {}),
       }
       const note = options.note?.(game)
       return note
@@ -193,9 +211,108 @@ const act = (
     },
   })
 
+/** Applies an undo or a redo, or says why it cannot. */
+const reverse = (model: Model, reversal: Reversal | string, verb: string): Result => {
+  if (typeof reversal === 'string') return withToast(model, reversal, 'plain')
+  const next: Model = {
+    ...beginChange(model, `${verb} ${reversal.label}`, figuresOf(solveFlow(model.game))),
+    game: reversal.game,
+    undo: reversal.undo,
+    redo: reversal.redo,
+    bottleneckAt: -1,
+  }
+  return withToast(next, `${verb}: ${reversal.label}.`, 'plain', [sync(next)])
+}
+
 const nodeName = (game: Game, id: string): string => {
   const node = game.nodes.find((entry) => entry.id === id)
   return node ? COMPONENTS[node.type].name : 'A Node'
+}
+
+/* ---------- Tradeoff cards ---------- */
+
+/** The action an option stands for. */
+const optionAction = (game: Game, nodeId: string, option: TradeoffOption): Actions.Action => {
+  switch (option.kind) {
+    case 'runtime':
+      return Actions.setRuntime(game, nodeId, option.id)
+    case 'framework':
+      return Actions.setFramework(game, nodeId, option.id)
+    case 'family':
+      return Actions.setFamily(game, nodeId, option.id)
+  }
+}
+
+/** The Message that applies an option, as the inspector sent before Tradeoff cards. */
+const optionMessage = (nodeId: string, option: TradeoffOption): Message => {
+  switch (option.kind) {
+    case 'runtime':
+      return Message.RuntimeChosen({ nodeId, runtime: option.id })
+    case 'framework':
+      return Message.FrameworkChosen({ nodeId, framework: option.id })
+    case 'family':
+      return Message.FamilyChosen({ nodeId, family: option.id })
+  }
+}
+
+/** A card for an option, with its ghost-run preview: computed here, never in a view. */
+const tradeoffOf = (
+  model: Model,
+  nodeId: string,
+  option: TradeoffOption,
+  pinned: boolean,
+): Tradeoff =>
+  Result.match(
+    previewOf(model.game, `${nodeId}:${option.kind}:${option.id}`, (game) =>
+      optionAction(game, nodeId, option),
+    ),
+    {
+      onSuccess: (preview) => ({ nodeId, option, pinned, preview, refusal: null }),
+      onFailure: (refusal) => ({
+        nodeId,
+        option,
+        pinned,
+        preview: null,
+        refusal: Actions.describeRefusal(refusal),
+      }),
+    },
+  )
+
+/** Applies an option and logs what its card predicted, so playtests can compare it with the outcome. */
+const applyOption = (model: Model, card: Tradeoff): Result => {
+  const closed: Model = { ...model, tradeoff: null }
+  const applied = route(closed, optionMessage(card.nodeId, card.option))
+  if (applied.model.game === closed.game) return applied
+  const seen = applied.model.seenTradeoffs.includes(card.option.kind)
+    ? applied.model.seenTradeoffs
+    : [...applied.model.seenTradeoffs, card.option.kind]
+  const next: Model = { ...applied.model, seenTradeoffs: seen }
+  return {
+    model: next,
+    commands: [
+      ...(applied.commands ?? []),
+      WritePrefs({ prefs: { seenTradeoffs: seen } }),
+      AppendLog({
+        entries: [
+          line(model.game.time, 'TradeoffPreviewed', {
+            option: card.option,
+            preview: card.preview,
+          }),
+        ],
+      }),
+    ],
+  }
+}
+
+const decodePrefs = Schema.decodeUnknownOption(Prefs)
+
+const parsePrefs = (json: string | null): Option.Option<Prefs> => {
+  if (json === null) return Option.none()
+  try {
+    return decodePrefs(JSON.parse(json))
+  } catch {
+    return Option.none()
+  }
 }
 
 const decodeGame = Schema.decodeUnknownOption(Game)
@@ -353,10 +470,14 @@ const tick = (model: Model): Result => {
 
   // Feedback after a change.
   const settled = advanceChange(next, ledger, next.toastSeq + 1)
-  next = { ...next, change: settled.change, delta: settled.delta ?? next.delta }
+  next = {
+    ...next,
+    change: settled.change,
+    delta: settled.delta ?? next.delta,
+    stableTicks: settled.delta ? STABLE_TICKS : Math.max(0, next.stableTicks - 1),
+  }
   if (settled.delta) logs.push(line(game.time, 'ChangeSettled', settled.delta))
   if (deltaExpired(next)) next = { ...next, delta: null }
-  if (next.undo && !undoAvailable(next)) next = { ...next, undo: null }
 
   // Utilization history, once per 10 sim seconds.
   if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.game.time / HISTORY_EVERY)) {
@@ -468,7 +589,8 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
     freeBoard: game,
     selected: null,
     placing: null,
-    undo: null,
+    undo: [],
+    redo: [],
     change: null,
     delta: null,
     bottleneck: null,
@@ -569,6 +691,30 @@ const handle = (model: Model, message: Message): Result =>
     },
     MenuChosen: ({ menu }) => ({ model: { ...model, menu } }),
 
+    PrefsLoaded: ({ json }) =>
+      Option.match(parsePrefs(json), {
+        onNone: () => ({ model }),
+        onSome: (prefs) => ({ model: { ...model, seenTradeoffs: prefs.seenTradeoffs } }),
+      }),
+
+    OptionPreviewed: ({ nodeId, option }) =>
+      model.tradeoff?.pinned
+        ? { model }
+        : { model: { ...model, tradeoff: tradeoffOf(model, nodeId, option, false) } },
+    OptionLeft: () =>
+      model.tradeoff && !model.tradeoff.pinned
+        ? { model: { ...model, tradeoff: null } }
+        : { model },
+    OptionChosen: ({ nodeId, option }) => {
+      const card = tradeoffOf(model, nodeId, option, true)
+      // Once an option set is confirmed, its options apply on click; the card stays one line.
+      if (model.seenTradeoffs.includes(option.kind)) return applyOption(model, card)
+      return { model: { ...model, tradeoff: card } }
+    },
+    OptionConfirmed: () =>
+      model.tradeoff?.pinned ? applyOption(model, model.tradeoff) : { model },
+    TradeoffClosed: () => ({ model: { ...model, tradeoff: null } }),
+
     SandboxStoreLoaded: ({ json }) =>
       Option.match(parseStore(json), {
         onNone: () => ({ model }),
@@ -607,6 +753,7 @@ const handle = (model: Model, message: Message): Result =>
       const selected = model.selected
       switch (key) {
         case 'Escape': {
+          if (model.tradeoff) return { model: { ...model, tradeoff: null } }
           const next: Model =
             model.placing !== null
               ? { ...model, placing: null }
@@ -644,6 +791,9 @@ const handle = (model: Model, message: Message): Result =>
           return route(model, Message.Collected())
         case 'z':
           return route(model, Message.UndoChosen())
+        case 'Z':
+        case 'y':
+          return route(model, Message.RedoChosen())
         case 'u':
           return selected
             ? route(model, Message.ResizeChosen({ nodeId: selected, direction: 1 }))
@@ -696,7 +846,11 @@ const handle = (model: Model, message: Message): Result =>
         const next: Model = { ...model, selected: nodeId }
         return route(next, Message.Collected())
       }
-      const next: Model = { ...model, selected: nodeId }
+      const next: Model = {
+        ...model,
+        selected: nodeId,
+        tradeoff: model.selected === nodeId ? model.tradeoff : null,
+      }
       return { model: next, commands: [sync(next)] }
     },
 
@@ -732,7 +886,7 @@ const handle = (model: Model, message: Message): Result =>
 
     EmptyTapped: () => {
       if (model.selected === null) return { model }
-      const next: Model = { ...model, selected: null }
+      const next: Model = { ...model, selected: null, tradeoff: null }
       return { model: next, commands: [sync(next)] }
     },
 
@@ -910,18 +1064,8 @@ const handle = (model: Model, message: Message): Result =>
       ])
     },
 
-    UndoChosen: () => {
-      const game = undoGame(model)
-      if (!game || !model.undo) return withToast(model, 'Nothing to undo.', 'plain')
-      const label = model.undo.label
-      const next: Model = {
-        ...beginChange(model, `Undid ${label}`, figuresOf(solveFlow(model.game))),
-        game,
-        undo: null,
-        bottleneckAt: -1,
-      }
-      return withToast(next, `Undid: ${label}.`, 'plain', [sync(next)])
-    },
+    UndoChosen: () => reverse(model, undoGame(model), 'Undid'),
+    RedoChosen: () => reverse(model, redoGame(model), 'Redid'),
 
     ResearchFocused: ({ id }) => ({ model: { ...model, researchFocus: id } }),
 

@@ -2,7 +2,11 @@ import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import * as Actions from './actions.ts'
 import type { Action } from './actions.ts'
+import { Result as R } from 'effect'
+import { COMPONENTS, COMPONENT_IDS, FRAMEWORK_IDS, RUNTIME_IDS } from './catalog.ts'
 import { newGame } from './company.ts'
+import { frameworkReady, runtimeReady } from './lookups.ts'
+import { previewOf } from './preview.ts'
 import {
   GUIDED,
   START,
@@ -231,6 +235,31 @@ describe('the free Sandbox', () => {
   test('places Nodes for free', () => {
     const placed = ok(Actions.place(freeSandbox(), 'cache', 600, 500))
     expect(placed.cash).toBe(freeSandbox().cash)
+  })
+
+  test('places every Component that is not fixed to the board', () => {
+    // Users and Payments come with every board, once.
+    for (const type of COMPONENT_IDS.filter((id) => !COMPONENTS[id].fixed))
+      expect(R.isSuccess(Actions.place(freeSandbox(), type, 600, 500))).toBe(true)
+  })
+
+  test('has every runtime and framework ready', () => {
+    const game = freeSandbox()
+    for (const id of RUNTIME_IDS) expect(runtimeReady(game, id)).toBe(true)
+    for (const id of FRAMEWORK_IDS) expect(frameworkReady(game, id)).toBe(true)
+  })
+
+  test('previews a Tradeoff, with no Cash at all', () => {
+    const game = freeSandbox()
+    expect(game.cash).toBe(0)
+    const preview = previewOf(game, 'cluster', (current) =>
+      Actions.setRuntime(current, 'server', 'node_cluster'),
+    )
+    expect(R.isSuccess(preview)).toBe(true)
+    if (R.isSuccess(preview)) {
+      expect(preview.success.cash).toBe(0)
+      expect(preview.success.after.revenue).toBeGreaterThan(0)
+    }
   })
 
   test('copies a Company Design at its demand without touching the Company', () => {

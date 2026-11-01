@@ -1,11 +1,15 @@
 import { test } from 'vitest'
+import { resize, setRuntime } from './actions.ts'
 import { link, node, preseedGame } from './company.ts'
+import { previewOf } from './preview.ts'
 import { bottleneckOf, solveFlow } from './solve.ts'
 import type { Game, GameLink, GameNode } from './state.ts'
 
 /*
  * The performance budget (04 "Performance budget"): one Step of a 200-Node
- * board under 2 ms, and the Bottleneck search under 3 ms. Run it with
+ * board under 2 ms, and the Bottleneck search under 3 ms. The Tradeoff preview
+ * runs 2 × 10 one-second Steps for the first option hovered on a Game, then 10 for each
+ * other option, cached per Game and option. Run it with
  * `pnpm --filter @template/web exec vitest bench --run`. CI does not assert
  * timings: they depend on the machine.
  */
@@ -55,6 +59,36 @@ test('a 200-Node board', async ({ bench }) => {
     }),
     bench('bottleneckOf (budget 3 ms)', () => {
       bottleneckOf(game, flow)
+    }),
+  )
+})
+
+test('the Tradeoff preview', { timeout: 300_000 }, async ({ bench }) => {
+  const game: Game = {
+    ...preseedGame(),
+    users: 4_000,
+    researched: [...preseedGame().researched, 'lang-node', 'node-cluster'],
+  }
+  const big: Game = { ...bigBoard(), cash: 1e9 }
+  let second = 0
+  await bench.compare(
+    // A fresh Game object each time, so the preview cache does not answer.
+    bench('previewOf, Pre-seed runtime switch', () => {
+      previewOf({ ...game }, 'cluster', (current) => setRuntime(current, 'server', 'node_cluster'))
+    }),
+    bench('previewOf, Pre-seed resize', () => {
+      previewOf({ ...game }, 'resize', (current) => resize(current, 'server', 1))
+    }),
+    bench('previewOf, Pre-seed second option', () => {
+      // The unchanged ghost is cached for this Game; only the changed one runs.
+      previewOf(game, `resize-${(second += 1)}`, (current) => resize(current, 'server', 1))
+    }),
+    // About 2.5 s each on this board: the test timeout covers its samples.
+    bench('previewOf, 200-Node board resize', () => {
+      previewOf({ ...big }, 'resize', (current) => resize(current, 's0-0', 1))
+    }),
+    bench('previewOf, cached', () => {
+      previewOf(game, 'resize', (current) => resize(current, 'server', 1))
     }),
   )
 })

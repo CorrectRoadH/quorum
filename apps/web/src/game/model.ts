@@ -3,7 +3,16 @@ import { BUILD_GROUPS, type BuildGroup } from './engine/catalog.ts'
 import { Progress, SANDBOX_IDS } from './engine/sandbox.ts'
 import type { Ledger } from './engine/ledger.ts'
 import { solveFlow } from './engine/solve.ts'
-import { ComponentId, Game, ResearchId } from './engine/state.ts'
+import {
+  ComponentId,
+  FamilyId,
+  FrameworkId,
+  Game,
+  GameLink,
+  GameNode,
+  ResearchId,
+  RuntimeId,
+} from './engine/state.ts'
 
 /* ==========================================================================
    Quorum — what the UI holds. The Game is the saved company; everything else
@@ -75,10 +84,50 @@ export const Change = Schema.Struct({
   count: Schema.Finite,
   startedAt: Schema.Finite,
   before: Figures,
-  /** Revenue over the last few ticks, to tell when it stops moving. */
-  recent: Schema.Array(Schema.Finite),
+  /** Revenue, served, and error share over the last few ticks, to tell when they stop moving. */
+  recent: Schema.Array(
+    Schema.Struct({ revenue: Schema.Finite, served: Schema.Finite, errors: Schema.Finite }),
+  ),
+  /** Trailing ticks the figures have held within 1%. */
+  steady: Schema.Finite,
 })
 export type Change = typeof Change.Type
+
+/** An option a Tradeoff card previews: a Stack choice or an instance family. */
+export const TradeoffOption = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('runtime'), id: RuntimeId }),
+  Schema.Struct({ kind: Schema.Literal('framework'), id: FrameworkId }),
+  Schema.Struct({ kind: Schema.Literal('family'), id: FamilyId }),
+])
+export type TradeoffOption = typeof TradeoffOption.Type
+
+export const TradeoffKind = Schema.Literals(['runtime', 'framework', 'family'])
+export type TradeoffKind = typeof TradeoffKind.Type
+
+/** What a ghost run says an option does to the player's Design. */
+export const PreviewFigures = Schema.Struct({
+  before: Figures,
+  after: Figures,
+  burn: Schema.Array(Schema.Finite),
+  restart: Schema.Finite,
+  cash: Schema.Finite,
+})
+export type PreviewFigures = typeof PreviewFigures.Type
+
+/** The open Tradeoff card: hovered, or pinned by a click until Confirm or Cancel. */
+export const Tradeoff = Schema.Struct({
+  nodeId: Schema.String,
+  option: TradeoffOption,
+  pinned: Schema.Boolean,
+  preview: Schema.NullOr(PreviewFigures),
+  /** Why the option cannot be chosen, when it cannot. */
+  refusal: Schema.NullOr(Schema.String),
+})
+export type Tradeoff = typeof Tradeoff.Type
+
+/** What the player's browser remembers apart from saves: the option sets already confirmed once. */
+export const Prefs = Schema.Struct({ seenTradeoffs: Schema.Array(TradeoffKind) })
+export type Prefs = typeof Prefs.Type
 
 /** The result of a change, once it settled. */
 export const Delta = Schema.Struct({
@@ -91,10 +140,12 @@ export const Delta = Schema.Struct({
 })
 export type Delta = typeof Delta.Type
 
-/** The Design before the last board action, and the Cash it moved. */
+/** The Design before a board action, and the Cash it moved. Design pieces only, to keep the Model small. */
 export const Undo = Schema.Struct({
   label: Schema.String,
-  game: Game,
+  nodes: Schema.Array(GameNode),
+  links: Schema.Array(GameLink),
+  nextId: Schema.Finite,
   /** The signed Cash change of the action: negative for a purchase, positive for a sale. */
   cash: Schema.Finite,
   at: Schema.Finite,
@@ -136,7 +187,15 @@ export const Model = Schema.Struct({
   toastSeq: Schema.Finite,
   change: Schema.NullOr(Change),
   delta: Schema.NullOr(Delta),
-  undo: Schema.NullOr(Undo),
+  tradeoff: Schema.NullOr(Tradeoff),
+  /** Option sets the player confirmed once: their cards collapse to one line. */
+  seenTradeoffs: Schema.Array(TradeoffKind),
+  /** Ticks left to show "Stable" after a change settles. */
+  stableTicks: Schema.Finite,
+  /** Board actions to undo, newest last, at most 50. */
+  undo: Schema.Array(Undo),
+  /** Undone actions to redo, newest last. A new action clears it. */
+  redo: Schema.Array(Undo),
   /** The Bottleneck, searched once per sim second, not on every tick. */
   bottleneck: Schema.NullOr(Schema.String),
   /** The sim second of the last search; minus one searches again on the next tick. */
