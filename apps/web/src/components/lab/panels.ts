@@ -2,6 +2,8 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Check, Download, Lock, TriangleAlert, Trash2, X } from 'lucide'
 import { offer } from '@/game/engine/actions.ts'
 import {
+  COMPONENTS,
+  COMPONENT_IDS,
   ERAS,
   INCIDENTS,
   INCIDENT_IDS,
@@ -9,9 +11,11 @@ import {
   RESEARCH_TRACKS,
   researchList,
   type ResearchDef,
+  type ResearchId,
 } from '@/game/engine/catalog.ts'
 import { eraOf, has, researchReady } from '@/game/engine/lookups.ts'
 import { clock, compact, money } from '@/game/format.ts'
+import { COMPONENT_ICONS, type StackLogoId } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { SPEEDS } from '@/game/update.ts'
@@ -20,7 +24,17 @@ import { badge } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, FLOAT, NESTED, SCROLL, WELL, mark } from './bits.ts'
+import {
+  EYEBROW,
+  FIGURE,
+  FLOAT,
+  NESTED,
+  SCROLL,
+  WELL,
+  groupBadge,
+  mark,
+  stackLogo,
+} from './bits.ts'
 
 /* ==========================================================================
    The panels over the board: Research, How to play, the funding offer, the
@@ -102,6 +116,44 @@ const stats = (columns: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Me
 
 /* ---------- research ---------- */
 
+const RESEARCH_LOGOS: Partial<Record<ResearchId, StackLogoId>> = {
+  'lang-ruby': 'ruby',
+  'lang-node': 'node',
+  'lang-python': 'python',
+  'fw-laravel': 'laravel',
+  'fw-rails': 'rails',
+  'fw-express': 'express',
+  'fw-django': 'django',
+}
+
+/** The Component badge or brand logo a research item unlocks, else its monogram. */
+const researchMark = (entry: ResearchDef, locked: boolean, h: HtmlBuilder<Message>): Html => {
+  const component = COMPONENT_IDS.find((id) => COMPONENTS[id].unlock === entry.id)
+  if (component)
+    return h.span(
+      [h.Class('grid size-10 place-items-center')],
+      [groupBadge(COMPONENTS[component].group, COMPONENT_ICONS[component], 'size-9', h, locked)],
+    )
+  const logo = RESEARCH_LOGOS[entry.id]
+  if (logo)
+    return h.span(
+      [
+        h.Class(
+          cn(
+            'grid size-10 place-items-center rounded-lg bg-well shadow-well',
+            locked ? 'opacity-40 grayscale' : '',
+          ),
+        ),
+      ],
+      [stackLogo(logo, 'size-5', h)],
+    )
+  return mark(
+    entry.mark,
+    cn('size-10 rounded-lg text-[11px] lowercase', locked ? 'opacity-40' : ''),
+    h,
+  )
+}
+
 const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   const owned = has(game, entry.id)
@@ -132,11 +184,7 @@ const researchCard = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>)
       ),
     ],
     [
-      mark(
-        entry.mark,
-        `size-10 rounded-lg text-[11px] lowercase ${state === 'locked' ? 'opacity-40' : ''}`,
-        h,
-      ),
+      researchMark(entry, state === 'locked', h),
       h.div(
         [h.Class('flex min-w-0 flex-col gap-0.5')],
         [

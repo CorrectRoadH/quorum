@@ -43,13 +43,14 @@ import {
   KINDS,
   RUNTIMES,
   SIZES,
+  type BuildGroup,
   type ComponentId,
 } from './engine/catalog.ts'
 import type { Ledger } from './engine/ledger.ts'
 import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
 import { compact, money, ms, rate } from './format.ts'
-import { COMPONENT_ICONS } from './icons.ts'
+import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
 
 /* ==========================================================================
    The board: a PixiJS plane the player builds on. Foldkit owns the Model;
@@ -185,6 +186,12 @@ const palette = () => ({
   ok: token('--ok', '#1a8a51'),
   warn: token('--warn', '#cd7d09'),
   danger: token('--danger', '#c72e2b'),
+  groups: {
+    edge: token('--group-edge', '#3a9ad9'),
+    compute: token('--group-compute', '#6c4fe0'),
+    data: token('--group-data', '#1fa59a'),
+    ops: token('--group-ops', '#d43d93'),
+  } satisfies Record<BuildGroup, number>,
 })
 
 type Palette = ReturnType<typeof palette>
@@ -199,14 +206,14 @@ const mix = (a: number, b: number, t: number): number => {
 const gradients = new Map<string, FillGradient>()
 
 /** A cached top-to-bottom gradient, so redraws do not allocate textures. */
-const gradient = (top: number, bottom: number): FillGradient => {
-  const key = `${top}:${bottom}`
+const gradient = (top: number, bottom: number, across = false): FillGradient => {
+  const key = `${top}:${bottom}:${across}`
   const cached = gradients.get(key)
   if (cached) return cached
   const made = new FillGradient({
     type: 'linear',
     start: { x: 0, y: 0 },
-    end: { x: 0, y: 1 },
+    end: across ? { x: 1, y: 0 } : { x: 0, y: 1 },
     colorStops: [
       { offset: 0, color: top },
       { offset: 1, color: bottom },
@@ -216,6 +223,88 @@ const gradient = (top: number, bottom: number): FillGradient => {
   gradients.set(key, made)
   return made
 }
+
+type Corner = Readonly<{ cut: boolean; r: number }>
+const round = (r: number): Corner => ({ cut: false, r })
+const cut = (r: number): Corner => ({ cut: true, r })
+
+/**
+ * Card corners per build group, clockwise from the top left. Edge cards are
+ * chamfered like a hexagon, Compute cards are chips, Data cards are soft like a
+ * disc, and Ops cards are leaves, with two sharp corners like a diamond.
+ */
+const CORNERS: Record<BuildGroup, readonly [Corner, Corner, Corner, Corner]> = {
+  edge: [cut(9), cut(9), cut(9), cut(9)],
+  compute: [round(10), round(10), round(10), round(10)],
+  data: [round(18), round(18), round(18), round(18)],
+  ops: [round(16), round(4), round(16), round(4)],
+}
+
+/**
+ * Traces a card's silhouette into `g`, ready to fill or stroke. `grow` offsets
+ * it outward, for halos around the card; `head` keeps the bottom corners
+ * square, for the header band.
+ */
+const silhouette = (
+  g: Graphics,
+  group: BuildGroup,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  grow = 0,
+  head = false,
+): Graphics => {
+  const [tl, tr, br, bl] = CORNERS[group].map((corner, index) =>
+    head && index >= 2
+      ? round(0)
+      : { cut: corner.cut, r: corner.r + (corner.cut ? grow * 0.41 : grow) },
+  ) as [Corner, Corner, Corner, Corner]
+  const left = x - grow
+  const top = y - grow
+  const right = x + w + grow
+  const bottom = y + h + (head ? 0 : grow)
+  const turn = (
+    corner: Corner,
+    bx: number,
+    by: number,
+    cx: number,
+    cy: number,
+    ax: number,
+    ay: number,
+  ) => {
+    g.lineTo(bx, by)
+    if (corner.cut) g.lineTo(ax, ay)
+    else if (corner.r > 0) g.arcTo(cx, cy, ax, ay, corner.r)
+  }
+  g.moveTo(left + tl.r, top)
+  turn(tr, right - tr.r, top, right, top, right, top + tr.r)
+  turn(br, right, bottom - br.r, right, bottom, right - br.r, bottom)
+  turn(bl, left + bl.r, bottom, left, bottom, left, bottom - bl.r)
+  turn(tl, left, top + tl.r, left, top, left + tl.r, top)
+  return g.closePath()
+}
+
+/** A build group's badge shape, centred on (x, y) with outer radius `r`. */
+const badgeShape = (g: Graphics, group: BuildGroup, x: number, y: number, r: number): Graphics => {
+  switch (GROUP_SHAPES[group]) {
+    case 'hexagon':
+      return g.roundPoly(x, y, r * 1.04, 6, r * 0.22)
+    case 'diamond':
+      return g.roundPoly(x, y, r * 1.12, 4, r * 0.24)
+    case 'chip':
+      return g.roundRect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8, r * 0.5)
+    case 'disc':
+      return g.circle(x, y, r * 0.95)
+  }
+}
+
+/** Glyph size inside a badge of radius `r`; a diamond has the least room. */
+const badgeGlyph = (group: BuildGroup, r: number): number =>
+  Math.round(r * (GROUP_SHAPES[group] === 'diamond' ? 0.9 : 1.1))
+
+/** A cached left-to-right gradient. */
+const gradientX = (left: number, right: number): FillGradient => gradient(left, right, true)
 
 /** CSS cubic-bezier timing, so the board moves on the same curves as the DOM. */
 const cubicBezier =
@@ -315,6 +404,35 @@ const paint = (view: Sprite, node: IconNode, color: number): void => {
   view.texture = glyphOf(node)
   view.setSize(size)
   view.tint = color
+}
+
+const logos = new Map<string, Texture>()
+
+/** A brand mark filled once in white, then tinted to its brand colour per use. */
+const logoOf = (path: string): Texture => {
+  const cached = logos.get(path)
+  if (cached) return cached
+  const canvas = document.createElement('canvas')
+  canvas.width = GLYPH_PX
+  canvas.height = GLYPH_PX
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.scale(GLYPH_PX / 24, GLYPH_PX / 24)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill(new Path2D(path))
+  }
+  const made = Texture.from(canvas)
+  logos.set(path, made)
+  return made
+}
+
+/** Points a sprite at a language or framework mark; black marks take `ink`. */
+const paintLogo = (view: Sprite, id: StackLogoId, ink: number): void => {
+  const size = view.width
+  const logo = STACK_LOGOS[id]
+  view.texture = logoOf(logo.path)
+  view.setSize(size)
+  view.tint = logo.color ? Number.parseInt(logo.color.slice(1), 16) : ink
 }
 
 /* ---------- geometry ---------- */
@@ -468,8 +586,9 @@ const pipeWidth = (rate: number): number => 3 + Math.min(5, Math.sqrt(rate) * 0.
 
 const MONO = '"Geist Mono", ui-monospace, monospace'
 const SANS = '"Geist", ui-sans-serif, system-ui, sans-serif'
-/** Corner radius of a Node card, matching the panels around the board. */
-const RADIUS = 12
+/** The group badge in a card's header: its centre x and outer radius. */
+const BADGE_X = 19
+const BADGE_R = 10
 
 const label = (size: number, family: string, weight: '400' | '500' | '600' = '500') =>
   new Text({
@@ -478,7 +597,7 @@ const label = (size: number, family: string, weight: '400' | '500' | '600' = '50
     resolution: 3,
   })
 
-type RowTone = 'plain' | 'warn' | 'danger' | 'ok'
+type RowTone = 'plain' | 'warn' | 'danger' | 'ok' | 'muted'
 /** Row glyphs by key, so the per-frame digest stays a short string. */
 const ROW_ICONS = {
   inbound: ArrowRightToLine,
@@ -519,6 +638,10 @@ type Row = Readonly<{
   value: string
   tone?: RowTone
   bar?: number
+  /** A brand mark in place of the row glyph. */
+  logo?: StackLogoId
+  /** A brand mark just before the value. */
+  valueLogo?: StackLogoId
 }>
 type Footer = Readonly<{
   glyph: keyof typeof FOOT_ICONS
@@ -605,10 +728,21 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
       ]
     }
     case 'server': {
-      const runtime = RUNTIMES[node.runtime].name
-      const stack =
-        node.framework === 'none' ? runtime : `${runtime} · ${FRAMEWORKS[node.framework].name}`
-      return [inbound, capacity, { glyph: 'stack', name: 'Stack', value: stack }, latency, out]
+      const runtime = RUNTIMES[node.runtime]
+      const framework = node.framework === 'none' ? null : node.framework
+      return [
+        inbound,
+        capacity,
+        {
+          glyph: 'stack',
+          logo: runtime.language,
+          name: runtime.name,
+          value: framework ? FRAMEWORKS[framework].name : 'No framework',
+          ...(framework ? { valueLogo: framework } : { tone: 'muted' }),
+        },
+        latency,
+        out,
+      ]
     }
     case 'database':
     case 'replica': {
@@ -691,12 +825,13 @@ class NodeView {
   private readonly frame = new Graphics()
   private readonly bars = new Graphics()
   private readonly ports = new Graphics()
-  private readonly mark = glyph(14)
+  private readonly mark = glyph(12)
   private readonly title = label(12.5, SANS, '600')
   private readonly level = label(10, MONO)
   private readonly glyphs: Array<Sprite> = []
   private readonly names: Array<Text> = []
   private readonly values: Array<Text> = []
+  private readonly valueMarks: Array<Sprite> = []
   private readonly foot = label(12, SANS, '600')
   private readonly footMark = glyph(14)
   private digest = ''
@@ -705,11 +840,14 @@ class NodeView {
   /** Seconds into the exit, or -1 while the Node lives. */
   private leaving = -1
 
+  private readonly group: BuildGroup
+
   constructor(
     readonly type: ComponentId,
     enter: boolean,
   ) {
     const layout = layoutOf(type)
+    this.group = COMPONENTS[type].group
     // Scale around the card's center, so it grows in place.
     this.root.pivot.set(CARD_W / 2, heightOf(type) / 2)
     if (enter) {
@@ -727,7 +865,9 @@ class NodeView {
       this.foot,
       this.footMark,
     )
-    this.mark.position.set(13, HEAD / 2 - 7)
+    const glyphSize = badgeGlyph(this.group, BADGE_R)
+    this.mark.setSize(glyphSize)
+    this.mark.position.set(BADGE_X - glyphSize / 2, HEAD / 2 - glyphSize / 2)
     this.title.position.set(38, 7)
     this.level.anchor.set(1, 0)
     this.level.position.set(CARD_W - 12, 9)
@@ -740,10 +880,13 @@ class NodeView {
       mark.position.set(13, rowMid(index) - 7.5)
       name.position.set(32, rowMid(index) - 1)
       value.position.set(CARD_W - 14, rowMid(index) - 1)
+      const valueMark = glyph(13)
+      valueMark.visible = false
       this.glyphs.push(mark)
       this.names.push(name)
       this.values.push(value)
-      this.root.addChild(mark, name, value)
+      this.valueMarks.push(valueMark)
+      this.root.addChild(mark, name, value, valueMark)
     }
     this.foot.anchor.set(0, 0.5)
   }
@@ -807,7 +950,9 @@ class NodeView {
           ? colors.warn
           : tone === 'ok'
             ? colors.ok
-            : colors.ink
+            : tone === 'muted'
+              ? colors.muted
+              : colors.ink
     const status =
       own.status === 'down' || own.status === 'danger'
         ? colors.danger
@@ -822,18 +967,33 @@ class NodeView {
         ? colors.danger
         : colors.border
 
+    const group = this.group
+    const hue = colors.groups[group]
     this.frame.clear()
     // Depth: a wide soft shadow and a tight contact shadow under the card.
-    this.frame.roundRect(1, 3, CARD_W - 2, height, RADIUS).fill({ color: colors.ink, alpha: 0.035 })
-    this.frame.roundRect(0, 1, CARD_W, height, RADIUS).fill({ color: colors.ink, alpha: 0.05 })
-    this.frame.roundRect(0, 0, CARD_W, height, RADIUS).fill(colors.card)
-    this.frame.roundRect(0, 0, CARD_W, HEAD + RADIUS, RADIUS).fill(colors.head)
-    this.frame.rect(0, HEAD, CARD_W, RADIUS).fill(colors.card)
+    silhouette(this.frame, group, 1, 3, CARD_W - 2, height).fill({
+      color: colors.ink,
+      alpha: 0.035,
+    })
+    silhouette(this.frame, group, 0, 1, CARD_W, height).fill({ color: colors.ink, alpha: 0.05 })
+    silhouette(this.frame, group, 0, 0, CARD_W, height).fill(colors.card)
+    // The header band takes a wash of the group's colour, fading to the right.
+    silhouette(this.frame, group, 0, 0, CARD_W, HEAD, 0, true).fill(
+      gradientX(mix(colors.head, hue, 0.16), mix(colors.head, hue, 0.04)),
+    )
     this.frame
       .moveTo(0, HEAD)
       .lineTo(CARD_W, HEAD)
-      .stroke({ color: colors.border, width: 1, alpha: 0.7 })
-    this.frame.roundRect(8, 5, 24, HEAD - 10, 6).fill(colors.well)
+      .stroke({ color: mix(colors.border, hue, 0.35), width: 1, alpha: 0.8 })
+    // The badge: the group's shape, lit from the top, with a darker rim.
+    const badgeTone = node.down === -1 ? colors.muted : hue
+    badgeShape(this.frame, group, BADGE_X, HEAD / 2 + 0.5, BADGE_R).fill({
+      color: mix(badgeTone, 0x000000, 0.35),
+      alpha: 0.35,
+    })
+    badgeShape(this.frame, group, BADGE_X, HEAD / 2, BADGE_R).fill(
+      gradient(mix(badgeTone, 0xffffff, 0.18), mix(badgeTone, 0x000000, 0.08)),
+    )
     for (let index = 1; index < layout.rows; index += 1) {
       this.frame
         .moveTo(10, rowTop(index))
@@ -841,7 +1001,10 @@ class NodeView {
         .stroke({ color: colors.border, width: 1, alpha: 0.55 })
     }
     if (node.down !== 0)
-      this.frame.roundRect(0, 0, CARD_W, height, RADIUS).fill({ color: colors.danger, alpha: 0.07 })
+      silhouette(this.frame, group, 0, 0, CARD_W, height).fill({
+        color: colors.danger,
+        alpha: 0.07,
+      })
     if (footer) {
       const rect = footerRect(node.type)
       const fill =
@@ -896,11 +1059,14 @@ class NodeView {
       this.foot.text = ''
       this.footMark.visible = false
     }
-    this.frame
-      .roundRect(0, 0, CARD_W, height, RADIUS)
-      .stroke({ color: edge, width: selected ? 2 : 1, alignment: 1, alpha: selected ? 1 : 0.8 })
+    silhouette(this.frame, group, 0, 0, CARD_W, height).stroke({
+      color: edge,
+      width: selected ? 2 : 1,
+      alignment: 1,
+      alpha: selected ? 1 : 0.8,
+    })
 
-    paint(this.mark, COMPONENT_ICONS[node.type], colors.ink)
+    paint(this.mark, COMPONENT_ICONS[node.type], 0xffffff)
     this.title.text =
       node.down === -1
         ? `${def.name} · failed`
@@ -924,12 +1090,19 @@ class NodeView {
       const mark = this.glyphs[index]
       const name = this.names[index]
       const value = this.values[index]
-      if (!mark || !name || !value) return
-      paint(mark, ROW_ICONS[row.glyph], colors.muted)
+      const valueMark = this.valueMarks[index]
+      if (!mark || !name || !value || !valueMark) return
+      if (row.logo) paintLogo(mark, row.logo, colors.ink)
+      else paint(mark, ROW_ICONS[row.glyph], colors.muted)
       name.text = row.name
-      name.style.fill = colors.muted
+      name.style.fill = row.logo ? colors.ink : colors.muted
       value.text = row.value
       value.style.fill = toneOf(row.tone)
+      valueMark.visible = row.valueLogo !== undefined
+      if (row.valueLogo) {
+        paintLogo(valueMark, row.valueLogo, colors.ink)
+        valueMark.position.set(value.x - value.width - 18, rowMid(index) - 7.5)
+      }
       if (row.bar !== undefined) {
         const y = rowTop(index) + ROW - 4
         const tone = row.bar > 0.95 ? colors.danger : row.bar > 0.8 ? colors.warn : colors.accent
@@ -948,7 +1121,9 @@ class NodeView {
     }
     if (layout.outRow !== null) {
       const y = rowMid(layout.outRow)
-      this.ports.circle(CARD_W, y, PORT_R).fill(own.stranded > 0.01 ? colors.danger : colors.accent)
+      this.ports
+        .circle(CARD_W, y, PORT_R)
+        .fill(own.stranded > 0.01 ? colors.danger : colors.groups[this.group])
       this.ports.circle(CARD_W, y, 2).fill(colors.card)
     }
   }
@@ -1367,18 +1542,21 @@ class BoardController {
     if (!type) return
     const colors = palette()
     const height = heightOf(type)
+    const group = COMPONENTS[type].group
+    const hue = colors.groups[group]
     const frame = new Graphics()
-    frame
-      .roundRect(0, 0, CARD_W, height, RADIUS)
-      .fill(colors.card)
-      .stroke({ color: colors.accent, width: 2 })
-    frame.roundRect(8, 5, 24, HEAD - 10, 6).fill(colors.well)
+    silhouette(frame, group, 0, 0, CARD_W, height).fill(colors.card)
+    silhouette(frame, group, 0, 0, CARD_W, HEAD, 0, true).fill(mix(colors.head, hue, 0.14))
+    silhouette(frame, group, 0, 0, CARD_W, height).stroke({ color: hue, width: 2 })
+    badgeShape(frame, group, BADGE_X, HEAD / 2, BADGE_R).fill(hue)
     const name = label(12.5, SANS, '600')
     name.text = COMPONENTS[type].name
+    name.style.fill = colors.ink
     name.position.set(38, 7)
-    const mark = glyph(14)
-    paint(mark, COMPONENT_ICONS[type], colors.ink)
-    mark.position.set(13, HEAD / 2 - 7)
+    const size = badgeGlyph(group, BADGE_R)
+    const mark = glyph(size)
+    paint(mark, COMPONENT_ICONS[type], 0xffffff)
+    mark.position.set(BADGE_X - size / 2, HEAD / 2 - size / 2)
     this.ghost.addChild(frame, name, mark)
   }
 
@@ -1458,15 +1636,15 @@ class BoardController {
     if (bottleneck) {
       const pulse = 0.45 + 0.4 * Math.abs(Math.sin(this.phase * 2.4))
       const pad = 5
-      this.overlay
-        .roundRect(
-          bottleneck.x - pad,
-          bottleneck.y - pad,
-          CARD_W + pad * 2,
-          heightOf(bottleneck.type) + pad * 2,
-          RADIUS + pad,
-        )
-        .stroke({ color: colors.warn, width: 2.5, alpha: pulse })
+      silhouette(
+        this.overlay,
+        COMPONENTS[bottleneck.type].group,
+        bottleneck.x,
+        bottleneck.y,
+        CARD_W,
+        heightOf(bottleneck.type),
+        pad,
+      ).stroke({ color: colors.warn, width: 2.5, alpha: pulse })
       const tag = 'BOTTLENECK'
       this.overlay
         .roundRect(bottleneck.x - pad + 6, bottleneck.y - pad - 18, tag.length * 6.4 + 12, 15, 5)
@@ -1494,15 +1672,15 @@ class BoardController {
         })
         this.overlay.circle(end.x, end.y, 5).fill(colors.accent)
         if (target && target.id !== from.id) {
-          this.overlay
-            .roundRect(
-              target.x - 3,
-              target.y - 3,
-              CARD_W + 6,
-              heightOf(target.type) + 6,
-              RADIUS + 3,
-            )
-            .stroke({ color: colors.accent, width: 2 })
+          silhouette(
+            this.overlay,
+            COMPONENTS[target.type].group,
+            target.x,
+            target.y,
+            CARD_W,
+            heightOf(target.type),
+            3,
+          ).stroke({ color: colors.accent, width: 2 })
         }
       }
     }

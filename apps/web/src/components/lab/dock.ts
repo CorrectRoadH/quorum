@@ -15,7 +15,7 @@ import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { Kbd } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
-import { FIGURE, PANEL, tool } from './bits.ts'
+import { FIGURE, PANEL, groupBadge, tool } from './bits.ts'
 
 /* ==========================================================================
    The build dock: four group icons. A group opens its tray of Components;
@@ -50,9 +50,9 @@ const tile = (model: Model, type: ComponentId, h: HtmlBuilder<Message>): Html =>
     ],
     [
       h.span(
-        [h.Class('relative grid size-9 place-items-center rounded-lg bg-well shadow-well')],
+        [h.Class('relative grid size-9 place-items-center')],
         [
-          icon(h, COMPONENT_ICONS[type], cn('size-[18px]', unlocked ? '' : 'opacity-40')),
+          groupBadge(def.group, COMPONENT_ICONS[type], 'size-8', h, !unlocked),
           unlocked
             ? h.empty
             : h.span(
@@ -119,7 +119,7 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
                 h.Class(cn(tool(active), 'flex w-auto gap-2 px-3 text-[13px] font-medium')),
               ],
               [
-                icon(h, GROUP_ICONS[group.key], 'size-[18px]'),
+                groupBadge(group.key, GROUP_ICONS[group.key], 'size-5', h),
                 group.label,
                 h.span([h.Class(cn(FIGURE, 'text-[10px] opacity-55'))], [String(index + 1)]),
               ],
@@ -129,7 +129,12 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
             ? h.span(
                 [h.Class('flex items-center gap-1.5 px-2 text-[12px] text-muted-foreground')],
                 [
-                  icon(h, COMPONENT_ICONS[model.placing], 'size-3.5 text-foreground'),
+                  groupBadge(
+                    COMPONENTS[model.placing].group,
+                    COMPONENT_ICONS[model.placing],
+                    'size-4',
+                    h,
+                  ),
                   Kbd({}, ['Esc'], h),
                 ],
               )

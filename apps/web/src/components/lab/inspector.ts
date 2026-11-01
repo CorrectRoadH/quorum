@@ -8,7 +8,6 @@ import {
   FRAMEWORKS,
   FRAMEWORK_IDS,
   KINDS,
-  LANGUAGES,
   OS_RAM,
   PROFILES,
   REQUEST_KINDS,
@@ -40,7 +39,18 @@ import { icon } from '@/lib/icons'
 import { badge } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, NESTED, PANEL, SCROLL, WELL, mark, meter, row } from './bits.ts'
+import {
+  EYEBROW,
+  FIGURE,
+  NESTED,
+  PANEL,
+  SCROLL,
+  WELL,
+  groupBadge,
+  meter,
+  row,
+  stackLogo,
+} from './bits.ts'
 
 /* ==========================================================================
    The inspector: one Node up close. Its numbers and resources, its instance
@@ -135,7 +145,7 @@ const choice = (
             ? 'bg-raised text-foreground shadow-raised'
             : ready
               ? 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
-              : 'cursor-not-allowed text-muted-foreground/45'
+              : 'cursor-not-allowed text-muted-foreground/45 [&_svg]:opacity-45 [&_svg]:grayscale'
         }`,
       ),
     ],
@@ -507,11 +517,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               runtimeReady(game, id),
               Message.RuntimeChosen({ nodeId: node.id, runtime: id }),
               [
-                mark(
-                  LANGUAGES[RUNTIMES[id].language].mark,
-                  'size-5 rounded text-[9px] lowercase',
-                  h,
-                ),
+                stackLogo(RUNTIMES[id].language, 'size-4', h),
                 h.span([h.Class('truncate')], [RUNTIMES[id].name]),
               ],
               runtimeReady(game, id)
@@ -584,7 +590,10 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               node.framework === id,
               frameworkReady(game, id),
               Message.FrameworkChosen({ nodeId: node.id, framework: id }),
-              [h.span([h.Class('truncate')], [FRAMEWORKS[id].name])],
+              [
+                id === 'none' ? h.empty : stackLogo(id, 'size-4', h),
+                h.span([h.Class('truncate')], [FRAMEWORKS[id].name]),
+              ],
               frameworkReady(game, id)
                 ? FRAMEWORKS[id].blurb
                 : `Research ${FRAMEWORKS[id].name} to unlock`,
@@ -710,10 +719,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
       h.div(
         [h.Class('flex items-center gap-3 px-4 pt-4 pb-2')],
         [
-          h.span(
-            [h.Class('grid size-10 shrink-0 place-items-center rounded-lg bg-well shadow-well')],
-            [icon(h, COMPONENT_ICONS[node.type], 'size-5')],
-          ),
+          groupBadge(def.group, COMPONENT_ICONS[node.type], 'size-10', h),
           h.div(
             [h.Class('flex min-w-0 flex-1 flex-col')],
             [

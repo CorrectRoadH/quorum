@@ -1,6 +1,10 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
+import type { IconNode } from 'lucide'
+import type { BuildGroup } from '@/game/engine/catalog.ts'
+import { GROUP_SHAPES, type GroupShape, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
 import type { Message } from '@/game/message.ts'
 import type { Toast } from '@/game/model.ts'
+import { icon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 /* ==========================================================================
@@ -56,6 +60,99 @@ export const mark = (text: string, className: string, h: HtmlBuilder<Message>): 
     ],
     [text],
   )
+
+export const GROUP_TEXT: Record<BuildGroup, string> = {
+  edge: 'text-group-edge',
+  compute: 'text-group-compute',
+  data: 'text-group-data',
+  ops: 'text-group-ops',
+}
+
+/** Glyph scale inside each badge shape; a diamond has the least room. */
+const GLYPH_SCALE: Record<GroupShape, number> = {
+  hexagon: 0.5,
+  chip: 0.56,
+  disc: 0.52,
+  diamond: 0.42,
+}
+
+const shapeOf = (shape: GroupShape, h: HtmlBuilder<Message>): Html => {
+  // A stroke in the fill colour with round joins softens the polygon corners.
+  const soft = [
+    h.Fill('currentColor'),
+    h.Stroke('currentColor'),
+    h.StrokeWidth('2'),
+    h.StrokeLinejoin('round'),
+  ]
+  switch (shape) {
+    case 'hexagon':
+      return h.polygon(
+        [h.Points('12,1.5 21.1,6.75 21.1,17.25 12,22.5 2.9,17.25 2.9,6.75'), ...soft],
+        [],
+      )
+    case 'diamond':
+      return h.polygon([h.Points('12,1.5 22.5,12 12,22.5 1.5,12'), ...soft], [])
+    case 'chip':
+      return h.rect(
+        [h.X('1.5'), h.Y('1.5'), h.Width('21'), h.Height('21'), h.Rx('6'), h.Fill('currentColor')],
+        [],
+      )
+    case 'disc':
+      return h.circle([h.Cx('12'), h.Cy('12'), h.R('11'), h.Fill('currentColor')], [])
+  }
+}
+
+/**
+ * A Component glyph on its build group's badge: the group's colour and shape,
+ * with the glyph knocked out in white. Grey when `muted`, for locked entries.
+ */
+export const groupBadge = (
+  group: BuildGroup,
+  glyph: IconNode,
+  className: string,
+  h: HtmlBuilder<Message>,
+  muted = false,
+): Html => {
+  const shape = GROUP_SHAPES[group]
+  const scale = GLYPH_SCALE[shape]
+  const offset = 12 - 12 * scale
+  return h.svg(
+    [
+      h.AriaHidden(true),
+      h.Xmlns('http://www.w3.org/2000/svg'),
+      h.ViewBox('0 0 24 24'),
+      h.Class(
+        cn(
+          'shrink-0 overflow-visible drop-shadow-[0_1px_1px_oklch(0_0_0/0.18)]',
+          muted ? 'text-muted-foreground/35' : GROUP_TEXT[group],
+          className,
+        ),
+      ),
+    ],
+    [
+      shapeOf(shape, h),
+      h.g(
+        [h.Transform(`translate(${offset} ${offset}) scale(${scale})`)],
+        // A nested 24-unit svg; its currentColor is white.
+        [icon(h, glyph, 'size-6 text-white')],
+      ),
+    ],
+  )
+}
+
+/** A language or framework brand mark, in its brand colour. */
+export const stackLogo = (id: StackLogoId, className: string, h: HtmlBuilder<Message>): Html => {
+  const logo = STACK_LOGOS[id]
+  return h.svg(
+    [
+      h.AriaHidden(true),
+      h.Xmlns('http://www.w3.org/2000/svg'),
+      h.ViewBox('0 0 24 24'),
+      h.Class(cn('shrink-0', logo.color ? '' : 'text-foreground', className)),
+    ],
+    [h.path([h.D(logo.path), h.Fill(logo.color ?? 'currentColor')], [])],
+  )
+}
 
 /** A label over a value, for the HUD. */
 export const figure = (
