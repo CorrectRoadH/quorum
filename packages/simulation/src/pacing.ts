@@ -4,6 +4,7 @@ import {
   collect,
   connect,
   decline,
+  deleteMessage,
   disconnect,
   filePostmortem,
   place,
@@ -11,8 +12,11 @@ import {
   replace,
   resize,
   restart,
+  setCacheGuard,
+  setDlq,
   setFamily,
   setRuntime,
+  setUnderAttack,
   setWorkers,
   study,
   type Action,
@@ -66,6 +70,10 @@ export type Milestone =
   | 'first-hire'
   | 'first-feature'
   | 'seed'
+  | 'search-engine'
+  | 'waf'
+  | 'queue'
+  | 'series-a'
 
 /** Margin when an Era ends: `live` at the build's prices, `design` at the design's cost index. */
 export type MarginRecord = Readonly<{
@@ -100,6 +108,13 @@ const PRIORITY: ReadonlyArray<ResearchId> = [
   'alerting',
   'health-checks',
   'funnels',
+  'full-text-search',
+  'waf',
+  'object-storage',
+  'background-jobs',
+  'queues',
+  'cdn',
+  'stampede-protection',
 ]
 
 /** Polyglot researches the languages right after the basics. */
@@ -198,9 +213,13 @@ const addServer = (game: Game, ledger: Ledger, model: GameNode): Game => {
     const front = placed(next, ledger, 'lb', model.x - 160, model.y)
     if (!front) return game
     next = front[0]
-    for (const link of next.links.filter((entry) => entry.from === 'users'))
-      next = disconnect(next, link.from, link.to)
-    next = tried(next, connect(next, 'users', front[1]))
+    // Whatever fed the App Servers (Users, a WAF, a CDN) now feeds the Load Balancer.
+    const feeders = next.links.filter((entry) =>
+      servers(next).some((server) => server.id === entry.to),
+    )
+    for (const link of feeders) next = disconnect(next, link.from, link.to)
+    for (const from of new Set(feeders.map((link) => link.from)))
+      next = tried(next, connect(next, from, front[1]))
     for (const server of servers(next)) next = tried(next, connect(next, front[1], server.id))
     lb = byId(next, front[1])
   }
@@ -237,6 +256,56 @@ const inFront = (
     next = tried(next, connect(next, link.from, pooler[1]))
   }
   return tried(next, connect(next, pooler[1], database.id))
+}
+
+/** Puts an edge Node between Users and whatever Users reached. */
+const inFrontOfUsers = (game: Game, ledger: Ledger, type: 'waf' | 'cdn'): Game => {
+  const entry = game.links.find((link) => link.from === 'users')
+  const users = byId(game, 'users')
+  if (!entry || !users) return game
+  const edge = placed(game, ledger, type, users.x + 60, users.y + (type === 'cdn' ? -140 : 140))
+  if (!edge) return game
+  const rewired = tried(edge[0], connect(disconnect(edge[0], 'users', entry.to), 'users', edge[1]))
+  return tried(rewired, connect(rewired, edge[1], entry.to))
+}
+
+/** Links every App Server to a data Node. */
+const linkServers = (game: Game, to: string): Game =>
+  servers(game).reduce((current, server) => tried(current, connect(current, server.id, to)), game)
+
+/**
+ * The Seed playbook: a Search Engine once search loads the Database, Object
+ * Storage once uploads arrive, a WAF for the bots, a Queue and a Worker for
+ * the uploads, and stampede protection on every Cache.
+ */
+const seedBuild = (game: Game, ledger: Ledger): Game => {
+  let next = game
+  const missing = (type: ComponentId) => !next.nodes.some((node) => node.type === type)
+  const anchor = servers(next)[0]
+  if (!anchor) return next
+  if (has(next, 'waf') && missing('waf') && (ledger.kinds.bot?.rate ?? 0) > 0)
+    next = inFrontOfUsers(next, ledger, 'waf')
+  if (has(next, 'full-text-search') && missing('search') && (ledger.kinds.search?.rate ?? 0) > 0) {
+    const search = placed(next, ledger, 'search', anchor.x + 320, anchor.y + 200)
+    if (search) next = linkServers(search[0], search[1])
+  }
+  if (has(next, 'object-storage') && missing('storage') && (ledger.kinds.upload?.rate ?? 0) > 0) {
+    const storage = placed(next, ledger, 'storage', anchor.x + 320, anchor.y + 340)
+    if (storage) next = linkServers(storage[0], storage[1])
+  }
+  if (has(next, 'queues') && missing('queue') && (ledger.kinds.upload?.rate ?? 0) > 0) {
+    const queue = placed(next, ledger, 'queue', anchor.x + 320, anchor.y - 240)
+    const worker = queue && placed(queue[0], ledger, 'worker', anchor.x + 600, anchor.y - 240)
+    if (queue && worker) {
+      next = tried(worker[0], setDlq(worker[0], queue[1], true))
+      next = tried(next, connect(next, queue[1], worker[1]))
+      next = linkServers(next, queue[1])
+    }
+  }
+  if (has(next, 'stampede-protection'))
+    for (const cache of next.nodes.filter((node) => node.type === 'cache' && !node.coalesce))
+      next = tried(next, setCacheGuard(next, cache.id, { coalesce: true }))
+  return next
 }
 
 /** What the Balanced player does about the Node that limits the Design. */
@@ -295,6 +364,11 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
     next = tried(next, restart(next, incident.nodeId))
   if (incident?.kind === 'slow-query' && incident.nodeId)
     next = tried(next, addIndex(next, incident.nodeId))
+  if (incident?.kind === 'poison') next = tried(next, deleteMessage(next))
+  // Under attack mode only while the DDoS lasts: it blocks real users too.
+  for (const waf of next.nodes.filter((node) => node.type === 'waf'))
+    if (waf.underAttack !== (incident?.kind === 'ddos'))
+      next = tried(next, setUnderAttack(next, waf.id, incident?.kind === 'ddos'))
 
   const ready = (id: ResearchId) => !has(next, id) && researchReady(next, id)
   const research =
@@ -348,6 +422,8 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
       next = tried(next, hire(next, tuning))
   }
 
+  if (strategy !== 'greedy' && next.stage >= 2) next = seedBuild(next, solveFlow(next))
+
   const flow = solveFlow(next)
   const target =
     bottleneckOf(next, flow) ??
@@ -381,18 +457,24 @@ const reached = (before: Game, after: Game): ReadonlyArray<Milestone> => {
   if (after.stage >= 1) found.push('preseed')
   if (after.hires.length + after.engineers.length > 0) found.push('first-hire')
   if (after.stage >= 2) found.push('seed')
+  if (after.nodes.some((node) => node.type === 'search')) found.push('search-engine')
+  if (after.nodes.some((node) => node.type === 'waf')) found.push('waf')
+  if (after.nodes.some((node) => node.type === 'queue')) found.push('queue')
+  if (after.stage >= 3) found.push('series-a')
   return found
 }
 
 /**
  * Plays a Company with a strategy in 1 s Steps until `until` sim seconds or
- * the Seed round. `tuning` defaults to the design's pacing.
+ * the Era `untilStage` begins (Seed by default). `tuning` defaults to the
+ * design's pacing.
  */
 export const runBot = (
   seed: number,
   until: number,
   tuning: Tuning = DESIGN_TUNING,
   strategy: Strategy = 'balanced',
+  untilStage = 2,
 ): BotRun => {
   let game = newGame(seed)
   const milestones: Partial<Record<Milestone, number>> = {}
@@ -400,7 +482,7 @@ export const runBot = (
   const mark = (milestone: Milestone) => {
     if (milestones[milestone] === undefined) milestones[milestone] = game.time
   }
-  while (game.time < until && game.stage < 2) {
+  while (game.time < until && game.stage < untilStage) {
     if (Math.round(game.time) % LOOK_EVERY === 0) {
       const before = game
       const ledger = solveFlow(before)

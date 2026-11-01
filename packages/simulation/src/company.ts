@@ -53,6 +53,12 @@ export const node = (
   engine: 'redis',
   pm: 'static',
   mode: 'transaction',
+  depth: 0,
+  dlq: false,
+  coalesce: false,
+  warming: false,
+  paranoia: 2,
+  underAttack: false,
   ...extra,
 })
 
@@ -105,6 +111,7 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   autopilot: true,
   deploys: 0,
   badDeploys: 0,
+  stored: 0,
 })
 
 /**

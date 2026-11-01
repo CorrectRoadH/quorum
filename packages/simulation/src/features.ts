@@ -4,6 +4,7 @@ import {
   FEATURE_IDS,
   PAYING_SHARE,
   PLAN_PER_DAY,
+  type BackendKind,
   type FeatureDef,
   type RequestKind,
 } from './catalog.ts'
@@ -70,3 +71,7 @@ export const subscriptionsOf = (game: Game): number =>
   shipped(game).some((feature) => feature.subscription)
     ? (game.users * PAYING_SHARE * PLAN_PER_DAY) / CALENDAR_DAY
     : 0
+
+/** What one query of a backend kind costs relative to its catalog cost. */
+export const queryFactor = (game: Game, kind: BackendKind): number =>
+  product(game, (feature) => feature.queries[kind] ?? 1)

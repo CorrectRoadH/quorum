@@ -95,6 +95,18 @@ _Avoid_: query type, internal request
 Requests that reach a Node with no outbound Link that accepts them. They count as errors.
 _Avoid_: dropped, lost, orphaned
 
+**Task**:
+The backend kind an App Server sends to a Queue for the part of a request that can go async. A Worker runs it later; the user waits only for the enqueue.
+_Avoid_: job (a later request kind), message
+
+**Queue depth**:
+Tasks a Queue holds that no Worker has taken yet. It is saved with the Game, and a growing depth is the first sign Workers are too slow.
+_Avoid_: backlog (the Team's work list), lag
+
+**Egress**:
+The Burn for bytes sent to the internet: responses from App Servers at the origin price, and pages a CDN answers at the cheaper edge price. Billed from Seed.
+_Avoid_: bandwidth cost, transfer fee
+
 ### The simulation
 
 **Simulation**:

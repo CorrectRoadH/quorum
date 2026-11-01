@@ -10,6 +10,7 @@ import {
   OPEN_ACTION_WEIGHT,
   RUNTIMES,
   SPIKE_MAGNITUDE,
+  WARMED,
   type ComponentId,
   type IncidentId,
 } from './catalog.ts'
@@ -29,14 +30,12 @@ import { fixed, serviceOf } from './team.ts'
 /** The director avoids repeating the last incident type. */
 const REPEAT_WEIGHT = 0.3
 
-const TARGETS = new Set(['server', 'database', 'replica', 'cache', 'pooler', 'lb'])
-
 const busy = (ledger: Ledger, node: GameNode): boolean => (ledger.nodes[node.id]?.inbound ?? 0) > 0
 
 /** Nodes an instance failure can hit, weighted toward Nodes with no second copy. */
 const instanceTargets = (game: Game, ledger: Ledger): ReadonlyArray<readonly [GameNode, number]> =>
   game.nodes
-    .filter((node) => TARGETS.has(node.type) && !isDown(node) && busy(ledger, node))
+    .filter((node) => COMPONENTS[node.type].limiting && !isDown(node) && busy(ledger, node))
     .map((node) => {
       const copies = game.nodes.filter((other) => other.type === node.type).length
       return [node, copies === 1 ? 3 : 0.5] as const
@@ -51,8 +50,18 @@ const leakTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
       busy(ledger, node),
   )
 
+const hasNode = (game: Game, type: ComponentId): boolean =>
+  game.nodes.some((node) => node.type === type && !isDown(node))
+
+const cacheTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
+  game.nodes.filter((node) => node.type === 'cache' && !isDown(node) && busy(ledger, node))
+
+const poisonTargets = (game: Game): ReadonlyArray<GameNode> =>
+  game.nodes.filter((node) => node.type === 'queue' && !node.dlq)
+
 /** How hard this incident would hit the current Design: 0 when it has nothing to hit, else 0.2 to 3. */
 export const weaknessOf = (game: Game, ledger: Ledger, kind: IncidentId): number => {
+  if (INCIDENTS[kind].era > game.stage) return 0
   const weakness = rawWeakness(game, ledger, kind)
   return weakness > 0 ? Math.max(MIN_WEAKNESS, weakness) : 0
 }
@@ -63,7 +72,7 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number =>
       const hottest = Math.max(
         0,
         ...game.nodes
-          .filter((node) => TARGETS.has(node.type))
+          .filter((node) => COMPONENTS[node.type].limiting)
           .map((node) => ledger.nodes[node.id]?.utilization ?? 0),
       )
       return hottest > 0.5 ? 2 : 1
@@ -103,6 +112,23 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number =>
     ),
     // Only a deploy ships a bug: the director never picks one.
     Match.when('bad-deploy', () => 0),
+    // Scrapers and floods hit every Design; a WAF makes them a nuisance.
+    Match.when('bot-surge', () => (hasNode(game, 'waf') ? 0.5 : 2)),
+    Match.when('ddos', () => (hasNode(game, 'waf') ? 0.5 : 1.5)),
+    Match.when('stuffing', () =>
+      (ledger.kinds.login?.rate ?? 0) > 0 ? (hasNode(game, 'waf') ? 0.5 : 2) : 0,
+    ),
+    Match.when('stampede', () =>
+      cacheTargets(game, ledger).some(
+        (node) => !(node.coalesce && has(game, 'stampede-protection')),
+      )
+        ? 2
+        : cacheTargets(game, ledger).length > 0
+          ? 0.5
+          : 0,
+    ),
+    // A dead-letter queue moves the poison message aside: nothing to hit.
+    Match.when('poison', () => (poisonTargets(game).length > 0 ? 2 : 0)),
     Match.exhaustive,
   )
 
@@ -132,9 +158,21 @@ export const startIncident = (
     Match.when('slow-query', () =>
       game.nodes.find((node) => node.type === 'database' && busy(ledger, node)),
     ),
+    Match.when('stampede', () => {
+      const targets = cacheTargets(game, ledger)
+      return targets[Math.floor(roll * targets.length)]
+    }),
+    // It strikes a Queue without a dead-letter queue first; one with a DLQ shrugs it off.
+    Match.when('poison', () => {
+      const exposed = poisonTargets(game)
+      const targets =
+        exposed.length > 0 ? exposed : game.nodes.filter((node) => node.type === 'queue')
+      return targets[Math.floor(roll * targets.length)]
+    }),
     Match.orElse(() => undefined),
   )
-  if ((kind === 'instance' || kind === 'leak' || kind === 'slow-query') && !target) return null
+  const targeted = ['instance', 'leak', 'slow-query', 'stampede', 'poison'] as const
+  if ((targeted as ReadonlyArray<IncidentId>).includes(kind) && !target) return null
   const incident: Incident = {
     kind,
     remaining: INCIDENTS[kind].duration,
@@ -151,14 +189,16 @@ export const startIncident = (
         ? SPIKE_MAGNITUDE[0] + (SPIKE_MAGNITUDE[1] - SPIKE_MAGNITUDE[0]) * roll
         : SPIKE_MAGNITUDE[0],
   }
-  const nodes =
-    kind === 'instance' && target
-      ? game.nodes.map((node) =>
-          node.id === target.id
-            ? { ...node, down: -1, downCause: 'failure' as const, downAt: game.time }
-            : node,
-        )
-      : game.nodes
+  // A stampede: the Cache restarted empty, or mostly warm with Cache warming.
+  const nodes = game.nodes.map((node) =>
+    node.id !== target?.id
+      ? node
+      : kind === 'instance'
+        ? { ...node, down: -1, downCause: 'failure' as const, downAt: game.time }
+        : kind === 'stampede'
+          ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
+          : node,
+  )
   return { game: { ...game, nodes, incident, lastIncident: kind }, incident }
 }
 

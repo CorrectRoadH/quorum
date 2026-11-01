@@ -94,6 +94,18 @@ export const GameNode = Schema.Struct({
   engine: CacheEngine.pipe(Schema.withDecodingDefaultKey(Effect.succeed('redis' as const))),
   /** The Connection Pooler's mode. Saves from before modes pooled by transaction. */
   mode: PoolerMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed('transaction' as const))),
+  /** Tasks waiting in a Queue. */
+  depth: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** A Queue moves a task that keeps failing to a dead-letter queue. */
+  dlq: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** A Cache coalesces misses for the same key (Stampede protection). */
+  coalesce: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** A Cache refills before it takes traffic after a restart (Cache warming). */
+  warming: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** A WAF's paranoia level, 1 to 4. */
+  paranoia: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(2))),
+  /** A WAF challenges every request. */
+  underAttack: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 })
 export type GameNode = typeof GameNode.Type
 
@@ -362,5 +374,7 @@ export const Game = Schema.Struct({
   autopilot: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
   deploys: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   badDeploys: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** GB held in Object Storage. */
+  stored: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
 })
 export type Game = typeof Game.Type

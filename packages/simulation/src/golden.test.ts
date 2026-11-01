@@ -16,7 +16,10 @@ import { SIM_VERSION } from './version.ts'
 const GOLDEN_STEPS = 10_000
 // SIM_VERSION 2 (M4): the founder now builds Features with Dev Hours and each
 // deploy rolls for a bad deploy, so the Pre-seed replay's demand and seed move.
-const GOLDEN_HASH = 'a49590af'
+// SIM_VERSION 3 (M5 Seed): the save gains Queue depth, Cache, Queue and WAF
+// options, and stored GB. The Pre-seed replay's values are unchanged; the
+// encoded Game carries the new fields, so its hash moves.
+const GOLDEN_HASH = 'c9a1b233'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {

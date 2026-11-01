@@ -10,15 +10,18 @@ import {
   Coins,
   Gauge,
   Gem,
+  HardDrive,
   Hourglass,
   HandCoins,
   type IconNode,
   Inbox,
   Layers,
+  ListOrdered,
   LogIn,
   Plus,
   RotateCcw,
   ScanLine,
+  ShieldBan,
   Shuffle,
   Smile,
   Target,
@@ -127,6 +130,18 @@ const layoutOf = (type: ComponentId): Layout => {
     case 'cache':
     case 'pooler':
       return { rows: 4, inRow: 0, outRow: 3, footer: false }
+    case 'search':
+      return { rows: 3, inRow: 0, outRow: null, footer: true }
+    case 'storage':
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
+    case 'queue':
+      return { rows: 4, inRow: 0, outRow: 3, footer: true }
+    case 'worker':
+      return { rows: 3, inRow: 0, outRow: null, footer: true }
+    case 'cdn':
+      return { rows: 3, inRow: 0, outRow: 2, footer: false }
+    case 'waf':
+      return { rows: 4, inRow: 0, outRow: 3, footer: true }
   }
 }
 
@@ -688,6 +703,9 @@ const ROW_ICONS = {
   policy: Shuffle,
   logins: LogIn,
   cost: Coins,
+  depth: ListOrdered,
+  stored: HardDrive,
+  blocked: ShieldBan,
 } as const
 
 const FOOT_ICONS = {
@@ -868,6 +886,59 @@ const rowsOf = (
         { glyph: 'logins', name: 'Logins', value: `${rate(own.inbound)}/s` },
         { glyph: 'cost', name: 'Cost', value: `${money(burnOf(game, node))}/s` },
         latency,
+      ]
+    case 'search':
+      return [inbound, capacity, latency]
+    case 'storage':
+      return [
+        inbound,
+        { glyph: 'stored', name: 'Stored', value: `${compact(game.stored)} GB` },
+        { glyph: 'cost', name: 'Cost', value: `${money(burnOf(game, node))}/s` },
+      ]
+    case 'queue':
+      return [
+        inbound,
+        {
+          glyph: 'depth',
+          name: 'Depth',
+          value: compact(Math.round(node.depth)),
+          tone: node.depth >= 1_000 ? 'danger' : node.depth >= 100 ? 'warn' : 'plain',
+        },
+        capacity,
+        out,
+      ]
+    case 'worker': {
+      const runtime = RUNTIMES[node.runtime]
+      const framework = node.framework === 'none' ? null : node.framework
+      return [
+        inbound,
+        capacity,
+        {
+          glyph: 'stack',
+          logo: runtime.language,
+          name: runtime.name,
+          value: framework ? FRAMEWORKS[framework].name : '—',
+          ...(framework ? { valueLogo: framework } : { tone: 'muted' }),
+        },
+      ]
+    }
+    case 'cdn':
+      return [
+        inbound,
+        { glyph: 'hits', name: 'Hit ratio', value: pct(own.hitRatio ?? 0), bar: own.hitRatio ?? 0 },
+        out,
+      ]
+    case 'waf':
+      return [
+        inbound,
+        capacity,
+        {
+          glyph: 'blocked',
+          name: 'Paranoia',
+          value: node.underAttack ? 'under attack' : `level ${node.paranoia}`,
+          tone: node.underAttack ? 'warn' : 'plain',
+        },
+        out,
       ]
   }
 }

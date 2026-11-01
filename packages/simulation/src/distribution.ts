@@ -19,6 +19,7 @@ export const ERROR_CAUSES = [
   'oom',
   'timeout',
   'crash',
+  'blocked',
 ] as const
 export type ErrorCause = (typeof ERROR_CAUSES)[number]
 export type Failures = Readonly<Record<ErrorCause, number>>

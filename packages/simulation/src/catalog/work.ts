@@ -1,6 +1,6 @@
 /* What Dev Hours build: Features for the product, and Engineering tasks for the system (08). */
 
-import type { RequestKind } from './kinds.ts'
+import type { BackendKind, RequestKind } from './kinds.ts'
 import type { ResearchId } from './research.ts'
 
 export const FEATURE_IDS = [
@@ -10,6 +10,10 @@ export const FEATURE_IDS = [
   'password-login',
   'paid-plans',
   'email-digests',
+  'search-filters',
+  'profile-photos',
+  'public-api',
+  'infinite-scroll',
 ] as const
 export type FeatureId = (typeof FEATURE_IDS)[number]
 
@@ -31,6 +35,8 @@ export type FeatureDef = Readonly<{
   value: Partial<Record<RequestKind, number>>
   /** Multiplies the response size of a kind. */
   payload: Partial<Record<RequestKind, number>>
+  /** Multiplies what one query of a backend kind costs the Node that answers it. */
+  queries: Partial<Record<BackendKind, number>>
   /**
    * A kind users send once this ships. Gated: no user sends it before, even
    * where the Era's mix has it. Otherwise it arrives before its Era at `share`.
@@ -56,6 +62,7 @@ const feature = (
   load: {},
   value: {},
   payload: {},
+  queries: {},
   unlocks: null,
   shapes: 0,
   subscription: false,
@@ -117,6 +124,44 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
     dh: 20,
     churn: 0.9,
     effect: 'Churn −10%',
+  }),
+  'search-filters': feature({
+    id: 'search-filters',
+    name: 'Search filters',
+    era: 2,
+    dh: 30,
+    value: { search: 1.25 },
+    queries: { 'q-search': 1.4 },
+    effect: 'Searches earn 25% more',
+    hidden: 'Each search query costs 40% more',
+  }),
+  'profile-photos': feature({
+    id: 'profile-photos',
+    name: 'Profile photos',
+    era: 2,
+    dh: 25,
+    growth: 1.1,
+    unlocks: { kind: 'upload', share: 0.04, gated: true },
+    effect: 'Growth +10%, uploads arrive: 120 ms of CPU each',
+  }),
+  'public-api': feature({
+    id: 'public-api',
+    name: 'Public API',
+    era: 2,
+    dh: 40,
+    market: 1.25,
+    load: { read: 1.3, bot: 1.5 },
+    effect: 'Market +25%, API reads +30%',
+    hidden: 'Bots +50%',
+  }),
+  'infinite-scroll': feature({
+    id: 'infinite-scroll',
+    name: 'Infinite scroll',
+    era: 2,
+    dh: 20,
+    value: { read: 1.1 },
+    load: { read: 1.4 },
+    effect: 'API reads earn 10% more, and users send 40% more',
   }),
 }
 

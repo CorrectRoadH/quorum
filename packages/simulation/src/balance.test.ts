@@ -44,7 +44,8 @@ const model = (
 
 /** Requests per second per dollar of Burn, for `read` with database calls of `dbMs`. */
 const perDollar = (server: GameNode, dbMs: number): number =>
-  model(server, { read: 1 }, { reads: dbMs, writes: dbMs, auth: 0 }).capacity / burnOf(game, server)
+  model(server, { read: 1 }, { 'q-read': dbMs, 'q-write': dbMs, auth: 0 }).capacity /
+  burnOf(game, server)
 
 // PHP-FPM with OPcache and 10 workers per vCPU (plan D6), against Node.js cluster with no framework.
 const php = box({ runtime: 'php_fpm', workers: 40 })
@@ -70,7 +71,7 @@ describe('runtime balance targets', () => {
     const mix = ERAS[1]?.mix ?? {}
     /** Pre-seed demand that loads the single loop to `rho`. */
     const loadedTo = (rho: number) => {
-      const unit = model(single, mix, { reads: 3, writes: 3, auth: 0 })
+      const unit = model(single, mix, { 'q-read': 3, 'q-write': 3, auth: 0 })
       const rate = rho / unit.utilization
       return Object.fromEntries(
         Object.entries(mix).map(([kind, share]) => [kind, (share ?? 0) * rate]),
@@ -79,7 +80,7 @@ describe('runtime balance targets', () => {
 
     for (const rho of [0.5, 0.8])
       test(`adds 40 to 120 ms to the p99 at ρ = ${rho}`, () => {
-        const stall = model(single, loadedTo(rho), { reads: 3, writes: 3, auth: 0 }).tailMs
+        const stall = model(single, loadedTo(rho), { 'q-read': 3, 'q-write': 3, auth: 0 }).tailMs
         expect(stall).toBeGreaterThanOrEqual(40)
         expect(stall).toBeLessThanOrEqual(120)
       })

@@ -29,6 +29,19 @@ describe('old saves', () => {
       true,
     )
     expect(game.nodes.every((node) => node.engine === 'redis' && node.ttl === 300)).toBe(true)
+    // Seed (M5): Queue, WAF and Cache options, and the files in Object Storage.
+    expect(
+      game.nodes.every(
+        (node) =>
+          node.depth === 0 &&
+          !node.dlq &&
+          node.paranoia === 2 &&
+          !node.underAttack &&
+          !node.coalesce &&
+          !node.warming,
+      ),
+    ).toBe(true)
+    expect(game.stored).toBe(0)
     // The old Analytics `sample: 1` was 10%; the rate now lives by value and decodes as 10%.
     const analytics = game.nodes.find((node) => node.type === 'analytics')
     expect(analytics?.sample).toBe(1)

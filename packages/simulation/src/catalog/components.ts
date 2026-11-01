@@ -15,6 +15,12 @@ export const COMPONENT_IDS = [
   'cache',
   'replica',
   'auth',
+  'search',
+  'storage',
+  'queue',
+  'worker',
+  'cdn',
+  'waf',
 ] as const
 export type ComponentId = (typeof COMPONENT_IDS)[number]
 
@@ -51,6 +57,19 @@ export type ComponentDef = Readonly<{
   latency: number
   /** Kinds this Node takes on an inbound link. */
   accepts: ReadonlyArray<Kind>
+  /** Kinds this Node sends on its routing links. */
+  sends: ReadonlyArray<Kind>
+  /**
+   * Kinds it takes only when no linked Node takes them as its own job: Postgres
+   * searches and stores files until a Search Engine or Object Storage is linked.
+   */
+  fallback: ReadonlyArray<Kind>
+  /** Runs the Service's Stack, and holds a slot while it waits on each call. */
+  stack: boolean
+  /** Its capacity can limit the Design: the Bottleneck search weighs it and Instance failure can hit it. */
+  limiting: boolean
+  /** A new copy starts cold and warms up. */
+  coldStart: boolean
   /** Most routing links out. Users resolve to one host until DNS. */
   maxOut: number
   /** Receives a copy of its parent's traffic instead of a share of it. */
@@ -62,9 +81,28 @@ export type ComponentDef = Readonly<{
 }>
 
 const def = (
-  entry: Omit<ComponentDef, 'maxOut' | 'tap' | 'unlock' | 'fixed' | 'sized' | 'burn' | 'steps'> &
+  entry: Omit<
+    ComponentDef,
+    | 'maxOut'
+    | 'tap'
+    | 'unlock'
+    | 'fixed'
+    | 'sized'
+    | 'burn'
+    | 'steps'
+    | 'sends'
+    | 'fallback'
+    | 'stack'
+    | 'limiting'
+    | 'coldStart'
+  > &
     Partial<ComponentDef>,
 ): ComponentDef => ({
+  sends: [],
+  fallback: [],
+  stack: false,
+  limiting: false,
+  coldStart: false,
   maxOut: 99,
   tap: false,
   unlock: null,
@@ -88,6 +126,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: [],
     maxOut: 1,
     fixed: true,
+    sends: REQUEST_KINDS,
   }),
   payments: def({
     id: 'payments',
@@ -129,6 +168,10 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     sized: true,
     latency: 2,
     accepts: REQUEST_KINDS,
+    sends: ['q-read', 'q-write', 'auth', 'q-search', 'blob-put', 'task'],
+    stack: true,
+    limiting: true,
+    coldStart: true,
   }),
   database: def({
     id: 'database',
@@ -140,8 +183,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 90,
     sized: true,
     latency: 2,
-    accepts: ['q-read', 'q-write'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    fallback: ['q-search', 'blob-put'],
     maxOut: 0,
+    limiting: true,
+    coldStart: true,
   }),
   dns: def({
     id: 'dns',
@@ -156,6 +202,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: REQUEST_KINDS,
     maxOut: 8,
     unlock: 'dns-rr',
+    sends: REQUEST_KINDS,
   }),
   lb: def({
     id: 'lb',
@@ -170,6 +217,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: REQUEST_KINDS,
     unlock: 'load-balancing',
     steps: 6,
+    sends: REQUEST_KINDS,
+    limiting: true,
   }),
   pooler: def({
     id: 'pooler',
@@ -181,9 +230,12 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 80,
     burn: 0.03,
     latency: 0.3,
-    accepts: ['q-read', 'q-write'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    fallback: ['q-search', 'blob-put'],
     unlock: 'pooling',
     steps: 4,
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    limiting: true,
   }),
   cache: def({
     id: 'cache',
@@ -196,9 +248,13 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 150,
     burn: 0.06,
     latency: 0.5,
-    accepts: ['q-read', 'q-write'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    fallback: ['q-search', 'blob-put'],
     unlock: 'caching',
     steps: 8,
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    limiting: true,
+    coldStart: true,
   }),
   replica: def({
     id: 'replica',
@@ -213,6 +269,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: ['q-read'],
     maxOut: 0,
     unlock: 'replication',
+    limiting: true,
+    coldStart: true,
   }),
   auth: def({
     id: 'auth',
@@ -226,6 +284,99 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: ['auth'],
     maxOut: 0,
     unlock: 'auth-provider',
+  }),
+  search: def({
+    id: 'search',
+    code: 'fts',
+    name: 'Search Engine',
+    product: 'Elasticsearch',
+    group: 'data',
+    blurb: 'Answers search queries. 400 per second per size step.',
+    cost: 300,
+    burn: 0.25,
+    latency: 15,
+    accepts: ['q-search'],
+    maxOut: 0,
+    unlock: 'full-text-search',
+    steps: 8,
+    limiting: true,
+  }),
+  storage: def({
+    id: 'storage',
+    code: 's3',
+    name: 'Object Storage',
+    product: 'Amazon S3',
+    group: 'data',
+    blurb: 'Holds uploaded files. No limit. Pay for what it stores.',
+    cost: 280,
+    burn: 0.01,
+    latency: 40,
+    accepts: ['blob-put'],
+    maxOut: 0,
+    unlock: 'object-storage',
+  }),
+  queue: def({
+    id: 'queue',
+    code: 'mq',
+    name: 'Queue',
+    product: 'RabbitMQ',
+    group: 'compute',
+    blurb: 'Takes work now so Workers can do it later. Users wait only for the enqueue.',
+    cost: 360,
+    burn: 0.1,
+    latency: 2,
+    accepts: ['task'],
+    sends: ['task'],
+    unlock: 'queues',
+    steps: 6,
+    limiting: true,
+  }),
+  worker: def({
+    id: 'worker',
+    code: 'wrk',
+    name: 'Worker',
+    product: 'Sidekiq',
+    group: 'compute',
+    blurb: 'Runs your code on tasks from a Queue. Users never wait for it.',
+    cost: 60,
+    sized: true,
+    latency: 0,
+    accepts: ['task'],
+    maxOut: 0,
+    unlock: 'background-jobs',
+    stack: true,
+    limiting: true,
+    coldStart: true,
+  }),
+  cdn: def({
+    id: 'cdn',
+    code: 'cdn',
+    name: 'CDN',
+    product: 'Cloudflare',
+    group: 'edge',
+    blurb: 'Answers cacheable pages near the user. Egress from the edge costs less.',
+    cost: 220,
+    burn: 0.05,
+    latency: 8,
+    accepts: REQUEST_KINDS,
+    sends: REQUEST_KINDS,
+    unlock: 'cdn',
+  }),
+  waf: def({
+    id: 'waf',
+    code: 'waf',
+    name: 'WAF',
+    product: 'ModSecurity',
+    group: 'edge',
+    blurb: 'Blocks bots before they reach the app, and some real users with them.',
+    cost: 260,
+    burn: 0.1,
+    latency: 2,
+    accepts: REQUEST_KINDS,
+    sends: REQUEST_KINDS,
+    unlock: 'waf',
+    steps: 6,
+    limiting: true,
   }),
 }
 
@@ -260,6 +411,52 @@ export const CACHE_TTLS = [
 export const HOT_KB_PER_USER = 200
 /** Operations per second one cache thread answers. */
 export const CACHE_OPS = 50_000
+
+/** A CDN's hit ratio per kind at the default TTL (05 "CDN"): 70% of pages. */
+export const CDN_HIT: Partial<Record<Kind, number>> = { page: 0.7 }
+/** CDN TTLs in seconds, and what each does to the hit ratio. Proposed: the GDD gives no numbers. */
+export const CDN_TTLS = [
+  { ttl: 60, factor: 0.8 },
+  { ttl: 300, factor: 1 },
+  { ttl: 3_600, factor: 1.2 },
+] as const
+/** Milliseconds a request crosses the internet to reach the origin. A CDN edge sits closer. */
+export const INTERNET_MS = 30
+
+/** WAF paranoia levels (05 "WAF"): bots blocked, real users blocked, and CPU per request. */
+export const PARANOIA = [
+  { level: 1, block: 0.6, falsePositive: 0.001, cpu: 1 },
+  { level: 2, block: 0.8, falsePositive: 0.005, cpu: 1.5 },
+  { level: 3, block: 0.92, falsePositive: 0.02, cpu: 2.5 },
+  { level: 4, block: 0.98, falsePositive: 0.06, cpu: 4 },
+] as const
+/** "Under attack" mode challenges every request: it blocks nearly all junk and some real users, and adds latency. */
+export const UNDER_ATTACK = { block: 0.99, falsePositive: 0.01, latency: 40 } as const
+
+/** Messages per second one RabbitMQ node takes (05 "Queue"). */
+export const QUEUE_RATE = 20_000
+/** Milliseconds a backlog of one message adds to the enqueue: a large backlog slows the broker. Proposed. */
+export const BACKLOG_MS = 0.01
+/** A Queue offers its Workers its backlog over this many seconds. */
+export const DRAIN_SECONDS = 10
+/** While a poison message is stuck, Workers spend this share of their time on it. Proposed. */
+export const POISON_SHARE = 0.9
+
+/** Search queries per second one Search Engine answers at size 1 (05 "Stats"). */
+export const SEARCH_QPS = 400
+/** MB in one uploaded file (04 "Request kinds"). */
+export const UPLOAD_MB = 2
+/** Object Storage price per GB stored per second. Proposed: stylized, like every price here. */
+export const STORAGE_PRICE = 0.0005
+
+/** Egress price per GB (09 "Egress"). */
+export const EGRESS_ORIGIN = 0.09
+export const EGRESS_CDN = 0.02
+
+/** With Stampede protection, a cold Cache sends at most this share of its misses on: the rest wait on one fetch. */
+export const COALESCED = 0.25
+/** How warm a Cache comes back from a restart with Cache warming. */
+export const WARMED = 0.8
 
 /** Auth Provider price, in dollars per second per user. */
 export const AUTH_PRICE_PER_USER = 0.00006

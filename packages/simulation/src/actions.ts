@@ -2,7 +2,9 @@ import { Data, Result } from 'effect'
 import {
   ALERT_THRESHOLDS,
   CACHE_TTLS,
+  CDN_TTLS,
   COMPONENTS,
+  PARANOIA,
   CHECK_INTERVALS,
   CREDIT_CAP,
   DEFAULT_FPM_WORKERS,
@@ -133,8 +135,7 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     sampleRate: 0.1,
     down: 0,
     downCause: 'restart',
-    warm:
-      type === 'server' || type === 'cache' || type === 'database' || type === 'replica' ? 0 : 1,
+    warm: COMPONENTS[type].coldStart ? 0 : 1,
     credits: 0,
     leak: 0,
     compress: stack?.compress ?? false,
@@ -146,6 +147,12 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     engine: 'redis',
     pm: 'static',
     mode: 'transaction',
+    depth: 0,
+    dlq: false,
+    coalesce: false,
+    warming: false,
+    paranoia: 2,
+    underAttack: false,
   }
 }
 
@@ -180,21 +187,7 @@ export const move = (game: Game, id: string, x: number, y: number): Game =>
 /* ---------- links ---------- */
 
 /** Kinds a Node sends on its routing links. */
-const emitsOf = (node: GameNode): ReadonlyArray<Kind> => {
-  switch (node.type) {
-    case 'users':
-    case 'dns':
-    case 'lb':
-      return REQUEST_KINDS
-    case 'server':
-      return ['q-read', 'q-write', 'auth']
-    case 'cache':
-    case 'pooler':
-      return ['q-read', 'q-write']
-    default:
-      return []
-  }
-}
+const emitsOf = (node: GameNode): ReadonlyArray<Kind> => COMPONENTS[node.type].sends
 
 const reaches = (links: ReadonlyArray<GameLink>, from: string, to: string): boolean => {
   const seen = new Set<string>()
@@ -338,7 +331,8 @@ const defaultWorkers = (node: GameNode, runtime: RuntimeId): number =>
 
 export const setRuntime = (game: Game, id: string, runtime: RuntimeId): Action =>
   withNode(game, id, (node) => {
-    if (node.type !== 'server') return notAllowed('Only App Servers run a Stack.')
+    if (node.type !== 'server' && node.type !== 'worker')
+      return notAllowed('Only App Servers and Workers run a Stack.')
     const def = RUNTIMES[runtime]
     if (!runtimeReady(game, runtime) && def.research)
       return no(Refusal.Locked({ what: def.name, research: RESEARCH[def.research].name }))
@@ -425,7 +419,11 @@ export const setTtl = (game: Game, id: string, ttl: number): Action =>
       return CACHE_TTLS.some((entry) => entry.ttl === ttl)
         ? ok(patch(game, id, { ttl }))
         : notAllowed('A cache TTL is 10 seconds, 1 minute, or 1 hour.')
-    if (node.type !== 'dns') return notAllowed('Only DNS and Caches have a TTL.')
+    if (node.type === 'cdn')
+      return CDN_TTLS.some((entry) => entry.ttl === ttl)
+        ? ok(patch(game, id, { ttl }))
+        : notAllowed('A CDN TTL is 1 minute, 5 minutes, or 1 hour.')
+    if (node.type !== 'dns') return notAllowed('Only DNS, CDNs and Caches have a TTL.')
     if (!(DNS_TTLS as ReadonlyArray<number>).includes(ttl))
       return notAllowed('A TTL is 30 seconds, 5 minutes, or 1 hour.')
     if (!has(game, 'health-checks'))
@@ -436,7 +434,7 @@ export const setTtl = (game: Game, id: string, ttl: number): Action =>
 /** Sets PHP-FPM's process manager. */
 export const setPm = (game: Game, id: string, pm: PmMode): Action =>
   withNode(game, id, (node) =>
-    node.type === 'server' && node.runtime === 'php_fpm'
+    (node.type === 'server' || node.type === 'worker') && node.runtime === 'php_fpm'
       ? ok(node.pm === pm ? game : patch(game, id, { pm }))
       : notAllowed('Only PHP-FPM has a process manager.'),
   )
@@ -455,6 +453,54 @@ export const setCacheEngine = (game: Game, id: string, engine: CacheEngine): Act
     if (node.type !== 'cache') return notAllowed('Only a Cache has an engine.')
     return ok(node.engine === engine ? game : patch(game, id, { engine, warm: 0 }))
   })
+
+/** Turns a Cache's stampede protection or warming on or off. Each needs its research. */
+export const setCacheGuard = (
+  game: Game,
+  id: string,
+  change: Readonly<{ coalesce?: boolean; warming?: boolean }>,
+): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'cache') return notAllowed('Only a Cache has stampede guards.')
+    if (change.coalesce && !has(game, 'stampede-protection'))
+      return no(
+        Refusal.Locked({ what: 'Coalescing', research: RESEARCH['stampede-protection'].name }),
+      )
+    if (change.warming && !has(game, 'cache-warming'))
+      return no(Refusal.Locked({ what: 'Warming', research: RESEARCH['cache-warming'].name }))
+    return ok(patch(game, id, change))
+  })
+
+/** Turns a Queue's dead-letter queue on or off. */
+export const setDlq = (game: Game, id: string, dlq: boolean): Action =>
+  withNode(game, id, (node) =>
+    node.type === 'queue'
+      ? ok(node.dlq === dlq ? game : patch(game, id, { dlq }))
+      : notAllowed('Only a Queue has a dead-letter queue.'),
+  )
+
+/** Sets a WAF's paranoia level, 1 to 4. */
+export const setParanoia = (game: Game, id: string, paranoia: number): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'waf') return notAllowed('Only a WAF has a paranoia level.')
+    if (!PARANOIA.some((entry) => entry.level === paranoia))
+      return notAllowed('Paranoia runs from 1 to 4.')
+    return ok(node.paranoia === paranoia ? game : patch(game, id, { paranoia }))
+  })
+
+/** Turns a WAF's Under attack mode on or off: it challenges every request. */
+export const setUnderAttack = (game: Game, id: string, underAttack: boolean): Action =>
+  withNode(game, id, (node) =>
+    node.type === 'waf'
+      ? ok(node.underAttack === underAttack ? game : patch(game, id, { underAttack }))
+      : notAllowed('Only a WAF has Under attack mode.'),
+  )
+
+/** Deletes the poison message: the Workers get back to the queue. */
+export const deleteMessage = (game: Game): Action =>
+  game.incident?.kind === 'poison'
+    ? ok({ ...game, incident: { ...game.incident, remaining: 0 } })
+    : notAllowed('No poison message is stuck.')
 
 /** Sets an alert rule's threshold. A new threshold is a fresh start: its false alarms are forgiven. */
 export const setAlertRule = (game: Game, rule: AlertRule, threshold: number): Action => {
@@ -492,7 +538,7 @@ export const replace = (game: Game, id: string): Action =>
 /** Restarts an App Server: frees leaked memory, comes back cold. */
 export const restart = (game: Game, id: string): Action =>
   withNode(game, id, (node) =>
-    node.type !== 'server'
+    node.type !== 'server' && node.type !== 'worker'
       ? notAllowed('Only App Servers restart.')
       : isDown(node)
         ? notAllowed('It is already down.')

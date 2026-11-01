@@ -10,12 +10,19 @@ export const INCIDENT_IDS = [
   'leak',
   'slow-query',
   'bad-deploy',
+  'bot-surge',
+  'stuffing',
+  'stampede',
+  'poison',
+  'ddos',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
 export type IncidentDef = Readonly<{
   id: IncidentId
   name: string
+  /** The first Era the director can pick it in. */
+  era: number
   severity: 2 | 3
   /** The severity it steps up to when it stays unmitigated (11 "Escalation"). */
   escalatesTo: 1 | 2
@@ -33,6 +40,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   spike: {
     id: 'spike',
     name: 'Traffic spike',
+    era: 1,
     severity: 3,
     escalatesTo: 2,
     duration: 30,
@@ -43,6 +51,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   instance: {
     id: 'instance',
     name: 'Instance failure',
+    era: 1,
     severity: 3,
     escalatesTo: 2,
     duration: 60,
@@ -53,6 +62,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   connections: {
     id: 'connections',
     name: 'Connection exhaustion',
+    era: 1,
     severity: 2,
     escalatesTo: 1,
     duration: 40,
@@ -63,6 +73,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   loop: {
     id: 'loop',
     name: 'Event loop block',
+    era: 1,
     severity: 3,
     escalatesTo: 2,
     duration: 35,
@@ -73,6 +84,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   leak: {
     id: 'leak',
     name: 'Memory leak',
+    era: 1,
     severity: 3,
     escalatesTo: 2,
     duration: 60,
@@ -83,6 +95,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   'slow-query': {
     id: 'slow-query',
     name: 'Slow query',
+    era: 1,
     severity: 3,
     escalatesTo: 2,
     duration: 300,
@@ -93,6 +106,7 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
   'bad-deploy': {
     id: 'bad-deploy',
     name: 'Bad deploy',
+    era: 1,
     severity: 3,
     escalatesTo: 2,
     duration: 120,
@@ -100,7 +114,67 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     prevention: 'A pipeline that can roll back, automated tests, and smaller deploys.',
     actions: ['ci', 'testing-culture'],
   },
+  'bot-surge': {
+    id: 'bot-surge',
+    name: 'Bot surge',
+    era: 2,
+    severity: 3,
+    escalatesTo: 2,
+    duration: 90,
+    cause: 'Scrapers found the site. Half of all traffic was bots.',
+    prevention: 'A WAF in front of the App Servers.',
+    actions: ['waf'],
+  },
+  stuffing: {
+    id: 'stuffing',
+    name: 'Credential stuffing',
+    era: 2,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'Bots tried leaked passwords: 20× the logins, each one a bcrypt hash.',
+    prevention: 'A WAF blocks most of them. An Auth Provider hashes the rest.',
+    actions: ['waf', 'auth-provider'],
+  },
+  stampede: {
+    id: 'stampede',
+    name: 'Cache stampede',
+    era: 2,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 90,
+    cause: 'The Cache restarted empty. Every miss went to the database at once.',
+    prevention: 'Stampede protection coalesces misses. Cache warming refills it before traffic.',
+    actions: ['stampede-protection', 'cache-warming'],
+  },
+  poison: {
+    id: 'poison',
+    name: 'Poison message',
+    era: 2,
+    severity: 3,
+    escalatesTo: 2,
+    duration: 120,
+    cause: 'A task that always fails kept coming back. Workers retried it instead of the queue.',
+    prevention: 'A dead-letter queue moves a failing task aside.',
+    actions: [],
+  },
+  ddos: {
+    id: 'ddos',
+    name: 'DDoS',
+    era: 2,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'An attacker flooded the edge with 50 times normal traffic.',
+    prevention: 'A WAF, with Under attack mode when it starts. A CDN takes the cacheable part.',
+    actions: ['waf', 'cdn'],
+  },
 }
+
+/** A bot surge lifts bots to half of all traffic; a DDoS adds 50 times it; stuffing 19 times the logins. */
+export const BOT_SURGE = 0.8
+export const DDOS_MAGNITUDE = 50
+export const STUFFING_MAGNITUDE = 19
 
 /** A traffic spike multiplies demand by a roll in this range. */
 export const SPIKE_MAGNITUDE = [3, 10] as const

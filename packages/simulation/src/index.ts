@@ -18,6 +18,7 @@ export * from './ledger.ts'
 export * from './lookups.ts'
 export * from './preview.ts'
 export * from './random.ts'
+export * from './rules.ts'
 export * from './sandbox.ts'
 export * from './solve.ts'
 // The id schemas (`ComponentId` and the others) share their names with the

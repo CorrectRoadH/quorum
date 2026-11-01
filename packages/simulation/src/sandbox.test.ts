@@ -182,13 +182,15 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
     const bigger: Plan = (game, passed) =>
       passed === 0 ? ok(Actions.resize(game, 'server', 1)) : game
     expect(play('event-loop-stall', bigger, LONG).objective).toBe(0)
-    // Or keep one event loop, and send login hashing to a second Node.js server.
+    // Or keep one event loop for the rest, and send login hashing to its own Node.js servers.
+    // One event loop of logins alone does not survive 4× hashing: the hasher needs every core.
     const routeLogin: Plan = (game, passed) => {
       if (passed > 0) return game
       const fronted = addServer(behindLoadBalancer(game), 'database')
       const lb = fronted.nodes.find((node) => node.type === 'lb')?.id ?? ''
       const hasher = lastId(fronted)
-      const node = ok(Actions.setRuntime(fronted, hasher, 'node'))
+      const sized = ok(Actions.resize(ok(Actions.resize(fronted, hasher, 1)), hasher, 1))
+      const node = ok(Actions.setRuntime(sized, hasher, 'node_cluster'))
       const apart = ok(Actions.setLinkKinds(node, lb, hasher, ['login']))
       return ok(Actions.setLinkKinds(apart, lb, 'server', ['page', 'read', 'write']))
     }
@@ -220,6 +222,91 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
     const bigger: Plan = (game, passed) =>
       passed <= 1 ? ok(Actions.resize(game, 'database', 1)) : game
     expect(play('read-mostly', bigger, LONG).objective).toBe(1)
+  })
+
+  test('Stampede: coalesce the misses, then warm the Cache before traffic', () => {
+    const guard =
+      (change: Readonly<{ coalesce?: boolean; warming?: boolean }>): Plan =>
+      (game, passed) =>
+        passed === 0 ? ok(Actions.setCacheGuard(game, 'cache', change)) : game
+    passesInTime(play('stampede', guard({ coalesce: true, warming: true }), LONG), 3)
+    // A cold Cache overloads the database, its refills time out, and it stays cold.
+    expect(play('stampede', idle, LONG).objective).toBe(1)
+    // Coalescing alone survives one restart; at 50% more demand the cold Cache still slows the App Servers.
+    expect(play('stampede', guard({ coalesce: true }), LONG).objective).toBe(2)
+    // A bigger Database survives too, at a Burn the budget does not allow.
+    const bigger: Plan = (game, passed) =>
+      passed === 0
+        ? ok(
+            Actions.setCacheGuard(ok(Actions.resize(game, 'database', 1)), 'cache', {
+              coalesce: true,
+            }),
+          )
+        : game
+    expect(play('stampede', bigger, LONG).objective).toBe(2)
+  })
+
+  test('Slow Uploads: a Queue and a Worker take uploads off the App Servers', () => {
+    const queue =
+      (dlq: boolean): Plan =>
+      (game, passed) => {
+        if (passed > 0) return game
+        const placed = ok(Actions.place(game, 'queue', 880, 60))
+        const id = lastId(placed)
+        const worked = ok(Actions.place(placed, 'worker', 1100, 60))
+        const worker = lastId(worked)
+        const linked = ['server1', 'server2'].reduce(
+          (current, server) => ok(Actions.connect(current, server, id)),
+          ok(Actions.connect(worked, id, worker)),
+        )
+        return ok(Actions.setDlq(linked, id, dlq))
+      }
+    passesInTime(play('slow-uploads', queue(true), LONG), 3)
+    expect(play('slow-uploads', idle, LONG).objective).toBe(1)
+    // Without a dead-letter queue, the poison message keeps the Workers busy and the queue climbs.
+    const poisoned = play('slow-uploads', queue(false), LONG)
+    expect(poisoned.objective).toBe(2)
+    // More PHP-FPM workers only add waiting: the boxes are out of CPU.
+    const workers: Plan = (game, passed) =>
+      passed === 0
+        ? ok(Actions.setWorkers(ok(Actions.setWorkers(game, 'server1', 40)), 'server2', 40))
+        : game
+    expect(play('slow-uploads', workers, LONG).objective).toBe(1)
+  })
+
+  test('Bots: a WAF at a moderate paranoia level blocks the flood', () => {
+    const waf =
+      (level: number): Plan =>
+      (game, passed) => {
+        if (passed > 0) return game
+        const placed = ok(Actions.place(game, 'waf', 240, 280))
+        const id = lastId(placed)
+        const wired = ok(
+          Actions.connect(
+            ok(Actions.connect(Actions.disconnect(placed, 'users', 'lb'), 'users', id)),
+            id,
+            'lb',
+          ),
+        )
+        return ok(Actions.setParanoia(wired, id, level))
+      }
+    passesInTime(play('bots', waf(2), LONG), 3)
+    expect(play('bots', idle, LONG).objective).toBe(1)
+    // Paranoia 4 blocks 6% of real users: errors never fall under 1%.
+    expect(play('bots', waf(4), LONG).objective).toBe(0)
+    // A third App Server rides out the flood, over the Burn budget.
+    const third: Plan = (game, passed) => {
+      if (passed > 0) return game
+      const placed = ok(Actions.place(game, 'server', 600, 580))
+      const id = lastId(placed)
+      const sized = ok(Actions.resize(ok(Actions.resize(placed, id, 1)), id, 1))
+      const php = ok(Actions.setWorkers(ok(Actions.setRuntime(sized, id, 'php_fpm')), id, 24))
+      return ['database', 'search', 'storage'].reduce(
+        (current, to) => ok(Actions.connect(current, id, to)),
+        ok(Actions.connect(php, 'lb', id)),
+      )
+    }
+    expect(play('bots', third, LONG).objective).toBe(2)
   })
 })
 

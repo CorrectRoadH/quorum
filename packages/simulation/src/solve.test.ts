@@ -17,7 +17,8 @@ import {
 import { newGame, preseedGame } from './company.ts'
 import { serverModel } from './capacity.ts'
 import { restarted } from './lookups.ts'
-import { cosTurns, diurnal, hitRatioOf, solve, weekly } from './solve.ts'
+import { hitRatioOf } from './rules.ts'
+import { cosTurns, diurnal, solve, weekly } from './solve.ts'
 import type { Game, GameNode } from './state.ts'
 
 const rich = (game: Game): Game => ({ ...game, cash: 1e9, insight: 1e9 })
@@ -161,7 +162,7 @@ describe('the network limit', () => {
       game,
       node,
       arriving: { page: 10 },
-      callLatency: { reads: 3, writes: 3, auth: 0 },
+      callLatency: { 'q-read': 3, 'q-write': 3, auth: 0 },
       delegated: false,
       local: false,
       inflight: 0,

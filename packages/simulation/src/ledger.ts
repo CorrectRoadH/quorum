@@ -29,7 +29,7 @@ export type NodeLedger = Readonly<{
   strandedKinds: ReadonlyArray<Kind>
   /** Database connections in use, and the limit. */
   connections: Readonly<{ used: number; max: number }> | null
-  /** Cache hit ratio. */
+  /** Cache or CDN hit ratio. */
   hitRatio: number | null
   /** Milliseconds a replica lags behind the primary. */
   lag: number | null
@@ -92,6 +92,8 @@ export type Ledger = Readonly<{
   burn: number
   /** Dollars per second of payroll, included in `burn`. */
   salaries: number
+  /** Dollars per second of egress, included in `burn`. */
+  egress: number
   /** Most users the market holds: the Era's, grown by Features. */
   market: number
   /** Traffic-weighted velocity of the App Servers' Stacks: language × framework. */

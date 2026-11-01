@@ -26,7 +26,8 @@ import { forceIncident } from '@template/simulation/director'
 import { StepEvent } from '@template/simulation/events'
 import { nextGoal } from '@template/simulation/goals'
 import type { Ledger } from '@template/simulation/ledger'
-import { buildItems, eraOf, has, isFinalEra } from '@template/simulation/lookups'
+import { buildItems, eraOf, has, isFinalEra, nextEra } from '@template/simulation/lookups'
+import { cheatCash, cheatInsight } from './cheats.ts'
 import {
   advanceSandbox,
   freeSandbox,
@@ -376,7 +377,13 @@ const eventText = (event: StepEvent, game: Game): Note =>
           ? [`${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`, 'danger']
           : incident.kind === 'slow-query'
             ? ['A new query has no index. Every read scans the table.', 'danger']
-            : null,
+            : incident.kind === 'poison'
+              ? ['A task keeps failing. Workers retry it instead of the queue.', 'danger']
+              : incident.kind === 'ddos'
+                ? ['A flood of junk traffic hits the edge.', 'danger']
+                : incident.kind === 'stampede'
+                  ? ['The Cache restarted empty. Every miss goes to the database.', 'danger']
+                  : null,
     IncidentResolved: ({ postmortem }): Note => [
       postmortem.action
         ? `${INCIDENTS[postmortem.kind].name} is over. Action item: ${RESEARCH[postmortem.action].name}. Until then it is twice as likely.`
@@ -1112,6 +1119,49 @@ const handle = (model: Model, message: Message): Result =>
             : null,
       }),
 
+    CacheGuardChosen: ({ nodeId, coalesce, warming }) =>
+      act(
+        model,
+        coalesce !== undefined
+          ? coalesce
+            ? 'Coalescing on'
+            : 'Coalescing off'
+          : warming
+            ? 'Warming on'
+            : 'Warming off',
+        Actions.setCacheGuard(model.game, nodeId, {
+          ...(coalesce === undefined ? {} : { coalesce }),
+          ...(warming === undefined ? {} : { warming }),
+        }),
+        { undoable: true },
+      ),
+
+    DlqChosen: ({ nodeId, dlq }) =>
+      act(
+        model,
+        dlq ? 'Dead-letter queue on' : 'Dead-letter queue off',
+        Actions.setDlq(model.game, nodeId, dlq),
+        {
+          undoable: true,
+        },
+      ),
+
+    ParanoiaChosen: ({ nodeId, paranoia }) =>
+      act(model, `Paranoia ${paranoia}`, Actions.setParanoia(model.game, nodeId, paranoia), {
+        undoable: true,
+      }),
+
+    UnderAttackChosen: ({ nodeId, underAttack }) =>
+      act(
+        model,
+        underAttack ? 'Under attack mode on' : 'Under attack mode off',
+        Actions.setUnderAttack(model.game, nodeId, underAttack),
+        { undoable: true },
+      ),
+
+    MessageDeleted: () =>
+      act(model, 'Deleted the poison message', Actions.deleteMessage(model.game)),
+
     NodeSold: ({ nodeId }) =>
       act(model, `Sold ${nodeName(model.game, nodeId)}`, Actions.sell(model.game, nodeId), {
         undoable: true,
@@ -1204,16 +1254,23 @@ const handle = (model: Model, message: Message): Result =>
     PanelClosed: () => ({ model: { ...model, panel: 'none' } }),
 
     CheatCash: () => {
-      const next: Model = { ...model, game: { ...model.game, cash: model.game.cash + 1_000 } }
+      const next: Model = {
+        ...model,
+        game: { ...model.game, cash: model.game.cash + cheatCash(model.game) },
+      }
       return { model: next, commands: [sync(next)] }
     },
     CheatInsight: () => ({
-      model: { ...model, game: { ...model.game, insight: model.game.insight + 100 } },
+      model: {
+        ...model,
+        game: { ...model.game, insight: model.game.insight + cheatInsight(model.game) },
+      },
     }),
-    CheatPreseed: () => {
-      if (model.game.stage >= 1) return withToast(model, 'Already past the Garage.', 'plain')
+    CheatRound: () => {
+      const next = nextEra(model.game)
+      if (!next || isFinalEra(model.game)) return withToast(model, 'No round to skip to.', 'plain')
       const ready = { ...model.game, users: Math.max(model.game.users, eraOf(model.game).raiseAt) }
-      return act({ ...model, game: ready }, 'Skipped to Pre-seed', Actions.raise(ready), {
+      return act({ ...model, game: ready }, `Skipped to ${next.name}`, Actions.raise(ready), {
         patch: afterRound,
       })
     },

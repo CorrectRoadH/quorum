@@ -35,6 +35,8 @@ const LEAD_EDGE = fromBench(48.44, 115.68)
 const LEAD_END = fromBench(48.44, 140.69)
 
 const MENU = { left: 96, top: 470, width: 400, pad: 8, row: 64 }
+/** Where the menu must end, in stage units. */
+const MENU_BOTTOM = 900
 const PORT = [MENU.left + MENU.width, MENU.top + MENU.pad + MENU.row / 2] as const
 
 /** Once assembled, the bench floats this many units up and back; the cable's end follows it. */
@@ -293,13 +295,15 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
     [
       h.AriaLabel('Main menu'),
       h.Class(
-        'title-menu absolute flex flex-col gap-[calc(var(--u)*0.25)] rounded-[calc(var(--u)*1.5)] bg-surface shadow-card',
+        'title-menu absolute flex flex-col gap-[calc(var(--u)*0.25)] overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-[calc(var(--u)*1.5)] bg-surface shadow-card',
       ),
       h.Style({
         left: x(MENU.left),
         top: y(MENU.top),
         width: x(MENU.width),
         padding: x(MENU.pad),
+        // Above the corner rule and the playtest log button: a longer list scrolls.
+        maxHeight: y(MENU_BOTTOM - MENU.top),
       }),
     ],
     model.menu === 'sandbox'

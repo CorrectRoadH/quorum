@@ -263,7 +263,7 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
         [h.Class('flex items-center gap-1.5')],
         [
           h.span([h.Class(cn(EYEBROW, 'mr-auto'))], ['Mix']),
-          ...ERAS.slice(0, 2).map((era, stage) =>
+          ...ERAS.slice(0, 3).map((era, stage) =>
             tiny(era.name, Message.MixChosen({ stage }), h, model.game.stage === stage),
           ),
         ],

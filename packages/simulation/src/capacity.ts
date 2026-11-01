@@ -12,16 +12,18 @@ import {
   ORM_READS,
   OS_RAM,
   PM_MODES,
-  PROFILES,
   QUERY_CPU,
   REQUEST_KINDS,
   ROWS_PER_USER,
   UNINDEXED_MS_PER_ROW,
   RUNTIMES,
+  USER_UP_MBPS,
+  BACKEND_KINDS,
+  type BackendKind,
   type RequestKind,
 } from './catalog.ts'
-import { payloadFactor } from './features.ts'
-import { has, networkOf, payloadOf, ramOf, vcpuOf } from './lookups.ts'
+import { payloadFactor, queryFactor } from './features.ts'
+import { asLogin, has, networkOf, payloadOf, profileOf, ramOf, vcpuOf } from './lookups.ts'
 import { fixed } from './team.ts'
 import type { Game, GameNode } from './state.ts'
 
@@ -104,23 +106,43 @@ const total = (rates: Readonly<Record<string, number>>): number =>
 
 /* ---------- App Server ---------- */
 
-export type Calls = Readonly<{ reads: number; writes: number; auth: number }>
+/** Backend calls per request, or milliseconds per call, by backend kind. A missing kind is 0. */
+export type Calls = Readonly<Partial<Record<BackendKind, number>>>
 
-/** The backend calls one request of a kind makes from this App Server. */
+/** Sums count × latency over the backend kinds, in catalog order, so the sum is the same everywhere. */
+export const waitOf = (calls: Calls, latency: Calls): number => {
+  let sum = 0
+  for (const kind of BACKEND_KINDS) {
+    const count = calls[kind] ?? 0
+    if (count !== 0) sum += count * (latency[kind] ?? 0)
+  }
+  return sum
+}
+
+/**
+ * The backend calls one request of a kind makes from this App Server. With a
+ * Queue linked, a kind that can go async also enqueues one task.
+ */
 export const callsOf = (
   game: Game,
   node: GameNode,
   kind: RequestKind,
   delegated: boolean,
+  offloaded = false,
 ): Calls => {
-  const profile = PROFILES[kind]
-  if (kind === 'login' && delegated) return { reads: 0, writes: 0, auth: 1 }
+  const profile = profileOf(game, kind)
+  if (asLogin(game, kind) && delegated) return { auth: 1 }
   // Eager loading: the research shows the N+1 queries, and the task removes them.
   const orm =
     profile.orm &&
     FRAMEWORKS[node.framework].orm &&
     !(has(game, 'eager-loading') && fixed(game, 'eager-loading'))
-  return { reads: profile.reads * (orm ? ORM_READS : 1), writes: profile.writes, auth: 0 }
+  const calls: Partial<Record<BackendKind, number>> = {
+    ...profile.calls,
+    'q-read': (profile.calls['q-read'] ?? 0) * (orm ? ORM_READS : 1),
+  }
+  if (offloaded && profile.offload > 0) calls.task = 1
+  return calls
 }
 
 export type ServerContext = Readonly<{
@@ -141,6 +163,10 @@ export type ServerContext = Readonly<{
   sampling: number
   /** Login hashing costs this many times more (incident "Event loop block"). */
   hashing: number
+  /** A Queue is linked: kinds that can go async hand most of their CPU to a Worker. */
+  offloaded?: boolean
+  /** A Worker: it runs only the async part of each kind, and answers no user. */
+  worker?: boolean
 }>
 
 /**
@@ -158,19 +184,26 @@ export const speedOf = (game: Game, node: GameNode): number => {
 /** Core-milliseconds one request of a kind costs this server. */
 const cpuOf = (context: ServerContext, kind: RequestKind, calls: Calls): number => {
   const { game, node } = context
-  const profile = PROFILES[kind]
+  const profile = profileOf(game, kind)
   const framework = FRAMEWORKS[node.framework]
   const speed = speedOf(game, node)
+  const login = asLogin(game, kind)
   let cpu =
-    kind === 'login' && context.delegated
+    login && context.delegated && !context.worker
       ? (LOGIN_DELEGATED_CPU * framework.overhead) / speed
       : profile.native
-        ? profile.cpu * (kind === 'login' ? context.hashing : 1)
+        ? profile.cpu * (login ? context.hashing : 1)
         : (profile.cpu * framework.overhead) / speed
+  // A Worker runs the part that went async; the App Server keeps the rest.
+  if (context.worker) return cpu * profile.offload * (1 + context.sampling)
+  if (context.offloaded) cpu *= 1 - profile.offload
   if (node.compress && profile.compressible) cpu *= GZIP_CPU
   if (context.local)
     cpu +=
-      (calls.reads * QUERY_CPU['q-read'] + calls.writes * QUERY_CPU['q-write']) *
+      ((calls['q-read'] ?? 0) * QUERY_CPU['q-read'] +
+        (calls['q-write'] ?? 0) * QUERY_CPU['q-write'] +
+        (calls['q-search'] ?? 0) * QUERY_CPU['q-search'] +
+        (calls['blob-put'] ?? 0) * QUERY_CPU['blob-put']) *
       LOCAL_DB_CONTENTION
   return cpu * (1 + context.sampling)
 }
@@ -222,7 +255,12 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const kinds = REQUEST_KINDS.filter((kind) => (arriving[kind] ?? 0) > 0)
   const rate = kinds.reduce((sum, kind) => sum + (arriving[kind] ?? 0), 0)
   const calls = Object.fromEntries(
-    REQUEST_KINDS.map((kind) => [kind, callsOf(game, node, kind, context.delegated)]),
+    REQUEST_KINDS.map((kind) => [
+      kind,
+      context.worker
+        ? {}
+        : callsOf(game, node, kind, context.delegated, context.offloaded ?? false),
+    ]),
   ) as Record<RequestKind, Calls>
   const cpu = Object.fromEntries(
     REQUEST_KINDS.map((kind) => [kind, cpuOf(context, kind, calls[kind]) / efficiency]),
@@ -235,24 +273,30 @@ export const serverModel = (context: ServerContext): NodeModel => {
 
   const waiting = (kind: RequestKind): number => {
     if (context.local) return 0
-    const entry = calls[kind]
-    return (
-      entry.reads * context.callLatency.reads +
-      entry.writes * context.callLatency.writes +
-      entry.auth * context.callLatency.auth
-    )
+    return waitOf(calls[kind], context.callLatency)
   }
-  const residence = (kind: RequestKind): number => cpu[kind] / perRequest + cpuWait + waiting(kind)
+  // A slow client holds the slot while its request body comes up the wire, unless the work went
+  // async: then the file goes straight to storage and the App Server keeps the small sync part.
+  const receiving = (kind: RequestKind): number => {
+    const profile = profileOf(game, kind)
+    if (context.worker || profile.inKB <= 0) return 0
+    const kept = context.offloaded ? 1 - profile.offload : 1
+    return ((profile.inKB * 8) / USER_UP_MBPS) * kept
+  }
+  const residence = (kind: RequestKind): number =>
+    cpu[kind] / perRequest + cpuWait + waiting(kind) + receiving(kind)
   const slotWork = kinds.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * residence(kind), 0)
   const slotUtilization = slots === Number.POSITIVE_INFINITY ? 0 : slotWork / (slots * 1000)
   const slotWait = rate > 0 ? waitFor(slotWork / rate, slotUtilization, slots) : 0
 
   // Every response leaves through the box's network card: bandwidth over bytes per request.
-  const bytes = kinds.reduce(
-    (sum, kind) =>
-      sum + (arriving[kind] ?? 0) * payloadOf(node, kind) * payloadFactor(context.game, kind),
-    0,
-  )
+  const bytes = context.worker
+    ? 0
+    : kinds.reduce(
+        (sum, kind) =>
+          sum + (arriving[kind] ?? 0) * payloadOf(node, kind) * payloadFactor(context.game, kind),
+        0,
+      )
   const networkUtilization = bytes / (networkOf(node) * context.boost)
 
   const utilization = Math.max(cpuUtilization, slotUtilization, networkUtilization)
@@ -276,7 +320,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
   // The stall hits LOOP_TAIL_SHARE of requests, above 1%, so it lands on the p99 and not the p95.
   // The libuv pool and an Auth Provider take the login hash off the loop, not the rest.
   const offLoop = (kind: RequestKind): boolean =>
-    kind === 'login' && (has(game, 'libuv-pool') || context.delegated)
+    asLogin(game, kind) && (has(game, 'libuv-pool') || context.delegated)
   const onLoop = runtime.model === 'loop' ? kinds.filter((kind) => !offLoop(kind)) : []
   const callback = (kind: RequestKind): number => cpu[kind] / perRequest
   const loopWork = onLoop.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * callback(kind), 0)
@@ -333,7 +377,7 @@ const DISK_READ_MS = 8
 export type DatabaseContext = Readonly<{
   game: Game
   node: GameNode
-  arriving: Readonly<Partial<Record<'q-read' | 'q-write', number>>>
+  arriving: Readonly<Partial<Record<'q-read' | 'q-write' | 'q-search' | 'blob-put', number>>>
   boost: number
 }>
 
@@ -352,10 +396,15 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
     game.incident?.kind === 'slow-query' ? game.users * ROWS_PER_USER * UNINDEXED_MS_PER_ROW : 0
   const readCpu = ((QUERY_CPU['q-read'] + scan) * (disk ? 1.5 : 1)) / warmth
   const writeCpu = QUERY_CPU['q-write'] / warmth
+  // Postgres full-text search and files stored as rows: both work, both badly at volume.
+  const searchCpu = (QUERY_CPU['q-search'] * queryFactor(game, 'q-search')) / warmth
+  const putCpu = QUERY_CPU['blob-put'] / warmth
   const reads = arriving['q-read'] ?? 0
   const writes = arriving['q-write'] ?? 0
-  const rate = reads + writes
-  const work = reads * readCpu + writes * writeCpu
+  const searches = arriving['q-search'] ?? 0
+  const puts = arriving['blob-put'] ?? 0
+  const rate = reads + writes + searches + puts
+  const work = reads * readCpu + writes * writeCpu + searches * searchCpu + puts * putCpu
   const utilization = cores > 0 ? work / (cores * 1000) : rate > 0 ? 99 : 0
   const wait = rate > 0 ? waitFor(work / rate / perRequest, utilization, cores) : 0
   const share = utilization > 1 ? 1 / utilization : 1
@@ -368,6 +417,8 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
     service: {
       'q-read': { fixed: 2.5 + (disk ? DISK_READ_MS : 0), variable: readCpu / perRequest + wait },
       'q-write': { fixed: 2.5, variable: writeCpu / perRequest + wait },
+      'q-search': { fixed: 2.5, variable: searchCpu / perRequest + wait },
+      'blob-put': { fixed: 2.5, variable: putCpu / perRequest + wait },
     },
     tailP: 0,
     tailMs: 0,
@@ -396,6 +447,9 @@ export const FLAT_CAPACITY: Readonly<Record<string, number>> = {
   lb: 2_000,
   cache: 50_000,
   pooler: 10_000,
+  search: 400,
+  queue: 20_000,
+  waf: 5_000,
 }
 
 export const flatModel = (

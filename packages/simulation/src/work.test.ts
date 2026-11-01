@@ -227,8 +227,8 @@ describe('Features', () => {
     expect(decoded.services).toEqual(game.services)
   })
 
-  test('every Feature in the slice belongs to the Garage or Pre-seed', () => {
-    for (const feature of Object.values(FEATURES)) expect(feature.era).toBeLessThanOrEqual(1)
+  test('every Feature belongs to an Era the build has: Garage, Pre-seed or Seed', () => {
+    for (const feature of Object.values(FEATURES)) expect(feature.era).toBeLessThanOrEqual(2)
   })
 })
 
@@ -257,10 +257,10 @@ describe('Engineering tasks and tech debt', () => {
     }
     const server = laravel.nodes.find((node) => node.type === 'server')
     if (!server) throw new Error('no server')
-    expect(callsOf(laravel, server, 'read', false).reads).toBe(3)
+    expect(callsOf(laravel, server, 'read', false)['q-read']).toBe(3)
     const fixedUp = work({ ...ok(queueTask(laravel, 'eager-loading')), devHours: 0 }, 13 * 60)
     expect(serviceOf(fixedUp).fixes).toContain('eager-loading')
-    expect(callsOf(fixedUp, server, 'read', false).reads).toBe(1)
+    expect(callsOf(fixedUp, server, 'read', false)['q-read']).toBe(1)
   })
 
   test('debt slows velocity by 1 − 0.5 × debt, and a Refactor pays it down', () => {

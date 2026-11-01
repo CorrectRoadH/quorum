@@ -20,14 +20,18 @@ import {
   RESTART_SECONDS,
   SELL_REFUND,
   SIZES,
+  STORAGE_PRICE,
   VCPU_PRICE,
+  WARMED,
   USER_MBPS,
+  USER_UP_MBPS,
   VM_RESTART_SECONDS,
   type BuildGroup,
   type ComponentId,
   type EraDef,
   type FrameworkId,
   type RequestKind,
+  type RequestProfile,
   type ResearchId,
   type RuntimeId,
 } from './catalog.ts'
@@ -91,9 +95,20 @@ export const vcpuOf = (node: GameNode): number => SIZES[node.size]?.vcpu ?? 1
 export const payloadOf = (node: GameNode, kind: RequestKind): number =>
   PROFILES[kind].payloadKB * (node.compress && PROFILES[kind].compressible ? GZIP_RATIO : 1)
 
-/** Milliseconds the response takes to reach the user over their downlink. */
+/** Milliseconds the response takes to reach the user over their downlink, after the request came up. */
 export const transferMs = (node: GameNode, kind: RequestKind): number =>
-  (payloadOf(node, kind) * 8) / USER_MBPS
+  (payloadOf(node, kind) * 8) / USER_MBPS + (PROFILES[kind].inKB * 8) / USER_UP_MBPS
+
+/** Credential stuffing: bots send logins, each one a password hash. */
+export const stuffing = (game: Game): boolean => game.incident?.kind === 'stuffing'
+
+/** A kind's profile now: during credential stuffing, bots send logins. */
+export const profileOf = (game: Game, kind: RequestKind): RequestProfile =>
+  kind === 'bot' && stuffing(game) ? { ...PROFILES.login, scored: false } : PROFILES[kind]
+
+/** This kind costs an App Server a login: a password hash, or a call to the Auth Provider. */
+export const asLogin = (game: Game, kind: RequestKind): boolean =>
+  kind === 'login' || (kind === 'bot' && stuffing(game))
 
 /** Milliseconds one internal call costs on the wire: a hop, plus a handshake without keep-alive. */
 export const hopMs = (game: Game): number => HOP_MS + (has(game, 'keepalive') ? 0 : HANDSHAKE_MS)
@@ -114,13 +129,19 @@ export const restartSeconds = (node: GameNode): number =>
 
 /** The fields of a Node that restarts and comes back cold. */
 /** How warm a Node comes back from a restart: cold, except Redis, which reloads its data. */
-export const warmAfterRestart = (node: GameNode): number =>
-  node.type === 'cache' ? CACHE_ENGINES[node.engine].warmAfterRestart : 0
+export const warmAfterRestart = (node: GameNode, warming = false): number =>
+  node.type === 'cache'
+    ? Math.max(CACHE_ENGINES[node.engine].warmAfterRestart, warming ? WARMED : 0)
+    : 0
 
-export const restarted = (node: GameNode, cause: GameNode['downCause'] = 'restart') => ({
+export const restarted = (
+  node: GameNode,
+  cause: GameNode['downCause'] = 'restart',
+  warming = false,
+) => ({
   down: restartSeconds(node),
   downCause: cause,
-  warm: warmAfterRestart(node),
+  warm: warmAfterRestart(node, warming),
 })
 
 export const languageOf = (node: GameNode) => RUNTIMES[node.runtime].language
@@ -143,6 +164,7 @@ export const burnOf = (game: Game, node: GameNode): number => {
   if (node.type === 'analytics')
     return def.burn * (SAMPLE_STORAGE[sampleIndex(node)] ?? 1) * flatScale(node) * index
   if (node.type === 'auth') return game.users * AUTH_PRICE_PER_USER
+  if (node.type === 'storage') return (def.burn + game.stored * STORAGE_PRICE) * index
   return def.burn * flatScale(node) * index
 }
 

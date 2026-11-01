@@ -3,6 +3,7 @@ import { ArrowUp, ChevronRight, Minus, Plus, RotateCcw, Trash2, X } from 'lucide
 import {
   CACHE_ENGINES,
   CACHE_TTLS,
+  CDN_TTLS,
   CHECK_INTERVALS,
   COMPONENTS,
   CREDIT_CAP,
@@ -15,6 +16,7 @@ import {
   LB_POLICIES,
   PM_MODES,
   OS_RAM,
+  PARANOIA,
   PROFILES,
   REQUEST_KINDS,
   RUNTIMES,
@@ -308,6 +310,46 @@ const warnings = (
       ),
     )
   }
+  if (node.type === 'queue' && game.incident?.kind === 'poison' && game.incident.nodeId === node.id)
+    list.push(
+      callout(
+        node.dlq
+          ? 'A task keeps failing. The dead-letter queue holds it.'
+          : 'A task keeps failing. Workers retry it forever.',
+        node.dlq ? 'warn' : 'danger',
+        node.dlq
+          ? null
+          : button(
+              {
+                onClick: Message.MessageDeleted(),
+                variant: 'outline',
+                size: 'sm',
+                className: 'self-start text-danger',
+              },
+              ['Delete message'],
+              h,
+            ),
+        h,
+      ),
+    )
+  if (node.type === 'waf' && game.incident?.kind === 'ddos' && !node.underAttack)
+    list.push(
+      callout(
+        'A flood of junk traffic.',
+        'danger',
+        button(
+          {
+            onClick: Message.UnderAttackChosen({ nodeId: node.id, underAttack: true }),
+            variant: 'outline',
+            size: 'sm',
+            className: 'self-start text-danger',
+          },
+          ['Under attack'],
+          h,
+        ),
+        h,
+      ),
+    )
   if (node.type === 'database' && game.incident?.kind === 'slow-query') {
     const analysed = has(game, 'query-analysis')
     list.push(
@@ -849,6 +891,9 @@ const KIND_SHORT: Record<RequestKind, string> = {
   read: 'Read',
   write: 'Write',
   login: 'Login',
+  search: 'Search',
+  upload: 'Upload',
+  bot: 'Bot',
 }
 
 const dnsTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
@@ -866,10 +911,38 @@ const dnsTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
     h,
   )
 
-const cache = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+const cache = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html =>
   section(
     'Cache',
     [
+      ...(has(game, 'stampede-protection')
+        ? [
+            picker(
+              'coalesce',
+              [
+                [false, 'Every miss'],
+                [true, 'Coalesce'],
+              ],
+              node.coalesce,
+              (coalesce) => Message.CacheGuardChosen({ nodeId: node.id, coalesce }),
+              h,
+            ),
+          ]
+        : []),
+      ...(has(game, 'cache-warming')
+        ? [
+            picker(
+              'warming',
+              [
+                [false, 'Cold start'],
+                [true, 'Warm start'],
+              ],
+              node.warming,
+              (warming) => Message.CacheGuardChosen({ nodeId: node.id, warming }),
+              h,
+            ),
+          ]
+        : []),
       picker(
         'engine',
         (Object.keys(CACHE_ENGINES) as ReadonlyArray<CacheEngine>).map(
@@ -882,6 +955,64 @@ const cache = (node: GameNode, h: HtmlBuilder<Message>): Html =>
       picker(
         'cache-ttl',
         CACHE_TTLS.map((entry) => [entry.ttl, duration(entry.ttl)] as const),
+        node.ttl,
+        (ttl) => Message.TtlChosen({ nodeId: node.id, ttl }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+const queue = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Failed tasks',
+    [
+      picker(
+        'dlq',
+        [
+          [false, 'Retry forever'],
+          [true, 'Dead-letter queue'],
+        ],
+        node.dlq,
+        (dlq) => Message.DlqChosen({ nodeId: node.id, dlq }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+const waf = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Paranoia',
+    [
+      picker(
+        'paranoia',
+        PARANOIA.map((entry) => [entry.level, `${entry.level}`] as const),
+        node.paranoia,
+        (paranoia) => Message.ParanoiaChosen({ nodeId: node.id, paranoia }),
+        h,
+      ),
+      picker(
+        'under-attack',
+        [
+          [false, 'Normal'],
+          [true, 'Under attack'],
+        ],
+        node.underAttack,
+        (underAttack) => Message.UnderAttackChosen({ nodeId: node.id, underAttack }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+const cdnTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'TTL',
+    [
+      picker(
+        'cdn-ttl',
+        CDN_TTLS.map((entry) => [entry.ttl, duration(entry.ttl)] as const),
         node.ttl,
         (ttl) => Message.TtlChosen({ nodeId: node.id, ttl }),
         h,
@@ -1082,10 +1213,13 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...resources(node, ledger, h),
           ...(node.type === 'users' ? traffic(game, ledger, h) : []),
           ...(def.sized ? [instance(game, node, h)] : []),
-          ...(node.type === 'server' ? stack(game, node, h) : []),
+          ...(node.type === 'server' || node.type === 'worker' ? stack(game, node, h) : []),
           ...(node.type === 'analytics' ? [sampler(game, node, h)] : []),
           ...(node.type === 'lb' ? loadBalancer(game, node, h) : []),
-          ...(node.type === 'cache' ? [cache(node, h)] : []),
+          ...(node.type === 'cache' ? [cache(game, node, h)] : []),
+          ...(node.type === 'queue' ? [queue(node, h)] : []),
+          ...(node.type === 'waf' ? [waf(node, h)] : []),
+          ...(node.type === 'cdn' ? [cdnTtl(node, h)] : []),
           ...(node.type === 'pooler' ? [pooler(node, h)] : []),
           ...(node.type === 'dns' && has(game, 'health-checks') ? [dnsTtl(node, h)] : []),
           ...(has(game, 'timeouts') ? calls(game, node, h) : []),
@@ -1132,7 +1266,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                 h,
               )
             : h.empty,
-          node.type === 'server' && node.down === 0
+          (node.type === 'server' || node.type === 'worker') && node.down === 0
             ? button(
                 {
                   onClick: Message.RestartChosen({ nodeId: node.id }),

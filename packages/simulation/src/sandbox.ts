@@ -35,6 +35,9 @@ export const SANDBOX_IDS = [
   'connection-limit',
   'event-loop-stall',
   'read-mostly',
+  'stampede',
+  'slow-uploads',
+  'bots',
 ] as const
 export type SandboxId = (typeof SANDBOX_IDS)[number]
 
@@ -61,6 +64,13 @@ const within =
   (apdex: number, burn: number) =>
   (game: Game, ledger: Ledger): boolean =>
     serving(apdex)(game, ledger) && ledger.burn <= burn + 1e-9
+
+/** Serving, with every Queue's backlog under `depth` tasks. */
+const draining =
+  (apdex: number, depth: number) =>
+  (game: Game, ledger: Ledger): boolean =>
+    serving(apdex)(game, ledger) &&
+    game.nodes.every((entry) => entry.type !== 'queue' || entry.depth < depth)
 
 const fast =
   (p99: number) =>
@@ -90,6 +100,11 @@ const board = (
 })
 
 /* ---------- the tracks ---------- */
+
+const STAMPEDE_USERS = 6_000
+const STAMPEDE_BURN = 3.7
+const BOTS_USERS = 12_000
+const BOTS_BURN = 5.1
 
 export const GUIDED: Record<SandboxId, GuidedSandbox> = {
   'out-of-credits': {
@@ -309,6 +324,160 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       },
     ],
   },
+  stampede: {
+    id: 'stampede',
+    name: 'Stampede',
+    stage: 2,
+    start: () =>
+      board(
+        2,
+        STAMPEDE_USERS,
+        [
+          'php-fpm',
+          'load-balancing',
+          'caching',
+          'stampede-protection',
+          'cache-warming',
+          'percentiles',
+          'full-text-search',
+          'object-storage',
+        ],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 3,
+              runtime: 'php_fpm',
+              workers: 24,
+            }),
+          ),
+          node('cache', 'cache', 880, 160, { ttl: 3_600 }),
+          node('database', 'database', 1120, 280, { size: 2 }),
+          node('search', 'search', 880, 400),
+          node('storage', 'storage', 880, 560),
+        ],
+        [
+          ['users', 'lb'],
+          ...[1, 2].flatMap((index): ReadonlyArray<readonly [string, string]> => [
+            ['lb', `server${index}`],
+            [`server${index}`, 'cache'],
+            [`server${index}`, 'search'],
+            [`server${index}`, 'storage'],
+          ]),
+          ['cache', 'database'],
+        ],
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: 'The Cache will restart. Keep Apdex above 0.85 for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'stampede', survive: true },
+        met: serving(0.85),
+      },
+      {
+        goal: `Demand is up 50%. The Cache restarts again. Keep Apdex above 0.85 with Burn at $${STAMPEDE_BURN.toFixed(2)}/s or less.`,
+        users: STAMPEDE_USERS * 1.5,
+        hold: 120,
+        incident: { kind: 'stampede', survive: true },
+        met: within(0.85, STAMPEDE_BURN),
+      },
+    ],
+  },
+  'slow-uploads': {
+    id: 'slow-uploads',
+    name: 'Slow Uploads',
+    stage: 2,
+    start: () =>
+      board(
+        2,
+        5_000,
+        ['php-fpm', 'load-balancing', 'background-jobs', 'queues', 'object-storage', 'percentiles'],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 2,
+              runtime: 'php_fpm',
+              workers: 16,
+            }),
+          ),
+          node('database', 'database', 880, 220, { size: 3 }),
+          node('storage', 'storage', 880, 440),
+        ],
+        [
+          ['users', 'lb'],
+          ...[1, 2].flatMap((index): ReadonlyArray<readonly [string, string]> => [
+            ['lb', `server${index}`],
+            [`server${index}`, 'database'],
+            [`server${index}`, 'storage'],
+          ]),
+        ],
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: 'Demand is up 60%. Keep Apdex above 0.9 with Burn at $2.60/s or less.',
+        users: 8_000,
+        hold: 120,
+        met: within(0.9, 2.6),
+      },
+      {
+        goal: 'A task will fail forever. Keep the Queue under 500 tasks for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'poison', survive: true },
+        met: draining(0.9, 500),
+      },
+    ],
+  },
+  bots: {
+    id: 'bots',
+    name: 'Bots',
+    stage: 2,
+    start: () =>
+      board(
+        2,
+        BOTS_USERS,
+        ['php-fpm', 'load-balancing', 'waf', 'percentiles', 'full-text-search', 'object-storage'],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 3,
+              runtime: 'php_fpm',
+              workers: 24,
+            }),
+          ),
+          node('database', 'database', 880, 220, { size: 4 }),
+          node('search', 'search', 880, 400),
+          node('storage', 'storage', 880, 560),
+        ],
+        [
+          ['users', 'lb'],
+          ...[1, 2].flatMap((index): ReadonlyArray<readonly [string, string]> => [
+            ['lb', `server${index}`],
+            [`server${index}`, 'database'],
+            [`server${index}`, 'search'],
+            [`server${index}`, 'storage'],
+          ]),
+        ],
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: 'Scrapers are coming. Keep Apdex above 0.9 for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'bot-surge', survive: true },
+        met: serving(0.9),
+      },
+      {
+        goal: `They are back. Keep Apdex above 0.9 with Burn at $${BOTS_BURN.toFixed(2)}/s or less.`,
+        hold: 120,
+        incident: { kind: 'bot-surge', survive: true },
+        met: within(0.9, BOTS_BURN),
+      },
+    ],
+  },
 }
 
 export const TRACKS: ReadonlyArray<
@@ -316,6 +485,7 @@ export const TRACKS: ReadonlyArray<
 > = [
   { stage: 0, sandboxes: ['out-of-credits', 'shared-box', 'second-server'] },
   { stage: 1, sandboxes: ['connection-limit', 'event-loop-stall', 'read-mostly'] },
+  { stage: 2, sandboxes: ['stampede', 'slow-uploads', 'bots'] },
 ]
 
 /** A guided Sandbox opens when the one before it in its track has passed. */
@@ -380,8 +550,8 @@ export type Advance = Readonly<{
 
 /**
  * Checks the current objective against the Ledger. A break in the condition
- * starts the hold again. For an incident the Design must survive, the break
- * also arms the incident again once it is over.
+ * starts the hold again. For an incident the Design must survive, a break that
+ * lasts until the incident is over arms it again.
  */
 export const advanceSandbox = (
   sandbox: GuidedSandbox,
@@ -393,8 +563,10 @@ export const advanceSandbox = (
   const objective = sandbox.objectives[progress.objective]
   if (!objective) return { game, progress, advanced: false }
   const held = objective.met(game, ledger) ? progress.held + seconds : 0
+  // The Design must recover while the incident runs. Still broken when it ends, it fires again.
   let fired =
-    progress.fired && !(objective.incident?.survive && held === 0 && game.incident === null)
+    progress.fired &&
+    !(objective.incident?.survive && game.incident === null && (held === 0 || progress.held === 0))
   let next = game
   if (objective.incident && !fired && held >= INCIDENT_AFTER) {
     const started = forceIncident(game, ledger, objective.incident.kind, objective.incident.only)

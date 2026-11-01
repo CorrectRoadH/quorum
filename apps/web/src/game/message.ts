@@ -97,6 +97,15 @@ export const Message = defineMessageUnion({
   ReplaceBought: { nodeId: Schema.String },
   RestartChosen: { nodeId: Schema.String },
   IndexAdded: { nodeId: Schema.String },
+  CacheGuardChosen: {
+    nodeId: Schema.String,
+    coalesce: Schema.optional(Schema.Boolean),
+    warming: Schema.optional(Schema.Boolean),
+  },
+  DlqChosen: { nodeId: Schema.String, dlq: Schema.Boolean },
+  ParanoiaChosen: { nodeId: Schema.String, paranoia: Schema.Finite },
+  UnderAttackChosen: { nodeId: Schema.String, underAttack: Schema.Boolean },
+  MessageDeleted: {},
   NodeSold: { nodeId: Schema.String },
   Collected: {},
   /** Hovering an option opens its Tradeoff card; clicking pins it, or applies it once seen. */
@@ -137,7 +146,7 @@ export const Message = defineMessageUnion({
   /** Playtest panel. */
   CheatCash: {},
   CheatInsight: {},
-  CheatPreseed: {},
+  CheatRound: {},
   IncidentForced: { kind: IncidentId },
   LogExported: {},
   LogCleared: {},

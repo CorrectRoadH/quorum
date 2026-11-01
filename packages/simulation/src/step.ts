@@ -12,6 +12,7 @@ import {
   PROFILES,
   REQUEST_KINDS,
   RUNTIMES,
+  UPLOAD_MB,
   WARMUP_SECONDS,
   type Tuning,
 } from './catalog.ts'
@@ -57,25 +58,65 @@ export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): n
   return rate * game.users * Math.max(0, 1 - game.users / ledger.market) * health
 }
 
+/**
+ * During a Cache stampede, refills time out while a database behind the Cache
+ * is overloaded, so the Cache stays cold (11 "Cache stampede").
+ */
+/** Database load at which a cold Cache's refill queries start to time out. */
+const REFILL_STALL = 0.9
+
+const refillsStall = (game: Game, ledger: Ledger, node: GameNode): boolean =>
+  node.type === 'cache' &&
+  game.incident?.kind === 'stampede' &&
+  game.links.some((link) => {
+    if (link.from !== node.id) return false
+    const target = game.nodes.find((entry) => entry.id === link.to)
+    return (
+      (target?.type === 'database' || target?.type === 'pooler') &&
+      (ledger.nodes[link.to]?.utilization ?? 0) >= REFILL_STALL
+    )
+  })
+
+/**
+ * A Queue's backlog: tasks it accepted minus tasks its Workers took. With no
+ * Worker linked, nothing drains.
+ */
+const depthAfter = (game: Game, ledger: Ledger, queue: GameNode, seconds: number): number => {
+  const own = ledger.nodes[queue.id]
+  if (!own) return queue.depth
+  const accepted = Math.max(0, own.inbound - own.dropped)
+  let drained = 0
+  for (const link of ledger.links) {
+    if (link.from !== queue.id) continue
+    const worker = ledger.nodes[link.to]
+    if (!worker || worker.inbound <= 0) continue
+    drained += link.rate * ((worker.inbound - worker.dropped) / worker.inbound)
+  }
+  return Math.max(0, queue.depth + (accepted - drained) * seconds)
+}
+
 const advanceNode = (
+  game: Game,
   node: GameNode,
-  time: number,
   ledger: Ledger,
   seconds: number,
   events: Array<StepEvent>,
 ): GameNode => {
+  const time = game.time
   let next = node
   if (node.down > 0) {
     const down = Math.max(0, node.down - seconds)
     next = {
       ...next,
       down,
-      warm: down === 0 ? warmAfterRestart(node) : node.warm,
+      warm:
+        down === 0 ? warmAfterRestart(node, node.warming && has(game, 'cache-warming')) : node.warm,
       downCause: down === 0 ? 'restart' : node.downCause,
     }
-  } else if (node.down === 0 && node.warm < 1) {
+  } else if (node.down === 0 && node.warm < 1 && !refillsStall(game, ledger, node)) {
     next = { ...next, warm: Math.min(1, node.warm + seconds / WARMUP_SECONDS) }
   }
+  if (node.type === 'queue') next = { ...next, depth: depthAfter(game, ledger, node, seconds) }
   const credits = ledger.nodes[node.id]?.resources.credits
   if (node.family === 'burstable' && credits) {
     const balance = Math.max(
@@ -92,7 +133,7 @@ const advanceNode = (
   const ram = ledger.nodes[node.id]?.resources.ram
   const killable = RUNTIMES[node.runtime].pool || node.leak > 0
   if (
-    node.type === 'server' &&
+    (node.type === 'server' || node.type === 'worker') &&
     node.down === 0 &&
     killable &&
     ram &&
@@ -174,7 +215,13 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
   }
   if (!game.sandbox) cash -= ledger.burn * seconds
 
-  const nodes = game.nodes.map((node) => advanceNode(node, game.time, ledger, seconds, events))
+  const nodes = game.nodes.map((node) => advanceNode(game, node, ledger, seconds, events))
+  // Object Storage keeps every file it is sent: data never shrinks by itself (07 "Data volume").
+  const puts = game.nodes.reduce(
+    (total, node) =>
+      node.type === 'storage' ? total + (ledger.nodes[node.id]?.inbound ?? 0) : total,
+    0,
+  )
   const users = game.sandbox
     ? game.users
     : Math.max(20, game.users + growthOf(game, ledger, tuning.pace) * seconds)
@@ -185,7 +232,10 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
 
   // The first time users get a new kind of request through, the team learns from it, once.
   const firsts = REQUEST_KINDS.filter(
-    (kind) => !game.servedKinds.includes(kind) && (ledger.kinds[kind]?.success ?? 0) > 0.5,
+    (kind) =>
+      PROFILES[kind].scored &&
+      !game.servedKinds.includes(kind) &&
+      (ledger.kinds[kind]?.success ?? 0) > 0.5,
   )
 
   const crossedSecond = Math.floor(time) > Math.floor(game.time)
@@ -213,6 +263,7 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
     falseAlarms,
     insight: game.insight + ledger.insight * seconds + FIRST_KIND_INSIGHT * firsts.length,
     servedKinds: firsts.length > 0 ? [...game.servedKinds, ...firsts] : game.servedKinds,
+    stored: puts > 0 ? game.stored + (puts * UPLOAD_MB * seconds) / 1_000 : game.stored,
     time,
     earned: game.earned + earned,
     history: crossedSecond ? [...game.history, sample].slice(-HISTORY) : game.history,

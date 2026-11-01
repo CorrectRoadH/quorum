@@ -6,6 +6,7 @@ import {
   ChartLine,
   Check,
   FileArchive,
+  Flame,
   Funnel,
   GitBranch,
   HeartPulse,
@@ -17,6 +18,7 @@ import {
   ScanEye,
   ScrollText,
   SearchCode,
+  Snowflake,
   Shuffle,
   Siren,
   TestTube,
@@ -228,6 +230,14 @@ const LOOKS: Record<ResearchId, Look> = {
   ci: { group: 'ops', glyph: GitBranch, hue: 160 },
   'code-review': { group: 'ops', glyph: ScanEye, hue: 300 },
   'testing-culture': { group: 'ops', glyph: TestTube, hue: 110 },
+  'full-text-search': { component: 'search' },
+  'object-storage': { component: 'storage' },
+  cdn: { component: 'cdn' },
+  waf: { component: 'waf' },
+  'background-jobs': { component: 'worker' },
+  queues: { component: 'queue' },
+  'stampede-protection': { group: 'data', glyph: Flame, hue: 25 },
+  'cache-warming': { group: 'data', glyph: Snowflake, hue: 220 },
 }
 
 /** The item's own colour: its group's, its brand's, or its hue. */

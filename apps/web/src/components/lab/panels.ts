@@ -2,7 +2,8 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Download, Trash2, X } from 'lucide'
 import { offer } from '@template/simulation/actions'
 import { INCIDENTS, INCIDENT_IDS } from '@template/simulation/catalog'
-import { eraOf } from '@template/simulation/lookups'
+import { eraOf, isFinalEra, nextEra } from '@template/simulation/lookups'
+import { cheatCash, cheatInsight } from '@/game/cheats.ts'
 import { clock, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
@@ -365,11 +366,19 @@ export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.div(
                 [h.Class('flex flex-wrap gap-2')],
                 [
-                  model.game.stage === 0
-                    ? secondaryButton('Skip to Pre-seed', Message.CheatPreseed(), h)
+                  nextEra(model.game) && !isFinalEra(model.game)
+                    ? secondaryButton(
+                        `Skip to ${nextEra(model.game)?.name ?? ''}`,
+                        Message.CheatRound(),
+                        h,
+                      )
                     : h.empty,
-                  secondaryButton('+$1,000', Message.CheatCash(), h),
-                  secondaryButton('+100 Insight', Message.CheatInsight(), h),
+                  secondaryButton(`+${money(cheatCash(model.game))}`, Message.CheatCash(), h),
+                  secondaryButton(
+                    `+${cheatInsight(model.game).toLocaleString('en-US')} Insight`,
+                    Message.CheatInsight(),
+                    h,
+                  ),
                 ],
               ),
             ],
