@@ -49,7 +49,7 @@ import {
 import type { Ledger } from './engine/ledger.ts'
 import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
-import { compact, money, ms, rate } from './format.ts'
+import { compact, money, ms, priceLabel, rate } from './format.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
 
 /* ==========================================================================
@@ -750,7 +750,7 @@ const rowsOf = (game: Game, node: GameNode, ledger: Ledger): ReadonlyArray<Row> 
           glyph: 'stack',
           logo: runtime.language,
           name: runtime.name,
-          value: framework ? FRAMEWORKS[framework].name : 'No framework',
+          value: framework ? FRAMEWORKS[framework].name : '—',
           ...(framework ? { valueLogo: framework } : { tone: 'muted' }),
         },
         latency,
@@ -812,7 +812,7 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
     const price = replacePrice(game, node)
     return {
       glyph: 'replace',
-      text: `Replace  ${money(price)}`,
+      text: `Replace  ${priceLabel(game.sandbox, price)}`.trim(),
       enabled: game.cash >= price,
       tone: 'danger',
     }
@@ -823,8 +823,8 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
   return {
     glyph: analytics ? 'more' : 'resize',
     text: analytics
-      ? `More samples  ${money(price)}`
-      : `Resize to ${SIZES[node.size + 1]?.name ?? ''}  ${money(price)}`,
+      ? `More samples  ${priceLabel(game.sandbox, price)}`.trim()
+      : `Resize to ${SIZES[node.size + 1]?.name ?? ''}  ${priceLabel(game.sandbox, price)}`.trim(),
     enabled: game.cash >= price,
     tone: game.cash >= price ? 'accent' : 'muted',
   }
@@ -1111,6 +1111,10 @@ class NodeView {
       name.style.fill = row.logo ? colors.ink : colors.muted
       value.text = row.value
       value.style.fill = toneOf(row.tone)
+      // A long name gives way to the value: it is cut with an ellipsis before the two touch.
+      const room = value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x
+      while (name.width > room && name.text.length > 2)
+        name.text = `${name.text.slice(0, -2).trimEnd()}…`
       valueMark.visible = row.valueLogo !== undefined
       if (row.valueLogo) {
         paintLogo(valueMark, row.valueLogo, colors.ink)
