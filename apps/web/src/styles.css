@@ -445,8 +445,140 @@
   }
 }
 
-:root[data-input='keyboard'] :is(.enter-pop, .enter-modal, .enter-backdrop) {
+:root[data-input='keyboard'] :is(.enter-pop, .enter-modal, .enter-backdrop, .swap) {
   transition-duration: 0ms;
+}
+
+/* New content in a surface that stays: it comes into focus where the old
+   content was, while the surface morphs to fit (src/game/motion.ts). The
+   blur masks the crossfade, so it reads as one thing changing. */
+.swap {
+  transition:
+    opacity 200ms var(--ease-out),
+    filter 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+@starting-style {
+  .swap {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(3px);
+  }
+}
+
+/* A morphing box clips what does not fit it yet. */
+[data-morph] {
+  overflow: clip;
+}
+
+/* Exits. A removed surface stays a moment, inert, and leaves the way it came,
+   a little faster than it arrived (src/game/motion.ts removes it after). */
+[data-exiting] {
+  pointer-events: none;
+  animation: exit-fade 150ms var(--ease-out) forwards;
+}
+.enter-backdrop[data-exiting] {
+  animation: exit-fade 180ms var(--ease-out) forwards;
+}
+.enter-backdrop[data-exiting] .enter-modal {
+  animation: exit-modal 180ms var(--ease-out) forwards;
+}
+.enter-panel[data-exiting] {
+  animation: exit-panel 200ms var(--ease-out) forwards;
+}
+.enter-toast[data-exiting] {
+  animation: exit-toast 260ms ease forwards;
+}
+.enter-down[data-exiting] {
+  animation: exit-up 180ms var(--ease-out) forwards;
+}
+.enter-left[data-exiting] {
+  animation: exit-left 180ms var(--ease-out) forwards;
+}
+.enter-pop[data-exiting] {
+  animation: exit-pop 150ms var(--ease-out) forwards;
+}
+.enter-badge[data-exiting] {
+  animation: exit-badge 150ms var(--ease-out) forwards;
+}
+.swap[data-exiting] {
+  animation: exit-swap 140ms var(--ease-out) forwards;
+}
+@keyframes exit-fade {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes exit-modal {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes exit-panel {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes exit-toast {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+@keyframes exit-up {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes exit-left {
+  to {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+@keyframes exit-pop {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+@keyframes exit-badge {
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+@keyframes exit-swap {
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* A page arrives: its bell swings once and settles. It does not keep blinking. */
+.ring {
+  transform-origin: 50% 2px;
+  animation: ring 700ms var(--ease-out);
+}
+@keyframes ring {
+  15% {
+    transform: rotate(16deg);
+  }
+  30% {
+    transform: rotate(-13deg);
+  }
+  45% {
+    transform: rotate(9deg);
+  }
+  60% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(2deg);
+  }
 }
 
 /* A rare moment, so it gets the delight budget: the content arrives in order. */
@@ -859,5 +991,18 @@ details.fold[open]::details-content {
   }
   .shine::after {
     display: none;
+  }
+  @starting-style {
+    .swap {
+      filter: none;
+      transform: none;
+    }
+  }
+  [data-exiting],
+  [data-exiting] .enter-modal {
+    animation-name: exit-fade !important;
+  }
+  .ring {
+    animation: none;
   }
 }

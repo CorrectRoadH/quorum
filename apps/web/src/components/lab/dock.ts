@@ -23,9 +23,6 @@ import { FIGURE, GROUP_TEXT, PANEL, groupBadge, tool } from './bits.ts'
    on the board places it.
    ========================================================================== */
 
-/** A row is 48px with a 2px gap; the list's height follows from the count. */
-const ROW = 50
-
 const TAB_OFFSET: Record<BuildGroup, string> = {
   edge: 'translate-x-0',
   compute: 'translate-x-11',
@@ -78,7 +75,11 @@ const row = (model: Model, type: ComponentId, index: number, h: HtmlBuilder<Mess
 /** The part in hand: its mark and name, and a way to put it down. */
 const armed = (type: ComponentId, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Key('armed'), h.Class('enter-pop flex items-center gap-2 pr-1 pl-2 text-[12.5px]')],
+    [
+      h.Key('armed'),
+      h.DataAttribute('exit', 'gesture'),
+      h.Class('swap flex items-center gap-2 pr-1 pb-1.5 pl-2 text-[12.5px] whitespace-nowrap'),
+    ],
     [
       groupBadge(COMPONENTS[type].group, COMPONENT_ICONS[type], 'size-5', h),
       h.span([h.Class('font-medium')], [COMPONENTS[type].name]),
@@ -96,36 +97,31 @@ const armed = (type: ComponentId, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+/** The open group's parts, keyed by group, so switching groups swaps the list
+ *  in place while the dock morphs to its new height. */
+const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Key(`list-${group}`),
+      h.DataAttribute('exit', 'gesture'),
+      h.Class('swap flex w-[420px] max-w-full flex-col gap-0.5 pb-1 compact:w-auto'),
+    ],
+    buildItems(group).map((type, index) => row(model, type, index, h)),
+  )
+
+/** One surface. Its top slot holds the open group's parts or the part in hand,
+ *  and the dock morphs between them instead of snapping (src/game/motion.ts). */
 export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   const open = model.buildGroup
   return h.div(
     [
+      h.DataAttribute('morph', 'gesture'),
       h.Class(
-        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-stretch p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0`,
+        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0 compact:items-stretch`,
       ),
     ],
     [
-      // The list always renders; its height is known from the row count, so the panel
-      // grows, shrinks and moves between groups instead of snapping.
-      h.div(
-        [
-          h.Key('list'),
-          h.Style({ height: `${open ? buildItems(open).length * ROW + 2 : 0}px` }),
-          h.AriaHidden(!open),
-          h.Class(
-            cn(
-              'max-w-full self-center overflow-hidden transition-[height,width] duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none compact:w-auto compact:self-stretch',
-              open ? 'w-[420px]' : 'w-0',
-            ),
-          ),
-        ],
-        [
-          h.div(
-            [h.Class('flex flex-col gap-0.5 pb-1')],
-            buildItems(model.lastGroup).map((type, index) => row(model, type, index, h)),
-          ),
-        ],
-      ),
+      open ? list(model, open, h) : model.placing ? armed(model.placing, h) : h.empty,
       h.div(
         [h.Class('flex items-center justify-center gap-1'), h.Role('group'), h.AriaLabel('Build')],
         [
@@ -142,7 +138,7 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
                       // is inserted would transition from the left edge.
                       h.Class(
                         cn(
-                          'animate-in fade-in pointer-events-none absolute top-0 left-0 size-10 rounded-xl bg-well shadow-well transition-[translate] duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none',
+                          'animate-in fade-in pointer-events-none absolute top-0 left-0 size-10 rounded-xl bg-well shadow-well transition-[translate] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none',
                           TAB_OFFSET[open],
                         ),
                       ),
@@ -186,7 +182,6 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
               ),
             ],
           ),
-          model.placing ? armed(model.placing, h) : h.empty,
         ],
       ),
     ],

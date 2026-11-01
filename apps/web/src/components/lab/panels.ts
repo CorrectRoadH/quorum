@@ -27,6 +27,7 @@ export const shell = (
 ) =>
   h.div(
     [
+      h.DataAttribute('exit', 'gesture'),
       h.Class(
         'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] enter-backdrop compact:p-3 compact:pt-[max(12px,env(safe-area-inset-top))] compact:pb-[max(12px,env(safe-area-inset-bottom))]',
       ),

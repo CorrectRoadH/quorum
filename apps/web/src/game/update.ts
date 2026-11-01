@@ -37,6 +37,7 @@ import {
   FitBoard,
   LoadSandboxStore,
   LoadSave,
+  PlaySound,
   SyncBoard,
   ToggleFullscreen,
   WriteSandboxStore,
@@ -50,6 +51,7 @@ import {
   undoAvailable,
   undoGame,
 } from './feedback.ts'
+import { cueOf } from './cues.ts'
 import { Message } from './message.ts'
 import { Model, SandboxStore, type SandboxRun, type Tone } from './model.ts'
 import type { LogEntry } from './playlog.ts'
@@ -85,7 +87,6 @@ export const initialModel = (): Model =>
     panel: 'none',
     researchFocus: null,
     buildGroup: null,
-    lastGroup: 'edge',
     speed: 1,
     paused: false,
     savedAt: 0,
@@ -459,7 +460,16 @@ const afterRound = (model: Model, game: Game): Partial<Model> => ({
 
 /* ---------- update ---------- */
 
-const route = (model: Model, message: Message): Result =>
+/** Handles a Message and adds its sound cue. Messages that route to another
+ *  Message (keys, taps on Payments) sound once, as the Message they became. */
+const route = (model: Model, message: Message): Result => {
+  const result = handle(model, message)
+  if (result.commands?.some((command) => command.name === 'PlaySound')) return result
+  const cue = cueOf(model, message, result.model)
+  return cue ? { ...result, commands: [...(result.commands ?? []), PlaySound(cue)] } : result
+}
+
+const handle = (model: Model, message: Message): Result =>
   Message.match<Result>(message, {
     SaveLoaded: ({ json }) =>
       Option.match(parseSave(json), {
@@ -601,7 +611,7 @@ const route = (model: Model, message: Message): Result =>
     },
 
     BuildGroupChosen: ({ group }) => ({
-      model: { ...model, buildGroup: model.buildGroup === group ? null : group, lastGroup: group },
+      model: { ...model, buildGroup: model.buildGroup === group ? null : group },
     }),
 
     PlacingChosen: ({ type }) => {

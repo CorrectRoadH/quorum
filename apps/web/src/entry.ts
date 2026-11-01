@@ -1,5 +1,6 @@
 import { Runtime } from 'foldkit'
 import { init, Message, Model, subscriptions, update, view } from './app/main.ts'
+import { startMotion } from './game/motion.ts'
 import './styles.css'
 
 const application = Runtime.makeApplication({
@@ -16,5 +17,8 @@ const application = Runtime.makeApplication({
 const root = document.documentElement
 addEventListener('keydown', () => (root.dataset['input'] = 'keyboard'), true)
 addEventListener('pointerdown', () => (root.dataset['input'] = 'pointer'), true)
+
+// Foldkit replaces the container it renders into, so motion watches the body.
+startMotion(document.body)
 
 Runtime.run(application)

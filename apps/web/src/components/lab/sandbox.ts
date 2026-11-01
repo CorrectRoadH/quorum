@@ -164,6 +164,7 @@ export const objectiveBar = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.div(
     [
       h.Key(`objective-${run.progress.objective}`),
+      h.DataAttribute('exit', 'notice'),
       h.Class(
         'enter-down flex w-[420px] flex-col gap-2 compact:w-auto rounded-xl bg-surface px-3 py-2.5 text-[12.5px] shadow-card',
       ),

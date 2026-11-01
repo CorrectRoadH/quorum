@@ -149,6 +149,7 @@ const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
               onClick: Message.PanelOpened({ panel: 'offer' }),
               size: 'sm',
               className: 'enter-pop shine mt-1 w-full',
+              attributes: [h.Key('offer'), h.DataAttribute('exit', 'gesture')],
             },
             [icon(h, Rocket, 'size-3.5'), `${next.name} offer`],
             h,
@@ -176,6 +177,7 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
 
   return h.header(
     [
+      h.DataAttribute('morph', 'notice'),
       h.Class(
         `absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-1 p-1.5 ${PANEL} compact:pointer-events-auto compact:static compact:w-auto compact:p-1`,
       ),
@@ -302,6 +304,8 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
               affordable > 0
                 ? h.span(
                     [
+                      h.Key('badge'),
+                      h.DataAttribute('exit', 'notice'),
                       h.Class(
                         cn(
                           FIGURE,
@@ -352,10 +356,14 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 const pill = `flex max-w-[480px] compact:max-w-none items-center gap-2.5 rounded-xl bg-surface px-3 py-2 text-[12.5px] shadow-card`
 
+/** The pill stays and its text swaps, so a new goal morphs in rather than snapping. */
 export const goalBar = (text: string, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Key('goal'), h.Class(`${pill} short:hidden`)],
-    [icon(h, Lightbulb, 'size-3.5 shrink-0 text-warn'), text],
+    [h.Key('goal'), h.DataAttribute('morph', 'notice'), h.Class(`${pill} short:hidden`)],
+    [
+      icon(h, Lightbulb, 'size-3.5 shrink-0 text-warn'),
+      h.span([h.Key(text), h.DataAttribute('exit', 'notice'), h.Class('swap')], [text]),
+    ],
   )
 
 /** Settling while the Design settles, then what the change did, with Undo. */
@@ -365,39 +373,63 @@ const undoButton = (danger: boolean, h: HtmlBuilder<Message>): Html =>
       onClick: Message.UndoChosen(),
       variant: danger ? 'destructive' : 'outline',
       size: 'icon-sm',
-      className: 'pointer-events-auto ml-1',
-      attributes: [h.Title('Undo (Z), full refund'), h.AriaLabel('Undo')],
+      className: 'enter-badge pointer-events-auto ml-1',
+      attributes: [
+        h.Key('undo'),
+        h.DataAttribute('exit', 'notice'),
+        h.Title('Undo (Z), full refund'),
+        h.AriaLabel('Undo'),
+      ],
     },
     icon(h, Undo2, 'size-3.5'),
     h,
   )
 
+/** One pill from the first change to the delta: Settling morphs into the result,
+ *  and the pill leaves when the delta expires. */
 export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
   const undo = undoAvailable(model)
-  if (model.change) {
-    return h.div(
-      [h.Key('settling'), h.Class(`enter-down ${pill}`)],
-      [
-        spinner({ className: 'size-3.5 text-muted-foreground' }, h),
-        h.span(
-          [h.Class('text-muted-foreground')],
-          [model.change.count > 1 ? `${model.change.count} changes` : model.change.label],
-        ),
-        undo ? undoButton(false, h) : h.empty,
-      ],
-    )
-  }
   const delta = model.delta
-  if (!delta) return h.empty
+  if (!model.change && !delta) return h.empty
+  const body = model.change
+    ? h.span(
+        [
+          h.Key('settling'),
+          h.DataAttribute('exit', 'notice'),
+          h.Class('swap flex items-center gap-2.5 whitespace-nowrap'),
+        ],
+        [
+          spinner({ className: 'size-3.5 text-muted-foreground' }, h),
+          h.span(
+            [h.Class('text-muted-foreground')],
+            [model.change.count > 1 ? `${model.change.count} changes` : model.change.label],
+          ),
+        ],
+      )
+    : h.span(
+        [
+          h.Key(`delta-${delta?.id}`),
+          h.DataAttribute('exit', 'notice'),
+          h.Class('swap flex items-center gap-2.5 whitespace-nowrap'),
+        ],
+        [
+          h.span(
+            [h.Class(`size-2 shrink-0 rounded-full ${delta?.worse ? 'bg-danger' : 'bg-ok'}`)],
+            [],
+          ),
+          h.span(
+            [h.Class(cn(FIGURE, 'text-[11.5px]'))],
+            [delta ? describeDelta(delta, has(model.game, 'percentiles')) : ''],
+          ),
+        ],
+      )
   return h.div(
-    [h.Key(`delta-${delta.id}`), h.Class(`enter-down ${pill}`)],
     [
-      h.span([h.Class(`size-2 shrink-0 rounded-full ${delta.worse ? 'bg-danger' : 'bg-ok'}`)], []),
-      h.span(
-        [h.Class(cn(FIGURE, 'text-[11.5px]'))],
-        [describeDelta(delta, has(model.game, 'percentiles'))],
-      ),
-      undo ? undoButton(delta.worse, h) : h.empty,
+      h.Key('change'),
+      h.DataAttribute('morph', 'notice'),
+      h.DataAttribute('exit', 'notice'),
+      h.Class(`enter-down ${pill}`),
     ],
+    [body, undo ? undoButton(!model.change && !!delta?.worse, h) : h.empty],
   )
 }

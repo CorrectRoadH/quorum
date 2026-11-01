@@ -34,8 +34,10 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
         [
           model.sandbox ? sandboxHud(model, ledger, h) : hud(model, ledger, h),
           toolbar(model, h),
+          // Notices stack here; when one comes or goes, the others slide over.
           h.div(
             [
+              h.DataAttribute('flip', 'notice'),
               h.Class(
                 'pointer-events-none absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2 compact:static compact:translate-x-0 compact:items-stretch compact:gap-1.5',
               ),
@@ -48,8 +50,9 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
                 ? h.div(
                     [
                       h.Key('paused'),
+                      h.DataAttribute('exit', 'gesture'),
                       h.Class(
-                        'flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 compact:hidden font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground shadow-card',
+                        'enter-badge flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 compact:hidden font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground shadow-card',
                       ),
                     ],
                     [icon(h, Pause, 'size-3'), 'Paused'],

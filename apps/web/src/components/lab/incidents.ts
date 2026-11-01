@@ -32,13 +32,24 @@ export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
   if (firing.length === 0) return h.empty
   return h.div(
     [
+      h.Key('pager'),
+      h.DataAttribute('morph', 'notice'),
+      h.DataAttribute('exit', 'notice'),
       h.Class(
         'enter-down flex items-center gap-2.5 rounded-xl bg-danger px-3.5 py-2 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
       ),
     ],
     [
-      icon(h, BellRing, 'size-4 animate-pulse'),
-      h.span([], [firing.map((rule) => ALERT_TEXT[rule]).join(' · ')]),
+      icon(h, BellRing, 'ring size-4 shrink-0'),
+      // A new page swaps in; the pill morphs to its length.
+      h.span(
+        [
+          h.Key(firing.join()),
+          h.DataAttribute('exit', 'notice'),
+          h.Class('swap whitespace-nowrap'),
+        ],
+        [firing.map((rule) => ALERT_TEXT[rule]).join(' · ')],
+      ),
     ],
   )
 }
@@ -98,6 +109,8 @@ const card = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Message>): Html
   return h.details(
     [
       h.Key(`pm-${postmortem.id}`),
+      h.DataAttribute('exit', 'gesture'),
+      h.DataAttribute('exit-anchor', 'bottom'),
       h.Class(`fold enter-left group w-[380px] compact:w-auto ${PANEL}`),
     ],
     [
@@ -158,14 +171,14 @@ const card = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Message>): Html
   )
 }
 
+/** The column stays when it is empty, so the last card can still leave. */
 export const postmortems = (model: Model, h: HtmlBuilder<Message>): Html =>
-  model.game.postmortems.length === 0
-    ? h.empty
-    : h.div(
-        [
-          h.Class(
-            'absolute bottom-3 left-3 z-20 flex flex-col gap-2 compact:right-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+68px)] compact:left-2',
-          ),
-        ],
-        model.game.postmortems.slice(-3).map((entry) => card(model.game, entry, h)),
-      )
+  h.div(
+    [
+      h.DataAttribute('flip', 'gesture'),
+      h.Class(
+        'absolute bottom-3 left-3 z-20 flex flex-col gap-2 compact:right-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+68px)] compact:left-2',
+      ),
+    ],
+    model.game.postmortems.slice(-3).map((entry) => card(model.game, entry, h)),
+  )

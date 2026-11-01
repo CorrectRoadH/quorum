@@ -6,6 +6,7 @@ import { solve } from './engine/solve.ts'
 import { ComponentId, Game } from './engine/state.ts'
 import { Message } from './message.ts'
 import { SandboxStore } from './model.ts'
+import { play, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 
 /* ==========================================================================
@@ -122,4 +123,11 @@ export const ClearLog = Command.define('ClearLog', {
   args: {},
   messages: [Message.Synced],
   execute: () => Effect.sync(() => clearLog()).pipe(Effect.as(Message.Synced())),
+})
+
+export const PlaySound = Command.define('PlaySound', {
+  args: { sound: Schema.Literals(SOUND_NAMES), pitch: Schema.Finite, spatial: Schema.Boolean },
+  messages: [Message.Synced],
+  execute: ({ sound, pitch, spatial }) =>
+    Effect.sync(() => play(sound, pitch, spatial)).pipe(Effect.as(Message.Synced())),
 })
