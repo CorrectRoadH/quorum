@@ -48,8 +48,8 @@ import {
   SIZES,
   type BuildGroup,
   type ComponentId,
-} from './engine/catalog.ts'
-import type { Ledger } from './engine/ledger.ts'
+} from '@template/simulation/catalog'
+import type { Ledger } from '@template/simulation/ledger'
 import {
   burnOf,
   drawerSize,
@@ -58,8 +58,8 @@ import {
   replacePrice,
   resizePrice,
   sizeLabel,
-} from './engine/lookups.ts'
-import type { Game, GameNode } from './engine/state.ts'
+} from '@template/simulation/lookups'
+import type { Game, GameNode } from '@template/simulation/state'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'

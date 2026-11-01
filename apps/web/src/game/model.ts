@@ -1,8 +1,8 @@
 import { Schema } from 'effect'
-import { BUILD_GROUPS, type BuildGroup } from './engine/catalog.ts'
-import { Progress, SANDBOX_IDS } from './engine/sandbox.ts'
-import type { Ledger } from './engine/ledger.ts'
-import { solveFlow } from './engine/solve.ts'
+import { BUILD_GROUPS, type BuildGroup } from '@template/simulation/catalog'
+import { Progress, SANDBOX_IDS } from '@template/simulation/sandbox'
+import type { Ledger } from '@template/simulation/ledger'
+import { solveFlow } from '@template/simulation/solve'
 import {
   ComponentId,
   FamilyId,
@@ -12,7 +12,7 @@ import {
   GameNode,
   ResearchId,
   RuntimeId,
-} from './engine/state.ts'
+} from '@template/simulation/state'
 
 /* ==========================================================================
    Quorum — what the UI holds. The Game is the saved company; everything else

@@ -1,4 +1,4 @@
-import { canRaise } from './engine/actions.ts'
+import { canRaise } from '@template/simulation/actions'
 import type { Message } from './message.ts'
 import type { Model, Tone } from './model.ts'
 import type { Sound } from './sound.ts'

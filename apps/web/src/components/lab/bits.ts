@@ -1,6 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { IconNode } from 'lucide'
-import type { BuildGroup } from '@/game/engine/catalog.ts'
+import type { BuildGroup } from '@template/simulation/catalog'
 import { GROUP_SHAPES, type GroupShape, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
 import type { Message } from '@/game/message.ts'
 import type { Toast } from '@/game/model.ts'

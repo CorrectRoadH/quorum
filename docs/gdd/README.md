@@ -52,7 +52,7 @@ latency hides the p99.
 - Engineering terms, such as [event loop](./glossary.md#event-loop), link to the
   [engineering glossary](./glossary.md).
 - Every number is a balance target unless the text says otherwise. The source of truth for numbers
-  in code is `apps/web/src/game/engine/catalog.ts`. When this document and the catalog disagree,
+  in code is `packages/simulation/src/catalog.ts`. When this document and the catalog disagree,
   [Balancing](./16-balancing.md) records which one wins.
 - "Real" marks a behavior taken from real systems. "Stylized" marks a behavior that the game
   simplifies or exaggerates for play. [Reality check](./reality-check.md) lists both.

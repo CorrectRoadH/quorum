@@ -1,6 +1,7 @@
 import { Schema } from 'effect'
 import { describe, expect, test } from 'vitest'
 import save from './fixtures/save-02f8200.json' with { type: 'json' }
+import m3Save from './fixtures/save-v2-m3.json' with { type: 'json' }
 import { sizeName } from './lookups.ts'
 import { solve } from './solve.ts'
 import { Game } from './state.ts'
@@ -49,5 +50,25 @@ describe('old saves', () => {
   test('a save from before the Sandbox decodes as a Company', () => {
     const { sandbox: _, ...older } = save
     expect(decode(older).sandbox).toBe(false)
+  })
+
+  /*
+   * A Garage Company saved by build 2559d8c (M3) after five sim minutes. Never
+   * regenerate it: every field added to the Game or a Node after M3 needs a
+   * decoding default, and this test proves the save still loads and plays.
+   */
+  test('a save from build 2559d8c decodes, solves, and steps', () => {
+    const game = decode(m3Save)
+    expect(game.stage).toBe(0)
+    expect(game.time).toBe(300)
+    expect(game.nodes.map((node) => node.type)).toEqual([
+      'users',
+      'server',
+      'analytics',
+      'payments',
+    ])
+    expect(game.history).toHaveLength(300)
+    expect(solve(game).revenue).toBeGreaterThan(0)
+    expect(step(game, 1).game.time).toBe(game.time + 1)
   })
 })

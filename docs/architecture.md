@@ -38,17 +38,20 @@ To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` fro
 - `apps/web/src/app` owns the Foldkit application. Remote data belongs in Foldkit Query submodels. Update handlers decide when to load or revalidate them.
 - `apps/backend/src/contexts` is the home for server-side bounded contexts as product vocabulary is discovered. Do not pre-invent product domains in the scaffold.
 - `packages/rpc` owns the public wire contract only: Effect RPC groups, request/response schemas, declared errors, and the API path prefix.
+- `packages/simulation` owns the Simulation: the catalog, the Game schema, the solver, the Step, actions, and the Sandboxes. The browser plays it and the API Worker will replay Challenges with it ([ADR 0004](adr/0004-simulation-package.md)). It imports only `effect` and its own files, and uses only exact math, so every runtime computes the same Game.
 - `examples/reference` shows a complete Query-to-RPC path in a separate website app. Run it with `pnpm dev:reference`, which uses the root Alchemy entrypoint with the `reference` stage; it is deliberately excluded from the default stack.
 
 ## Dependency direction
 
 ```text
-apps/web ─────────► packages/rpc
-apps/backend ─────► packages/rpc
+apps/web ─────────► packages/rpc, packages/simulation
+apps/backend ─────► packages/rpc (and packages/simulation from M8)
 examples/reference ► packages/rpc
+packages/rpc ─────► effect
+packages/simulation ► effect
 ```
 
-The web app must not import backend implementation modules. The RPC package must not import either app. Share the wire contract, not internal backend models.
+The web app must not import backend implementation modules. The RPC package must not import either app or the Simulation. The Simulation must not import either app, `packages/rpc`, or any UI, browser, or Cloudflare module. Share the wire contract, not internal backend models.
 
 ## Cloudflare scope
 

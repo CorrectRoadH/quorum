@@ -19,11 +19,11 @@ import {
   Users,
   Wallet,
 } from 'lucide'
-import { researchList } from '@/game/engine/catalog.ts'
-import { canRaise } from '@/game/engine/actions.ts'
-import type { Ledger } from '@/game/engine/ledger.ts'
-import { eraOf, has, nextEra, researchReady } from '@/game/engine/lookups.ts'
-import { clockOf } from '@/game/engine/solve.ts'
+import { researchList } from '@template/simulation/catalog'
+import { canRaise } from '@template/simulation/actions'
+import type { Ledger } from '@template/simulation/ledger'
+import { eraOf, has, nextEra, researchReady } from '@template/simulation/lookups'
+import { clockOf } from '@template/simulation/solve'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'

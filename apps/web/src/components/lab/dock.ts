@@ -6,8 +6,8 @@ import {
   RESEARCH,
   type BuildGroup,
   type ComponentId,
-} from '@/game/engine/catalog.ts'
-import { buildItems, isUnlocked, priceOf } from '@/game/engine/lookups.ts'
+} from '@template/simulation/catalog'
+import { buildItems, isUnlocked, priceOf } from '@template/simulation/lookups'
 import { money } from '@/game/format.ts'
 import { COMPONENT_ICONS, GROUP_ICONS } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'

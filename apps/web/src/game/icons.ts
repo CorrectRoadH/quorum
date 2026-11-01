@@ -26,7 +26,7 @@ import {
   siRubyonrails,
   siSymfony,
 } from 'simple-icons'
-import type { BuildGroup, ComponentId, FrameworkId, LanguageId } from './engine/catalog.ts'
+import type { BuildGroup, ComponentId, FrameworkId, LanguageId } from '@template/simulation/catalog'
 
 /** One glyph per Component, shared by the board, the dock and the inspector. */
 export const COMPONENT_ICONS: Record<ComponentId, IconNode> = {

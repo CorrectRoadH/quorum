@@ -1,6 +1,6 @@
 import { Option, Result, Schema } from 'effect'
 import type { Runtime, Update } from 'foldkit'
-import * as Actions from './engine/actions.ts'
+import * as Actions from '@template/simulation/actions'
 import {
   ALERT_RULES,
   BUILD_GROUPS,
@@ -16,13 +16,13 @@ import {
   RUNTIMES,
   SIZES,
   STEP_SECONDS,
-} from './engine/catalog.ts'
-import { newGame, preseedGame } from './engine/company.ts'
-import { forceIncident } from './engine/director.ts'
-import { StepEvent } from './engine/events.ts'
-import { nextGoal } from './engine/goals.ts'
-import type { Ledger } from './engine/ledger.ts'
-import { buildItems, eraOf, has, isFinalEra } from './engine/lookups.ts'
+} from '@template/simulation/catalog'
+import { newGame, preseedGame } from '@template/simulation/company'
+import { forceIncident } from '@template/simulation/director'
+import { StepEvent } from '@template/simulation/events'
+import { nextGoal } from '@template/simulation/goals'
+import type { Ledger } from '@template/simulation/ledger'
+import { buildItems, eraOf, has, isFinalEra } from '@template/simulation/lookups'
 import {
   advanceSandbox,
   freeSandbox,
@@ -30,11 +30,11 @@ import {
   passedAll,
   sandboxOf,
   START,
-} from './engine/sandbox.ts'
-import { previewOf } from './engine/preview.ts'
-import { bottleneckOf, solveFlow } from './engine/solve.ts'
-import { Game } from './engine/state.ts'
-import { step } from './engine/step.ts'
+} from '@template/simulation/sandbox'
+import { previewOf } from '@template/simulation/preview'
+import { bottleneckOf, solveFlow } from '@template/simulation/solve'
+import { Game } from '@template/simulation/state'
+import { step } from '@template/simulation/step'
 import {
   AppendLog,
   ClearLog,

@@ -4,7 +4,7 @@
 
 This document collects every formula and tunable constant, and describes how balance is checked.
 
-**Source of truth.** Once a number is implemented, `apps/web/src/game/engine/catalog.ts` is the
+**Source of truth.** Once a number is implemented, `packages/simulation/src/catalog.ts` is the
 source of truth, and this document records the target and the reason. When they disagree, the code
 wins for the current build, and the difference goes in the [divergence log](#divergence-log) until one
 side changes.

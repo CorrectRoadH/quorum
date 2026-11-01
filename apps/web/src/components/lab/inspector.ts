@@ -22,8 +22,8 @@ import {
   SAMPLE_RATES,
   SIZES,
   type RequestKind,
-} from '@/game/engine/catalog.ts'
-import type { Ledger } from '@/game/engine/ledger.ts'
+} from '@template/simulation/catalog'
+import type { Ledger } from '@template/simulation/ledger'
 import {
   burnOf,
   drawerSize,
@@ -37,8 +37,8 @@ import {
   runtimeReady,
   sizeLabel as sizeLabelOf,
   vcpuOf,
-} from '@/game/engine/lookups.ts'
-import { LINK_TIMEOUTS } from '@/game/engine/actions.ts'
+} from '@template/simulation/lookups'
+import { LINK_TIMEOUTS } from '@template/simulation/actions'
 import type {
   CacheEngine,
   Game,
@@ -46,7 +46,7 @@ import type {
   GameNode,
   LbPolicy,
   PmMode,
-} from '@/game/engine/state.ts'
+} from '@template/simulation/state'
 import { compact, duration, money, ms, priceLabel, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'

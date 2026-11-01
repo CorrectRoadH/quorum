@@ -10,7 +10,7 @@ import { tradeoffCard } from '@/components/lab/tradeoff.ts'
 import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'
-import { nextGoal } from './engine/goals.ts'
+import { nextGoal } from '@template/simulation/goals'
 import type { Message } from './message.ts'
 import { ledgerOf, type Model } from './model.ts'
 

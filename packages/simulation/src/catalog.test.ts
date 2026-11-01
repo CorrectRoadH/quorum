@@ -1,5 +1,5 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
-import glossary from '../../../../../docs/gdd/glossary.md?raw'
 import {
   AXES,
   RUNTIMES,
@@ -14,6 +14,8 @@ import {
   researchList,
   type ResearchId,
 } from './catalog.ts'
+
+const glossary = readFileSync(new URL('../../../docs/gdd/glossary.md', import.meta.url), 'utf8')
 
 /* The research catalog against 10 "Research": cost bands, prerequisites, and the GDD's ids. */
 

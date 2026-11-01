@@ -15,10 +15,10 @@ import {
   Wallet,
   Zap,
 } from 'lucide'
-import { ERAS, INCIDENTS, INCIDENT_IDS } from '@/game/engine/catalog.ts'
-import type { Ledger } from '@/game/engine/ledger.ts'
-import { has } from '@/game/engine/lookups.ts'
-import { GUIDED, TRACKS, type SandboxId } from '@/game/engine/sandbox.ts'
+import { ERAS, INCIDENTS, INCIDENT_IDS } from '@template/simulation/catalog'
+import type { Ledger } from '@template/simulation/ledger'
+import { has } from '@template/simulation/lookups'
+import { GUIDED, TRACKS, type SandboxId } from '@template/simulation/sandbox'
 import { clock, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { isPhone } from '@/game/viewport.ts'

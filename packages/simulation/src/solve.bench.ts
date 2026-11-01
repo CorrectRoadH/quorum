@@ -10,7 +10,7 @@ import type { Game, GameLink, GameNode } from './state.ts'
  * board under 2 ms, and the Bottleneck search under 3 ms. The Tradeoff preview
  * runs 2 × 10 one-second Steps for the first option hovered on a Game, then 10 for each
  * other option, cached per Game and option. Run it with
- * `pnpm --filter @template/web exec vitest bench --run`. CI does not assert
+ * `pnpm --filter @template/simulation exec vitest bench --run`. CI does not assert
  * timings: they depend on the machine.
  */
 

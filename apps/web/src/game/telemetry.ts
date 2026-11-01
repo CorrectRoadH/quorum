@@ -1,7 +1,7 @@
-import { COMPONENTS } from './engine/catalog.ts'
-import type { Ledger } from './engine/ledger.ts'
-import { clockOf } from './engine/solve.ts'
-import type { Game, GameNode } from './engine/state.ts'
+import { COMPONENTS } from '@template/simulation/catalog'
+import type { Ledger } from '@template/simulation/ledger'
+import { clockOf } from '@template/simulation/solve'
+import type { Game, GameNode } from '@template/simulation/state'
 import type { Model } from './model.ts'
 import type { LogEntry } from './playlog.ts'
 

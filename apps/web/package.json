@@ -11,6 +11,7 @@
     "@foldkit/ui": "0.168.0",
     "@foldkit/vite-plugin": "0.27.0",
     "@template/rpc": "workspace:*",
+    "@template/simulation": "workspace:*",
     "cn": "0.5.0",
     "effect": "4.0.0",
     "foldkit": "0.167.0",

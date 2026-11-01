@@ -12,7 +12,7 @@ import {
   ResearchId,
   Retries,
   RuntimeId,
-} from './engine/state.ts'
+} from '@template/simulation/state'
 import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 
 /* ==========================================================================

@@ -367,5 +367,6 @@ When the player returns, the game simulates the time they were away:
 | Offline simulation of 8 hours | Under 1 second                   |
 | Bottleneck analysis           | Under 3 ms, once per second      |
 
-The simulation is a pure function of the save and the step. It lives in
-`apps/web/src/game/engine/sim.ts` and has no access to the UI.
+The simulation is a pure function of the save and the step. It lives in the
+`packages/simulation` workspace package ([ADR 0004](../adr/0004-simulation-package.md)), imports only
+`effect`, and has no access to the UI.

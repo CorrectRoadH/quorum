@@ -33,9 +33,9 @@ import {
   type ResearchDef,
   type ResearchId,
   type ResearchTrack,
-} from '@/game/engine/catalog.ts'
-import { has, researchReady } from '@/game/engine/lookups.ts'
-import type { Game } from '@/game/engine/state.ts'
+} from '@template/simulation/catalog'
+import { has, researchReady } from '@template/simulation/lookups'
+import type { Game } from '@template/simulation/state'
 import { compact } from '@/game/format.ts'
 import { COMPONENT_ICONS, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'
