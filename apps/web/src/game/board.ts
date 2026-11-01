@@ -344,29 +344,125 @@ const inFooter = (node: GameNode, point: Pt): boolean => {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h
 }
 
-const bezier = (a: Pt, b: Pt) => {
-  const reach = Math.max(60, Math.abs(b.x - a.x) * 0.5)
-  return { a, c1: { x: a.x + reach, y: a.y }, c2: { x: b.x - reach, y: b.y }, b }
-}
+/** How far a backward link runs out of a port before it turns. */
+const STUB = 16
+/** Corner radius of a link's bends. */
+const BEND = 6
 
-type Curve = ReturnType<typeof bezier>
+const gap = (a: Pt, b: Pt): number => Math.hypot(b.x - a.x, b.y - a.y)
 
-const pointOn = ({ a, c1, c2, b }: Curve, t: number): Pt => {
-  const u = 1 - t
-  return {
-    x: u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x,
-    y: u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y,
+/** A link's path as a polyline: straight runs with soft right-angle bends. */
+type Route = ReadonlyArray<Pt>
+
+/**
+ * Forward links bend once, halfway between the ports. Backward links leave
+ * the port, drop to `lane` under both cards, and come back in from the left.
+ */
+const route = (a: Pt, b: Pt, lane: number): Route => {
+  const x = Math.round((a.x + b.x) / 2)
+  const corners =
+    b.x - a.x > 8
+      ? [a, { x, y: a.y }, { x, y: b.y }, b]
+      : [
+          a,
+          { x: a.x + STUB, y: a.y },
+          { x: a.x + STUB, y: lane },
+          { x: b.x - STUB, y: lane },
+          { x: b.x - STUB, y: b.y },
+          b,
+        ]
+  const points = corners.filter((point, index) => {
+    const previous = corners[index - 1]
+    return !previous || gap(previous, point) > 0.5
+  })
+  // Round each inner corner with a short quadratic arc, sampled into the polyline.
+  const path: Array<Pt> = [a]
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const before = points[index - 1]
+    const corner = points[index]
+    const after = points[index + 1]
+    if (!before || !corner || !after) continue
+    const r = Math.min(BEND, gap(before, corner) / 2, gap(corner, after) / 2)
+    const start = {
+      x: corner.x + ((before.x - corner.x) / gap(before, corner)) * r,
+      y: corner.y + ((before.y - corner.y) / gap(before, corner)) * r,
+    }
+    const end = {
+      x: corner.x + ((after.x - corner.x) / gap(corner, after)) * r,
+      y: corner.y + ((after.y - corner.y) / gap(corner, after)) * r,
+    }
+    for (let step = 0; step <= 4; step += 1) {
+      const t = step / 4
+      const u = 1 - t
+      path.push({
+        x: u * u * start.x + 2 * u * t * corner.x + t * t * end.x,
+        y: u * u * start.y + 2 * u * t * corner.y + t * t * end.y,
+      })
+    }
   }
+  path.push(b)
+  return path
 }
 
-const distanceTo = (curve: Curve, point: Pt): number => {
+const lengthOf = (path: Route): number =>
+  path.reduce((sum, point, index) => {
+    const previous = path[index - 1]
+    return previous ? sum + gap(previous, point) : sum
+  }, 0)
+
+/** The point `t` of the way along a path, by length. */
+const pointOn = (path: Route, t: number): Pt => {
+  let left = lengthOf(path) * t
+  for (let index = 1; index < path.length; index += 1) {
+    const a = path[index - 1]
+    const b = path[index]
+    if (!a || !b) continue
+    const span = gap(a, b)
+    if (left <= span && span > 0) {
+      const k = left / span
+      return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }
+    }
+    left -= span
+  }
+  return path[path.length - 1] ?? { x: 0, y: 0 }
+}
+
+const distanceTo = (path: Route, point: Pt): number => {
   let best = Number.POSITIVE_INFINITY
-  for (let index = 0; index <= 32; index += 1) {
-    const at = pointOn(curve, index / 32)
-    best = Math.min(best, Math.hypot(at.x - point.x, at.y - point.y))
+  for (let index = 1; index < path.length; index += 1) {
+    const a = path[index - 1]
+    const b = path[index]
+    if (!a || !b) continue
+    const span = (b.x - a.x) ** 2 + (b.y - a.y) ** 2
+    const k =
+      span === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(1, ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / span),
+          )
+    best = Math.min(best, gap({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }, point))
   }
   return best
 }
+
+/** The lane a backward link runs along, under both cards. */
+const laneUnder = (from: GameNode, toBottom: number): number =>
+  Math.max(from.y + heightOf(from.type), toBottom) + 18
+
+const routeOf = (from: GameNode, to: GameNode): Route =>
+  route(outPort(from), inPort(to), laneUnder(from, to.y + heightOf(to.type)))
+
+const traceOf = (graphics: Graphics, path: Route): Graphics => {
+  const [first, ...rest] = path
+  if (!first) return graphics
+  graphics.moveTo(first.x, first.y)
+  for (const point of rest) graphics.lineTo(point.x, point.y)
+  return graphics
+}
+
+/** Pipe width grows with traffic, from 3 to 8 world pixels. */
+const pipeWidth = (rate: number): number => 3 + Math.min(5, Math.sqrt(rate) * 0.8)
 
 /* ---------- one node window ---------- */
 
@@ -1058,7 +1154,7 @@ class BoardController {
       const from = byId.get(link.from)
       const to = byId.get(link.to)
       if (!from || !to) continue
-      if (distanceTo(bezier(outPort(from), inPort(to)), point) <= reach) return link
+      if (distanceTo(routeOf(from, to), point) <= reach) return link
     }
     return null
   }
@@ -1307,22 +1403,32 @@ class BoardController {
       const from = byId.get(link.from)
       const to = byId.get(link.to)
       if (!from || !to) continue
-      const curve = bezier(outPort(from), inPort(to))
+      const path = routeOf(from, to)
       const flow = rates.get(`${link.from}>${link.to}`)
       const tap = COMPONENTS[to.type].tap
       const hovered = this.hoverLink?.from === link.from && this.hoverLink.to === link.to
       const busy = (flow?.rate ?? 0) > 0.01
-      const color = hovered || flow?.failing ? colors.danger : busy ? colors.accent : colors.edge
-      this.wires
-        .moveTo(curve.a.x, curve.a.y)
-        .bezierCurveTo(curve.c1.x, curve.c1.y, curve.c2.x, curve.c2.y, curve.b.x, curve.b.y)
-      this.wires.stroke({
-        color,
-        width: hovered ? 3 : busy ? 2 : 1.5,
-        alpha: tap ? 0.5 : busy ? 0.55 : 0.8,
-      })
+      // The packets' colour; the pipe under them is a pale tint of it, with no outline.
+      const packet =
+        hovered || flow?.failing
+          ? colors.danger
+          : tap
+            ? colors.muted
+            : flow && busy
+              ? KINDS[flow.kind].color
+              : colors.edge
+      traceOf(this.wires, path).stroke(
+        busy
+          ? {
+              color: mix(packet, colors.canvas, hovered ? 0.45 : 0.72),
+              width: pipeWidth(flow?.rate ?? 0),
+              cap: 'round',
+              join: 'round',
+            }
+          : { color: hovered ? colors.danger : colors.edge, width: hovered ? 3 : 1.5, alpha: 0.8 },
+      )
       if (hovered) {
-        const mid = pointOn(curve, 0.5)
+        const mid = pointOn(path, 0.5)
         this.overlay.circle(mid.x, mid.y, 9).fill(colors.danger)
         this.overlay
           .moveTo(mid.x - 3.5, mid.y - 3.5)
@@ -1332,14 +1438,17 @@ class BoardController {
         this.overlay.stroke({ color: colors.card, width: 2 })
       }
       if (!flow || !busy) continue
-      const count = Math.min(9, Math.max(1, Math.round(Math.log2(1 + flow.rate) * 1.4)))
-      const length = Math.hypot(curve.b.x - curve.a.x, curve.b.y - curve.a.y) + 60
-      const speed = 150 / length
-      const packet = tap ? colors.muted : KINDS[flow.kind].color
+      const length = lengthOf(path)
+      const count = Math.max(
+        1,
+        Math.min(9, Math.round(Math.log2(1 + flow.rate) * 1.4), Math.floor(length / 20)),
+      )
+      const speed = 150 / (length + 60)
+      const radius = Math.max(1.5, pipeWidth(flow.rate) / 2 - 0.5)
       for (let index = 0; index < count; index += 1) {
         const t = (this.phase * speed + index / count) % 1
-        const at = pointOn(curve, t)
-        this.packets.circle(at.x, at.y, 3)
+        const at = pointOn(path, t)
+        this.packets.circle(at.x, at.y, radius)
       }
       this.packets.fill({ color: packet, alpha: tap ? 0.6 : 0.95 })
     }
@@ -1374,12 +1483,15 @@ class BoardController {
       const from = byId.get(gesture.from)
       if (from) {
         const target = this.nodeAt(gesture.at)
-        const end = target && target.id !== from.id ? inPort(target) : gesture.at
-        const curve = bezier(outPort(from), end)
-        this.overlay
-          .moveTo(curve.a.x, curve.a.y)
-          .bezierCurveTo(curve.c1.x, curve.c1.y, curve.c2.x, curve.c2.y, curve.b.x, curve.b.y)
-        this.overlay.stroke({ color: colors.accent, width: 2.5 })
+        const snapped = target && target.id !== from.id
+        const end = snapped ? inPort(target) : gesture.at
+        const lane = laneUnder(from, snapped ? target.y + heightOf(target.type) : gesture.at.y)
+        traceOf(this.overlay, route(outPort(from), end, lane)).stroke({
+          color: colors.accent,
+          width: 2.5,
+          cap: 'round',
+          join: 'round',
+        })
         this.overlay.circle(end.x, end.y, 5).fill(colors.accent)
         if (target && target.id !== from.id) {
           this.overlay
