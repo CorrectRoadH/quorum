@@ -17,7 +17,7 @@ import { forceIncident } from './engine/director.ts'
 import { StepEvent } from './engine/events.ts'
 import { nextGoal } from './engine/goals.ts'
 import type { Ledger } from './engine/ledger.ts'
-import { eraOf, has, isFinalEra } from './engine/lookups.ts'
+import { buildItems, eraOf, has, isFinalEra } from './engine/lookups.ts'
 import {
   advanceSandbox,
   freeSandbox,
@@ -85,6 +85,7 @@ export const initialModel = (): Model =>
     panel: 'none',
     researchFocus: null,
     buildGroup: null,
+    lastGroup: 'edge',
     speed: 1,
     paused: false,
     savedAt: 0,
@@ -590,6 +591,9 @@ const route = (model: Model, message: Message): Result =>
         case 'Backspace':
           return selected ? route(model, Message.NodeSold({ nodeId: selected })) : { model }
         default: {
+          // With a group open, a digit picks that part.
+          const picked = (model.buildGroup ? buildItems(model.buildGroup) : [])[Number(key) - 1]
+          if (picked) return route(model, Message.PlacingChosen({ type: picked }))
           const group = BUILD_KEYS[key]
           return group ? route(model, Message.BuildGroupChosen({ group })) : { model }
         }
@@ -597,11 +601,17 @@ const route = (model: Model, message: Message): Result =>
     },
 
     BuildGroupChosen: ({ group }) => ({
-      model: { ...model, buildGroup: model.buildGroup === group ? null : group },
+      model: { ...model, buildGroup: model.buildGroup === group ? null : group, lastGroup: group },
     }),
 
     PlacingChosen: ({ type }) => {
-      const next: Model = { ...model, placing: model.placing === type ? null : type, panel: 'none' }
+      // Picking a part closes its list: the board is the next step.
+      const next: Model = {
+        ...model,
+        placing: model.placing === type ? null : type,
+        panel: 'none',
+        buildGroup: null,
+      }
       return { model: next, commands: [sync(next)] }
     },
 

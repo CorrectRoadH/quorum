@@ -120,6 +120,8 @@ export const Model = Schema.Struct({
   researchFocus: Schema.NullOr(ResearchId),
   /** The open build tray, or null when the dock shows only its group icons. */
   buildGroup: Schema.NullOr(BuildGroupKey),
+  /** The group that was open last, so the dock can animate out of it and back from it. */
+  lastGroup: BuildGroupKey,
   speed: Schema.Finite,
   paused: Schema.Boolean,
   /** Game time of the last save, so the clock saves every few seconds. */

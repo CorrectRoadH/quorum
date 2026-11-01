@@ -1,6 +1,7 @@
 import {
   AUTH_PRICE_PER_USER,
   COMPONENTS,
+  COMPONENT_IDS,
   COPY_PRICE_GROWTH,
   DRAWER_MIN,
   DRAWER_SECONDS,
@@ -13,6 +14,7 @@ import {
   SELL_REFUND,
   SIZES,
   VCPU_PRICE,
+  type BuildGroup,
   type ComponentId,
   type EraDef,
   type FrameworkId,
@@ -33,6 +35,10 @@ export const eraOf = (game: Game): EraDef => ERAS[Math.min(game.stage, ERAS.leng
 export const nextEra = (game: Game): EraDef | undefined => ERAS[game.stage + 1]
 
 export const isFinalEra = (game: Game): boolean => game.stage >= ERAS.length - 1
+
+/** The Components a player can place from one build group, in catalog order. */
+export const buildItems = (group: BuildGroup): ReadonlyArray<ComponentId> =>
+  COMPONENT_IDS.filter((type) => COMPONENTS[type].group === group && !COMPONENTS[type].fixed)
 
 export const isUnlocked = (game: Game, type: ComponentId): boolean => {
   const unlock = COMPONENTS[type].unlock
