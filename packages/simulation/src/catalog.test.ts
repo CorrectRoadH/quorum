@@ -27,7 +27,7 @@ const BANDS: ReadonlyArray<readonly [number, number]> = [
   [1_500, 8_000],
 ]
 
-/** Every Garage and Pre-seed research id in 10 "Research", the Auth Provider's (plan C8), and the Seed ids the build has. */
+/** Every Garage and Pre-seed research id in 10 "Research", the Auth Provider's (plan C8), and the Seed and Series A ids the build has. */
 const GDD_IDS: ReadonlyArray<string> = [
   'dns-rr',
   'load-balancing',
@@ -73,6 +73,23 @@ const GDD_IDS: ReadonlyArray<string> = [
   'full-text-search',
   'object-storage',
   'cache-warming',
+  'lang-go',
+  'lang-java',
+  'lang-csharp',
+  'fw-gin',
+  'fw-spring-boot',
+  'fw-aspnet',
+  'tracing',
+  'cert-automation',
+  'lang-elixir',
+  'lang-rust',
+  'fw-phoenix',
+  'tiered-caching',
+  'multi-az',
+  'autoscaling',
+  'containers',
+  'slo-dashboards',
+  'error-budgets',
 ]
 
 describe('the research catalog', () => {
@@ -109,7 +126,7 @@ describe('the research catalog', () => {
     }
   })
 
-  test('every Garage, Pre-seed and built Seed id in the design exists', () => {
+  test('every Garage, Pre-seed and built Seed and Series A id in the design exists', () => {
     const missing = GDD_IDS.filter((id) => !(RESEARCH_IDS as ReadonlyArray<string>).includes(id))
     expect(missing).toEqual([])
     for (const id of RESEARCH_IDS) expect(RESEARCH[id]?.id).toBe(id)

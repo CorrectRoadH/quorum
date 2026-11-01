@@ -1,15 +1,29 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import { connect, disconnect, place, type Action } from './actions.ts'
-import { DESIGN_TUNING, LANGUAGES, MIGRATION_BUGS } from './catalog.ts'
+import {
+  DESIGN_TUNING,
+  LANGUAGES,
+  MIGRATION_BUGS,
+  RUNTIMES,
+  type ResearchId,
+  type RuntimeId,
+} from './catalog.ts'
 import { preseedGame } from './company.ts'
 import type { Ledger } from './ledger.ts'
 import { migrationCost } from './migration.ts'
 import { GUIDED } from './sandbox.ts'
 import { solveFlow } from './solve.ts'
 import type { Game } from './state.ts'
-import { serviceOf } from './team.ts'
-import { advanceTeam, cancelMigration, changeStack, queueFeature, shiftMigration } from './work.ts'
+import { languageOfService, salaryOf, serviceOf } from './team.ts'
+import {
+  advanceTeam,
+  cancelMigration,
+  changeStack,
+  hire,
+  queueFeature,
+  shiftMigration,
+} from './work.ts'
 
 /* 08 "Migrations": a Stack change in a Company is Dev Hours and a strangler, not a restart. */
 
@@ -106,6 +120,34 @@ describe('migrations', () => {
     expect(fixedUp.backlog.some((item) => item.ref === 'fix-bugs')).toBe(false)
     expect(serviceOf(fixedUp).migration).toBeNull()
     expect(solveFlow(fixedUp).errors.crash).toBe(0)
+  })
+
+  test('a migration to each Series A language moves every App Server, and hires speak it', () => {
+    const targets: ReadonlyArray<readonly [RuntimeId, ResearchId]> = [
+      ['go', 'lang-go'],
+      ['tomcat', 'lang-java'],
+      ['kestrel', 'lang-csharp'],
+      ['beam', 'lang-elixir'],
+      ['tokio', 'lang-rust'],
+    ]
+    for (const [runtime, research] of targets) {
+      const start = { ...four(), researched: [...four().researched, research] }
+      let game = ok(changeStack(start, 'server', { runtime }))
+      for (let index = 0; index < 4; index += 1) game = step(game)
+      const language = RUNTIMES[runtime].language
+      expect(
+        game.nodes
+          .filter((node) => node.type === 'server')
+          .every((node) => node.runtime === runtime),
+      ).toBe(true)
+      expect(languageOfService(game)).toBe(language)
+      const hired = ok(hire(game, DESIGN_TUNING))
+      expect(hired.hires.at(-1)?.language).toBe(language)
+      expect(salaryOf(hired, language)).toBeCloseTo(
+        salaryOf(hired, 'php') * (LANGUAGES[language].salary / LANGUAGES.php.salary),
+        9,
+      )
+    }
   })
 
   test('the next step waits for its Dev Hours', () => {

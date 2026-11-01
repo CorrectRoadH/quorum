@@ -12,6 +12,7 @@ import {
   Play,
   Rocket,
   Scan,
+  ShieldCheck,
   Smile,
   Timer,
   TriangleAlert,
@@ -25,6 +26,7 @@ import { researchList } from '@template/simulation/catalog'
 import { canRaise } from '@template/simulation/actions'
 import type { Ledger } from '@template/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@template/simulation/lookups'
+import { budgetOf, budgeted } from '@template/simulation/slo'
 import { clockOf } from '@template/simulation/solve'
 import { devHoursRate } from '@template/simulation/team'
 import { itemName } from '@template/simulation/work'
@@ -48,6 +50,7 @@ const CHIP_ORDER: Record<string, string> = {
   Errors: 'compact:order-2',
   p99: 'compact:order-3',
   Latency: 'compact:order-3',
+  SLO: 'compact:order-2',
 }
 
 /** One stat: a glyph and its name, then the value and a short note. */
@@ -103,6 +106,27 @@ const stat = (
         : h.empty,
     ],
   )
+
+const percent = (share: number): string => `${(Math.floor(share * 10_000) / 100).toFixed(2)}%`
+
+/** Availability over the week against the Era's SLO; the error budget left with SLO dashboards. */
+const slo = (game: Model['game'], h: HtmlBuilder<Message>): Html => {
+  const budget = budgetOf(game)
+  const left = Math.max(0, budget.left)
+  return stat(
+    'SLO',
+    ShieldCheck,
+    percent(budget.availability),
+    has(game, 'slo-dashboards')
+      ? budget.left > 0
+        ? `${Math.round(left * 100)}% left`
+        : 'spent'
+      : `/ ${Math.round(budget.slo * 1_000) / 10}%`,
+    budget.left > 0.5 ? 'ok' : budget.left > 0 ? 'warn' : 'danger',
+    h,
+    `Availability this week against ${percent(budget.slo)}. The error budget: ${budget.left > 0 ? `${Math.round(left * 100)}% left` : 'spent'}.`,
+  )
+}
 
 /** What the toolbar takes from the top row of a phone: the funding row leaves it free. */
 const TOOLBAR_ROOM = 'compact:min-h-9 compact:pr-[var(--toolbar-w)]'
@@ -280,6 +304,7 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
             h,
             `Errors: ${errorTitle}`,
           ),
+          budgeted(game) ? slo(game, h) : h.empty,
           stat(
             percentiles ? 'p99' : 'Latency',
             Timer,

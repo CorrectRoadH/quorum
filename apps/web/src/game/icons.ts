@@ -1,5 +1,6 @@
 import {
   Activity,
+  Boxes,
   ChartLine,
   Combine,
   Cpu,
@@ -12,7 +13,9 @@ import {
   HardDrive,
   type IconNode,
   KeyRound,
+  Landmark,
   ListOrdered,
+  Scaling,
   Search,
   Server,
   Shield,
@@ -22,14 +25,22 @@ import {
 } from 'lucide'
 import {
   siDjango,
+  siDotnet,
+  siElixir,
   siExpress,
   siFlask,
+  siGin,
+  siGo,
   siLaravel,
   siNodedotjs,
+  siOpenjdk,
+  siPhoenixframework,
   siPhp,
   siPython,
   siRuby,
   siRubyonrails,
+  siRust,
+  siSpringboot,
   siSymfony,
 } from 'simple-icons'
 import type { BuildGroup, ComponentId, FrameworkId, LanguageId } from '@template/simulation/catalog'
@@ -53,6 +64,9 @@ export const COMPONENT_ICONS: Record<ComponentId, IconNode> = {
   worker: Cog,
   cdn: Earth,
   waf: Shield,
+  psp: Landmark,
+  autoscaler: Scaling,
+  cluster: Boxes,
 }
 
 export const GROUP_ICONS: Record<BuildGroup, IconNode> = {
@@ -97,4 +111,14 @@ export const STACK_LOGOS: Record<StackLogoId, Readonly<{ path: string; color: st
   // Simple Icons has no Sinatra mark: it wears Ruby's.
   sinatra: { path: siRuby.path, color: '#B4302A' },
   flask: { path: siFlask.path, color: `#${siFlask.hex}` },
+  go: { path: siGo.path, color: `#${siGo.hex}` },
+  java: { path: siOpenjdk.path, color: null },
+  // Simple Icons has no C# mark: C# and ASP.NET Core wear .NET's.
+  csharp: { path: siDotnet.path, color: `#${siDotnet.hex}` },
+  elixir: { path: siElixir.path, color: `#${siElixir.hex}` },
+  rust: { path: siRust.path, color: null },
+  gin: { path: siGin.path, color: `#${siGin.hex}` },
+  'spring-boot': { path: siSpringboot.path, color: `#${siSpringboot.hex}` },
+  aspnet: { path: siDotnet.path, color: `#${siDotnet.hex}` },
+  phoenix: { path: siPhoenixframework.path, color: `#${siPhoenixframework.hex}` },
 }

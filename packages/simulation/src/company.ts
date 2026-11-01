@@ -59,6 +59,16 @@ export const node = (
   warming: false,
   paranoia: 2,
   underAttack: false,
+  zone: 'a',
+  standby: false,
+  replicas: 1,
+  pending: 0,
+  readyIn: 0,
+  scaledAt: 0,
+  signal: 'cpu',
+  target: 0.6,
+  minCopies: 1,
+  maxCopies: 8,
   ...extra,
 })
 
@@ -112,6 +122,7 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   deploys: 0,
   badDeploys: 0,
   stored: 0,
+  budget: [],
 })
 
 /**

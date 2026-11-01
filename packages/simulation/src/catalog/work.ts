@@ -14,6 +14,11 @@ export const FEATURE_IDS = [
   'profile-photos',
   'public-api',
   'infinite-scroll',
+  'video',
+  'chat',
+  'checkout',
+  'notifications-center',
+  'mobile-app',
 ] as const
 export type FeatureId = (typeof FEATURE_IDS)[number]
 
@@ -24,6 +29,8 @@ export type FeatureDef = Readonly<{
   era: number
   dh: number
   requires: ReadonlyArray<FeatureId>
+  /** Research the Company needs before it can build it. */
+  research: ResearchId | null
   /** Multiplies the Era's market. */
   market: number
   /** Multiplies user growth and churn. */
@@ -56,6 +63,7 @@ const feature = (
   entry: Pick<FeatureDef, 'id' | 'name' | 'era' | 'dh' | 'effect'> & Partial<FeatureDef>,
 ): FeatureDef => ({
   requires: [],
+  research: null,
   market: 1,
   growth: 1,
   churn: 1,
@@ -162,6 +170,52 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
     value: { read: 1.1 },
     load: { read: 1.4 },
     effect: 'API reads earn 10% more, and users send 40% more',
+  }),
+  video: feature({
+    id: 'video',
+    name: 'Video',
+    era: 3,
+    dh: 60,
+    market: 1.4,
+    unlocks: { kind: 'media', share: 0.1, gated: true },
+    effect: 'Market +40%, video arrives: 5 MB each',
+  }),
+  chat: feature({
+    id: 'chat',
+    name: 'Chat',
+    era: 3,
+    dh: 70,
+    churn: 0.8,
+    unlocks: { kind: 'rt', share: 0.08, gated: true },
+    effect: 'Churn −20%, realtime messages hold connections open',
+  }),
+  checkout: feature({
+    id: 'checkout',
+    name: 'Checkout',
+    era: 3,
+    dh: 80,
+    research: 'checkout',
+    unlocks: { kind: 'buy', share: 0.03, gated: true },
+    effect: 'Checkouts arrive: $25 each, through the Payment Provider',
+  }),
+  'notifications-center': feature({
+    id: 'notifications-center',
+    name: 'Notifications center',
+    era: 3,
+    dh: 35,
+    requires: ['chat'],
+    growth: 1.1,
+    load: { rt: 1.2 },
+    effect: 'Growth +10%, realtime +20%',
+  }),
+  'mobile-app': feature({
+    id: 'mobile-app',
+    name: 'Mobile app',
+    era: 3,
+    dh: 120,
+    market: 1.6,
+    load: { read: 1.5 },
+    effect: 'Market +60%, API reads +50%',
   }),
 }
 

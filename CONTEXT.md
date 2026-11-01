@@ -73,6 +73,18 @@ _Avoid_: tech, build, loadout
 The family and size of a compute or data Node, which sets its vCPU, RAM, and price.
 _Avoid_: level, tier, spec
 
+**Zone**:
+A failure domain inside a region. Every zoned Node sits in one; a call between zones adds latency and Egress, and a zone outage takes down every Node in it.
+_Avoid_: availability zone, AZ (in UI copy), datacenter, rack
+
+**Copy**:
+One of the identical machines a scaled App Server or Worker Node runs. An Autoscaler adds and removes copies; the Node stays one card.
+_Avoid_: replica (that is the read replica Component), instance, pod (in UI copy)
+
+**Standby**:
+A second, idle box for a data Node in another zone. It takes over within seconds when the Node's zone fails, and doubles the Node's Burn.
+_Avoid_: failover node, secondary, hot spare
+
 **Service**:
 A codebase with its own deploy pipeline, owned by one Team. Every App Server and Worker belongs to one.
 _Avoid_: app, microservice, group

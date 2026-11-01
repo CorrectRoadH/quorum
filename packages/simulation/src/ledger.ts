@@ -94,6 +94,8 @@ export type Ledger = Readonly<{
   salaries: number
   /** Dollars per second of egress, included in `burn`. */
   egress: number
+  /** Dollars per second to third parties (Payment Provider fees), included in `burn`. */
+  fees: number
   /** Most users the market holds: the Era's, grown by Features. */
   market: number
   /** Traffic-weighted velocity of the App Servers' Stacks: language × framework. */

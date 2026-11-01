@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { DESIGN_TUNING } from './catalog.ts'
 import { runBot } from './pacing.ts'
+import { budgetOf } from './slo.ts'
 
 /*
  * The Balanced bot at the design pace (16 "Pacing model", plan D16: five seeds).
@@ -47,32 +48,41 @@ describe('the Balanced bot at the design pace', { timeout: 60_000 }, () => {
 })
 
 /*
- * The Balanced bot through Seed (10 "Era 2: Seed"). Growth bounds the Era again:
- * from 5,000 to 25,000 users against a 35,000 market takes about 28 minutes at
- * the design's g, so Series A comes 27–33 minutes after Seed. The bot places a
- * Search Engine and a WAF as soon as it can; uploads wait on Profile photos,
- * which its autopilot has not built by Series A. Margin at the design's Series A
- * cost index (120) is recorded, not asserted: the Margin bot is later work.
+ * The Balanced bot through Seed (10 "Era 2: Seed") and 40 minutes into Series A
+ * (10 "Era 3: Series A"). Growth bounds Seed again: from 5,000 to 25,000 users
+ * against a 35,000 market takes about 28 minutes at the design's g, so Series A
+ * comes 27–33 minutes after Seed. The bot places a Search Engine and a WAF as
+ * soon as it can; uploads wait on Profile photos, which its autopilot has not
+ * built by Series A, and so do media, rt and buy. In Series A it researches
+ * Multiple zones first, then spreads its App Servers across two zones and gives
+ * every data Node a standby. Series B is a placeholder, so the run stops on the
+ * clock. Margins at the design's cost indexes are recorded, not asserted.
  */
-describe('the Balanced bot through Seed', { timeout: 120_000 }, () => {
+describe('the Balanced bot through Seed into Series A', { timeout: 180_000 }, () => {
   for (const seed of SEEDS)
-    test(`seed ${seed}: plays Seed with its new Components and raises Series A`, async ({
+    test(`seed ${seed}: plays Seed, raises Series A, and spreads across zones`, async ({
       annotate,
     }) => {
-      const run = runBot(seed, 150 * 60, DESIGN_TUNING, 'balanced', 3)
+      const run = runBot(seed, 110 * 60, DESIGN_TUNING, 'balanced', 4)
       const { milestones } = run
       expect(run.game.stage).toBe(3)
       expect(milestones['search-engine'] ?? Infinity).toBeLessThan(milestones['series-a'] ?? 0)
       expect(milestones.waf ?? Infinity).toBeLessThan(milestones['series-a'] ?? 0)
-      expect(run.game.apdex).toBeGreaterThan(0.88)
       const seedEra = run.margins.find((entry) => entry.stage === 2)
       expect(seedEra?.live ?? -1).toBeGreaterThan(0)
+      expect(milestones['second-zone'] ?? Infinity).toBeGreaterThan(milestones['series-a'] ?? 0)
+      expect(milestones.standby ?? Infinity).toBeLessThan(110 * 60)
+      expect(run.game.apdex).toBeGreaterThan(0.9)
+      const budget = budgetOf(run.game)
       await annotate(
         `Seed at ${minutes(milestones.seed)} min, Series A at ${minutes(milestones['series-a'])}; ` +
           `Search Engine ${minutes(milestones['search-engine'])}, WAF ${minutes(milestones.waf)}, ` +
           `second server ${minutes(milestones['second-server'])}; margin at Series A entry ` +
           `${((seedEra?.live ?? 0) * 100).toFixed(0)}% live, ` +
-          `${((seedEra?.design ?? 0) * 100).toFixed(0)}% at cost index 120`,
+          `${((seedEra?.design ?? 0) * 100).toFixed(0)}% at cost index 120; second zone ` +
+          `${minutes(milestones['second-zone'])}, standby ${minutes(milestones.standby)}; at 110 min ` +
+          `${Math.round(run.game.users)} users, availability ${(budget.availability * 100).toFixed(2)}% ` +
+          `against ${(budget.slo * 100).toFixed(1)}%`,
       )
     })
 })

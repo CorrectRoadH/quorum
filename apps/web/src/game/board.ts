@@ -8,6 +8,7 @@ import {
   Check,
   ChevronsUp,
   Coins,
+  Copy,
   Gauge,
   Gem,
   HardDrive,
@@ -49,6 +50,7 @@ import {
   KINDS,
   RUNTIMES,
   SIZES,
+  ZONES,
   type BuildGroup,
   type ComponentId,
 } from '@template/simulation/catalog'
@@ -61,6 +63,8 @@ import {
   replacePrice,
   resizePrice,
   sizeLabel,
+  zoned,
+  zoneMs,
 } from '@template/simulation/lookups'
 import type { Game, GameNode } from '@template/simulation/state'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
@@ -142,6 +146,12 @@ const layoutOf = (type: ComponentId): Layout => {
       return { rows: 3, inRow: 0, outRow: 2, footer: false }
     case 'waf':
       return { rows: 4, inRow: 0, outRow: 3, footer: true }
+    case 'psp':
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
+    case 'autoscaler':
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
+    case 'cluster':
+      return { rows: 2, inRow: 0, outRow: null, footer: false }
   }
 }
 
@@ -661,6 +671,9 @@ const traceOf = (graphics: Graphics, path: Route): Graphics => {
   return graphics
 }
 
+/** World pixels per dash, and per gap, on a link between zones. */
+const DASH = 7
+
 /** Pipe width grows with traffic, from 3 to 8 world pixels. */
 const pipeWidth = (rate: number): number => 3 + Math.min(5, Math.sqrt(rate) * 0.8)
 
@@ -706,6 +719,7 @@ const ROW_ICONS = {
   depth: ListOrdered,
   stored: HardDrive,
   blocked: ShieldBan,
+  copies: Copy,
 } as const
 
 const FOOT_ICONS = {
@@ -940,7 +954,67 @@ const rowsOf = (
         },
         out,
       ]
+    case 'psp':
+      return [
+        { ...inbound, name: 'Checkouts' },
+        latency,
+        { glyph: 'cost', name: 'Fees', value: `${money(ledger.fees)}/s` },
+      ]
+    case 'autoscaler': {
+      const members = membersOf(game, node)
+      const copies = members.reduce((total, member) => total + member.replicas, 0)
+      const pending = members.reduce((total, member) => total + member.pending, 0)
+      return [
+        {
+          glyph: 'copies',
+          name: 'Copies',
+          value: members.length === 0 ? '—' : pending > 0 ? `${copies} +${pending}` : `${copies}`,
+          tone: members.length === 0 ? 'muted' : pending > 0 ? 'warn' : 'plain',
+        },
+        {
+          glyph: 'load',
+          name: 'Target',
+          value: `${node.signal === 'cpu' ? 'CPU' : 'load'} ${pct(node.target)}`,
+        },
+        {
+          glyph: 'policy',
+          name: 'Range',
+          value: `${node.minCopies}–${node.maxCopies > 0 ? node.maxCopies : '∞'}`,
+        },
+      ]
+    }
+    case 'cluster': {
+      const members = membersOf(game, node)
+      return [
+        { glyph: 'copies', name: 'Members', value: `${members.length}` },
+        {
+          glyph: 'cost',
+          name: 'Burn',
+          value: `${money(members.reduce((total, member) => total + burnOf(game, member), 0))}/s`,
+        },
+      ]
+    }
   }
+}
+
+/** The App Servers and Workers linked into a control Node. */
+const membersOf = (game: Game, node: GameNode): ReadonlyArray<GameNode> =>
+  game.nodes.filter((entry) =>
+    game.links.some((link) => link.from === entry.id && link.to === node.id),
+  )
+
+/** The header's right label: the size, the copies, and the zone once zones are researched. */
+const levelOf = (game: Game, node: GameNode): string => {
+  const def = COMPONENTS[node.type]
+  const size = def.sized ? (SIZES[node.size]?.name ?? '') : def.steps > 1 ? `S${node.size}` : ''
+  const copies = `${node.replicas > 1 ? ` ×${node.replicas}` : ''}${node.pending > 0 ? ` +${node.pending}` : ''}`
+  // A standby sits in the next zone over.
+  const standby = ZONES[(ZONES.indexOf(node.zone) + 1) % ZONES.length] ?? ''
+  const zone =
+    has(game, 'multi-az') && zoned(node)
+      ? `${node.zone.toUpperCase()}${node.standby ? `+${standby.toUpperCase()}` : ''} · `
+      : ''
+  return `${zone}${size}${copies}`
 }
 
 const footerOf = (game: Game, node: GameNode): Footer | null => {
@@ -1165,6 +1239,7 @@ class NodeView {
       selected,
       Math.ceil(node.down),
       node.warm < 1,
+      levelOf(game, node),
     ])
     if (digest === this.digest) return
     this.digest = digest
@@ -1310,12 +1385,12 @@ class NodeView {
             ? `${def.name} · cold`
             : def.name
     this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
-    this.level.text = def.sized
-      ? (SIZES[node.size]?.name ?? '')
-      : def.steps > 1
-        ? `S${node.size}`
-        : ''
+    this.level.text = levelOf(game, node)
     this.level.style.fill = colors.muted
+    // A long title gives way to the level: it is cut with an ellipsis before the two touch.
+    const room = this.level.x - this.level.width - 18 - this.title.x
+    while (this.title.width > room && this.title.text.length > 2)
+      this.title.text = `${this.title.text.slice(0, -2).trimEnd()}…`
 
     this.bars.clear()
     if (status !== colors.border)
@@ -2065,6 +2140,16 @@ class BoardController {
             }
           : { color: hovered ? colors.danger : colors.edge, width: hovered ? 3 : 1.5, alpha: 0.8 },
       )
+      // A link between zones is dashed: each call crosses a zone boundary.
+      if (zoneMs(from, to) > 0) {
+        const length = lengthOf(path)
+        for (let at = DASH; at < length; at += DASH * 2)
+          traceOf(this.wires, [
+            pointOn(path, at / length),
+            pointOn(path, Math.min(1, (at + DASH) / length)),
+          ])
+        this.wires.stroke({ color: colors.canvas, width: pipeWidth(flow?.rate ?? 0) + 2 })
+      }
       if (hovered) {
         const mid = pointOn(path, 0.5)
         this.overlay.circle(mid.x, mid.y, 9).fill(colors.danger)

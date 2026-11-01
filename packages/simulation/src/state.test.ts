@@ -60,6 +60,21 @@ describe('old saves', () => {
     expect(game.autopilot).toBe(true)
     expect(game.devHours).toBe(0)
     expect(game.nodes.every((node) => node.mode === 'transaction')).toBe(true)
+    // Series A (M5): zones, copies and the Autoscaler, and the error budget.
+    expect(
+      game.nodes.every(
+        (node) =>
+          node.zone === 'a' &&
+          !node.standby &&
+          node.replicas === 1 &&
+          node.pending === 0 &&
+          node.signal === 'cpu' &&
+          node.minCopies === 1 &&
+          node.maxCopies === 8,
+      ),
+    ).toBe(true)
+    expect(game.incident?.zone).toBeNull()
+    expect(game.budget).toEqual([])
     expect(solve(game).revenue).toBeGreaterThan(0)
     expect(step(game, 1).game.time).toBe(game.time + 1)
   })

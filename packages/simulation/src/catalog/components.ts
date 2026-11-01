@@ -21,6 +21,9 @@ export const COMPONENT_IDS = [
   'worker',
   'cdn',
   'waf',
+  'psp',
+  'autoscaler',
+  'cluster',
 ] as const
 export type ComponentId = (typeof COMPONENT_IDS)[number]
 
@@ -74,6 +77,8 @@ export type ComponentDef = Readonly<{
   maxOut: number
   /** Receives a copy of its parent's traffic instead of a share of it. */
   tap: boolean
+  /** Takes no traffic: App Servers and Workers link into it to come under its control. */
+  control: boolean
   /** Research that unlocks it, or null for the starter kit. */
   unlock: ResearchId | null
   /** The player cannot place or sell it. */
@@ -85,6 +90,7 @@ const def = (
     ComponentDef,
     | 'maxOut'
     | 'tap'
+    | 'control'
     | 'unlock'
     | 'fixed'
     | 'sized'
@@ -105,6 +111,7 @@ const def = (
   coldStart: false,
   maxOut: 99,
   tap: false,
+  control: false,
   unlock: null,
   fixed: false,
   sized: false,
@@ -168,7 +175,17 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     sized: true,
     latency: 2,
     accepts: REQUEST_KINDS,
-    sends: ['q-read', 'q-write', 'auth', 'q-search', 'blob-put', 'task'],
+    sends: [
+      'q-read',
+      'q-write',
+      'auth',
+      'q-search',
+      'blob-put',
+      'task',
+      'blob-get',
+      'q-tx',
+      'charge',
+    ],
     stack: true,
     limiting: true,
     coldStart: true,
@@ -183,8 +200,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 90,
     sized: true,
     latency: 2,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put'],
-    fallback: ['q-search', 'blob-put'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
+    fallback: ['q-search', 'blob-put', 'blob-get'],
     maxOut: 0,
     limiting: true,
     coldStart: true,
@@ -230,11 +247,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 80,
     burn: 0.03,
     latency: 0.3,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put'],
-    fallback: ['q-search', 'blob-put'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
+    fallback: ['q-search', 'blob-put', 'blob-get'],
     unlock: 'pooling',
     steps: 4,
-    sends: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
     limiting: true,
   }),
   cache: def({
@@ -248,11 +265,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 150,
     burn: 0.06,
     latency: 0.5,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put'],
-    fallback: ['q-search', 'blob-put'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
+    fallback: ['q-search', 'blob-put', 'blob-get'],
     unlock: 'caching',
     steps: 8,
-    sends: ['q-read', 'q-write', 'q-search', 'blob-put'],
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
     limiting: true,
     coldStart: true,
   }),
@@ -311,7 +328,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 280,
     burn: 0.01,
     latency: 40,
-    accepts: ['blob-put'],
+    accepts: ['blob-put', 'blob-get'],
     maxOut: 0,
     unlock: 'object-storage',
   }),
@@ -378,6 +395,51 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     steps: 6,
     limiting: true,
   }),
+  psp: def({
+    id: 'psp',
+    code: 'psp',
+    name: 'Payment Provider',
+    product: 'Stripe',
+    group: 'data',
+    blurb: 'Charges cards for checkouts. 2.9% plus $0.30 per checkout.',
+    cost: 0,
+    latency: 400,
+    accepts: ['charge'],
+    maxOut: 0,
+    unlock: 'checkout',
+    limiting: true,
+  }),
+  autoscaler: def({
+    id: 'autoscaler',
+    code: 'hpa',
+    name: 'Autoscaler',
+    product: 'Auto Scaling group',
+    group: 'ops',
+    blurb:
+      'Link App Servers or Workers into it. It adds copies when they run hot and removes them when idle.',
+    cost: 200,
+    latency: 0,
+    accepts: [],
+    maxOut: 0,
+    control: true,
+    unlock: 'autoscaling',
+  }),
+  cluster: def({
+    id: 'cluster',
+    code: 'k8s',
+    name: 'Kubernetes Cluster',
+    product: 'Kubernetes',
+    group: 'compute',
+    blurb:
+      'Link App Servers or Workers into it. They pack onto shared nodes: 15% less Burn, copies in 30 s.',
+    cost: 500,
+    burn: 0.1,
+    latency: 0,
+    accepts: [],
+    maxOut: 0,
+    control: true,
+    unlock: 'containers',
+  }),
 }
 
 /** How a Load Balancer splits traffic, and the research each policy needs. */
@@ -412,8 +474,10 @@ export const HOT_KB_PER_USER = 200
 /** Operations per second one cache thread answers. */
 export const CACHE_OPS = 50_000
 
-/** A CDN's hit ratio per kind at the default TTL (05 "CDN"): 70% of pages. */
-export const CDN_HIT: Partial<Record<Kind, number>> = { page: 0.7 }
+/** A CDN's hit ratio per kind at the default TTL (05 "CDN"): 70% of pages, 75% of video. */
+export const CDN_HIT: Partial<Record<Kind, number>> = { page: 0.7, media: 0.75 }
+/** With Tiered caching, a CDN answers this share of video. */
+export const TIERED_MEDIA_HIT = 0.92
 /** CDN TTLs in seconds, and what each does to the hit ratio. Proposed: the GDD gives no numbers. */
 export const CDN_TTLS = [
   { ttl: 60, factor: 0.8 },
@@ -457,6 +521,46 @@ export const EGRESS_CDN = 0.02
 export const COALESCED = 0.25
 /** How warm a Cache comes back from a restart with Cache warming. */
 export const WARMED = 0.8
+
+/** Payment Provider fee per successful checkout (09 "Third-party fees"): a share of the value plus a fixed part. */
+export const PSP_RATE = 0.029
+export const PSP_FIXED = 0.3
+/** Checkouts per second the Payment Provider takes. */
+export const PSP_CAPACITY = 1_000
+
+/** Zones a Node can sit in (05 "Zones and regions"). */
+export const ZONES = ['a', 'b', 'c'] as const
+/** A call between zones costs this much more than one inside a zone, and egress both ways. */
+export const CROSS_ZONE_MS = 1
+export const EGRESS_CROSS_ZONE = 0.01
+/** KB one backend call moves between Nodes, for cross-zone egress. Proposed. */
+export const BACKEND_KB = 4
+/** Data Nodes that can keep a standby in another zone; App Servers and Workers spread copies instead. */
+export const STANDBY_TYPES: ReadonlyArray<ComponentId> = [
+  'database',
+  'pooler',
+  'cache',
+  'search',
+  'queue',
+]
+/** A Node with a standby fails over to it in this many seconds when its zone goes. */
+export const FAILOVER_SECONDS = 20
+
+/** Autoscaler (05 "Autoscaler"): seconds before a new copy serves, on VMs and in a Kubernetes Cluster. */
+export const VM_REACTION = 180
+export const POD_REACTION = 30
+/** Seconds between two scaling actions on one Node. */
+export const SCALE_COOLDOWN = 30
+/** Targets, and the most copies, the player can pick. Zero copies means no max. */
+export const SCALE_TARGETS = [0.4, 0.6, 0.8] as const
+export const SCALE_MAXIMA = [4, 8, 16, 0] as const
+/** A Node scales in when its load falls below this share of the target. */
+export const SCALE_IN = 0.6
+/** Kubernetes bin packing: members cost this share of their Burn (05 "Kubernetes Cluster"). */
+export const POD_BURN = 0.85
+/** Noisy neighbours: this share of a member's requests wait this long. Proposed. */
+export const NOISY_SHARE = 0.01
+export const NOISY_MS = 10
 
 /** Auth Provider price, in dollars per second per user. */
 export const AUTH_PRICE_PER_USER = 0.00006

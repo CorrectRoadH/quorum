@@ -20,6 +20,7 @@ export const ERROR_CAUSES = [
   'timeout',
   'crash',
   'blocked',
+  'upstream',
 ] as const
 export type ErrorCause = (typeof ERROR_CAUSES)[number]
 export type Failures = Readonly<Record<ErrorCause, number>>
@@ -114,7 +115,8 @@ export const hop = (entry: Partial<Hop>): Hop => ({
   ...entry,
 })
 
-const combineTail = (a: number, aMs: number, b: number, bMs: number) => {
+/** Two independent tail events as one: either can hit, and the length is their weighted mean. */
+export const combineTail = (a: number, aMs: number, b: number, bMs: number) => {
   const p = 1 - (1 - a) * (1 - b)
   return { tailP: p, tailMs: a + b > 0 ? (a * aMs + b * bMs) / (a + b) : 0 }
 }

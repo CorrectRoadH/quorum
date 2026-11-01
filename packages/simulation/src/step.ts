@@ -11,8 +11,12 @@ import {
   OOM_RATIO,
   PROFILES,
   REQUEST_KINDS,
+  POD_REACTION,
   RUNTIMES,
+  SCALE_COOLDOWN,
+  SCALE_IN,
   UPLOAD_MB,
+  VM_REACTION,
   WARMUP_SECONDS,
   type Tuning,
 } from './catalog.ts'
@@ -20,7 +24,17 @@ import { advanceIncident, directIncidents } from './director.ts'
 import { StepEvent, type AlertRule } from './events.ts'
 import { churnFactor, growthFactor } from './features.ts'
 import type { Ledger } from './ledger.ts'
-import { drawerSize, eraOf, has, restarted, vcpuOf, warmAfterRestart } from './lookups.ts'
+import {
+  drawerSize,
+  eraOf,
+  has,
+  inCluster,
+  isDown,
+  restarted,
+  vcpuOf,
+  warmAfterRestart,
+} from './lookups.ts'
+import { recordBudget } from './slo.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
 import type { Alarms, FalseAlarms, Game, GameNode, Sample } from './state.ts'
 import { advanceTeam } from './work.ts'
@@ -95,6 +109,68 @@ const depthAfter = (game: Game, ledger: Ledger, queue: GameNode, seconds: number
   return Math.max(0, queue.depth + (accepted - drained) * seconds)
 }
 
+/** Seconds a cold Node takes to warm: its runtime's JIT for App Servers and Workers. */
+const warmupOf = (node: GameNode): number =>
+  node.type === 'server' || node.type === 'worker' ? RUNTIMES[node.runtime].warmup : WARMUP_SECONDS
+
+/** The live Autoscaler a Node links into, if any. */
+const autoscalerOf = (game: Game, node: GameNode): GameNode | undefined => {
+  if (node.type !== 'server' && node.type !== 'worker') return undefined
+  for (const link of game.links) {
+    if (link.from !== node.id) continue
+    const target = game.nodes.find((entry) => entry.id === link.to)
+    if (target?.type === 'autoscaler' && !isDown(target)) return target
+  }
+  return undefined
+}
+
+/**
+ * Copies boot, then join cold. An Autoscaler asks for more when the Node runs
+ * above its target, and gives one back when it idles, at most once per cooldown.
+ */
+const scale = (game: Game, node: GameNode, ledger: Ledger, seconds: number): GameNode => {
+  if (node.pending > 0) {
+    const readyIn = node.readyIn - seconds
+    if (readyIn > 0) return { ...node, readyIn }
+    const replicas = node.replicas + node.pending
+    // The new copies start cold: a JIT runtime runs them slowly for its warmup.
+    return {
+      ...node,
+      replicas,
+      pending: 0,
+      readyIn: 0,
+      warm: (node.warm * node.replicas) / replicas,
+    }
+  }
+  const scaler = autoscalerOf(game, node)
+  if (!scaler || isDown(node) || game.time - node.scaledAt < SCALE_COOLDOWN) return node
+  const own = ledger.nodes[node.id]
+  if (!own) return node
+  const cpu = own.resources.cpu
+  const load =
+    scaler.signal === 'cpu' ? (cpu && cpu.total > 0 ? cpu.used / cpu.total : 0) : own.utilization
+  const most = scaler.maxCopies > 0 ? scaler.maxCopies : Number.POSITIVE_INFINITY
+  const wanted = Math.min(
+    most,
+    Math.max(scaler.minCopies, Math.ceil((node.replicas * load) / scaler.target)),
+  )
+  if (wanted > node.replicas)
+    return {
+      ...node,
+      pending: wanted - node.replicas,
+      readyIn: inCluster(game, node) ? POD_REACTION : VM_REACTION,
+      scaledAt: game.time,
+    }
+  // Give one back only when the rest would still run under the target, so it does not flap.
+  if (
+    node.replicas > scaler.minCopies &&
+    load < scaler.target * SCALE_IN &&
+    (load * node.replicas) / (node.replicas - 1) < scaler.target
+  )
+    return { ...node, replicas: node.replicas - 1, scaledAt: game.time }
+  return node
+}
+
 const advanceNode = (
   game: Game,
   node: GameNode,
@@ -114,8 +190,9 @@ const advanceNode = (
       downCause: down === 0 ? 'restart' : node.downCause,
     }
   } else if (node.down === 0 && node.warm < 1 && !refillsStall(game, ledger, node)) {
-    next = { ...next, warm: Math.min(1, node.warm + seconds / WARMUP_SECONDS) }
+    next = { ...next, warm: Math.min(1, node.warm + seconds / warmupOf(node)) }
   }
+  if (node.type === 'server' || node.type === 'worker') next = scale(game, next, ledger, seconds)
   if (node.type === 'queue') next = { ...next, depth: depthAfter(game, ledger, node, seconds) }
   const credits = ledger.nodes[node.id]?.resources.credits
   if (node.family === 'burstable' && credits) {
@@ -264,6 +341,7 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
     insight: game.insight + ledger.insight * seconds + FIRST_KIND_INSIGHT * firsts.length,
     servedKinds: firsts.length > 0 ? [...game.servedKinds, ...firsts] : game.servedKinds,
     stored: puts > 0 ? game.stored + (puts * UPLOAD_MB * seconds) / 1_000 : game.stored,
+    budget: recordBudget(game, ledger, seconds),
     time,
     earned: game.earned + earned,
     history: crossedSecond ? [...game.history, sample].slice(-HISTORY) : game.history,

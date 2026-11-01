@@ -6,6 +6,8 @@ import {
   CACHE_TTLS,
   CDN_HIT,
   CDN_TTLS,
+  PSP_CAPACITY,
+  TIERED_MEDIA_HIT,
   COALESCED,
   COMPONENTS,
   DRAIN_SECONDS,
@@ -47,7 +49,7 @@ import {
   type Outcome,
 } from './distribution.ts'
 import { mixOf, payloadFactor, queryFactor } from './features.ts'
-import { flatScale, grown, has, hopMs, transferMs } from './lookups.ts'
+import { flatScale, grown, has, hopMs, inCluster, transferMs } from './lookups.ts'
 import { buggy } from './migration.ts'
 import type { Game, GameNode } from './state.ts'
 import { badDeployShare, fixed } from './team.ts'
@@ -209,10 +211,14 @@ export const hitRatioOf = (game: Game, node: GameNode, writeShare: number): numb
   )
 }
 
-/** A CDN's hit ratio for a kind at its TTL. */
-export const cdnHitOf = (node: GameNode, kind: Kind): number => {
+/** A CDN's hit ratio for a kind at its TTL. Tiered caching lifts video. */
+export const cdnHitOf = (node: GameNode, kind: Kind, game?: Game): number => {
   const ttl = CDN_TTLS.find((entry) => entry.ttl === node.ttl) ?? CDN_TTLS[1]
-  return Math.min(0.95, (CDN_HIT[kind] ?? 0) * ttl.factor)
+  const base =
+    kind === 'media' && game && has(game, 'tiered-caching')
+      ? TIERED_MEDIA_HIT
+      : (CDN_HIT[kind] ?? 0)
+  return Math.min(0.95, base * ttl.factor)
 }
 
 /** A WAF's paranoia level, or Under attack mode. */
@@ -236,7 +242,9 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   users: {
     model: unlimited(30, 0),
     serve: passOn,
-    outcome: relay,
+    // An expired certificate: every browser refuses the site until it is renewed.
+    outcome: (answer, node, kind) =>
+      answer.game.incident?.kind === 'certificate' ? failed('down') : relay(answer, node, kind),
     connections: noConnections,
     probe: noProbe,
   },
@@ -275,6 +283,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
         sampling: solver.sampling(node),
         hashing: solver.game.incident?.kind === 'loop' ? 4 : 1,
         offloaded: solver.offloads(node),
+        pod: inCluster(solver.game, node),
       }),
     serve: (serve, node, rates, share) => {
       const { solver } = serve
@@ -299,6 +308,9 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       const crashes =
         (game.incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0) +
         (buggy(game, node) ? MIGRATION_BUGS : 0)
+      // A runtime that holds a worker per open connection cannot keep realtime connections.
+      if (requestKind === 'rt' && RUNTIMES[node.runtime].connectionKB === null)
+        return failed('refused')
       if (answer.runsLocalDb) return failSome(through(own), crashes, 'crash')
       const calls = callsOf(game, node, requestKind, answer.delegates, answer.offloads)
       const hop = hopMs(game)
@@ -468,6 +480,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
         sampling: solver.sampling(node),
         hashing: 1,
         worker: true,
+        pod: inCluster(solver.game, node),
       })
     },
     outcome: (answer, _, kind) => through(answer.ownHop(kind)),
@@ -476,14 +489,15 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   cdn: {
     model: unlimited(8, 0),
     serve: (serve, node, rates, share) => {
+      const { game } = serve.solver
       serve.setHits(cdnHitOf(node, 'page'), 0)
       each(rates, share, (kind, processed) =>
-        serve.route(kind, processed * (1 - cdnHitOf(node, kind))),
+        serve.route(kind, processed * (1 - cdnHitOf(node, kind, game))),
       )
     },
     // A hit is answered at the edge; a miss goes on to the origin.
     outcome: (answer, node, kind) => {
-      const hit = cdnHitOf(node, kind)
+      const hit = cdnHitOf(node, kind, answer.game)
       if (hit <= 0) return relay(answer, node, kind)
       const mixed = blend([
         [answered(0, 0), hit],
@@ -517,6 +531,26 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       ),
     connections: noConnections,
     probe: noProbe,
+  },
+  // A Managed Component: 400 ms per charge, and its own outages.
+  psp: {
+    model: (solver, node, arriving) =>
+      flatModel(PSP_CAPACITY, arriving, { fixed: 400, variable: 30 }, solver.boost(node)),
+    outcome: (answer, _, kind) =>
+      answer.game.incident?.kind === 'psp-outage'
+        ? failed('upstream')
+        : through(answer.ownHop(kind)),
+    ...terminal,
+  },
+  autoscaler: {
+    model: () => flatModel(Number.POSITIVE_INFINITY, {}, { fixed: 0, variable: 0 }, 1),
+    outcome: () => failed('stranded'),
+    ...terminal,
+  },
+  cluster: {
+    model: () => flatModel(Number.POSITIVE_INFINITY, {}, { fixed: 0, variable: 0 }, 1),
+    outcome: () => failed('stranded'),
+    ...terminal,
   },
 }
 

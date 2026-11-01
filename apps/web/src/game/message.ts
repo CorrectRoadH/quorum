@@ -16,6 +16,8 @@ import {
   ResearchId,
   Retries,
   RuntimeId,
+  ScaleSignal,
+  Zone,
 } from '@template/simulation/state'
 import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 
@@ -105,6 +107,16 @@ export const Message = defineMessageUnion({
   DlqChosen: { nodeId: Schema.String, dlq: Schema.Boolean },
   ParanoiaChosen: { nodeId: Schema.String, paranoia: Schema.Finite },
   UnderAttackChosen: { nodeId: Schema.String, underAttack: Schema.Boolean },
+  ZoneChosen: { nodeId: Schema.String, zone: Zone },
+  StandbyChosen: { nodeId: Schema.String, standby: Schema.Boolean },
+  AutoscalerChosen: {
+    nodeId: Schema.String,
+    signal: Schema.optional(ScaleSignal),
+    target: Schema.optional(Schema.Finite),
+    minCopies: Schema.optional(Schema.Finite),
+    maxCopies: Schema.optional(Schema.Finite),
+  },
+  CertificateRenewed: {},
   MessageDeleted: {},
   NodeSold: { nodeId: Schema.String },
   Collected: {},

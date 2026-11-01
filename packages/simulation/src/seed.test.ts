@@ -59,11 +59,10 @@ const settle = (game: Game, seconds: number): Game => {
 }
 
 describe('the Seed Era', () => {
-  test('raises Series A at 25,000 users, and Series A is where the build ends', () => {
+  test('raises Series A at 25,000 users', () => {
     expect(ERAS[2]?.raiseAt).toBe(25_000)
     expect(ERAS[2]?.grant).toBe(80_000)
     expect(ERAS[3]?.name).toBe('Series A')
-    expect(ERAS[3]?.raiseAt).toBe(Number.POSITIVE_INFINITY)
     const shares = Object.values(ERAS[2]?.mix ?? {}).reduce((sum, share) => sum + (share ?? 0), 0)
     expect(shares).toBeCloseTo(1, 9)
   })

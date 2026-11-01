@@ -310,6 +310,67 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
   })
 })
 
+describe('the Series A track', () => {
+  /** A third Go App Server behind the Load Balancer, in the zone it is placed in. */
+  const third = (game: Game): Game => {
+    const placed = ok(Actions.place(game, 'server', 600, 580))
+    const id = lastId(placed)
+    const go = ok(Actions.setRuntime(ok(Actions.resize(placed, id, 1)), id, 'go'))
+    return ['database', 'storage', 'psp'].reduce(
+      (current, to) => ok(Actions.connect(current, id, to)),
+      ok(Actions.connect(go, 'lb', id)),
+    )
+  }
+
+  test('Zone Outage: a second zone and a standby ride out the outage', () => {
+    const spread: Plan = (game, passed) =>
+      passed > 0
+        ? game
+        : ok(Actions.setStandby(ok(Actions.setZone(game, 'server2', 'b')), 'database', true))
+    passesInTime(play('zone-outage', spread, LONG), 3)
+    expect(play('zone-outage', idle, LONG).objective).toBe(1)
+    // More App Servers in the same zone go down with it.
+    expect(
+      play('zone-outage', (game, passed) => (passed > 0 ? game : third(game)), LONG).objective,
+    ).toBe(1)
+    // Spread and a spare server survive too, over the Burn budget.
+    const spare: Plan = (game, passed) => (passed > 0 ? game : third(spread(game, 0)))
+    expect(play('zone-outage', spare, LONG).objective).toBe(2)
+  }, 60_000)
+
+  test('Cold Start: warm spare copies take the spike and give it back at night', () => {
+    const scaler =
+      (cluster: boolean, day: number, night: number): Plan =>
+      (game, passed) => {
+        if (passed === 2) {
+          const id = game.nodes.find((node) => node.type === 'autoscaler')?.id ?? ''
+          return ok(Actions.setAutoscaler(game, id, { minCopies: night }))
+        }
+        if (passed > 0) return game
+        let next = ok(Actions.place(game, 'autoscaler', 600, 80))
+        const id = lastId(next)
+        next = ok(Actions.connect(next, 'server1', id))
+        if (cluster) {
+          next = ok(Actions.place(next, 'cluster', 800, 80))
+          next = ok(Actions.connect(next, 'server1', lastId(next)))
+        }
+        return ok(Actions.setAutoscaler(next, id, { minCopies: day }))
+      }
+    passesInTime(play('cold-start', scaler(true, 2, 1), LONG), 3)
+    expect(play('cold-start', idle, LONG).objective).toBe(1)
+    // Two warm copies all night run over the Burn budget.
+    expect(play('cold-start', scaler(true, 2, 2), LONG).objective).toBe(2)
+    // A box two sizes bigger takes the spike and costs too much at night.
+    const vertical: Plan = (game, passed) =>
+      passed > 0 ? game : ok(Actions.resize(ok(Actions.resize(game, 'server1', 1)), 'server1', 1))
+    expect(play('cold-start', vertical, LONG).objective).toBe(2)
+    // An Autoscaler on VMs alone reacts too late, then catches up: slower, not failing.
+    expect(play('cold-start', scaler(false, 1, 1), LONG).elapsed).toBeGreaterThan(
+      play('cold-start', scaler(true, 2, 1), LONG).elapsed,
+    )
+  }, 60_000)
+})
+
 describe('the free Sandbox', () => {
   test('holds demand flat, spends nothing, and starts no incidents', () => {
     let game = freeSandbox()

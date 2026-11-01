@@ -2,8 +2,12 @@ import {
   ANALYTICS_CAPACITY,
   BOT_SURGE,
   DDOS_MAGNITUDE,
+  BACKEND_KB,
   EGRESS_CDN,
+  EGRESS_CROSS_ZONE,
   EGRESS_ORIGIN,
+  PSP_FIXED,
+  PSP_RATE,
   STUFFING_MAGNITUDE,
   COMPONENTS,
   DIURNAL_AMPLITUDE,
@@ -45,7 +49,17 @@ import {
 } from './distribution.ts'
 import { marketOf, mixOf, subscriptionsOf, valueFactor } from './features.ts'
 import type { KindLedger, Ledger, LinkLedger, NodeLedger, NodeStatus } from './ledger.ts'
-import { burnOf, eraOf, grown, has, hopMs, isDown, languageOf, sampleIndex } from './lookups.ts'
+import {
+  burnOf,
+  eraOf,
+  grown,
+  has,
+  hopMs,
+  isDown,
+  languageOf,
+  sampleIndex,
+  zoneMs,
+} from './lookups.ts'
 import {
   RULES,
   accepts,
@@ -190,6 +204,8 @@ const graphOf = (game: Game): Graph => {
     const from = byId.get(link.from)
     const to = byId.get(link.to)
     if (!from || !to) continue
+    // A link into an Autoscaler or a Cluster puts the Node under its control: no traffic.
+    if (COMPONENTS[to.type].control) continue
     if (COMPONENTS[to.type].tap) {
       taps.set(to.id, [...(taps.get(to.id) ?? []), from.id])
     } else {
@@ -517,10 +533,17 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   const failureOn = (node: GameNode, child: GameNode, kind: Kind): number =>
     1 - attempt(node, child, kind).success
 
+  /** A call that leaves its zone pays the cross-zone hop on top. */
+  const placed = (node: GameNode, child: GameNode, kind: Kind): Outcome => {
+    const extra = zoneMs(node, child)
+    const answer = call(node, child, kind)
+    return extra > 0 ? through(hop({ fixed: extra }), [[answer, 1]]) : answer
+  }
+
   /** What one request of `kind` sent from `node` to its targets gets back. */
   const downstream = (node: GameNode, kind: Kind, extraHop = 0): Outcome => {
     const mixed = blend(
-      splitOf(inputs, node, kind).map(([child, weight]) => [call(node, child, kind), weight]),
+      splitOf(inputs, node, kind).map(([child, weight]) => [placed(node, child, kind), weight]),
     )
     if (!mixed) return failed('stranded')
     return extraHop > 0 ? through(hop({ fixed: extraHop }), [[mixed, 1]]) : mixed
@@ -531,7 +554,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     splitOf(inputs, node, kind).reduce((total, [child, weight]) => {
       const policy = policyOf(game, graph, node.id, child.id)
       const attempts = policy.naive ? attemptsFor(failureOn(node, child, kind)) : 1
-      const each = heldFor(outcome(child, kind), policy.timeout) + extraHop
+      const each = heldFor(outcome(child, kind), policy.timeout) + extraHop + zoneMs(node, child)
       return total + weight * attempts * Math.min(policy.timeout, each)
     }, 0)
 
@@ -885,12 +908,33 @@ const ledgerOf = (
         const rates = pass.arriving.get(node.id) ?? {}
         for (const kind of REQUEST_KINDS)
           egress +=
-            (((rates[kind] ?? 0) * cdnHitOf(node, kind) * PROFILES[kind].payloadKB) / 1_000_000) *
+            (((rates[kind] ?? 0) * cdnHitOf(node, kind, game) * PROFILES[kind].payloadKB) /
+              1_000_000) *
             EGRESS_CDN
+      }
+    }
+    // Traffic between zones bills both ways: requests at their payload, backend calls at 4 KB.
+    for (const [key, carried] of pass.links) {
+      const [from, to] = key.split('>')
+      const source = graph.byId.get(from ?? '')
+      const target = graph.byId.get(to ?? '')
+      if (!source || !target || zoneMs(source, target) === 0) continue
+      for (const [kind, rate] of Object.entries(carried) as Array<[Kind, number]>) {
+        const kb = isBackendKind(kind) ? BACKEND_KB : PROFILES[kind as RequestKind].payloadKB
+        egress += ((rate * kb) / 1_000_000) * EGRESS_CROSS_ZONE * 2
       }
     }
     egress *= eraOf(game).costIndex
   }
+
+  // Third parties (09 "Third-party fees"): the Payment Provider takes a share of each checkout
+  // and a fixed part, which the cost index scales like every other price.
+  const checkouts = kinds.buy ? kinds.buy.rate * kinds.buy.success : 0
+  const fees =
+    checkouts > 0
+      ? checkouts *
+        (KINDS.buy.value * valueFactor(game, 'buy') * PSP_RATE + PSP_FIXED * eraOf(game).costIndex)
+      : 0
 
   const subscriptions = subscriptionsOf(game)
   const salaries = payrollOf(game)
@@ -911,9 +955,16 @@ const ledgerOf = (
     revenue: revenue + subscriptions,
     subscriptions,
     insight,
-    burn: game.nodes.reduce((total, node) => total + burnOf(game, node), 0) + salaries + egress,
+    burn:
+      fees > 0
+        ? game.nodes.reduce((total, node) => total + burnOf(game, node), 0) +
+          salaries +
+          egress +
+          fees
+        : game.nodes.reduce((total, node) => total + burnOf(game, node), 0) + salaries + egress,
     salaries,
     egress,
+    fees,
     market: marketOf(game),
     velocity,
     failing,

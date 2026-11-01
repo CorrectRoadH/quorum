@@ -13,10 +13,13 @@ import {
   resize,
   restart,
   setCacheGuard,
+  renewCertificate,
   setDlq,
   setFamily,
   setRuntime,
+  setStandby,
   setUnderAttack,
+  setZone,
   setWorkers,
   study,
   type Action,
@@ -34,6 +37,7 @@ import {
   RESEARCH_IDS,
   RUNTIMES,
   SALARY_BASE,
+  STANDBY_TYPES,
   type ComponentId,
   type ResearchId,
   type RuntimeId,
@@ -74,6 +78,11 @@ export type Milestone =
   | 'waf'
   | 'queue'
   | 'series-a'
+  | 'second-zone'
+  | 'standby'
+  | 'autoscaler'
+  | 'cdn'
+  | 'payment-provider'
 
 /** Margin when an Era ends: `live` at the build's prices, `design` at the design's cost index. */
 export type MarginRecord = Readonly<{
@@ -115,6 +124,16 @@ const PRIORITY: ReadonlyArray<ResearchId> = [
   'queues',
   'cdn',
   'stampede-protection',
+  // Series A: zones first, then checkout, the Autoscaler, and the SLO. Not Error budgets:
+  // incidents spend the bot's budget, and a spent budget halves velocity.
+  'multi-az',
+  'cert-automation',
+  'checkout',
+  'tracing',
+  'slo-dashboards',
+  'autoscaling',
+  'tiered-caching',
+  'containers',
 ]
 
 /** Polyglot researches the languages right after the basics. */
@@ -308,6 +327,42 @@ const seedBuild = (game: Game, ledger: Ledger): Game => {
   return next
 }
 
+/**
+ * The Series A playbook: Object Storage, a CDN and the Payment Provider once
+ * media and checkout arrive; every other App Server and Worker in a second
+ * zone, a standby for every data Node; and an Autoscaler on the first App Server.
+ */
+const seriesABuild = (game: Game, ledger: Ledger): Game => {
+  let next = game
+  const missing = (type: ComponentId) => !next.nodes.some((node) => node.type === type)
+  const anchor = servers(next)[0]
+  if (!anchor) return next
+  const media = (ledger.kinds.media?.rate ?? 0) > 0
+  if (has(next, 'object-storage') && missing('storage') && media) {
+    const storage = placed(next, ledger, 'storage', anchor.x + 320, anchor.y + 340)
+    if (storage) next = linkServers(storage[0], storage[1])
+  }
+  if (has(next, 'cdn') && missing('cdn') && media) next = inFrontOfUsers(next, ledger, 'cdn')
+  if (has(next, 'checkout') && missing('psp') && (ledger.kinds.buy?.rate ?? 0) > 0) {
+    const psp = placed(next, ledger, 'psp', anchor.x + 320, anchor.y + 480)
+    if (psp) next = linkServers(psp[0], psp[1])
+  }
+  if (has(next, 'multi-az')) {
+    for (const type of ['server', 'worker'] as const)
+      for (const [index, copy] of next.nodes.filter((node) => node.type === type).entries())
+        if (index % 2 === 1 && copy.zone === 'a') next = tried(next, setZone(next, copy.id, 'b'))
+    for (const data of next.nodes.filter(
+      (node) => STANDBY_TYPES.includes(node.type) && !node.standby,
+    ))
+      next = affordable(next, ledger, (current) => setStandby(current, data.id, true))
+  }
+  if (has(next, 'autoscaling') && missing('autoscaler')) {
+    const scaler = placed(next, ledger, 'autoscaler', anchor.x, anchor.y - 200)
+    if (scaler) next = tried(scaler[0], connect(scaler[0], anchor.id, scaler[1]))
+  }
+  return next
+}
+
 /** What the Balanced player does about the Node that limits the Design. */
 const relieve = (game: Game, ledger: Ledger, node: GameNode, strategy: Strategy): Game => {
   const limit = ledger.nodes[node.id]?.limit ?? 'none'
@@ -365,6 +420,7 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   if (incident?.kind === 'slow-query' && incident.nodeId)
     next = tried(next, addIndex(next, incident.nodeId))
   if (incident?.kind === 'poison') next = tried(next, deleteMessage(next))
+  if (incident?.kind === 'certificate') next = tried(next, renewCertificate(next))
   // Under attack mode only while the DDoS lasts: it blocks real users too.
   for (const waf of next.nodes.filter((node) => node.type === 'waf'))
     if (waf.underAttack !== (incident?.kind === 'ddos'))
@@ -423,6 +479,7 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   }
 
   if (strategy !== 'greedy' && next.stage >= 2) next = seedBuild(next, solveFlow(next))
+  if (strategy !== 'greedy' && next.stage >= 3) next = seriesABuild(next, solveFlow(next))
 
   const flow = solveFlow(next)
   const target =
@@ -461,6 +518,11 @@ const reached = (before: Game, after: Game): ReadonlyArray<Milestone> => {
   if (after.nodes.some((node) => node.type === 'waf')) found.push('waf')
   if (after.nodes.some((node) => node.type === 'queue')) found.push('queue')
   if (after.stage >= 3) found.push('series-a')
+  if (after.nodes.some((node) => node.zone !== 'a')) found.push('second-zone')
+  if (after.nodes.some((node) => node.standby)) found.push('standby')
+  if (after.nodes.some((node) => node.type === 'autoscaler')) found.push('autoscaler')
+  if (after.nodes.some((node) => node.type === 'cdn')) found.push('cdn')
+  if (after.nodes.some((node) => node.type === 'psp')) found.push('payment-provider')
   return found
 }
 

@@ -22,7 +22,11 @@ import {
   RUNTIMES,
   RUNTIME_IDS,
   SAMPLE_RATES,
+  SCALE_MAXIMA,
+  SCALE_TARGETS,
   SIZES,
+  STANDBY_TYPES,
+  ZONES,
   type RequestKind,
 } from '@template/simulation/catalog'
 import type { Ledger } from '@template/simulation/ledger'
@@ -39,6 +43,7 @@ import {
   runtimeReady,
   sizeLabel as sizeLabelOf,
   vcpuOf,
+  zoned,
 } from '@template/simulation/lookups'
 import { LINK_TIMEOUTS } from '@template/simulation/actions'
 import type {
@@ -894,6 +899,9 @@ const KIND_SHORT: Record<RequestKind, string> = {
   search: 'Search',
   upload: 'Upload',
   bot: 'Bot',
+  media: 'Media',
+  rt: 'Realtime',
+  buy: 'Buy',
 }
 
 const dnsTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
@@ -976,6 +984,79 @@ const queue = (node: GameNode, h: HtmlBuilder<Message>): Html =>
         node.dlq,
         (dlq) => Message.DlqChosen({ nodeId: node.id, dlq }),
         h,
+      ),
+    ],
+    h,
+  )
+
+/** Which zone the Node runs in, and a standby in another for data Nodes. */
+const placement = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Zone',
+    [
+      picker(
+        'zone',
+        ZONES.map((zone) => [zone, zone.toUpperCase()] as const),
+        node.zone,
+        (zone) => Message.ZoneChosen({ nodeId: node.id, zone }),
+        h,
+      ),
+      ...(STANDBY_TYPES.includes(node.type)
+        ? [
+            picker(
+              'standby',
+              [
+                [false, 'No standby'],
+                [true, 'Standby'],
+              ],
+              node.standby,
+              (standby) => Message.StandbyChosen({ nodeId: node.id, standby }),
+              h,
+            ),
+          ]
+        : []),
+    ],
+    h,
+  )
+
+const MIN_COPIES = [1, 2, 4, 8] as const
+
+const autoscaler = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Scaling',
+    [
+      picker(
+        'scale-signal',
+        [
+          ['cpu', 'CPU'],
+          ['load', 'Load'],
+        ],
+        node.signal,
+        (signal) => Message.AutoscalerChosen({ nodeId: node.id, signal }),
+        h,
+      ),
+      picker(
+        'scale-target',
+        SCALE_TARGETS.map((target) => [target, `${Math.round(target * 100)}%`] as const),
+        node.target,
+        (target) => Message.AutoscalerChosen({ nodeId: node.id, target }),
+        h,
+      ),
+      picker(
+        'scale-min',
+        MIN_COPIES.map((copies) => [copies, `min ${copies}`] as const),
+        node.minCopies,
+        (minCopies) => Message.AutoscalerChosen({ nodeId: node.id, minCopies }),
+        h,
+        (copies) => node.maxCopies === 0 || copies <= node.maxCopies,
+      ),
+      picker(
+        'scale-max',
+        SCALE_MAXIMA.map((copies) => [copies, copies === 0 ? 'no max' : `max ${copies}`] as const),
+        node.maxCopies,
+        (maxCopies) => Message.AutoscalerChosen({ nodeId: node.id, maxCopies }),
+        h,
+        (copies) => copies === 0 || copies >= node.minCopies,
       ),
     ],
     h,
@@ -1221,6 +1302,8 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...(node.type === 'waf' ? [waf(node, h)] : []),
           ...(node.type === 'cdn' ? [cdnTtl(node, h)] : []),
           ...(node.type === 'pooler' ? [pooler(node, h)] : []),
+          ...(node.type === 'autoscaler' ? [autoscaler(node, h)] : []),
+          ...(has(game, 'multi-az') && zoned(node) ? [placement(node, h)] : []),
           ...(node.type === 'dns' && has(game, 'health-checks') ? [dnsTtl(node, h)] : []),
           ...(has(game, 'timeouts') ? calls(game, node, h) : []),
         ],

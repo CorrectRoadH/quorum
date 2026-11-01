@@ -34,6 +34,7 @@ import {
 } from './catalog.ts'
 import type { Ledger } from './ledger.ts'
 import { eraOf, has, languageOf } from './lookups.ts'
+import { budgetVelocity } from './slo.ts'
 import {
   monolith,
   type Engineer,
@@ -158,7 +159,11 @@ export const teamOutputs = (
     const effective =
       headcount > 0 ? (effectiveEngineers(headcount, structured(game)) * output) / headcount : 0
     const velocity =
-      ledger.velocity * (1 - 0.5 * debt) * policyNow(game, team, tuning).velocity * morale
+      ledger.velocity *
+      (1 - 0.5 * debt) *
+      policyNow(game, team, tuning).velocity *
+      morale *
+      budgetVelocity(game)
     return { team, headcount, effective, velocity, rate: (effective * velocity * tuning.pace) / 60 }
   })
 }

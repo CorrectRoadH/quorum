@@ -383,7 +383,11 @@ const eventText = (event: StepEvent, game: Game): Note =>
                 ? ['A flood of junk traffic hits the edge.', 'danger']
                 : incident.kind === 'stampede'
                   ? ['The Cache restarted empty. Every miss goes to the database.', 'danger']
-                  : null,
+                  : incident.kind === 'zone' && incident.zone
+                    ? [`Zone ${incident.zone.toUpperCase()} is down.`, 'danger']
+                    : incident.kind === 'psp-outage'
+                      ? ['The Payment Provider is down. Checkouts fail.', 'danger']
+                      : null,
     IncidentResolved: ({ postmortem }): Note => [
       postmortem.action
         ? `${INCIDENTS[postmortem.kind].name} is over. Action item: ${RESEARCH[postmortem.action].name}. Until then it is twice as likely.`
@@ -1158,6 +1162,38 @@ const handle = (model: Model, message: Message): Result =>
         Actions.setUnderAttack(model.game, nodeId, underAttack),
         { undoable: true },
       ),
+
+    ZoneChosen: ({ nodeId, zone }) =>
+      act(
+        model,
+        `${nodeName(model.game, nodeId)} to zone ${zone}`,
+        Actions.setZone(model.game, nodeId, zone),
+        { undoable: true },
+      ),
+
+    StandbyChosen: ({ nodeId, standby }) =>
+      act(
+        model,
+        standby ? 'Standby on' : 'Standby off',
+        Actions.setStandby(model.game, nodeId, standby),
+        { undoable: true },
+      ),
+
+    AutoscalerChosen: ({ nodeId, signal, target, minCopies, maxCopies }) =>
+      act(
+        model,
+        'Autoscaler set',
+        Actions.setAutoscaler(model.game, nodeId, {
+          ...(signal === undefined ? {} : { signal }),
+          ...(target === undefined ? {} : { target }),
+          ...(minCopies === undefined ? {} : { minCopies }),
+          ...(maxCopies === undefined ? {} : { maxCopies }),
+        }),
+        { undoable: true },
+      ),
+
+    CertificateRenewed: () =>
+      act(model, 'Renewed the certificate', Actions.renewCertificate(model.game)),
 
     MessageDeleted: () =>
       act(model, 'Deleted the poison message', Actions.deleteMessage(model.game)),

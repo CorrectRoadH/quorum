@@ -24,7 +24,13 @@ export type Objective = Readonly<{
    * With `survive`, the Design must ride it out: a break fires it again.
    * Without, the player may fix it by hand and then hold the condition.
    */
-  incident?: Readonly<{ kind: IncidentId; only?: ComponentId; survive: boolean }>
+  incident?: Readonly<{
+    kind: IncidentId
+    only?: ComponentId
+    survive: boolean
+    /** A fixed spike multiplier instead of a roll, so the lesson does not depend on luck. */
+    magnitude?: number
+  }>
   met: (game: Game, ledger: Ledger) => boolean
 }>
 
@@ -38,6 +44,8 @@ export const SANDBOX_IDS = [
   'stampede',
   'slow-uploads',
   'bots',
+  'zone-outage',
+  'cold-start',
 ] as const
 export type SandboxId = (typeof SANDBOX_IDS)[number]
 
@@ -105,6 +113,34 @@ const STAMPEDE_USERS = 6_000
 const STAMPEDE_BURN = 3.7
 const BOTS_USERS = 12_000
 const BOTS_BURN = 5.1
+const ZONE_USERS = 8_000
+const ZONE_BURN = 18.5
+const COLD_USERS = 8_000
+const COLD_BURN = 9.5
+const COLD_SPIKE = 4
+const COLD_DATABASE = 5
+
+/** What a Series A Design needs besides App Servers: files, checkouts, and their Links. */
+const seriesAData = (size = 4): ReadonlyArray<GameNode> => [
+  node('database', 'database', 880, 220, { size }),
+  node('storage', 'storage', 880, 420),
+  node('psp', 'psp', 880, 580),
+]
+const seriesALinks = (servers: ReadonlyArray<string>): ReadonlyArray<readonly [string, string]> =>
+  servers.flatMap((server): ReadonlyArray<readonly [string, string]> => [
+    ['lb', server],
+    [server, 'database'],
+    [server, 'storage'],
+    [server, 'psp'],
+  ])
+const SERIES_A_RESEARCH: ReadonlyArray<ResearchId> = [
+  'load-balancing',
+  'health-checks',
+  'percentiles',
+  'object-storage',
+  'checkout',
+  'multi-az',
+]
 
 export const GUIDED: Record<SandboxId, GuidedSandbox> = {
   'out-of-credits': {
@@ -478,6 +514,76 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       },
     ],
   },
+  'zone-outage': {
+    id: 'zone-outage',
+    name: 'Zone Outage',
+    stage: 3,
+    start: () =>
+      board(
+        3,
+        ZONE_USERS,
+        [...SERIES_A_RESEARCH, 'lang-go'],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 2,
+              runtime: 'go',
+            }),
+          ),
+          ...seriesAData(),
+        ],
+        [['users', 'lb'], ...seriesALinks(['server1', 'server2'])],
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: 'A zone will fail. Keep Apdex above 0.85 for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'zone', survive: true },
+        met: serving(0.85),
+      },
+      {
+        goal: `Demand is up 50%. A zone fails again. Keep Apdex above 0.85 with Burn at $${ZONE_BURN.toFixed(2)}/s or less.`,
+        users: ZONE_USERS * 1.5,
+        hold: 120,
+        incident: { kind: 'zone', survive: true },
+        met: within(0.85, ZONE_BURN),
+      },
+    ],
+  },
+  'cold-start': {
+    id: 'cold-start',
+    name: 'Cold Start',
+    stage: 3,
+    start: () =>
+      board(
+        3,
+        COLD_USERS,
+        [...SERIES_A_RESEARCH, 'lang-java', 'autoscaling', 'containers'],
+        [
+          node('lb', 'lb', 360, 280),
+          node('server1', 'server', 600, 280, { size: 3, runtime: 'tomcat' }),
+          ...seriesAData(COLD_DATABASE),
+        ],
+        [['users', 'lb'], ...seriesALinks(['server1'])],
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: `A ${COLD_SPIKE}× spike is coming. Keep Apdex above 0.85 for 2 minutes.`,
+        hold: 120,
+        incident: { kind: 'spike', survive: true, magnitude: COLD_SPIKE },
+        met: serving(0.85),
+      },
+      {
+        goal: `Night traffic. Keep Apdex above 0.9 with Burn at $${COLD_BURN.toFixed(2)}/s or less.`,
+        users: COLD_USERS / 2,
+        hold: 120,
+        met: within(0.9, COLD_BURN),
+      },
+    ],
+  },
 }
 
 export const TRACKS: ReadonlyArray<
@@ -486,6 +592,7 @@ export const TRACKS: ReadonlyArray<
   { stage: 0, sandboxes: ['out-of-credits', 'shared-box', 'second-server'] },
   { stage: 1, sandboxes: ['connection-limit', 'event-loop-stall', 'read-mostly'] },
   { stage: 2, sandboxes: ['stampede', 'slow-uploads', 'bots'] },
+  { stage: 3, sandboxes: ['zone-outage', 'cold-start'] },
 ]
 
 /** A guided Sandbox opens when the one before it in its track has passed. */
@@ -571,7 +678,11 @@ export const advanceSandbox = (
   if (objective.incident && !fired && held >= INCIDENT_AFTER) {
     const started = forceIncident(game, ledger, objective.incident.kind, objective.incident.only)
     if (started) {
-      next = started
+      const magnitude = objective.incident.magnitude
+      next =
+        magnitude === undefined || started.incident === null
+          ? started
+          : { ...started, incident: { ...started.incident, magnitude } }
       fired = true
     }
   }

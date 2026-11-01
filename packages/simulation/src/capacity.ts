@@ -1,6 +1,8 @@
 import {
   APACHE_MAX_WORKERS,
   APACHE_SPARE,
+  NOISY_MS,
+  NOISY_SHARE,
   BURST_BASELINE,
   FRAMEWORKS,
   GZIP_CPU,
@@ -16,12 +18,14 @@ import {
   REQUEST_KINDS,
   ROWS_PER_USER,
   UNINDEXED_MS_PER_ROW,
+  RT_HOLD_SECONDS,
   RUNTIMES,
   USER_UP_MBPS,
   BACKEND_KINDS,
   type BackendKind,
   type RequestKind,
 } from './catalog.ts'
+import { combineTail } from './distribution.ts'
 import { payloadFactor, queryFactor } from './features.ts'
 import { asLogin, has, networkOf, payloadOf, profileOf, ramOf, vcpuOf } from './lookups.ts'
 import { fixed } from './team.ts'
@@ -94,6 +98,10 @@ export type NodeModel = Readonly<{
 
 /** Share of requests on an event loop that wait behind a blocking callback. */
 export const LOOP_TAIL_SHARE = 0.02
+/** Garbage collection pauses start above this share of the heap (06 "Runtime behaviors"). */
+export const GC_HEAP = 0.7
+/** Share of requests a GC pause lands on at a full heap: the p99, not the p50. Proposed. */
+export const GC_TAIL_SHARE = 0.02
 
 /** M/M/c-style waiting time, capped at saturation. */
 const waitFor = (service: number, utilization: number, servers: number): number => {
@@ -167,6 +175,8 @@ export type ServerContext = Readonly<{
   offloaded?: boolean
   /** A Worker: it runs only the async part of each kind, and answers no user. */
   worker?: boolean
+  /** It runs as pods in a Kubernetes Cluster: neighbours on the same node steal CPU now and then. */
+  pod?: boolean
 }>
 
 /**
@@ -198,13 +208,15 @@ const cpuOf = (context: ServerContext, kind: RequestKind, calls: Calls): number 
   if (context.worker) return cpu * profile.offload * (1 + context.sampling)
   if (context.offloaded) cpu *= 1 - profile.offload
   if (node.compress && profile.compressible) cpu *= GZIP_CPU
-  if (context.local)
-    cpu +=
-      ((calls['q-read'] ?? 0) * QUERY_CPU['q-read'] +
-        (calls['q-write'] ?? 0) * QUERY_CPU['q-write'] +
-        (calls['q-search'] ?? 0) * QUERY_CPU['q-search'] +
-        (calls['blob-put'] ?? 0) * QUERY_CPU['blob-put']) *
-      LOCAL_DB_CONTENTION
+  if (context.local) {
+    let queries = 0
+    for (const backend of BACKEND_KINDS) {
+      const count = calls[backend] ?? 0
+      const each = QUERY_CPU[backend as keyof typeof QUERY_CPU]
+      if (count !== 0 && each !== undefined) queries += count * each
+    }
+    cpu += queries * LOCAL_DB_CONTENTION
+  }
   return cpu * (1 + context.sampling)
 }
 
@@ -212,25 +224,29 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const { game, node, arriving } = context
   const runtime = RUNTIMES[node.runtime]
   const framework = FRAMEWORKS[node.framework]
-  const vcpu = vcpuOf(node) * context.boost
-  const ram = ramOf(node) * context.boost
+  // Copies an Autoscaler added serve as one Node: every resource scales with them.
+  const copies = node.replicas
+  const vcpu = vcpuOf(node) * context.boost * copies
+  const ram = ramOf(node) * context.boost * copies
 
+  // Puma runs a process per core behind its GVL; the JVM, Go, .NET, BEAM and Tokio run one
+  // process on every core.
   const processes =
     node.runtime === 'mod_php'
       ? Math.min(APACHE_MAX_WORKERS, Math.ceil(context.inflight) + APACHE_SPARE)
       : runtime.pool
-        ? node.workers
-        : runtime.model === 'threads' || node.runtime === 'node_cluster'
-          ? Math.max(1, Math.round(vcpu))
-          : 1
+        ? node.workers * copies
+        : (runtime.model === 'threads' && !runtime.parallel) || node.runtime === 'node_cluster'
+          ? Math.max(1, Math.round(vcpu / copies)) * copies
+          : copies
   const slots =
-    runtime.model === 'loop'
+    runtime.model === 'loop' || runtime.model === 'green' || runtime.model === 'async'
       ? Number.POSITIVE_INFINITY
       : runtime.model === 'threads'
         ? processes * runtime.threads
         : node.runtime === 'mod_php'
-          ? APACHE_MAX_WORKERS * context.boost
-          : node.workers * context.boost
+          ? APACHE_MAX_WORKERS * context.boost * copies
+          : node.workers * context.boost * copies
 
   // PHP-FPM's process manager: static keeps the whole pool resident; dynamic and ondemand keep
   // what is busy, plus spares, and make some requests wait for a fork (06 "PHP-FPM pool modes").
@@ -239,15 +255,29 @@ export const serverModel = (context: ServerContext): NodeModel => {
     pm.spares === null
       ? processes
       : Math.min(processes, Math.max(1, Math.ceil(context.inflight) + pm.spares))
+  // A realtime connection stays open between messages. A runtime that waits for free holds a
+  // few KB per connection; one that holds a worker or a thread per connection fills its pool.
+  const connections = (arriving.rt ?? 0) * RT_HOLD_SECONDS
+  const connectionRam =
+    connections > 0 && runtime.connectionKB !== null
+      ? (connections * runtime.connectionKB) / 1_048_576
+      : 0
   const ramUsed =
-    OS_RAM +
+    OS_RAM * copies +
     (resident * (runtime.memory + framework.memory)) / 1024 +
     (context.local ? LOCAL_DB_RAM + game.users * LOCAL_DB_RAM_PER_USER : 0) +
-    node.leak
+    node.leak +
+    connectionRam
   const swapping = ramUsed > ram
   const efficiency = swapping ? Math.max(0.15, 1 - (2.5 * (ramUsed - ram)) / ram) : 1
+  // Above 70% heap a collector pauses some requests; Go's spends CPU instead (06 "Runtime behaviors").
+  const heap = ram > 0 ? ramUsed / ram : 0
+  const pressure = runtime.gc && heap > GC_HEAP ? Math.min(1, (heap - GC_HEAP) / (1 - GC_HEAP)) : 0
+  const collecting = pressure > 0 && runtime.gc ? 1 + runtime.gc.cpu * pressure : 1
 
-  const usable = Math.min(vcpu, runtime.model === 'process' ? Math.max(1, processes) : processes)
+  const usable = runtime.parallel
+    ? vcpu
+    : Math.min(vcpu, runtime.model === 'process' ? Math.max(1, processes) : processes)
   const throttled = node.family === 'burstable' && node.credits < 1
   const cores = throttled ? Math.min(usable, BURST_BASELINE * vcpu) : usable
   const perRequest = Math.min(1, cores)
@@ -263,7 +293,12 @@ export const serverModel = (context: ServerContext): NodeModel => {
     ]),
   ) as Record<RequestKind, Calls>
   const cpu = Object.fromEntries(
-    REQUEST_KINDS.map((kind) => [kind, cpuOf(context, kind, calls[kind]) / efficiency]),
+    REQUEST_KINDS.map((kind) => [
+      kind,
+      collecting > 1
+        ? (cpuOf(context, kind, calls[kind]) / efficiency) * collecting
+        : cpuOf(context, kind, calls[kind]) / efficiency,
+    ]),
   ) as Record<RequestKind, number>
 
   const cpuWork = kinds.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * cpu[kind], 0)
@@ -321,7 +356,8 @@ export const serverModel = (context: ServerContext): NodeModel => {
   // The libuv pool and an Auth Provider take the login hash off the loop, not the rest.
   const offLoop = (kind: RequestKind): boolean =>
     asLogin(game, kind) && (has(game, 'libuv-pool') || context.delegated)
-  const onLoop = runtime.model === 'loop' ? kinds.filter((kind) => !offLoop(kind)) : []
+  // Tokio blocks one worker thread of many: the stall lands on a share of requests per core.
+  const onLoop = runtime.blocking !== null ? kinds.filter((kind) => !offLoop(kind)) : []
   const callback = (kind: RequestKind): number => cpu[kind] / perRequest
   const loopWork = onLoop.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * callback(kind), 0)
   const loopSquares = onLoop.reduce(
@@ -329,9 +365,22 @@ export const serverModel = (context: ServerContext): NodeModel => {
     0,
   )
   const loopBlock = loopWork > 0 ? loopSquares / loopWork : 0
-  const tailP = loopBlock > 0 ? LOOP_TAIL_SHARE : pm.spawnShare
-  const tailMs =
+  const stallP =
+    loopBlock > 0
+      ? runtime.blocking === 'worker'
+        ? LOOP_TAIL_SHARE / Math.max(1, cores)
+        : LOOP_TAIL_SHARE
+      : pm.spawnShare
+  const stallMs =
     loopBlock > 0 ? loopBlock * Math.min(1, 2 * Math.min(1, cpuUtilization)) : pm.spawnMs
+  const gcP = pressure > 0 ? pressure * GC_TAIL_SHARE : 0
+  const collected =
+    gcP > 0 && runtime.gc
+      ? combineTail(stallP, stallMs, gcP, runtime.gc.pauseMs)
+      : { tailP: stallP, tailMs: stallMs }
+  const { tailP, tailMs } = context.pod
+    ? combineTail(collected.tailP, collected.tailMs, NOISY_SHARE, NOISY_MS)
+    : collected
 
   const service = Object.fromEntries(
     REQUEST_KINDS.map((kind) => [
@@ -377,7 +426,9 @@ const DISK_READ_MS = 8
 export type DatabaseContext = Readonly<{
   game: Game
   node: GameNode
-  arriving: Readonly<Partial<Record<'q-read' | 'q-write' | 'q-search' | 'blob-put', number>>>
+  arriving: Readonly<
+    Partial<Record<'q-read' | 'q-write' | 'q-search' | 'blob-put' | 'q-tx' | 'blob-get', number>>
+  >
   boost: number
 }>
 
@@ -399,12 +450,21 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
   // Postgres full-text search and files stored as rows: both work, both badly at volume.
   const searchCpu = (QUERY_CPU['q-search'] * queryFactor(game, 'q-search')) / warmth
   const putCpu = QUERY_CPU['blob-put'] / warmth
+  const txCpu = QUERY_CPU['q-tx'] / warmth
+  const getCpu = QUERY_CPU['blob-get'] / warmth
   const reads = arriving['q-read'] ?? 0
   const writes = arriving['q-write'] ?? 0
   const searches = arriving['q-search'] ?? 0
   const puts = arriving['blob-put'] ?? 0
-  const rate = reads + writes + searches + puts
-  const work = reads * readCpu + writes * writeCpu + searches * searchCpu + puts * putCpu
+  const txs = arriving['q-tx'] ?? 0
+  const gets = arriving['blob-get'] ?? 0
+  let rate = reads + writes + searches + puts
+  let work = reads * readCpu + writes * writeCpu + searches * searchCpu + puts * putCpu
+  // Checkouts and files read back from rows arrive with Series A.
+  if (txs > 0 || gets > 0) {
+    rate += txs + gets
+    work += txs * txCpu + gets * getCpu
+  }
   const utilization = cores > 0 ? work / (cores * 1000) : rate > 0 ? 99 : 0
   const wait = rate > 0 ? waitFor(work / rate / perRequest, utilization, cores) : 0
   const share = utilization > 1 ? 1 / utilization : 1
@@ -419,6 +479,8 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
       'q-write': { fixed: 2.5, variable: writeCpu / perRequest + wait },
       'q-search': { fixed: 2.5, variable: searchCpu / perRequest + wait },
       'blob-put': { fixed: 2.5, variable: putCpu / perRequest + wait },
+      'q-tx': { fixed: 2.5, variable: txCpu / perRequest + wait },
+      'blob-get': { fixed: 2.5 + DISK_READ_MS, variable: getCpu / perRequest + wait },
     },
     tailP: 0,
     tailMs: 0,

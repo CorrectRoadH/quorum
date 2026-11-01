@@ -2,7 +2,10 @@
 
 /** Multiplies the user growth rate `g`, so the slice fits a 15 to 30 minute session. */
 export const PLAYTEST_PACE = 2
-/** Mean sim seconds between Pre-seed incidents. The design's 12 minutes is too slow for a playtest. */
+/**
+ * Mean sim seconds between Pre-seed incidents. The design's 12 minutes is too slow for a playtest.
+ * Later Eras scale it by their own interval over Pre-seed's 12 minutes.
+ */
 export const INCIDENT_GAP = 200
 /** Sim seconds from the Pre-seed raise to the first incident. */
 export const FIRST_INCIDENT_AFTER = 90
@@ -46,7 +49,7 @@ export const DESIGN_TUNING: Tuning = {
 }
 
 /** The design's cost index per Era (16 "Cost index"). The live game uses `EraDef.costIndex`. */
-export const DESIGN_COST_INDEX: ReadonlyArray<number> = [1, 1, 25, 120]
+export const DESIGN_COST_INDEX: ReadonlyArray<number> = [1, 1, 25, 120, 120]
 
 /** The design's salary index per Era (16 "Cost index"). The live game uses `EraDef.salaryIndex`. */
-export const DESIGN_SALARY_INDEX: ReadonlyArray<number> = [1, 1, 12, 100]
+export const DESIGN_SALARY_INDEX: ReadonlyArray<number> = [1, 1, 12, 100, 400]

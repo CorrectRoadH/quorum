@@ -5,6 +5,9 @@ import {
   CDN_TTLS,
   COMPONENTS,
   PARANOIA,
+  SCALE_MAXIMA,
+  SCALE_TARGETS,
+  STANDBY_TYPES,
   CHECK_INTERVALS,
   CREDIT_CAP,
   DEFAULT_FPM_WORKERS,
@@ -48,6 +51,7 @@ import {
   vcpuOf,
 } from './lookups.ts'
 import { link } from './company.ts'
+import { zoned } from './director.ts'
 import type { AlertRule } from './events.ts'
 import type {
   CacheEngine,
@@ -58,6 +62,8 @@ import type {
   PmMode,
   PoolerMode,
   Retries,
+  ScaleSignal,
+  Zone,
 } from './state.ts'
 
 /* ==========================================================================
@@ -153,6 +159,16 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     warming: false,
     paranoia: 2,
     underAttack: false,
+    zone: 'a',
+    standby: false,
+    replicas: 1,
+    pending: 0,
+    readyIn: 0,
+    scaledAt: 0,
+    signal: 'cpu',
+    target: 0.6,
+    minCopies: 1,
+    maxCopies: 8,
   }
 }
 
@@ -213,6 +229,18 @@ export const connect = (game: Game, from: string, to: string): Action => {
   const targetDef = COMPONENTS[target.type]
   if (game.links.some((link) => link.from === from && link.to === to))
     return notAllowed('Already linked.')
+  // App Servers and Workers link into an Autoscaler or a Cluster to come under it: one of each.
+  if (targetDef.control) {
+    if (source.type !== 'server' && source.type !== 'worker')
+      return notAllowed(`Link App Servers or Workers into the ${targetDef.name}.`)
+    const taken = game.links.some(
+      (entry) =>
+        entry.from === from &&
+        game.nodes.some((node) => node.id === entry.to && node.type === target.type),
+    )
+    if (taken) return notAllowed(`${sourceDef.name} already has a ${targetDef.name}.`)
+    return ok({ ...game, links: [...game.links, link(from, to)] })
+  }
   if (targetDef.tap) {
     if (sourceDef.tap || source.type === 'payments')
       return notAllowed(`${sourceDef.name} has no traffic to sample.`)
@@ -495,6 +523,68 @@ export const setUnderAttack = (game: Game, id: string, underAttack: boolean): Ac
       ? ok(node.underAttack === underAttack ? game : patch(game, id, { underAttack }))
       : notAllowed('Only a WAF has Under attack mode.'),
   )
+
+/** Moves a Node to another zone. Needs Multiple zones; a sized Node restarts there. */
+export const setZone = (game: Game, id: string, zone: Zone): Action =>
+  withNode(game, id, (node) => {
+    if (!has(game, 'multi-az'))
+      return no(Refusal.Locked({ what: 'Zones', research: RESEARCH['multi-az'].name }))
+    if (!zoned(node)) return notAllowed(`${COMPONENTS[node.type].name} spans every zone.`)
+    if (node.zone === zone) return ok(game)
+    return ok(
+      patch(game, id, {
+        zone,
+        ...(COMPONENTS[node.type].sized && !isDown(node) ? restarted(node) : {}),
+      }),
+    )
+  })
+
+/** Gives a data Node a standby in another zone, at twice the Burn. Needs Multiple zones. */
+export const setStandby = (game: Game, id: string, standby: boolean): Action =>
+  withNode(game, id, (node) => {
+    if (!STANDBY_TYPES.includes(node.type))
+      return notAllowed('Only a Database, Pooler, Cache, Search Engine, or Queue keeps a standby.')
+    if (standby && !has(game, 'multi-az'))
+      return no(Refusal.Locked({ what: 'A standby', research: RESEARCH['multi-az'].name }))
+    return ok(node.standby === standby ? game : patch(game, id, { standby }))
+  })
+
+/** Sets an Autoscaler's signal, target, and copy limits. */
+export const setAutoscaler = (
+  game: Game,
+  id: string,
+  change: Readonly<{
+    signal?: ScaleSignal
+    target?: number
+    minCopies?: number
+    maxCopies?: number
+  }>,
+): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'autoscaler') return notAllowed('Only an Autoscaler scales.')
+    if (
+      change.target !== undefined &&
+      !(SCALE_TARGETS as ReadonlyArray<number>).includes(change.target)
+    )
+      return notAllowed('A target is 40%, 60%, or 80%.')
+    if (
+      change.maxCopies !== undefined &&
+      !(SCALE_MAXIMA as ReadonlyArray<number>).includes(change.maxCopies)
+    )
+      return notAllowed('A max is 4, 8, 16, or none.')
+    const minCopies = change.minCopies ?? node.minCopies
+    const maxCopies = change.maxCopies ?? node.maxCopies
+    if (minCopies < 1 || minCopies > 16 || !Number.isInteger(minCopies))
+      return notAllowed('A min is 1 to 16 copies.')
+    if (maxCopies > 0 && minCopies > maxCopies) return notAllowed('The min is above the max.')
+    return ok(patch(game, id, change))
+  })
+
+/** Renews an expired certificate: the site comes back. */
+export const renewCertificate = (game: Game): Action =>
+  game.incident?.kind === 'certificate'
+    ? ok({ ...game, incident: { ...game.incident, remaining: 0 } })
+    : notAllowed('No certificate has expired.')
 
 /** Deletes the poison message: the Workers get back to the queue. */
 export const deleteMessage = (game: Game): Action =>

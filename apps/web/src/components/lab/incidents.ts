@@ -4,6 +4,7 @@ import {
   BellRing,
   Check,
   ChevronRight,
+  FileBadge,
   Gem,
   Lock,
   Timer,
@@ -132,6 +133,27 @@ export const badDeploy = (model: Model, h: HtmlBuilder<Message>): Html => {
           attributes: [h.Title(ready ? 'Roll back' : `Research ${RESEARCH.ci.name} to roll back`)],
         },
         [icon(h, ready ? Undo2 : Lock, 'size-3.5'), 'Roll back'],
+        h,
+      ),
+    ],
+  )
+}
+
+/** An expired certificate on screen: every request fails until it is renewed. */
+export const expiredCertificate = (model: Model, h: HtmlBuilder<Message>): Html => {
+  if (model.game.incident?.kind !== 'certificate') return h.empty
+  return h.div(
+    [
+      h.Key('certificate'),
+      h.Class(
+        'pointer-events-auto enter-down flex items-center gap-2.5 rounded-xl bg-danger py-1.5 pr-1.5 pl-3.5 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
+      ),
+    ],
+    [
+      h.span([], [INCIDENTS.certificate.name]),
+      button(
+        { onClick: Message.CertificateRenewed(), size: 'sm', variant: 'outline' },
+        [icon(h, FileBadge, 'size-3.5'), 'Renew'],
         h,
       ),
     ],

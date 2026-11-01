@@ -94,6 +94,8 @@ export const featureRefusal = (game: Game, id: FeatureId): Refusal | null => {
   if (queued(game, id)) return Refusal.NotAllowed({ reason: `${def.name} is on the backlog.` })
   if (def.era > game.stage)
     return Refusal.TooEarly({ what: def.name, era: ERAS[def.era]?.name ?? 'a later Era' })
+  if (def.research && !has(game, def.research))
+    return Refusal.Locked({ what: def.name, research: RESEARCH[def.research].name })
   const missing = def.requires.filter((needed) => !planned(game, needed))
   if (missing.length > 0)
     return Refusal.NotAllowed({

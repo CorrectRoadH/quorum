@@ -26,6 +26,12 @@ export type EraDef = Readonly<{
    * the slice follows the raised Pre-seed cost index so payroll is a real share of Burn.
    */
   salaryIndex: number
+  /** Availability target per calendar week (10 "Eras"). The error budget counts from Series A. */
+  slo: number
+  /** Mean sim seconds between incidents at the design pace (11 "The incident director"); 0 for none. */
+  incidentInterval: number
+  /** The worst severity an incident may start at in this Era. */
+  maxSeverity: 1 | 2 | 3
   /** Share of each request kind in the traffic. Sums to 1. */
   mix: Partial<Record<RequestKind, number>>
   /** What the Era asks, shown on its card. */
@@ -37,6 +43,9 @@ export type EraDef = Readonly<{
 export const ERAS: ReadonlyArray<EraDef> = [
   {
     name: 'Garage',
+    slo: 0.99,
+    incidentInterval: 0,
+    maxSeverity: 3,
     market: 1_500,
     raiseAt: 1_000,
     grant: 2_500,
@@ -51,6 +60,9 @@ export const ERAS: ReadonlyArray<EraDef> = [
   },
   {
     name: 'Pre-seed',
+    slo: 0.99,
+    incidentInterval: 720,
+    maxSeverity: 2,
     market: 7_000,
     raiseAt: 5_000,
     grant: 15_000,
@@ -65,6 +77,9 @@ export const ERAS: ReadonlyArray<EraDef> = [
   },
   {
     name: 'Seed',
+    slo: 0.995,
+    incidentInterval: 600,
+    maxSeverity: 2,
     market: 35_000,
     raiseAt: 25_000,
     grant: 80_000,
@@ -87,25 +102,59 @@ export const ERAS: ReadonlyArray<EraDef> = [
   },
   {
     name: 'Series A',
+    slo: 0.999,
+    incidentInterval: 540,
+    maxSeverity: 2,
     market: 200_000,
-    raiseAt: Number.POSITIVE_INFINITY,
-    grant: 0,
-    dilution: 0,
+    raiseAt: 150_000,
+    grant: 1_500_000,
+    dilution: 0.18,
     growth: 0.0009,
     apdexTarget: 0.9,
     costIndex: 4,
     salaryIndex: 4,
     mix: {
-      page: 0.3,
-      read: 0.3,
-      write: 0.12,
-      login: 0.04,
-      search: 0.1,
-      upload: 0.04,
-      bot: 0.1,
+      page: 0.22,
+      read: 0.25,
+      write: 0.1,
+      login: 0.03,
+      search: 0.08,
+      upload: 0.03,
+      bot: 0.08,
+      media: 0.1,
+      rt: 0.08,
+      buy: 0.03,
+    },
+    question: 'What happens when a whole zone fails?',
+    arrivals: 'Video, chat and checkout. Zones, autoscaling and an error budget.',
+  },
+  {
+    name: 'Series B',
+    slo: 0.999,
+    incidentInterval: 480,
+    maxSeverity: 1,
+    market: 1_400_000,
+    raiseAt: Number.POSITIVE_INFINITY,
+    grant: 0,
+    dilution: 0,
+    growth: 0.0007,
+    apdexTarget: 0.91,
+    costIndex: 4,
+    salaryIndex: 4,
+    mix: {
+      page: 0.22,
+      read: 0.25,
+      write: 0.1,
+      login: 0.03,
+      search: 0.08,
+      upload: 0.03,
+      bot: 0.08,
+      media: 0.1,
+      rt: 0.08,
+      buy: 0.03,
     },
     question: 'The slice ends here.',
-    arrivals: 'Series A content is not built yet. Keep playing to stress your design.',
+    arrivals: 'Series B content is not built yet. Keep playing to stress your design.',
   },
 ]
 

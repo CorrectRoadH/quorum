@@ -1,7 +1,9 @@
 import { Match } from 'effect'
 import {
   COMPONENTS,
+  ERAS,
   ESCALATION,
+  FAILOVER_SECONDS,
   INCIDENTS,
   INCIDENT_GAP,
   INCIDENT_IDS,
@@ -16,9 +18,11 @@ import {
 } from './catalog.ts'
 import { StepEvent } from './events.ts'
 import type { Ledger } from './ledger.ts'
-import { has, isDown, ramOf, researchReady, restarted } from './lookups.ts'
+import { eraOf, has, isDown, ramOf, researchReady, restarted, zoned } from './lookups.ts'
+
+export { zoned }
 import { nextRandom, pickWeighted } from './random.ts'
-import type { Game, GameNode, Incident, Postmortem } from './state.ts'
+import type { Game, GameNode, Incident, Postmortem, Zone } from './state.ts'
 import { fixed, serviceOf } from './team.ts'
 
 /* ==========================================================================
@@ -58,6 +62,21 @@ const cacheTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
 
 const poisonTargets = (game: Game): ReadonlyArray<GameNode> =>
   game.nodes.filter((node) => node.type === 'queue' && !node.dlq)
+
+/**
+ * Zones whose loss would take a whole Component out: every live copy of some
+ * Component sits there, and a data Node there has no standby elsewhere.
+ */
+export const fragileZones = (game: Game): ReadonlyArray<Zone> => {
+  const live = game.nodes.filter((node) => zoned(node) && !isDown(node))
+  const zones = new Set<Zone>()
+  for (const node of live) {
+    if (node.standby) continue
+    const copies = live.filter((other) => other.type === node.type)
+    if (copies.every((other) => other.zone === node.zone)) zones.add(node.zone)
+  }
+  return [...zones].toSorted()
+}
 
 /** How hard this incident would hit the current Design: 0 when it has nothing to hit, else 0.2 to 3. */
 export const weaknessOf = (game: Game, ledger: Ledger, kind: IncidentId): number => {
@@ -129,6 +148,22 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number =>
     ),
     // A dead-letter queue moves the poison message aside: nothing to hit.
     Match.when('poison', () => (poisonTargets(game).length > 0 ? 2 : 0)),
+    Match.when('certificate', () => (has(game, 'cert-automation') ? 0 : 0.5)),
+    // Their outage, not yours: it hits whoever takes checkouts.
+    Match.when('psp-outage', () =>
+      game.nodes.some((node) => node.type === 'psp' && busy(ledger, node)) ? 1 : 0,
+    ),
+    // 3.0 once the Company could spread across zones and has not; before Multiple
+    // zones it has no answer, so the outage stays rare. 0.2 when nothing depends on one zone.
+    Match.when('zone', () =>
+      game.nodes.some((node) => zoned(node) && !isDown(node))
+        ? fragileZones(game).length > 0
+          ? has(game, 'multi-az')
+            ? 3
+            : 0.5
+          : 0.2
+        : 0,
+    ),
     Match.exhaustive,
   )
 
@@ -171,6 +206,14 @@ export const startIncident = (
     }),
     Match.orElse(() => undefined),
   )
+  // A zone outage strikes a zone the Design depends on, or else the busiest one.
+  const fragile = fragileZones(game)
+  const used = [
+    ...new Set(game.nodes.filter((node) => zoned(node) && !isDown(node)).map((node) => node.zone)),
+  ].toSorted()
+  const pool = fragile.length > 0 ? fragile : used
+  const zone = kind === 'zone' ? (pool[Math.floor(roll * pool.length)] ?? null) : null
+  if (kind === 'zone' && zone === null) return null
   const targeted = ['instance', 'leak', 'slow-query', 'stampede', 'poison'] as const
   if ((targeted as ReadonlyArray<IncidentId>).includes(kind) && !target) return null
   const incident: Incident = {
@@ -188,16 +231,25 @@ export const startIncident = (
       kind === 'spike'
         ? SPIKE_MAGNITUDE[0] + (SPIKE_MAGNITUDE[1] - SPIKE_MAGNITUDE[0]) * roll
         : SPIKE_MAGNITUDE[0],
+    zone,
   }
   // A stampede: the Cache restarted empty, or mostly warm with Cache warming.
+  // A zone outage downs its zone for the incident; a Node with a standby fails over.
   const nodes = game.nodes.map((node) =>
-    node.id !== target?.id
-      ? node
-      : kind === 'instance'
-        ? { ...node, down: -1, downCause: 'failure' as const, downAt: game.time }
-        : kind === 'stampede'
-          ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
-          : node,
+    zone !== null && zoned(node) && node.zone === zone && !isDown(node)
+      ? {
+          ...node,
+          down: node.standby ? FAILOVER_SECONDS : INCIDENTS.zone.duration,
+          downCause: 'failure' as const,
+          downAt: game.time,
+        }
+      : node.id !== target?.id
+        ? node
+        : kind === 'instance'
+          ? { ...node, down: -1, downCause: 'failure' as const, downAt: game.time }
+          : kind === 'stampede'
+            ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
+            : node,
   )
   return { game: { ...game, nodes, incident, lastIncident: kind }, incident }
 }
@@ -213,17 +265,20 @@ export const directIncidents = (
   const [roll, afterRoll] = nextRandom(game.seed)
   const [spread, afterGap] = nextRandom(afterRoll)
   const [pick, afterPick] = nextRandom(afterGap)
+  // Each Era sets its own interval; `gap` is Pre-seed's, so the playtest knob scales them all.
+  const interval = eraOf(game).incidentInterval / (ERAS[1]?.incidentInterval ?? 720)
   const scheduled: Game = {
     ...game,
     seed: afterPick,
-    nextIncidentAt: game.time + gap * (0.6 + 0.8 * spread),
+    nextIncidentAt: game.time + gap * interval * (0.6 + 0.8 * spread),
   }
+  const cap = eraOf(game).maxSeverity
   const kind = pickWeighted(
     INCIDENT_IDS.map(
       (id) =>
         [
           id,
-          weaknessOf(game, ledger, id) *
+          (INCIDENTS[id].severity < cap ? 0 : weaknessOf(game, ledger, id)) *
             // Tech debt makes every incident likelier (08 "Tech debt").
             (1 + serviceOf(game).debt) *
             (id === game.lastIncident ? REPEAT_WEIGHT : 1) *

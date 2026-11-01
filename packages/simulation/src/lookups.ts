@@ -4,10 +4,12 @@ import {
   COMPONENTS,
   COMPONENT_IDS,
   COPY_PRICE_GROWTH,
+  CROSS_ZONE_MS,
   DRAWER_MIN,
   DRAWER_SECONDS,
   ERAS,
   FAMILIES,
+  FRAMEWORKS,
   FRAMEWORK_RESEARCH,
   RESEARCH,
   RUNTIMES,
@@ -16,11 +18,13 @@ import {
   GZIP_RATIO,
   HANDSHAKE_MS,
   HOP_MS,
+  POD_BURN,
   PROFILES,
   RESTART_SECONDS,
   SELL_REFUND,
   SIZES,
   STORAGE_PRICE,
+  STREAM_KB,
   VCPU_PRICE,
   WARMED,
   USER_MBPS,
@@ -97,7 +101,10 @@ export const payloadOf = (node: GameNode, kind: RequestKind): number =>
 
 /** Milliseconds the response takes to reach the user over their downlink, after the request came up. */
 export const transferMs = (node: GameNode, kind: RequestKind): number =>
-  (payloadOf(node, kind) * 8) / USER_MBPS + (PROFILES[kind].inKB * 8) / USER_UP_MBPS
+  ((PROFILES[kind].stream ? Math.min(STREAM_KB, payloadOf(node, kind)) : payloadOf(node, kind)) *
+    8) /
+    USER_MBPS +
+  (PROFILES[kind].inKB * 8) / USER_UP_MBPS
 
 /** Credential stuffing: bots send logins, each one a password hash. */
 export const stuffing = (game: Game): boolean => game.incident?.kind === 'stuffing'
@@ -113,6 +120,19 @@ export const asLogin = (game: Game, kind: RequestKind): boolean =>
 /** Milliseconds one internal call costs on the wire: a hop, plus a handshake without keep-alive. */
 export const hopMs = (game: Game): number => HOP_MS + (has(game, 'keepalive') ? 0 : HANDSHAKE_MS)
 
+/** Nodes a zone outage takes down: what the Company runs in one zone itself. */
+export const zoned = (node: GameNode): boolean =>
+  COMPONENTS[node.type].limiting &&
+  !COMPONENTS[node.type].fixed &&
+  // A provider's, and the regional Load Balancer's and WAF's, span every zone.
+  node.type !== 'psp' &&
+  node.type !== 'lb' &&
+  node.type !== 'waf'
+
+/** Extra milliseconds a call between two Nodes pays for leaving its zone. Regional Nodes span every zone. */
+export const zoneMs = (from: GameNode, to: GameNode): number =>
+  zoned(from) && zoned(to) && from.zone !== to.zone ? CROSS_ZONE_MS : 0
+
 /** KB per second the box's network card moves: Gbps × 125,000. */
 export const networkOf = (node: GameNode): number => (SIZES[node.size]?.gbps ?? 1) * 125_000
 
@@ -121,10 +141,27 @@ export const ramOf = (node: GameNode): number => vcpuOf(node) * FAMILIES[node.fa
 
 export const isDown = (node: GameNode): boolean => node.down !== 0
 
+/** The Node links into a live Kubernetes Cluster: it runs as pods. */
+export const inCluster = (game: Game, node: GameNode): boolean =>
+  (node.type === 'server' || node.type === 'worker') &&
+  game.links.some(
+    (link) =>
+      link.from === node.id &&
+      game.nodes.some(
+        (entry) => entry.id === link.to && entry.type === 'cluster' && !isDown(entry),
+      ),
+  )
+
+/** Copies of a Node that bill: the ones serving and the ones still booting. */
+export const copiesOf = (node: GameNode): number => node.replicas + node.pending
+
 /** Seconds a Node stays down when it restarts: an App Server boots its runtime, at least 1 s for the VM. */
 export const restartSeconds = (node: GameNode): number =>
   node.type === 'server'
-    ? Math.max(VM_RESTART_SECONDS, RUNTIMES[node.runtime].startup)
+    ? Math.max(
+        VM_RESTART_SECONDS,
+        RUNTIMES[node.runtime].startup + FRAMEWORKS[node.framework].startup,
+      )
     : RESTART_SECONDS
 
 /** The fields of a Node that restarts and comes back cold. */
@@ -160,12 +197,18 @@ export const grown = (base: number, factor: number, steps: number): number => {
 export const burnOf = (game: Game, node: GameNode): number => {
   const def = COMPONENTS[node.type]
   const index = eraOf(game).costIndex
-  if (def.sized) return vcpuOf(node) * VCPU_PRICE * FAMILIES[node.family].price * index
+  if (def.sized) {
+    const one = vcpuOf(node) * VCPU_PRICE * FAMILIES[node.family].price * index
+    // A standby is a second box; pods pack onto shared nodes.
+    if (node.standby) return one * 2
+    if (copiesOf(node) === 1 && !inCluster(game, node)) return one
+    return one * copiesOf(node) * (inCluster(game, node) ? POD_BURN : 1)
+  }
   if (node.type === 'analytics')
     return def.burn * (SAMPLE_STORAGE[sampleIndex(node)] ?? 1) * flatScale(node) * index
   if (node.type === 'auth') return game.users * AUTH_PRICE_PER_USER
   if (node.type === 'storage') return (def.burn + game.stored * STORAGE_PRICE) * index
-  return def.burn * flatScale(node) * index
+  return def.burn * flatScale(node) * index * (node.standby ? 2 : 1)
 }
 
 /* A Sandbox has no money: every price below is 0 there. */

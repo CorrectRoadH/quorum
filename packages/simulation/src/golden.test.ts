@@ -19,7 +19,11 @@ const GOLDEN_STEPS = 10_000
 // SIM_VERSION 3 (M5 Seed): the save gains Queue depth, Cache, Queue and WAF
 // options, and stored GB. The Pre-seed replay's values are unchanged; the
 // encoded Game carries the new fields, so its hash moves.
-const GOLDEN_HASH = 'c9a1b233'
+// SIM_VERSION 4 (M5 Series A): the save gains each Node's zone, standby, copies
+// and Autoscaler settings, the incident's zone, and the error budget. The
+// Pre-seed replay's values are unchanged; the encoded Game carries the new
+// fields, so its hash moves.
+const GOLDEN_HASH = '9a1dfca3'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {

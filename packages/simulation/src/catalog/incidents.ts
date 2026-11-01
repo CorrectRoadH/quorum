@@ -15,6 +15,9 @@ export const INCIDENT_IDS = [
   'stampede',
   'poison',
   'ddos',
+  'certificate',
+  'psp-outage',
+  'zone',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -169,6 +172,39 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     prevention: 'A WAF, with Under attack mode when it starts. A CDN takes the cacheable part.',
     actions: ['waf', 'cdn'],
   },
+  certificate: {
+    id: 'certificate',
+    name: 'Certificate expired',
+    era: 2,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'The TLS certificate expired. Every browser refused the site.',
+    prevention: 'Certificate automation renews it before it expires.',
+    actions: ['cert-automation'],
+  },
+  'psp-outage': {
+    id: 'psp-outage',
+    name: 'Payment provider outage',
+    era: 3,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'The Payment Provider went down. Every checkout failed.',
+    prevention: 'Nothing on your side: it is their outage. Checkouts come back when it ends.',
+    actions: [],
+  },
+  zone: {
+    id: 'zone',
+    name: 'Zone outage',
+    era: 3,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 120,
+    cause: 'A whole zone failed. Every Node in it went grey.',
+    prevention: 'Copies in a second zone with spare capacity, and a Database standby.',
+    actions: ['multi-az'],
+  },
 }
 
 /** A bot surge lifts bots to half of all traffic; a DDoS adds 50 times it; stuffing 19 times the logins. */
@@ -206,3 +242,10 @@ export const ALERT_THRESHOLDS = {
 } as const
 /** False alarms in one calendar day before the player ignores a rule (12 "Alerting"). */
 export const ALERT_FATIGUE = 5
+
+/** The error budget counts from Series A (11 "SLOs and error budgets"). */
+export const SLO_FROM_STAGE = 3
+/** The SLO window: one calendar week, in hours. */
+export const SLO_WINDOW_HOURS = 168
+/** Velocity with more than half the budget left, between, and spent. */
+export const ERROR_BUDGET_FACTORS = { ahead: 1.1, normal: 1, spent: 0.5 } as const

@@ -12,6 +12,7 @@ import {
   RESEARCH_IDS,
   RUNTIME_IDS,
   START_KLOC,
+  ZONES,
 } from './catalog.ts'
 
 /* ==========================================================================
@@ -46,6 +47,13 @@ export type DownCause = typeof DownCause.Type
 
 export const PoolerMode = Schema.Literals(['session', 'transaction'])
 export type PoolerMode = typeof PoolerMode.Type
+
+export const Zone = Schema.Literals(ZONES)
+export type Zone = typeof Zone.Type
+
+/** What an Autoscaler reads: CPU, or the Node's whole load, slots and memory included. */
+export const ScaleSignal = Schema.Literals(['cpu', 'load'])
+export type ScaleSignal = typeof ScaleSignal.Type
 
 /** One placed Component. */
 export const GameNode = Schema.Struct({
@@ -106,6 +114,22 @@ export const GameNode = Schema.Struct({
   paranoia: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(2))),
   /** A WAF challenges every request. */
   underAttack: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** The zone the Node runs in. */
+  zone: Zone.pipe(Schema.withDecodingDefaultKey(Effect.succeed('a' as const))),
+  /** A data Node keeps a standby in another zone and fails over to it. */
+  standby: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Copies of an App Server or Worker that serve now. */
+  replicas: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))),
+  /** Copies an Autoscaler has asked for that are still booting, and the seconds until they serve. */
+  pending: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  readyIn: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** Sim time an Autoscaler last changed this Node's copies. */
+  scaledAt: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** An Autoscaler's signal, target load, and copy limits. A max of 0 means none. */
+  signal: ScaleSignal.pipe(Schema.withDecodingDefaultKey(Effect.succeed('cpu' as const))),
+  target: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0.6))),
+  minCopies: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))),
+  maxCopies: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(8))),
 })
 export type GameNode = typeof GameNode.Type
 
@@ -143,6 +167,8 @@ export const Incident = Schema.Struct({
   severity: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
   /** How many times normal demand a spike sends. */
   magnitude: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
+  /** The zone a zone outage took down. */
+  zone: Schema.NullOr(Zone).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 })
 export type Incident = typeof Incident.Type
 
@@ -175,6 +201,14 @@ export const Sample = Schema.Struct({
   errors: Schema.Finite,
 })
 export type Sample = typeof Sample.Type
+
+/** One calendar hour of requests users sent and the share that failed, for the error budget. */
+export const BudgetHour = Schema.Struct({
+  hour: Schema.Finite,
+  requests: Schema.Finite,
+  failed: Schema.Finite,
+})
+export type BudgetHour = typeof BudgetHour.Type
 
 /** Seconds each alert condition has held, for the pager. */
 export const Alarms = Schema.Struct({
@@ -376,5 +410,7 @@ export const Game = Schema.Struct({
   badDeploys: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** GB held in Object Storage. */
   stored: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** The last calendar week of requests and failures, by hour: the SLO window. */
+  budget: Schema.Array(BudgetHour).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 })
 export type Game = typeof Game.Type
