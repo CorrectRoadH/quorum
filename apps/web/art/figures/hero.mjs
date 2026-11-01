@@ -203,43 +203,82 @@ function packets() {
   return `<g class="packets">${out.join('')}</g>`
 }
 
-// On first paint the bench is assembled. The slab falls into place, its fittings
-// drop on, and then each machine in turn, left to right, lands as a plate and has
-// its parts set on it one by one, back to front, before its callout is pinned.
-// Things fall with gravity, sink a little and settle. The cables lay
-// once both ends are down; then traffic starts.
-const GRAVITY = 'cubic-bezier(.55,0,1,.45)'
-const SETTLE = 'cubic-bezier(.23,1,.32,1)'
+// On first paint the bench is assembled. The slab pops up, its fittings pop on,
+// and then each machine in turn, left to right, pops up as a plate and has its
+// parts popped onto it one by one, back to front, before its callout is pinned.
+// Each piece pops up tilted, rises a little past its size to 1.1x, and settles
+// level into place; each plate pops with a ring of short lines. The cables lay
+// once both ends are down; then traffic starts. The title screen plays a sound
+// as each pop starts.
+const BURST = 'cubic-bezier(.23,1,.32,1)'
+const SETTLE = 'cubic-bezier(.77,0,.175,1)'
 const ASSEMBLY = `<style>
-.iso .slam{animation:iso-slam 520ms both}
-.iso .drop{animation:iso-drop 420ms both}
+.iso :is(.slam,.drop){transform-box:fill-box;transform-origin:center}
+.iso .slam{--rise:-10px;animation:iso-pop 480ms both}
+.iso .drop{--rise:-6px;animation:iso-pop 360ms both}
 .iso .pin{animation:iso-fade 300ms ease both}
-@keyframes iso-slam{
-  0%{opacity:0;transform:translateY(-26px);animation-timing-function:${GRAVITY}}
+.iso .ray{fill:none;stroke:var(--anatomy-lit);stroke-width:1.6;stroke-linecap:round;stroke-dasharray:.5 2;animation:iso-ray 360ms ${BURST} both}
+@keyframes iso-pop{
+  0%{opacity:0;transform:translateY(0) rotate(var(--tilt)) scale(.3);animation-timing-function:${BURST}}
+  45%{opacity:1;transform:translateY(var(--rise)) rotate(calc(var(--tilt) * .5)) scale(1.1);animation-timing-function:${SETTLE}}
+  100%{transform:none}}
+@keyframes iso-ray{
+  0%{opacity:0;stroke-dashoffset:.5}
   10%{opacity:1}
-  50%{transform:translateY(0);animation-timing-function:${SETTLE}}
-  66%{transform:translateY(1.6px);animation-timing-function:${SETTLE}}
-  100%{transform:none}}
-@keyframes iso-drop{
-  0%{opacity:0;transform:translateY(-16px);animation-timing-function:${GRAVITY}}
-  15%{opacity:1}
-  55%{transform:translateY(0);animation-timing-function:${SETTLE}}
-  72%{transform:translateY(.8px);animation-timing-function:${SETTLE}}
-  100%{transform:none}}
+  70%{opacity:1}
+  100%{opacity:0;stroke-dashoffset:-1}}
 @keyframes iso-fade{from{opacity:0}}
 @media (prefers-reduced-motion:reduce){
   .iso :is(.slam,.drop){animation:iso-fade 300ms ease both}
-  .iso .packets{display:none}}
+  .iso :is(.packets,.ray){display:none}}
 </style>`
+
+// A seeded generator keeps the SVG the same on every build.
+let seed = 1
+const random = () => {
+  seed = (seed * 1664525 + 1013904223) % 4294967296
+  return seed / 4294967296
+}
+
+// The pop: short lines shoot straight out from round a plate, in screen space like
+// a cartoon pop, long and short in turn, and run off their ends.
+const RAY_DELAY = 40
+function pop(footprint, z, count, delay) {
+  const points = k.boxCorners(footprint, z, z).map((corner) => k.iso(corner, P))
+  const xs = points.map(([px]) => px)
+  const ys = points.map(([, py]) => py)
+  const [cx, cy] = [
+    (Math.min(...xs) + Math.max(...xs)) / 2,
+    (Math.min(...ys) + Math.max(...ys)) / 2,
+  ]
+  const [rx, ry] = [(Math.max(...xs) - cx) * 0.9, (Math.max(...ys) - cy) * 0.9]
+  const out = []
+  for (let i = 0; i < count; i++) {
+    const angle = ((i + 0.3 + random() * 0.4) / count) * Math.PI * 2
+    const [cos, sin] = [Math.cos(angle), Math.sin(angle)]
+    const [sx, sy] = [cx + cos * (rx + 4), cy + sin * (ry + 4)]
+    const length = (i % 2 ? 9 : 16) + random() * 5
+    out.push(
+      `<path class="ray" pathLength="1" d="M${sx.toFixed(1)} ${sy.toFixed(1)}l${(cos * length).toFixed(1)} ${(sin * length).toFixed(1)}" style="animation-delay:${Math.round(delay + RAY_DELAY)}ms"/>`,
+    )
+  }
+  return out.join('')
+}
 
 const FIRST_MACHINE = 300
 const MACHINE_GAP = 170
-/** A slam lands halfway through: plates are down this long after they start. */
+/** A plate is past its full size and settling this long after it starts; its parts pop on then. */
 const PLATE = 260
 const PARTS = 420
 
-const step = (kind, delay, inner) =>
-  `<g class="${kind}" style="animation-delay:${Math.round(delay)}ms">${inner}</g>`
+/** A piece that pops in leans one way or the other: plates a little, parts more. */
+const TILT = { slam: 5, drop: 9 }
+const step = (kind, delay, inner) => {
+  const tilt = TILT[kind]
+    ? `--tilt:${((random() < 0.5 ? -1 : 1) * TILT[kind] * (0.6 + random() * 0.4)).toFixed(1)}deg;`
+    : ''
+  return `<g class="${kind}" style="${tilt}animation-delay:${Math.round(delay)}ms">${inner}</g>`
+}
 
 /** Parts dropped one after another inside a time budget, from `start`. */
 const dropAll = (parts, start) => {
@@ -259,6 +298,7 @@ function callout({ at: [x, y], top, tag, left = false }) {
 }
 
 export function figure() {
+  seed = 1
   const t = tools(P)
   const leftToRight = [...MODULES].sort((a, b) => a.at[0] - b.at[0])
   const start = (module) => FIRST_MACHINE + leftToRight.indexOf(module) * MACHINE_GAP
@@ -283,6 +323,14 @@ export function figure() {
     }
   })
   for (const { svg } of machines.sort((a, b) => a.depth - b.depth)) body.push(svg)
+  // The pops go over everything, so they go on last.
+  const pops = [
+    pop(BENCH, TOP, 16, 0),
+    ...MODULES.map((module) =>
+      pop({ x: module.at[0] - 46, y: module.at[1] - 40, w: 92, d: 80 }, 0, 10, start(module)),
+    ),
+  ]
+  body.push(`<g class="pops">${pops.join('')}</g>`)
   return {
     width: WIDTH,
     height: HEIGHT,

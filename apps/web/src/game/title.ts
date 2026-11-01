@@ -7,6 +7,7 @@ import { eraOf } from './engine/lookups.ts'
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
+import { play } from './sound.ts'
 
 /* ==========================================================================
    The title screen: the night shift. One 16:10 stage, 1600 x 1000 units,
@@ -64,6 +65,50 @@ const BenchMounted = Mount.define('BenchMounted', {
         return Message.Synced()
       }),
     ),
+})
+
+/* --------------------------------------------------------------------------
+   Sounds. Each bench pop sounds as its animation starts: the plates burst on a
+   rising pentatonic scale, left to right. Menu items tick under the pointer
+   and chime when chosen.
+   -------------------------------------------------------------------------- */
+
+const SCALE = [0, 2, 4, 7, 9, 12, 14]
+
+const TitleSounds = Mount.define('TitleSounds', {
+  messages: [Message.Synced],
+  execute: ({ element }) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        let bursts = 0
+        const onAnimationStart = (event: Event) => {
+          if (!(event instanceof AnimationEvent) || event.animationName !== 'iso-pop') return
+          if (!(event.target instanceof Element)) return
+          if (event.target.classList.contains('slam'))
+            play('burst', 2 ** (SCALE[bursts++ % SCALE.length]! / 12))
+          else play('pop')
+        }
+        const aimOf = (target: EventTarget | null) =>
+          target instanceof Element ? target.closest('[data-aim]') : null
+        const onPointerOver = (event: Event) => {
+          if (!(event instanceof PointerEvent) || event.pointerType === 'touch') return
+          const aim = aimOf(event.target)
+          if (aim && aim !== aimOf(event.relatedTarget)) play('hover')
+        }
+        const onClick = (event: Event) => {
+          if (aimOf(event.target)) play('choose')
+        }
+        element.addEventListener('animationstart', onAnimationStart)
+        element.addEventListener('pointerover', onPointerOver)
+        element.addEventListener('click', onClick)
+        return () => {
+          element.removeEventListener('animationstart', onAnimationStart)
+          element.removeEventListener('pointerover', onPointerOver)
+          element.removeEventListener('click', onClick)
+        }
+      }),
+      (cleanup) => Effect.sync(cleanup),
+    ).pipe(Effect.as(Message.Synced())),
 })
 
 /* --------------------------------------------------------------------------
@@ -314,6 +359,7 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.Class(
         'title-screen dark relative grid h-full place-items-center overflow-hidden bg-page text-foreground',
       ),
+      h.OnMount(TitleSounds()),
     ],
     [
       h.div([h.Class('title-grid pointer-events-none absolute inset-0')], []),
