@@ -25,6 +25,7 @@ export const node = (
   localDb: false,
   sample: 1,
   down: 0,
+  downCause: 'restart',
   warm: 1,
   credits: 0,
   leak: 0,

@@ -2,7 +2,7 @@ import * as Effect from 'effect/Effect'
 import { Schema } from 'effect'
 import { Command } from 'foldkit'
 import { fitBoard, setBoard } from './board.ts'
-import { solve } from './engine/solve.ts'
+import { solveFlow } from './engine/solve.ts'
 import { ComponentId, Game } from './engine/state.ts'
 import { Message } from './message.ts'
 import { SandboxStore } from './model.ts'
@@ -18,12 +18,17 @@ export const SAVE_KEY = 'quorum.save.v2'
 export const SANDBOX_KEY = 'quorum.sandbox.v1'
 
 export const SyncBoard = Command.define('SyncBoard', {
-  args: { game: Game, selected: Schema.NullOr(Schema.String), placing: Schema.NullOr(ComponentId) },
+  args: {
+    game: Game,
+    bottleneck: Schema.NullOr(Schema.String),
+    selected: Schema.NullOr(Schema.String),
+    placing: Schema.NullOr(ComponentId),
+  },
   messages: [Message.Synced],
-  execute: ({ game, selected, placing }) =>
-    Effect.sync(() => setBoard('board', { game, ledger: solve(game), selected, placing })).pipe(
-      Effect.as(Message.Synced()),
-    ),
+  execute: ({ game, bottleneck, selected, placing }) =>
+    Effect.sync(() =>
+      setBoard('board', { game, ledger: { ...solveFlow(game), bottleneck }, selected, placing }),
+    ).pipe(Effect.as(Message.Synced())),
 })
 
 export const FitBoard = Command.define('FitBoard', {

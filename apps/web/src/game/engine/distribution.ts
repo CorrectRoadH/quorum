@@ -4,12 +4,21 @@
 
    Latency is a fixed part (base latencies, network hops) plus an exponential
    part (service and queueing), plus a rare tail event such as an event loop
-   stall. Exponential response times are the M/M/1 shape, so percentiles and
+   stall. The tail lands on the slowest `tailP` share of requests: they are the
+   ones that waited behind the stall. Exponential response times are the M/M/1 shape, so percentiles and
    Apdex fall out of one formula. The math uses only + − × ÷, so it is exact
    across JavaScript engines.
    ========================================================================== */
 
-export const ERROR_CAUSES = ['stranded', 'dropped', 'refused', 'down', 'stale'] as const
+export const ERROR_CAUSES = [
+  'stranded',
+  'dropped',
+  'refused',
+  'down',
+  'stale',
+  'oom',
+  'timeout',
+] as const
 export type ErrorCause = (typeof ERROR_CAUSES)[number]
 export type Failures = Readonly<Record<ErrorCause, number>>
 
@@ -31,23 +40,20 @@ export type Outcome = Readonly<{
   fail: Failures
 }>
 
-export const NO_FAILURES: Failures = { stranded: 0, dropped: 0, refused: 0, down: 0, stale: 0 }
+/** A Failures record with one value per cause. A plain loop: this runs on every hop of every solve. */
+const failuresBy = (value: (cause: ErrorCause) => number): Failures => {
+  const fail = {} as Record<ErrorCause, number>
+  for (const cause of ERROR_CAUSES) fail[cause] = value(cause)
+  return fail
+}
 
-const scaleFailures = (fail: Failures, by: number): Failures => ({
-  stranded: fail.stranded * by,
-  dropped: fail.dropped * by,
-  refused: fail.refused * by,
-  down: fail.down * by,
-  stale: fail.stale * by,
-})
+export const NO_FAILURES: Failures = failuresBy(() => 0)
 
-const addFailures = (a: Failures, b: Failures): Failures => ({
-  stranded: a.stranded + b.stranded,
-  dropped: a.dropped + b.dropped,
-  refused: a.refused + b.refused,
-  down: a.down + b.down,
-  stale: a.stale + b.stale,
-})
+const scaleFailures = (fail: Failures, by: number): Failures =>
+  failuresBy((cause) => fail[cause] * by)
+
+const addFailures = (a: Failures, b: Failures): Failures =>
+  failuresBy((cause) => a[cause] + b[cause])
 
 /** Every request fails for one cause. */
 export const failed = (cause: ErrorCause): Outcome => ({
@@ -190,17 +196,19 @@ export const decay = (x: number): number => {
   return value
 }
 
-/** Share of answered requests slower than `ms`. */
+/**
+ * Share of answered requests slower than `ms`. The tail event adds `tailMs` to
+ * the slowest `tailP` share, so a stall raises the p99 by its length while the
+ * p95 and the mean barely move.
+ */
 export const slowerThan = (outcome: Outcome, ms: number): number => {
-  const beyond = (offset: number): number => {
-    const left = ms - offset
+  const base = (at: number): number => {
+    const left = at - outcome.fixed
     if (left < 0) return 1
     return outcome.variable > 0 ? decay(left / outcome.variable) : 0
   }
-  return (
-    (1 - outcome.tailP) * beyond(outcome.fixed) +
-    outcome.tailP * beyond(outcome.fixed + outcome.tailMs)
-  )
+  if (outcome.tailP <= 0 || outcome.tailMs <= 0) return base(ms)
+  return Math.max(base(ms), Math.min(outcome.tailP, base(ms - outcome.tailMs)))
 }
 
 export const meanOf = (outcome: Outcome): number =>

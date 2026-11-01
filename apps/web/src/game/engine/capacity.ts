@@ -18,7 +18,7 @@ import {
   RUNTIMES,
   type RequestKind,
 } from './catalog.ts'
-import { has, ramOf, vcpuOf } from './lookups.ts'
+import { has, networkOf, ramOf, vcpuOf } from './lookups.ts'
 import type { Game, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -34,6 +34,7 @@ export type Limit =
   | 'memory'
   | 'workers'
   | 'connections'
+  | 'network'
   | 'disk'
   | 'throughput'
   | 'none'
@@ -47,11 +48,19 @@ export type Resources = Readonly<{
   ram: Gauge | null
   /** Requests in flight against worker slots. */
   slots: Gauge | null
+  /** KB per second sent, against what the network card moves. */
+  network: Gauge | null
   /** Burstable credits in core-seconds, and their change per second. */
   credits: Readonly<{ balance: number; rate: number }> | null
 }>
 
-export const NO_RESOURCES: Resources = { cpu: null, ram: null, slots: null, credits: null }
+export const NO_RESOURCES: Resources = {
+  cpu: null,
+  ram: null,
+  slots: null,
+  network: null,
+  credits: null,
+}
 
 export type Service = Readonly<{ fixed: number; variable: number }>
 
@@ -76,6 +85,9 @@ export type NodeModel = Readonly<{
   throttled: boolean
   swapping: boolean
 }>
+
+/** Share of requests on an event loop that wait behind a blocking callback. */
+export const LOOP_TAIL_SHARE = 0.02
 
 /** M/M/c-style waiting time, capped at saturation. */
 const waitFor = (service: number, utilization: number, servers: number): number => {
@@ -123,11 +135,16 @@ export type ServerContext = Readonly<{
   hashing: number
 }>
 
-/** CPU speed of this server: runtime, OPcache, and warmup. */
-const speedOf = (game: Game, node: GameNode): number => {
+/**
+ * CPU speed of this server: runtime, OPcache, and warmup. A cold JIT runtime
+ * starts at its `warmFrom` share; a cold PHP box runs without OPcache until the
+ * cache fills.
+ */
+export const speedOf = (game: Game, node: GameNode): number => {
   const runtime = RUNTIMES[node.runtime]
-  const opcache = runtime.language === 'php' && has(game, 'opcache') ? OPCACHE_SPEED : 1
-  return runtime.speed * opcache * (0.5 + 0.5 * node.warm)
+  const opcache =
+    runtime.language === 'php' && has(game, 'opcache') ? 1 + (OPCACHE_SPEED - 1) * node.warm : 1
+  return runtime.speed * opcache * (runtime.warmFrom + (1 - runtime.warmFrom) * node.warm)
 }
 
 /** Core-milliseconds one request of a kind costs this server. */
@@ -214,7 +231,14 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const slotUtilization = slots === Number.POSITIVE_INFINITY ? 0 : slotWork / (slots * 1000)
   const slotWait = rate > 0 ? waitFor(slotWork / rate, slotUtilization, slots) : 0
 
-  const utilization = Math.max(cpuUtilization, slotUtilization)
+  // Every response leaves through the box's network card: bandwidth over bytes per request.
+  const bytes = kinds.reduce(
+    (sum, kind) => sum + (arriving[kind] ?? 0) * PROFILES[kind].payloadKB,
+    0,
+  )
+  const networkUtilization = bytes / (networkOf(node) * context.boost)
+
+  const utilization = Math.max(cpuUtilization, slotUtilization, networkUtilization)
   const share = utilization > 1 ? 1 / utilization : 1
   const limit: NodeModel['limit'] =
     utilization <= 0
@@ -223,17 +247,29 @@ export const serverModel = (context: ServerContext): NodeModel => {
         ? 'credits'
         : swapping
           ? 'memory'
-          : slotUtilization > cpuUtilization
-            ? 'workers'
-            : 'cpu'
+          : networkUtilization >= utilization
+            ? 'network'
+            : slotUtilization > cpuUtilization
+              ? 'workers'
+              : 'cpu'
 
-  // One event loop runs one callback at a time: a login hash stalls every request behind it.
-  const blocking = runtime.model === 'loop' && !has(game, 'libuv-pool') && !context.delegated
-  const hashTime = blocking
-    ? ((arriving.login ?? 0) * cpu.login) / (1000 * Math.max(1, processes))
-    : 0
-  const tailP = Math.min(0.4, 2 * hashTime * share)
-  const tailMs = blocking ? cpu.login / perRequest : 0
+  // One event loop runs one callback at a time: a heavy callback stalls every request behind
+  // it (06 "Event loops and blocking"). The squared term lets rare heavy kinds dominate:
+  //   loop_block_ms = Σ λ·cpu² / Σ λ·cpu,   added_p99 = loop_block_ms × min(1, 2ρ)
+  // The stall hits LOOP_TAIL_SHARE of requests, above 1%, so it lands on the p99 and not the p95.
+  // The libuv pool and an Auth Provider take the login hash off the loop, not the rest.
+  const offLoop = (kind: RequestKind): boolean =>
+    kind === 'login' && (has(game, 'libuv-pool') || context.delegated)
+  const onLoop = runtime.model === 'loop' ? kinds.filter((kind) => !offLoop(kind)) : []
+  const callback = (kind: RequestKind): number => cpu[kind] / perRequest
+  const loopWork = onLoop.reduce((sum, kind) => sum + (arriving[kind] ?? 0) * callback(kind), 0)
+  const loopSquares = onLoop.reduce(
+    (sum, kind) => sum + (arriving[kind] ?? 0) * callback(kind) * callback(kind),
+    0,
+  )
+  const loopBlock = loopWork > 0 ? loopSquares / loopWork : 0
+  const tailP = loopBlock > 0 ? LOOP_TAIL_SHARE : 0
+  const tailMs = loopBlock * Math.min(1, 2 * Math.min(1, cpuUtilization))
 
   const service = Object.fromEntries(
     REQUEST_KINDS.map((kind) => [
@@ -260,6 +296,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
         slots === Number.POSITIVE_INFINITY
           ? null
           : { used: (slotWork * share) / 1000, total: slots },
+      network: { used: bytes * share, total: networkOf(node) * context.boost },
       credits:
         node.family === 'burstable'
           ? { balance: node.credits, rate: BURST_BASELINE * vcpu - used }
@@ -322,6 +359,7 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
       cpu: { used, total: cores },
       ram: { used: Math.min(workingSet + OS_RAM, ram), total: ram },
       slots: null,
+      network: null,
       credits:
         node.family === 'burstable'
           ? { balance: node.credits, rate: BURST_BASELINE * vcpu - used }

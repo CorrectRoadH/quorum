@@ -76,16 +76,16 @@ details are in [Data tier](./07-data-tier.md). Runtime details for App Servers a
 | CDN                      | 220       | 0.05 + egress             | Unlimited                       | 8 ms at edge           | —       |
 | WAF                      | 260       | 0.10                      | 5,000 rps                       | 2 ms                   | 6       |
 | API Gateway              | 300       | 0.002 per request         | 10,000 rps                      | 6 ms                   | —       |
-| App Server               | 60        | Instance price            | Runtime model                   | 2 ms                   | 11      |
-| Worker                   | 60        | Instance price            | Runtime model                   | —                      | 11      |
+| App Server               | 60        | Instance price            | Runtime model                   | 2 ms                   | 9       |
+| Worker                   | 60        | Instance price            | Runtime model                   | —                      | 9       |
 | Serverless Function      | 0         | Per request + GB-s        | 1,000 concurrent                | Cold start             | —       |
 | Kubernetes Cluster       | 500       | 0.10 control plane        | Holds services                  | —                      | —       |
 | GPU Node                 | 900       | 1.20 (T4) to 9.00 (H100)  | Tokens per second               | Model-based            | 3 types |
 | Edge Function            | 0         | Per request               | Unlimited                       | 5 ms                   | —       |
-| Database                 | 90        | Instance price            | IOPS and CPU                    | 2 ms                   | 11      |
+| Database                 | 90        | Instance price            | IOPS and CPU                    | 2 ms                   | 9       |
 | Connection Pooler        | 80        | 0.03                      | 10,000 client connections       | 0.3 ms                 | 4       |
 | Cache                    | 150       | 0.06                      | 50,000 ops/s per core           | 0.5 ms                 | 8       |
-| Read Replica             | 160       | As Database               | As Database (reads only)        | 2 ms                   | 11      |
+| Read Replica             | 160       | As Database               | As Database (reads only)        | 2 ms                   | 9       |
 | Search Engine            | 300       | 0.25                      | 400 queries/s per node          | 15 ms                  | 8       |
 | Object Storage           | 280       | Per GB + egress           | Unlimited                       | 40 ms first byte       | —       |
 | Document Store           | 260       | 0.20                      | 3,000 ops/s                     | 3 ms                   | 8       |
@@ -231,7 +231,8 @@ runtime variant, and its framework. [Runtimes and frameworks](./06-runtimes.md) 
 | Burstable       | 1 : 2 GB      | 0.4×           | Garage. Earns CPU credits while idle and is throttled to 20% when credits run out. |
 | ARM (research)  | Same as above | 0.8×           | 20% cheaper. Some runtimes and libraries are slower or need work to port.          |
 
-Sizes go from `nano` (0.5 vCPU) to `metal` (96 vCPU), each step doubling vCPU and RAM.
+Sizes go from `nano` (0.5 vCPU) to `metal` (96 vCPU): nine sizes, each step doubling vCPU and RAM, and
+`metal` a 1.5× last step.
 
 The App Server answers `page` and `bot` itself and turns other kinds into backend kinds
 ([Simulation](./04-simulation.md#backend-kinds)).

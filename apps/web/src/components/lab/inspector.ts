@@ -28,6 +28,7 @@ import {
   replacePrice,
   resizePrice,
   runtimeReady,
+  sizeLabel as sizeLabelOf,
   vcpuOf,
 } from '@/game/engine/lookups.ts'
 import type { Game, GameNode } from '@/game/engine/state.ts'
@@ -702,11 +703,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
   const def = COMPONENTS[node.type]
   const history = model.nodeHistory[node.id] ?? []
   const price = resizePrice(game, node)
-  const sizeLabel = def.sized
-    ? SIZES[node.size]?.name
-    : node.type === 'payments' || node.type === 'analytics'
-      ? `size ${node.size}`
-      : null
+  const sizeLabel = def.sized || def.steps > 1 ? sizeLabelOf(node) : null
 
   return h.aside(
     [
@@ -792,11 +789,11 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                     [h.Class('flex items-center gap-1.5 truncate')],
                     [
                       icon(h, ArrowUp, 'size-4 shrink-0'),
-                      def.sized
-                        ? `${SIZES[node.size + 1]?.name ?? ''}`
-                        : node.type === 'payments'
-                          ? 'Bigger drawer'
-                          : 'More samples',
+                      node.type === 'payments'
+                        ? 'Bigger drawer'
+                        : node.type === 'analytics'
+                          ? 'More samples'
+                          : sizeLabelOf(node, node.size + 1),
                     ],
                   ),
                   h.span([h.Class(FIGURE)], [priceLabel(game.sandbox, price)]),

@@ -42,6 +42,11 @@ export type ComponentDef = Readonly<{
   burn: number
   /** Has an instance type (size and family). */
   sized: boolean
+  /**
+   * Largest size for Components without an instance type, from size 1. Each
+   * step doubles capacity and Burn. 1 means it has one size.
+   */
+  steps: number
   /** Milliseconds of fixed overhead per request that passes through. */
   latency: number
   /** Kinds this Node takes on an inbound link. */
@@ -57,7 +62,7 @@ export type ComponentDef = Readonly<{
 }>
 
 const def = (
-  entry: Omit<ComponentDef, 'maxOut' | 'tap' | 'unlock' | 'fixed' | 'sized' | 'burn'> &
+  entry: Omit<ComponentDef, 'maxOut' | 'tap' | 'unlock' | 'fixed' | 'sized' | 'burn' | 'steps'> &
     Partial<ComponentDef>,
 ): ComponentDef => ({
   maxOut: 99,
@@ -65,6 +70,7 @@ const def = (
   unlock: null,
   fixed: false,
   sized: false,
+  steps: 1,
   burn: 0,
   ...entry,
 })
@@ -95,6 +101,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: [],
     maxOut: 0,
     fixed: true,
+    steps: 6,
   }),
   analytics: def({
     id: 'analytics',
@@ -109,6 +116,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: [],
     maxOut: 0,
     tap: true,
+    steps: 8,
   }),
   server: def({
     id: 'server',
@@ -161,6 +169,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     latency: 1,
     accepts: REQUEST_KINDS,
     unlock: 'load-balancing',
+    steps: 6,
   }),
   pooler: def({
     id: 'pooler',
@@ -174,6 +183,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     latency: 0.3,
     accepts: ['q-read', 'q-write'],
     unlock: 'pooling',
+    steps: 4,
   }),
   cache: def({
     id: 'cache',
@@ -187,6 +197,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     latency: 0.5,
     accepts: ['q-read', 'q-write'],
     unlock: 'caching',
+    steps: 8,
   }),
   replica: def({
     id: 'replica',

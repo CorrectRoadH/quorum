@@ -75,7 +75,10 @@ export const undoAvailable = (model: Model): boolean => {
   return model.game.time - since <= UNDO_SECONDS
 }
 
-/** Puts the Design back as it was before the last board action and refunds its cost. */
+/**
+ * Puts the Design back as it was before the last board action and reverses the
+ * Cash it moved: a purchase is refunded, and a sale's refund is taken back.
+ */
 export const undoGame = (model: Model): Game | null => {
   const undo = model.undo
   if (!undo || !undoAvailable(model)) return null
@@ -88,7 +91,7 @@ export const undoGame = (model: Model): Game | null => {
     }),
     links: undo.game.links,
     nextId: Math.max(undo.game.nextId, model.game.nextId),
-    cash: model.game.cash + undo.spent,
+    cash: model.game.cash - undo.cash,
   }
 }
 

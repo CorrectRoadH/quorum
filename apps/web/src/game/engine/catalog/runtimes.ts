@@ -49,6 +49,10 @@ export type RuntimeDef = Readonly<{
   connections: number
   /** Processes live across requests, so memory can leak. */
   persistent: boolean
+  /** Seconds the runtime needs to boot after a restart. */
+  startup: number
+  /** Share of full speed a cold process runs at, before JIT warmup. PHP warms through OPcache instead. */
+  warmFrom: number
   research: ResearchId | null
   blurb: string
 }>
@@ -65,6 +69,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     threads: 1,
     connections: 1,
     persistent: false,
+    startup: 0,
+    warmFrom: 1,
     research: null,
     blurb:
       'Apache starts a process per request in flight, up to 150. Every process embeds PHP, so RAM runs out early.',
@@ -80,6 +86,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     threads: 1,
     connections: 1,
     persistent: false,
+    startup: 0,
+    warmFrom: 1,
     research: 'php-fpm',
     blurb:
       'A fixed pool of PHP workers behind NGINX. Each waiting request holds a worker. Shared nothing: no leaks.',
@@ -95,6 +103,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     threads: 5,
     connections: 5,
     persistent: true,
+    startup: 10,
+    warmFrom: 0.9,
     research: 'lang-ruby',
     blurb:
       'One process per core, 5 threads each. Threads overlap waits; the GVL keeps CPU on one core.',
@@ -110,6 +120,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     threads: 1,
     connections: 10,
     persistent: true,
+    startup: 1,
+    warmFrom: 0.8,
     research: 'lang-node',
     blurb:
       'One event loop. Waiting costs nothing, but it uses one core, and one slow request stalls every other.',
@@ -125,6 +137,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     threads: 1,
     connections: 10,
     persistent: true,
+    startup: 1,
+    warmFrom: 0.8,
     research: 'node-cluster',
     blurb: 'One event loop per core. Uses every core; memory and connections grow with the cores.',
   },
@@ -139,6 +153,8 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     threads: 1,
     connections: 1,
     persistent: true,
+    startup: 5,
+    warmFrom: 0.95,
     research: 'lang-python',
     blurb: 'A pool of sync workers, one request each. Like PHP-FPM with more memory per worker.',
   },

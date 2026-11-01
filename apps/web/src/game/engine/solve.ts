@@ -15,6 +15,7 @@ import {
   RUNTIMES,
   SAMPLE_OVERHEAD,
   SAMPLE_RATES,
+  WEEKEND_FACTOR,
   marketFor,
   type Kind,
   type RequestKind,
@@ -31,6 +32,7 @@ import {
 } from './capacity.ts'
 import {
   ERROR_CAUSES,
+  NO_FAILURES,
   answered,
   apdexOf,
   blend,
@@ -43,7 +45,7 @@ import {
   type Outcome,
 } from './distribution.ts'
 import type { KindLedger, Ledger, LinkLedger, NodeLedger, NodeStatus } from './ledger.ts'
-import { burnOf, eraOf, has, isDown, languageOf } from './lookups.ts'
+import { burnOf, eraOf, flatScale, grown, has, isDown, languageOf } from './lookups.ts'
 import type { Game, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -78,16 +80,64 @@ export const clockOf = (time: number) => {
   }
 }
 
+const PI = 3.141592653589793
+
+/** Taylor series of cos and sin around 0, exact to double precision on [−π/4, π/4]. */
+const cosSeries = (x: number): number => {
+  const xx = x * x
+  let term = 1
+  let sum = 1
+  for (let n = 2; n <= 20; n += 2) {
+    term *= -xx / ((n - 1) * n)
+    sum += term
+  }
+  return sum
+}
+const sinSeries = (x: number): number => {
+  const xx = x * x
+  let term = x
+  let sum = x
+  for (let n = 3; n <= 21; n += 2) {
+    term *= -xx / ((n - 1) * n)
+    sum += term
+  }
+  return sum
+}
+
+/**
+ * cos(2π × turns) with only + − × ÷ and floor, so every engine gets the same
+ * bits (04 "Determinism"). The angle folds into [0, π/4] by symmetry first.
+ */
+export const cosTurns = (turns: number): number => {
+  const t = turns - Math.floor(turns)
+  // cos is even and has period 1 in turns: fold to [0, 1/2].
+  const half = t > 0.5 ? 1 - t : t
+  // cos(π − x) = −cos(x): fold to [0, 1/4].
+  const sign = half > 0.25 ? -1 : 1
+  const quarter = half > 0.25 ? 0.5 - half : half
+  // cos(x) = sin(π/2 − x): fold to [0, 1/8].
+  return quarter > 0.125
+    ? sign * sinSeries((0.25 - quarter) * 2 * PI)
+    : sign * cosSeries(quarter * 2 * PI)
+}
+
 /** The daily cycle: 1 + A × cos(2π × (hour − 20) / 24). */
 export const diurnal = (time: number): number => {
-  const hour = (calendarMinute(time) % 1440) / 60
-  return 1 + DIURNAL_AMPLITUDE * Math.cos((2 * Math.PI * (hour - 20)) / 24)
+  const minute = calendarMinute(time) % 1440
+  return 1 + DIURNAL_AMPLITUDE * cosTurns((minute - 20 * 60) / 1440)
+}
+
+/** The weekly cycle: weekdays 1, Saturday and Sunday the weekend factor. Day 1 is a Monday. */
+export const weekly = (time: number): number => {
+  const day = Math.floor(calendarMinute(time) / 1440) % 7
+  return day >= 5 ? WEEKEND_FACTOR : 1
 }
 
 export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const era = eraOf(game)
   const spike = game.incident?.kind === 'spike' ? 3 : 1
-  const total = game.users * RPS_PER_USER * (game.sandbox ? 1 : diurnal(game.time)) * spike
+  const cycle = game.sandbox ? 1 : diurnal(game.time) * weekly(game.time)
+  const total = game.users * RPS_PER_USER * cycle * spike
   const demand: Partial<Record<RequestKind, number>> = {}
   for (const kind of REQUEST_KINDS) {
     const share = era.mix[kind] ?? 0
@@ -188,6 +238,9 @@ type Inputs = Readonly<{
 
 const NO_CALLS: Calls = { reads: 0, writes: 0, auth: 0 }
 
+/** Requests per second of a flat Component at its size. */
+const flatCapacity = (node: GameNode): number => (FLAT_CAPACITY[node.type] ?? 0) * flatScale(node)
+
 const modelFor = (
   inputs: Inputs,
   node: GameNode,
@@ -213,11 +266,11 @@ const modelFor = (
     case 'replica':
       return databaseModel({ game, node, arriving, boost })
     case 'lb':
-      return flatModel(FLAT_CAPACITY.lb ?? 0, arriving, { fixed: 1, variable: 0.1 }, boost)
+      return flatModel(flatCapacity(node), arriving, { fixed: 1, variable: 0.1 }, boost)
     case 'cache':
-      return flatModel(FLAT_CAPACITY.cache ?? 0, arriving, { fixed: 0.5, variable: 0.2 }, boost)
+      return flatModel(flatCapacity(node), arriving, { fixed: 0.5, variable: 0.2 }, boost)
     case 'pooler':
-      return flatModel(FLAT_CAPACITY.pooler ?? 0, arriving, { fixed: 0.3, variable: 0 }, boost)
+      return flatModel(flatCapacity(node), arriving, { fixed: 0.3, variable: 0 }, boost)
     case 'auth':
       return flatModel(Number.POSITIVE_INFINITY, arriving, { fixed: 120, variable: 15 }, 1)
     case 'users':
@@ -239,7 +292,8 @@ const probeCapacity = (inputs: Inputs, node: GameNode): number => {
       : node.type === 'database' || node.type === 'replica'
         ? { 'q-read': 1 }
         : {}
-  if (Object.keys(probe).length === 0) return FLAT_CAPACITY[node.type] ?? 1_000
+  if (Object.keys(probe).length === 0)
+    return FLAT_CAPACITY[node.type] === undefined ? 1_000 : flatCapacity(node)
   const model = modelFor(inputs, node, probe)
   return model.utilization > 0 ? 1 / model.utilization : 1_000
 }
@@ -427,7 +481,8 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     const cached = memo.get(key)
     if (cached) return cached
     const result = ((): Outcome => {
-      if (isDown(node)) return failed('down')
+      // A Node the kernel killed for memory fails as `oom` until it is back.
+      if (isDown(node)) return failed(node.downCause === 'oom' ? 'oom' : 'down')
       switch (node.type) {
         case 'users':
         case 'dns':
@@ -467,7 +522,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
             ...answered(0, 0),
             success: 1 - refused,
             stale: node.type === 'replica' && kind === 'q-read' ? pass.staleShare : 0,
-            fail: { stranded: 0, dropped: 0, refused, down: 0, stale: 0 },
+            fail: { ...NO_FAILURES, refused },
           }
           return through(ownHop(node, kind), [[reply, 1]])
         }
@@ -569,13 +624,7 @@ const ledgerOf = (
 
   // What users get back, per kind.
   const kinds: Partial<Record<RequestKind, KindLedger>> = {}
-  const errors: Record<ErrorCause, number> = {
-    stranded: 0,
-    dropped: 0,
-    refused: 0,
-    down: 0,
-    stale: 0,
-  }
+  const errors: Record<ErrorCause, number> = { ...NO_FAILURES }
   const mixture: Array<readonly [Outcome, number]> = []
   let rateTotal = 0
   let served = 0
@@ -668,7 +717,7 @@ const ledgerOf = (
       const entry = nodes[source]
       return total + (entry ? entry.inbound - entry.dropped : 0)
     }, 0)
-    const capacity = ANALYTICS_CAPACITY * 2 ** (tap.size - 1)
+    const capacity = grown(ANALYTICS_CAPACITY, 2, tap.size - 1)
     const sampled = isDown(tap) ? 0 : Math.min(volume * rate, capacity)
     insight += sampled * INSIGHT_YIELD * (2 - apdex)
     nodes[tapId] = {
@@ -754,7 +803,7 @@ const CANDIDATES = new Set(['server', 'database', 'replica', 'cache', 'lb', 'poo
  * The Node whose doubled capacity would earn the most: re-solve with each of
  * the three busiest Nodes boosted and keep the largest gain.
  */
-const bottleneckOf = (game: Game, base: Ledger): string | null => {
+export const bottleneckOf = (game: Game, base: Ledger): string | null => {
   const busiest = game.nodes
     .filter((node) => CANDIDATES.has(node.type) && !isDown(node))
     .map((node) => [node.id, base.nodes[node.id]?.utilization ?? 0] as const)
@@ -775,17 +824,28 @@ const bottleneckOf = (game: Game, base: Ledger): string | null => {
 
 /* ---------- entry points ---------- */
 
-const cache = new WeakMap<Game, Ledger>()
+const flows = new WeakMap<Game, Ledger>()
+const marked = new WeakMap<Game, Ledger>()
 
-/** The Ledger without the bottleneck search: what each Step needs. */
-export const solveFlow = (game: Game): Ledger => solveWith(game, null)
-
-/** The full Ledger, with the bottleneck marked. Cached per Game. */
-export const solve = (game: Game): Ledger => {
-  const cached = cache.get(game)
+/**
+ * The Ledger without the bottleneck search: what each Step and each view
+ * needs. The game runs the search once per sim second (04 "The bottleneck")
+ * and keeps the answer itself. Cached per Game.
+ */
+export const solveFlow = (game: Game): Ledger => {
+  const cached = flows.get(game)
   if (cached) return cached
-  const base = solveWith(game, null)
+  const ledger = solveWith(game, null)
+  flows.set(game, ledger)
+  return ledger
+}
+
+/** The full Ledger, with the bottleneck searched now. For tests and one-off checks. Cached per Game. */
+export const solve = (game: Game): Ledger => {
+  const cached = marked.get(game)
+  if (cached) return cached
+  const base = solveFlow(game)
   const ledger = { ...base, bottleneck: bottleneckOf(game, base) }
-  cache.set(game, ledger)
+  marked.set(game, ledger)
   return ledger
 }

@@ -41,13 +41,15 @@ export type RequestProfile = Readonly<{
   writes: number
   /** An ORM turns this kind's reads into N+1 queries. */
   orm: boolean
+  /** KB the response sends over the network. */
+  payloadKB: number
 }>
 
 export const PROFILES: Record<RequestKind, RequestProfile> = {
-  page: { cpu: 4, native: false, apdex: 400, reads: 2, writes: 0, orm: true },
-  read: { cpu: 1.5, native: false, apdex: 200, reads: 1, writes: 0, orm: true },
-  write: { cpu: 2, native: false, apdex: 300, reads: 0, writes: 1, orm: false },
-  login: { cpu: 80, native: true, apdex: 800, reads: 1, writes: 0, orm: false },
+  page: { cpu: 4, native: false, apdex: 400, reads: 2, writes: 0, orm: true, payloadKB: 80 },
+  read: { cpu: 1.5, native: false, apdex: 200, reads: 1, writes: 0, orm: true, payloadKB: 4 },
+  write: { cpu: 2, native: false, apdex: 300, reads: 0, writes: 1, orm: false, payloadKB: 2 },
+  login: { cpu: 80, native: true, apdex: 800, reads: 1, writes: 0, orm: false, payloadKB: 1 },
 }
 
 /** CPU ms that one query costs a database. Stylized, so the database matters at Pre-seed volume. */

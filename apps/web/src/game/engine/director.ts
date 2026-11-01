@@ -6,14 +6,13 @@ import {
   INCIDENT_IDS,
   LEAK_RATE,
   OPEN_ACTION_WEIGHT,
-  RESTART_SECONDS,
   RUNTIMES,
   type ComponentId,
   type IncidentId,
 } from './catalog.ts'
 import { StepEvent } from './events.ts'
 import type { Ledger } from './ledger.ts'
-import { has, isDown, ramOf, researchReady } from './lookups.ts'
+import { has, isDown, ramOf, researchReady, restarted } from './lookups.ts'
 import { nextRandom, pickWeighted } from './random.ts'
 import type { Game, GameNode, Incident, Postmortem } from './state.ts'
 
@@ -132,7 +131,9 @@ export const startIncident = (
   }
   const nodes =
     kind === 'instance' && target
-      ? game.nodes.map((node) => (node.id === target.id ? { ...node, down: -1 } : node))
+      ? game.nodes.map((node) =>
+          node.id === target.id ? { ...node, down: -1, downCause: 'failure' as const } : node,
+        )
       : game.nodes
   return { game: { ...game, nodes, incident, lastIncident: kind }, incident }
 }
@@ -141,16 +142,17 @@ export const startIncident = (
 export const directIncidents = (
   game: Game,
   ledger: Ledger,
+  gap = INCIDENT_GAP,
 ): Readonly<{ game: Game; events: ReadonlyArray<StepEvent> }> => {
   if (game.sandbox || game.incident || game.stage < 1 || game.time < game.nextIncidentAt)
     return { game, events: [] }
   const [roll, afterRoll] = nextRandom(game.seed)
-  const [gap, afterGap] = nextRandom(afterRoll)
+  const [spread, afterGap] = nextRandom(afterRoll)
   const [pick, afterPick] = nextRandom(afterGap)
   const scheduled: Game = {
     ...game,
     seed: afterPick,
-    nextIncidentAt: game.time + INCIDENT_GAP * (0.6 + 0.8 * gap),
+    nextIncidentAt: game.time + gap * (0.6 + 0.8 * spread),
   }
   const kind = pickWeighted(
     INCIDENT_IDS.map(
@@ -198,10 +200,9 @@ const resolve = (game: Game): Readonly<{ game: Game; events: ReadonlyArray<StepE
   )
   const nodes = game.nodes.map((node) => {
     if (node.id !== incident.nodeId) return node
-    if (incident.kind === 'instance' && node.down === -1)
-      return { ...node, down: RESTART_SECONDS, warm: 0 }
+    if (incident.kind === 'instance' && node.down === -1) return { ...node, ...restarted(node) }
     if (incident.kind === 'leak' && node.leak > 0)
-      return { ...node, down: RESTART_SECONDS, warm: 0, leak: 0 }
+      return { ...node, ...restarted(node, 'oom'), leak: 0 }
     return node
   })
   return {

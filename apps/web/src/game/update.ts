@@ -11,6 +11,7 @@ import {
   RUNTIMES,
   SAMPLE_RATES,
   SIZES,
+  STEP_SECONDS,
 } from './engine/catalog.ts'
 import { newGame, preseedGame } from './engine/company.ts'
 import { forceIncident } from './engine/director.ts'
@@ -26,7 +27,7 @@ import {
   sandboxOf,
   START,
 } from './engine/sandbox.ts'
-import { solve } from './engine/solve.ts'
+import { bottleneckOf, solveFlow } from './engine/solve.ts'
 import { Game } from './engine/state.ts'
 import { step } from './engine/step.ts'
 import {
@@ -53,7 +54,7 @@ import {
 } from './feedback.ts'
 import { cueOf } from './cues.ts'
 import { Message } from './message.ts'
-import { Model, SandboxStore, type SandboxRun, type Tone } from './model.ts'
+import { ledgerOf, Model, SandboxStore, type SandboxRun, type Tone } from './model.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
 
@@ -63,8 +64,10 @@ import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
    writes the playtest log.
    ========================================================================== */
 
+/** The UI reads the Ledger four times a second; the Simulation steps every 100 ms of sim time. */
 export const TICK_MS = 250
-const STEP_SECONDS = 0.25
+/** Steps per tick at 1×: 250 ms over 100 ms Steps. 2.5 is exact in binary, so the carry never drifts. */
+const STEPS_PER_TICK = 2.5
 const SAVE_EVERY = 5
 const SAMPLE_EVERY = 10
 const HISTORY_POINTS = 120
@@ -89,6 +92,7 @@ export const initialModel = (): Model =>
     buildGroup: null,
     speed: 1,
     paused: false,
+    carry: 0,
     savedAt: 0,
     sampledAt: 0,
     toast: null,
@@ -96,6 +100,8 @@ export const initialModel = (): Model =>
     change: null,
     delta: null,
     undo: null,
+    bottleneck: null,
+    bottleneckAt: -1,
     nodeHistory: {},
     lastGoal: '',
     lastBottleneck: '',
@@ -112,7 +118,12 @@ type Result = Update.Return<Model, Message>
 type AnyCommand = NonNullable<Result['commands']>[number]
 
 const sync = (model: Model): AnyCommand =>
-  SyncBoard({ game: model.game, selected: model.selected, placing: model.placing })
+  SyncBoard({
+    game: model.game,
+    bottleneck: model.bottleneck,
+    selected: model.selected,
+    placing: model.placing,
+  })
 
 /** The Model with a toast raised, and the Command that clears it later. */
 const toasted = (model: Model, message: string, tone: Tone): [Model, AnyCommand] => {
@@ -151,16 +162,18 @@ const act = (
     onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
     onSuccess: (game) => {
       if (game === model.game) return { model }
-      const measured = beginChange(model, label, figuresOf(solve(model.game)))
+      const measured = beginChange(model, label, figuresOf(solveFlow(model.game)))
       const next: Model = {
         ...measured,
         ...options.patch?.(model, game),
         game,
+        // The Design changed: search for the Bottleneck again on the next tick.
+        bottleneckAt: -1,
         undo: options.undoable
           ? {
               label,
               game: model.game,
-              spent: Math.max(0, model.game.cash - game.cash),
+              cash: game.cash - model.game.cash,
               at: model.game.time,
             }
           : model.undo,
@@ -253,7 +266,8 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
 /* ---------- the clock ---------- */
 
 const tick = (model: Model): Result => {
-  const steps = Math.max(1, Math.round(model.speed))
+  const owed = model.carry + STEPS_PER_TICK * model.speed
+  const steps = Math.floor(owed)
   let game = model.game
   const events: Array<StepEvent> = []
   for (let index = 0; index < steps; index += 1) {
@@ -266,17 +280,36 @@ const tick = (model: Model): Result => {
   let run = model.sandbox
   let advanced = false
   if (run && guided && !passedAll(guided, run.progress)) {
-    const advance = advanceSandbox(guided, run.progress, game, solve(game), steps * STEP_SECONDS)
+    const advance = advanceSandbox(
+      guided,
+      run.progress,
+      game,
+      solveFlow(game),
+      steps * STEP_SECONDS,
+    )
     if (advance.game.incident && advance.game.incident !== game.incident)
       events.push(StepEvent.IncidentStarted({ incident: advance.game.incident }))
     game = advance.game
     run = { ...run, progress: advance.progress }
     advanced = advance.advanced
   }
-  const ledger = solve(game)
+  // The Bottleneck search re-solves three times, so it runs once per sim second (04).
+  const second = Math.floor(game.time)
+  const search = model.bottleneckAt < 0 || second !== model.bottleneckAt
+  const flow = solveFlow(game)
+  const bottleneck = search ? bottleneckOf(game, flow) : model.bottleneck
+  const ledger: Ledger = { ...flow, bottleneck }
   // An incident drops the clock to 1×, so the player has time to respond.
   const incident = events.some((event) => event._tag === 'IncidentStarted')
-  let next: Model = { ...model, game, sandbox: run, speed: incident ? 1 : model.speed }
+  let next: Model = {
+    ...model,
+    game,
+    sandbox: run,
+    speed: incident ? 1 : model.speed,
+    carry: owed - steps,
+    bottleneck,
+    bottleneckAt: search ? second : model.bottleneckAt,
+  }
   const commands: Array<AnyCommand> = [sync(next)]
   const logs: Array<LogEntry> = []
 
@@ -332,12 +365,10 @@ const tick = (model: Model): Result => {
     logs.push(line(game.time, 'GoalChanged', { goal }))
     next = { ...next, lastGoal: goal }
   }
-  const bottleneck = ledger.bottleneck
-    ? `${ledger.bottleneck}:${ledger.nodes[ledger.bottleneck]?.limit ?? 'none'}`
-    : ''
-  if (bottleneck !== next.lastBottleneck) {
-    logs.push(line(game.time, 'BottleneckChanged', { bottleneck: bottleneck || null }))
-    next = { ...next, lastBottleneck: bottleneck }
+  const marker = bottleneck ? `${bottleneck}:${ledger.nodes[bottleneck]?.limit ?? 'none'}` : ''
+  if (marker !== next.lastBottleneck) {
+    logs.push(line(game.time, 'BottleneckChanged', { bottleneck: marker || null }))
+    next = { ...next, lastBottleneck: marker }
   }
   if (game.time - next.sampledAt >= SAMPLE_EVERY) {
     logs.push(line(game.time, 'Sample', sampleOf(next, ledger)))
@@ -431,6 +462,8 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
     undo: null,
     change: null,
     delta: null,
+    bottleneck: null,
+    bottleneckAt: -1,
     nodeHistory: {},
     savedAt: game.time,
     sampledAt: game.time,
@@ -445,7 +478,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
 /** Changes the free Sandbox's demand or mix in place. */
 const tuneFree = (model: Model, game: Game): Result => {
   if (model.sandbox?.id !== null) return { model }
-  const next: Model = { ...model, game }
+  const next: Model = { ...model, game, bottleneckAt: -1 }
   return { model: next, commands: [sync(next)] }
 }
 
@@ -475,7 +508,14 @@ const handle = (model: Model, message: Message): Result =>
       Option.match(parseSave(json), {
         onNone: () => ({ model }),
         onSome: (game) => ({
-          model: { ...model, game, saved: true, savedAt: game.time, sampledAt: game.time },
+          model: {
+            ...model,
+            game,
+            saved: true,
+            savedAt: game.time,
+            sampledAt: game.time,
+            bottleneckAt: -1,
+          },
         }),
       }),
 
@@ -512,6 +552,8 @@ const handle = (model: Model, message: Message): Result =>
         game: model.company ?? newGame(),
         sandbox: null,
         company: null,
+        bottleneck: null,
+        bottleneckAt: -1,
         freeBoard,
       }
       return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
@@ -789,9 +831,10 @@ const handle = (model: Model, message: Message): Result =>
       if (!game || !model.undo) return withToast(model, 'Nothing to undo.', 'plain')
       const label = model.undo.label
       const next: Model = {
-        ...beginChange(model, `Undid ${label}`, figuresOf(solve(model.game))),
+        ...beginChange(model, `Undid ${label}`, figuresOf(solveFlow(model.game))),
         game,
         undo: null,
+        bottleneckAt: -1,
       }
       return withToast(next, `Undid: ${label}.`, 'plain', [sync(next)])
     },
@@ -843,10 +886,10 @@ const handle = (model: Model, message: Message): Result =>
           `${INCIDENTS[model.game.incident.kind].name} is still running.`,
           'warn',
         )
-      const game = forceIncident(model.game, solve(model.game), kind)
+      const game = forceIncident(model.game, solveFlow(model.game), kind)
       if (!game)
         return withToast(model, `${INCIDENTS[kind].name} has no target in this Design.`, 'warn')
-      const next: Model = { ...model, game, panel: 'none' }
+      const next: Model = { ...model, game, panel: 'none', bottleneckAt: -1 }
       return { model: next, commands: [sync(next)] }
     },
     LogExported: () => ({ model, commands: [ExportLog({})] }),
@@ -874,7 +917,7 @@ const logged = (model: Model, message: Message, result: Result): Result => {
   const time = after.game.time
   const raised = after.toast && after.toast.id !== model.toast?.id ? after.toast : null
   if (!QUIET.has(message._tag)) {
-    const ledger: Ledger = solve(model.game)
+    const ledger: Ledger = ledgerOf(model)
     const refused =
       raised?.tone === 'warn' && after.game === model.game ? raised.message : undefined
     logs.push(

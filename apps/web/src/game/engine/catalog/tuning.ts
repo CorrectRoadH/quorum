@@ -6,3 +6,34 @@ export const PLAYTEST_PACE = 2
 export const INCIDENT_GAP = 200
 /** Sim seconds from the Pre-seed raise to the first incident. */
 export const FIRST_INCIDENT_AFTER = 90
+
+/** The pacing knobs the Simulation reads. The live game plays faster than the design. */
+export type Tuning = Readonly<{
+  /** Multiplies the user growth rate `g`. */
+  pace: number
+  /** Mean sim seconds between incidents. */
+  incidentGap: number
+  /** Sim seconds from the Pre-seed raise to the first incident. */
+  firstIncidentAfter: number
+}>
+
+/** What the live game plays at: the playtest knobs above. */
+export const LIVE_TUNING: Tuning = {
+  pace: PLAYTEST_PACE,
+  incidentGap: INCIDENT_GAP,
+  firstIncidentAfter: FIRST_INCIDENT_AFTER,
+}
+
+/**
+ * The design values (16 "User growth", 11 "Incident timing"). Tests and pacing
+ * bots pass these to check the design's targets; the live game does not use
+ * them (see the divergence log in 16).
+ */
+export const DESIGN_TUNING: Tuning = {
+  pace: 1,
+  incidentGap: 720,
+  firstIncidentAfter: 600,
+}
+
+/** The design's cost index per Era (16 "Cost index"). The live game uses `EraDef.costIndex`. */
+export const DESIGN_COST_INDEX: ReadonlyArray<number> = [1, 1, 25]

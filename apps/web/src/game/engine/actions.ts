@@ -11,7 +11,6 @@ import {
   POOL_LIMITS,
   REQUEST_KINDS,
   RESEARCH,
-  RESTART_SECONDS,
   RUNTIMES,
   SAMPLE_RATES,
   SIZES,
@@ -36,6 +35,7 @@ import {
   replacePrice,
   researchReady,
   resizePrice,
+  restarted,
   runtimeReady,
   vcpuOf,
 } from './lookups.ts'
@@ -97,9 +97,6 @@ const spend = (game: Game, price: number, what: string, apply: (game: Game) => G
     ? no(Refusal.Unaffordable({ what, price, currency: 'cash' }))
     : ok(apply({ ...game, cash: game.cash - price }))
 
-/** A restart: the Node is down for a moment and comes back cold. */
-const restarted: Partial<GameNode> = { down: RESTART_SECONDS, warm: 0 }
-
 /* ---------- placing and removing ---------- */
 
 const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: number): GameNode => {
@@ -117,6 +114,7 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     localDb: false,
     sample: 1,
     down: 0,
+    downCause: 'restart',
     warm:
       type === 'server' || type === 'cache' || type === 'database' || type === 'replica' ? 0 : 1,
     credits: 0,
@@ -242,7 +240,7 @@ export const resize = (game: Game, id: string, direction: 1 | -1): Action =>
     const lowest = def.sized ? 0 : 1
     if (direction === -1) {
       if (node.size <= lowest) return notAllowed(`${def.name} is at its smallest size.`)
-      return ok(patch(game, id, { size: node.size - 1, ...(def.sized ? restarted : {}) }))
+      return ok(patch(game, id, { size: node.size - 1, ...(def.sized ? restarted(node) : {}) }))
     }
     const price = resizePrice(game, node)
     if (price === null || node.size >= maxSize(node))
@@ -251,7 +249,7 @@ export const resize = (game: Game, id: string, direction: 1 | -1): Action =>
       ? `${SIZES[node.size + 1]?.name ?? 'Next size'}`
       : `Size ${node.size + 1}`
     return spend(game, price, label, (paid) =>
-      patch(paid, id, { size: node.size + 1, ...(def.sized ? restarted : {}) }),
+      patch(paid, id, { size: node.size + 1, ...(def.sized ? restarted(node) : {}) }),
     )
   })
 
@@ -262,7 +260,7 @@ export const setFamily = (game: Game, id: string, family: FamilyId): Action =>
     return ok(
       patch(game, id, {
         family,
-        ...restarted,
+        ...restarted(node),
         credits: family === 'burstable' ? (CREDIT_CAP * vcpuOf(node)) / 2 : 0,
       }),
     )
@@ -285,7 +283,7 @@ export const setRuntime = (game: Game, id: string, runtime: RuntimeId): Action =
         framework,
         workers: def.pool ? defaultWorkers(node, runtime) : node.workers,
         leak: 0,
-        ...restarted,
+        ...restarted({ ...node, runtime }),
       }),
     )
   })
@@ -299,7 +297,7 @@ export const setFramework = (game: Game, id: string, framework: FrameworkId): Ac
     if (def.language !== null && def.language !== RUNTIMES[node.runtime].language)
       return notAllowed(`${def.name} needs ${LANGUAGES[def.language].name}.`)
     if (node.framework === framework) return ok(game)
-    return ok(patch(game, id, { framework, ...restarted }))
+    return ok(patch(game, id, { framework, ...restarted(node) }))
   })
 
 export const setWorkers = (game: Game, id: string, workers: number): Action =>
@@ -328,7 +326,7 @@ export const replace = (game: Game, id: string): Action =>
     node.down !== -1
       ? notAllowed(`${COMPONENTS[node.type].name} has not failed.`)
       : spend(game, replacePrice(game, node), 'A replacement', (paid) =>
-          patch(paid, id, restarted),
+          patch(paid, id, restarted(node)),
         ),
   )
 
@@ -339,7 +337,7 @@ export const restart = (game: Game, id: string): Action =>
       ? notAllowed('Only App Servers restart.')
       : isDown(node)
         ? notAllowed('It is already down.')
-        : ok(patch(game, id, { down: 1, warm: 0, leak: 0 })),
+        : ok(patch(game, id, { ...restarted(node), leak: 0 })),
   )
 
 /** Adds the missing index: ends a Slow query incident. Needs Query analysis to find it. */
@@ -400,7 +398,7 @@ export const collect = (game: Game): Game => ({
 export const canRaise = (game: Game): boolean =>
   !game.sandbox && !isFinalEra(game) && game.users >= eraOf(game).raiseAt
 
-const advanceEra = (game: Game, raised: boolean): Action => {
+const advanceEra = (game: Game, raised: boolean, firstIncidentAfter: number): Action => {
   if (!canRaise(game)) {
     const era = eraOf(game)
     return notAllowed(`Reach ${era.raiseAt.toLocaleString('en-US')} users first.`)
@@ -413,15 +411,17 @@ const advanceEra = (game: Game, raised: boolean): Action => {
     cash: game.cash + (raised ? era.grant : 0),
     equity: raised ? game.equity * (1 - era.dilution) : game.equity,
     declined: !raised,
-    nextIncidentAt: stage === 1 ? game.time + FIRST_INCIDENT_AFTER : game.nextIncidentAt,
+    nextIncidentAt: stage === 1 ? game.time + firstIncidentAfter : game.nextIncidentAt,
   })
 }
 
 /** Takes the round: a grant for Equity, and full growth in the next Era. */
-export const raise = (game: Game): Action => advanceEra(game, true)
+export const raise = (game: Game, firstIncidentAfter = FIRST_INCIDENT_AFTER): Action =>
+  advanceEra(game, true, firstIncidentAfter)
 
 /** Declines the round: keeps Equity, no grant, and slower growth in the next Era. */
-export const decline = (game: Game): Action => advanceEra(game, false)
+export const decline = (game: Game, firstIncidentAfter = FIRST_INCIDENT_AFTER): Action =>
+  advanceEra(game, false, firstIncidentAfter)
 
 export const offer = (game: Game) => {
   const next = nextEra(game)

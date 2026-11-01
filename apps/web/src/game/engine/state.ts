@@ -20,6 +20,9 @@ export const FrameworkId = Schema.Literals(FRAMEWORK_IDS)
 export const ResearchId = Schema.Literals(RESEARCH_IDS)
 export const IncidentId = Schema.Literals(INCIDENT_IDS)
 
+export const DownCause = Schema.Literals(['restart', 'failure', 'oom'])
+export type DownCause = typeof DownCause.Type
+
 /** One placed Component. */
 export const GameNode = Schema.Struct({
   id: Schema.String,
@@ -39,6 +42,8 @@ export const GameNode = Schema.Struct({
   sample: Schema.Finite,
   /** Seconds left down. Minus one means down until replaced. */
   down: Schema.Finite,
+  /** Why the Node is down: a restart, a failure, or an out-of-memory kill. */
+  downCause: DownCause.pipe(Schema.withDecodingDefaultKey(Effect.succeed('restart' as const))),
   /** 0 when cold, 1 when warm. */
   warm: Schema.Finite,
   /** Burstable CPU credits, in core-seconds. */

@@ -1,12 +1,14 @@
 import { Schema } from 'effect'
 import { BUILD_GROUPS, type BuildGroup } from './engine/catalog.ts'
 import { Progress, SANDBOX_IDS } from './engine/sandbox.ts'
+import type { Ledger } from './engine/ledger.ts'
+import { solveFlow } from './engine/solve.ts'
 import { ComponentId, Game, ResearchId } from './engine/state.ts'
 
 /* ==========================================================================
    Quorum — what the UI holds. The Game is the saved company; everything else
    is the player's view of it. The Ledger is never stored: views derive it
-   from the Game with `solve`.
+   from the Game with `ledgerOf`.
    ========================================================================== */
 
 export const Route = Schema.Literals(['title', 'lab'])
@@ -89,11 +91,12 @@ export const Delta = Schema.Struct({
 })
 export type Delta = typeof Delta.Type
 
-/** The Design before the last board action, and the Cash it cost. */
+/** The Design before the last board action, and the Cash it moved. */
 export const Undo = Schema.Struct({
   label: Schema.String,
   game: Game,
-  spent: Schema.Finite,
+  /** The signed Cash change of the action: negative for a purchase, positive for a sale. */
+  cash: Schema.Finite,
   at: Schema.Finite,
 })
 export type Undo = typeof Undo.Type
@@ -123,6 +126,8 @@ export const Model = Schema.Struct({
   /** The group that was open last, so the dock can animate out of it and back from it. */
   speed: Schema.Finite,
   paused: Schema.Boolean,
+  /** Steps owed to the clock but not run yet: a tick at 1× is 2.5 Steps. */
+  carry: Schema.Finite,
   /** Game time of the last save, so the clock saves every few seconds. */
   savedAt: Schema.Finite,
   /** Game time of the last log sample. */
@@ -132,6 +137,10 @@ export const Model = Schema.Struct({
   change: Schema.NullOr(Change),
   delta: Schema.NullOr(Delta),
   undo: Schema.NullOr(Undo),
+  /** The Bottleneck, searched once per sim second, not on every tick. */
+  bottleneck: Schema.NullOr(Schema.String),
+  /** The sim second of the last search; minus one searches again on the next tick. */
+  bottleneckAt: Schema.Finite,
   /** Utilization per Node over the last two minutes, for Metrics. */
   nodeHistory: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
   /** The last goal and bottleneck logged, so the log records changes only. */
@@ -139,3 +148,9 @@ export const Model = Schema.Struct({
   lastBottleneck: Schema.String,
 })
 export type Model = typeof Model.Type
+
+/** The Ledger the views show: the flow solve, with the Bottleneck the clock last searched. */
+export const ledgerOf = (model: Model): Ledger => ({
+  ...solveFlow(model.game),
+  bottleneck: model.bottleneck,
+})

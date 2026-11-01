@@ -154,7 +154,7 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     cost: 20,
     era: 0,
     requires: [],
-    blurb: 'Errors split by cause: stranded, dropped, refused, down, stale.',
+    blurb: 'Errors split by cause: stranded, dropped, refused, down, stale, oom.',
   }),
   research({
     id: 'metrics',

@@ -10,9 +10,8 @@ import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'
 import { nextGoal } from './engine/goals.ts'
-import { solve } from './engine/solve.ts'
 import type { Message } from './message.ts'
-import type { Model } from './model.ts'
+import { ledgerOf, type Model } from './model.ts'
 
 /* ==========================================================================
    The lab is the game, fullscreen. The title screen is in title.ts.
@@ -23,7 +22,7 @@ const TOP =
   'contents compact:pointer-events-none compact:absolute compact:inset-x-0 compact:top-0 compact:z-20 compact:flex compact:flex-col compact:gap-1.5 compact:[--toolbar-w:196px] compact:pt-[max(8px,env(safe-area-inset-top))] compact:pr-[max(8px,env(safe-area-inset-right))] compact:pb-0 compact:pl-[max(8px,env(safe-area-inset-left))]'
 
 export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const ledger = solve(model.game)
+  const ledger = ledgerOf(model)
   return h.main(
     [h.Class('relative h-full overflow-hidden bg-canvas')],
     [

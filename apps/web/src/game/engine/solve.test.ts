@@ -10,7 +10,8 @@ import {
   type Action,
 } from './actions.ts'
 import { newGame, preseedGame } from './company.ts'
-import { solve } from './solve.ts'
+import { serverModel } from './capacity.ts'
+import { cosTurns, diurnal, solve, weekly } from './solve.ts'
 import type { Game, GameNode } from './state.ts'
 
 const rich = (game: Game): Game => ({ ...game, cash: 1e9, insight: 1e9 })
@@ -33,6 +34,29 @@ const preseed = (users: number, researched: Game['researched'] = []): Game => ({
   ...rich(preseedGame()),
   users,
   researched: [...preseedGame().researched, ...researched],
+})
+
+describe('the daily cycle', () => {
+  // The calendar starts at 14:00, and one sim second is one calendar minute.
+  const at = (hour: number): number => (hour - 14) * 60
+
+  test('peaks at 20:00 and bottoms out at 08:00', () => {
+    expect(Math.abs(diurnal(at(20)) - 1.45)).toBeLessThan(1e-12)
+    expect(Math.abs(diurnal(at(32)) - 0.55)).toBeLessThan(1e-12)
+  })
+
+  test('matches Math.cos at every calendar minute without calling it', () => {
+    for (let minute = 0; minute < 1440; minute += 1) {
+      const reference = 1 + 0.45 * Math.cos((2 * Math.PI * (minute / 60 - 20)) / 24)
+      expect(Math.abs(diurnal(minute - 14 * 60) - reference)).toBeLessThan(1e-9)
+    }
+    for (let turns = -2; turns <= 2; turns += 0.001)
+      expect(Math.abs(cosTurns(turns) - Math.cos(2 * Math.PI * turns))).toBeLessThan(1e-12)
+  })
+
+  test('weekends use the weekend factor, which is 1 until Ventures exist', () => {
+    for (let day = 0; day < 14; day += 1) expect(weekly(day * 1440)).toBe(1)
+  })
 })
 
 describe('the Garage box', () => {
@@ -122,20 +146,60 @@ describe('connections', () => {
   })
 })
 
+describe('the network limit', () => {
+  test('a nano box moves 0.5 Gbps: about 781 page views a second at 80 KB', () => {
+    const game = preseed(1_000)
+    const node = { ...(game.nodes.find((entry) => entry.id === 'server') as GameNode), size: 0 }
+    const model = serverModel({
+      game,
+      node,
+      arriving: { page: 10 },
+      callLatency: { reads: 3, writes: 3, auth: 0 },
+      delegated: false,
+      local: false,
+      inflight: 0,
+      boost: 1,
+      sampling: 0,
+      hashing: 1,
+    })
+    const network = model.resources.network
+    expect(network?.used).toBeCloseTo(800)
+    expect((network?.total ?? 0) / 80).toBeCloseTo(781.25)
+  })
+
+  test('Garage and Pre-seed designs never hit it', () => {
+    for (const game of [newGame(), preseed(5_000)])
+      for (const entry of Object.values(solve(game).nodes)) expect(entry.limit).not.toBe('network')
+  })
+})
+
 describe('the event loop', () => {
+  // 06: added_p99 = loop_block_ms × min(1, 2ρ), so the stall shows in full from ρ = 0.5. This box
+  // runs at about ρ = 0.57 at the 20:00 peak, behind a Database big enough to stay out of the way.
   const nodeServer = (researched: Game['researched']): Game => {
-    const game = ok(setRuntime(preseed(1_500, ['lang-node', ...researched]), 'server', 'node'))
-    return tune(game, 'server', { warm: 1, down: 0 })
+    const game = ok(setRuntime(preseed(2_500, ['lang-node', ...researched]), 'server', 'node'))
+    return tune(tune({ ...game, time: 6 * 60 }, 'server', { warm: 1, down: 0 }), 'database', {
+      size: 4,
+    })
   }
 
   test('login hashing stalls API reads on Node.js until the libuv pool takes it', () => {
     const blocked = solve(nodeServer([])).kinds.read
     const offloaded = solve(nodeServer(['libuv-pool'])).kinds.read
-    expect(blocked?.p99 ?? 0).toBeGreaterThan((offloaded?.p99 ?? 0) + 40)
-    // The mean moves far less than the tail.
+    expect(blocked?.p99 ?? 0).toBeGreaterThan((offloaded?.p99 ?? 0) + 30)
+    // The stall hits the slowest 2%: the p95 does not move, and the mean moves far less than the tail.
+    expect((blocked?.p95 ?? 0) - (offloaded?.p95 ?? 0)).toBeLessThan(1)
     expect((blocked?.mean ?? 0) - (offloaded?.mean ?? 0)).toBeLessThan(
       ((blocked?.p99 ?? 0) - (offloaded?.p99 ?? 0)) / 2,
     )
+  })
+
+  test('a quiet loop stalls less: the stall scales with min(1, 2ρ)', () => {
+    const quiet = (researched: Game['researched']) =>
+      solve({ ...nodeServer(researched), users: 600 }).kinds.read?.p99 ?? 0
+    const busy = (researched: Game['researched']) =>
+      solve(nodeServer(researched)).kinds.read?.p99 ?? 0
+    expect(quiet([]) - quiet(['libuv-pool'])).toBeLessThan((busy([]) - busy(['libuv-pool'])) * 0.5)
   })
 })
 

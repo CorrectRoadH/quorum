@@ -76,6 +76,10 @@ export const ERAS: ReadonlyArray<EraDef> = [
 export const RPS_PER_USER = 0.02
 /** The daily cycle: demand peaks at 20:00 and bottoms out at 08:00. */
 export const DIURNAL_AMPLITUDE = 0.45
+/** Weekend demand relative to weekdays. Each Venture sets its own; the default Venture is not defined yet. */
+export const WEEKEND_FACTOR = 1
+/** Sim seconds in one Step of the Simulation. */
+export const STEP_SECONDS = 0.1
 /** The calendar starts at 14:00 on day 1, so the Garage ends near the evening peak. One sim second is one calendar minute. */
 export const CALENDAR_START = 14 * 60
 /** Users leave at this rate per second at the worst Apdex. */

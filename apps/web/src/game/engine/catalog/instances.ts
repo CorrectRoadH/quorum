@@ -1,13 +1,20 @@
 /* Instance types, and the hardware constants every sized Node shares. */
 
+/**
+ * Each step doubles vCPU and RAM, up to `metal` (96 vCPU, a 1.5× last step).
+ * `gbps` is the network bandwidth. Saves store an index here, so sizes only
+ * ever append.
+ */
 export const SIZES = [
-  { name: 'nano', vcpu: 0.5 },
-  { name: 'micro', vcpu: 1 },
-  { name: 'small', vcpu: 2 },
-  { name: 'medium', vcpu: 4 },
-  { name: 'large', vcpu: 8 },
-  { name: 'xlarge', vcpu: 16 },
-  { name: '2xlarge', vcpu: 32 },
+  { name: 'nano', vcpu: 0.5, gbps: 0.5 },
+  { name: 'micro', vcpu: 1, gbps: 1 },
+  { name: 'small', vcpu: 2, gbps: 2 },
+  { name: 'medium', vcpu: 4, gbps: 5 },
+  { name: 'large', vcpu: 8, gbps: 10 },
+  { name: 'xlarge', vcpu: 16, gbps: 12.5 },
+  { name: '2xlarge', vcpu: 32, gbps: 25 },
+  { name: '4xlarge', vcpu: 64, gbps: 50 },
+  { name: 'metal', vcpu: 96, gbps: 100 },
 ] as const
 
 export const FAMILY_IDS = ['burstable', 'general', 'compute', 'memory'] as const
@@ -53,7 +60,11 @@ export const LOCAL_DB_CONTENTION = 1.5
 export const MAX_CONNECTIONS = 100
 /** Server connections a pooler keeps open to each database. */
 export const POOLER_CONNECTIONS = 20
-/** Seconds a Node is down while it restarts after a resize or a change of runtime. */
+/** Seconds a Node is down while it restarts after a resize or a change of runtime. App Servers add their runtime's startup. */
 export const RESTART_SECONDS = 2
+/** Seconds a VM takes to come back, however fast its runtime boots. */
+export const VM_RESTART_SECONDS = 1
+/** The kernel kills a process whose memory reaches this share of the box's RAM. */
+export const OOM_RATIO = 1.25
 /** Seconds a cold Node needs to warm up. */
 export const WARMUP_SECONDS = 15

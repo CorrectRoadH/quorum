@@ -27,6 +27,8 @@ const limitHint = (game: Game, node: GameNode, limit: Limit): string => {
         : `Every worker on ${name} is busy, mostly waiting on the database.`
     case 'connections':
       return 'Postgres is refusing connections: too many app processes hold pools. Shrink pools or add a Connection Pooler.'
+    case 'network':
+      return `${name} is sending as many bytes as its network card moves. Resize it, or add a copy behind a Load Balancer.`
     case 'disk':
       return `The ${name} working set no longer fits in RAM, so reads hit disk. Resize it or pick the Memory family.`
     case 'cpu':

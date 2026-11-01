@@ -5,15 +5,17 @@ import {
   CREDIT_CAP,
   DECLINED_GROWTH,
   FUNNEL_GROWTH,
-  PLAYTEST_PACE,
+  LIVE_TUNING,
+  OOM_RATIO,
   PROFILES,
-  RESTART_SECONDS,
+  RUNTIMES,
   WARMUP_SECONDS,
+  type Tuning,
 } from './catalog.ts'
 import { advanceIncident, directIncidents } from './director.ts'
 import { StepEvent, type AlertRule } from './events.ts'
 import type { Ledger } from './ledger.ts'
-import { drawerSize, eraOf, has, vcpuOf } from './lookups.ts'
+import { drawerSize, eraOf, has, restarted, vcpuOf } from './lookups.ts'
 import { solveFlow } from './solve.ts'
 import type { Alarms, Game, GameNode, Sample } from './state.ts'
 
@@ -31,15 +33,18 @@ export type StepResult = Readonly<{
 
 const HISTORY = 600
 
-/** Users grow along an S-curve while Apdex beats the Era's target, and leave fast when it does not. */
-export const growthOf = (game: Game, ledger: Ledger): number => {
+/**
+ * Users grow along an S-curve while Apdex beats the Era's target, and leave fast
+ * when it does not. `pace` multiplies `g`: the live game plays faster than the design.
+ */
+export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): number => {
   const era = eraOf(game)
   const target = era.apdexTarget
   const health = Math.max(-1, Math.min(1, (game.apdex - target) / (1 - target)))
   if (health < 0) return CHURN * game.users * health
   const rate =
     era.growth *
-    PLAYTEST_PACE *
+    pace *
     (game.declined ? DECLINED_GROWTH : 1) *
     (has(game, 'funnels') ? FUNNEL_GROWTH : 1)
   return rate * game.users * Math.max(0, 1 - game.users / ledger.market) * health
@@ -54,7 +59,12 @@ const advanceNode = (
   let next = node
   if (node.down > 0) {
     const down = Math.max(0, node.down - seconds)
-    next = { ...next, down, warm: down === 0 ? 0 : node.warm }
+    next = {
+      ...next,
+      down,
+      warm: down === 0 ? 0 : node.warm,
+      downCause: down === 0 ? 'restart' : node.downCause,
+    }
   } else if (node.down === 0 && node.warm < 1) {
     next = { ...next, warm: Math.min(1, node.warm + seconds / WARMUP_SECONDS) }
   }
@@ -68,11 +78,20 @@ const advanceNode = (
       events.push(StepEvent.CreditsExhausted({ nodeId: node.id }))
     next = { ...next, credits: balance }
   }
-  // A leaking process grows until the kernel kills it.
+  // A pool the player sized too big for its RAM swaps, then the kernel kills it, and so does a
+  // leak. Runtimes that size themselves (mod_php, Puma, Node.js) only swap: the player has no
+  // pool size to fix, only the box.
   const ram = ledger.nodes[node.id]?.resources.ram
-  if (node.leak > 0 && ram && ram.used > ram.total * 1.25) {
+  const killable = RUNTIMES[node.runtime].pool || node.leak > 0
+  if (
+    node.type === 'server' &&
+    node.down === 0 &&
+    killable &&
+    ram &&
+    ram.used > ram.total * OOM_RATIO
+  ) {
     events.push(StepEvent.OutOfMemory({ nodeId: node.id }))
-    next = { ...next, leak: 0, down: RESTART_SECONDS, warm: 0 }
+    next = { ...next, ...restarted(node, 'oom'), leak: 0 }
   }
   return next
 }
@@ -111,7 +130,7 @@ const advanceAlarms = (
   return next
 }
 
-export const step = (game: Game, seconds: number): StepResult => {
+export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING): StepResult => {
   const ledger = solveFlow(game)
   const events: Array<StepEvent> = []
 
@@ -135,9 +154,10 @@ export const step = (game: Game, seconds: number): StepResult => {
   const nodes = game.nodes.map((node) => advanceNode(node, ledger, seconds, events))
   const users = game.sandbox
     ? game.users
-    : Math.max(20, game.users + growthOf(game, ledger) * seconds)
+    : Math.max(20, game.users + growthOf(game, ledger, tuning.pace) * seconds)
   const apdex = game.apdex + (ledger.apdex - game.apdex) * Math.min(1, seconds / APDEX_WINDOW)
-  const time = game.time + seconds
+  // Sim time stays on a microsecond grid, so ten 0.1 s Steps make exactly one second.
+  const time = Math.round((game.time + seconds) * 1e6) / 1e6
   const alarms = advanceAlarms(game, ledger, seconds, events)
 
   const crossedSecond = Math.floor(time) > Math.floor(game.time)
@@ -171,7 +191,7 @@ export const step = (game: Game, seconds: number): StepResult => {
   const running = advanceIncident(next, ledger, seconds)
   next = running.game
   events.push(...running.events)
-  const directed = directIncidents(next, ledger)
+  const directed = directIncidents(next, ledger, tuning.incidentGap)
   next = directed.game
   events.push(...directed.events)
 

@@ -48,7 +48,15 @@ import {
   type ComponentId,
 } from './engine/catalog.ts'
 import type { Ledger } from './engine/ledger.ts'
-import { burnOf, drawerSize, eraOf, has, replacePrice, resizePrice } from './engine/lookups.ts'
+import {
+  burnOf,
+  drawerSize,
+  eraOf,
+  has,
+  replacePrice,
+  resizePrice,
+  sizeLabel,
+} from './engine/lookups.ts'
 import type { Game, GameNode } from './engine/state.ts'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
@@ -864,7 +872,7 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
     glyph: analytics ? 'more' : 'resize',
     text: analytics
       ? `More samples  ${priceLabel(game.sandbox, price)}`.trim()
-      : `Resize to ${SIZES[node.size + 1]?.name ?? ''}  ${priceLabel(game.sandbox, price)}`.trim(),
+      : `Resize to ${sizeLabel(node, node.size + 1)}  ${priceLabel(game.sandbox, price)}`.trim(),
     enabled: game.cash >= price,
     tone: game.cash >= price ? 'accent' : 'muted',
   }
@@ -1207,7 +1215,7 @@ class NodeView {
     this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
     this.level.text = def.sized
       ? (SIZES[node.size]?.name ?? '')
-      : node.type === 'payments' || node.type === 'analytics'
+      : def.steps > 1
         ? `S${node.size}`
         : ''
     this.level.style.fill = colors.muted
