@@ -19,12 +19,12 @@ with numbers.
 
 ## Audience
 
-| Segment                          | What they want                                                   | What the game gives them                                                                  |
-| -------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Working backend engineers        | To see their real knowledge pay off and to argue about runtimes. | Mechanics that behave like production. Their instincts work, and their biases are tested. |
-| Junior engineers and students    | To learn system design without reading a book first.             | Fast feedback. Each concept arrives when the player first needs it.                       |
-| Factorio and Upload Labs players | A new optimization problem with depth.                           | Throughput chains, ratios, bottlenecks, and an end goal they can measure.                 |
-| Idle game players                | Numbers that grow, progress while away, and a prestige loop.     | Offline progress, automation as a reward, and Legacy that changes the next run.           |
+| Segment                          | What they want                                                   | What the game gives them                                                                     |
+| -------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Working backend engineers        | To see their real knowledge pay off and to argue about runtimes. | Mechanics that behave like production. Their instincts work, and their biases are tested.    |
+| Junior engineers and students    | To learn system design without reading a book first.             | Fast feedback. Each concept arrives when the player first needs it, or earlier in a Sandbox. |
+| Factorio and Upload Labs players | A new optimization problem with depth.                           | Throughput chains, ratios, bottlenecks, and an end goal they can measure.                    |
+| Idle game players                | Numbers that grow, progress while away, and a prestige loop.     | Offline progress, automation as a reward, and Legacy that changes the next run.              |
 
 The primary audience is the first row. Every mechanic must survive review by a senior engineer.
 The other rows decide how the game teaches and paces.

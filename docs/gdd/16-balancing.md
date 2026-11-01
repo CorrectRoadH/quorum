@@ -162,7 +162,8 @@ Pillar 2 says no option strictly dominates another. The test checks it.
 For every option set (languages, variants within a language, frameworks within a language, cache
 strategies, replication modes, deploy strategies, pricing models, Component variants):
 
-1. Build a library of reference designs: each Era's typical design, plus the 32 Challenge setups.
+1. Build a library of reference designs: each Era's typical design, the 32 Challenge setups, and every guided
+   Sandbox.
 2. For each reference design, apply each option and run 10 sim minutes.
 3. Score each option on revenue per Burn, p99, errors, and Dev Hours.
 4. **Pass** if every option beats every sibling option by at least 10% on at least one of the four

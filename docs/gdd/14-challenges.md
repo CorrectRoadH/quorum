@@ -1,6 +1,92 @@
-# 14. Challenges and achievements
+# 14. Sandbox, Challenges, and achievements
 
 [Index](./README.md) · Previous: [Exit and Legacy](./13-prestige.md) · Next: [Interface and game feel](./15-ui-ux.md)
+
+## Sandbox
+
+A **Sandbox** is a Board outside any Company. It runs the same Simulation as a Company. Nothing in a
+Sandbox changes a Company, and nothing in a Company changes a Sandbox. There are two kinds: guided
+and free. [ADR 0003](../adr/0003-sandbox-teaches-outside-the-company.md) records why.
+
+The Sandbox fixes one problem: a Company teaches each mechanic when the player first needs it, so a
+player who wants to learn zones or GC pauses must first play the Company to Series A. The Garage Era
+is still the tutorial for a new player ([Progression](./10-progression.md#era-0-garage)).
+
+### Guided Sandboxes
+
+A guided Sandbox teaches one mechanic through two to four ordered objectives, like a Factorio
+tutorial level.
+
+- **Start.** A fixed Design with the problem already on the Board, or one that appears within the
+  first minute: a red card, a long tail, or Stranded requests.
+- **Objectives.** Each objective is one sentence that states the goal, for example "Keep p99 under
+  300 ms for 2 minutes." It passes when its rule on the Ledger holds for 90 to 180 sim seconds
+  without a break. A break starts the hold again.
+- **Escalation.** Later objectives raise demand, add a Burn budget, or script an Incident, so the
+  first fix stops being enough. An Incident the Design must survive fires again after each failure.
+  An Incident the player must answer by hand, such as a slow query, fires once.
+- **Palette.** The research the Sandbox grants. It holds the fix, plus at least one wrong option that
+  a reasonable player would try. The wrong option plays out, so the player sees why it fails.
+- **Demand and seed.** Fixed and flat, with no daily cycle. Users do not grow or leave.
+- **Visibility.** The Sandbox grants the [visibility step](./12-observability.md#the-visibility-ladder)
+  that the mechanic needs. A player cannot learn tail latency without seeing the p99.
+- **Money.** None. Placing and resizing are free; Burn shows, because some objectives set a budget.
+- **Length.** Varies with the mechanic. At 1× speed the fastest pass takes 4 to 11 sim minutes, and
+  a first attempt takes longer. Later tracks are longer, as later Factorio tutorials are.
+
+A guided Sandbox has no text overlays, arrows, or step-by-step prompts. The Board, the Node cards, and
+the Tradeoff cards work as they do in a Company. The game teaches through consequences
+([Vision](./01-vision.md#what-quorum-is-not)).
+
+Results are pass or fail. There is no score, no histogram, and no server. Nothing pays Cash,
+Insight, or Legacy, because a reward would make the Sandbox a required grind
+([pillar 5](./01-vision.md#pillar-5-respect-the-player)).
+
+### Sandbox tracks
+
+A **Sandbox track** is the ordered set of guided Sandboxes for one Era. Every track is available from
+the start. Inside a track, each Sandbox opens when the player passes the one before it. When the
+player passes every Sandbox in a track, that Era's Challenges unlock ([Rules](#rules)).
+
+| Era      | Guided Sandbox       | The problem on the Board                            | The fix it teaches                                    |
+| -------- | -------------------- | --------------------------------------------------- | ----------------------------------------------------- |
+| Garage   | Out of Credits       | A Burstable box is throttled to 20%                 | Change the Instance type: vertical scaling            |
+| Garage   | Shared Box           | App and database on one box run out of RAM          | Split the database onto its own Node                  |
+| Garage   | Second Server        | One App Server at 100%                              | A Load Balancer and a second App Server               |
+| Pre-seed | Connection Limit     | More App Servers cause `refused` errors at Postgres | A Connection Pooler                                   |
+| Pre-seed | Event Loop Stall     | 5% `login` on Node.js raises the p99 of every kind  | Route `login` to its own App Servers, or change Stack |
+| Pre-seed | Read Mostly          | The database is the bottleneck on `q-read`          | A Cache or a Read Replica, and their tradeoffs        |
+| Seed     | Stampede             | A cache restart sends every miss to the database    | Stampede protection and cache warming                 |
+| Seed     | Slow Uploads         | `upload` holds App Server slots                     | A Queue and a Worker                                  |
+| Seed     | Bots                 | A `bot` flood takes Capacity from real users        | Rate limits and a WAF                                 |
+| Series A | Zone Outage          | A zone fails at minute 2                            | Multi-zone with spare capacity                        |
+| Series A | Cold Start           | New JVM Nodes are slow during a spike               | Warmup and spare capacity                             |
+| Series A | Stale Checkout       | `buy` reads its own write from a lagging replica    | Read-your-writes routing                              |
+| Series B | GC Pauses            | Heap above 90%: the p99 spikes and the p50 does not | More memory or a different collector                  |
+| Series B | Retry Storm          | Retries multiply load after a short outage          | Retry budgets, backoff, and load shedding             |
+| Series B | Analytics on Primary | `report` queries slow down checkout on the primary  | A Warehouse                                           |
+| Series C | Far Away             | Users in another region see 150 ms more latency     | A second region                                       |
+| Series C | Missed Write         | Reads miss the latest write                         | R + W > N                                             |
+| Series C | Hot Key              | One key receives 30% of reads                       | Key splitting and local caching                       |
+
+The list is a balance target. Each track ships with the milestone that adds its mechanics
+([Scope and roadmap](./17-scope-and-roadmap.md#milestones)). The Garage and Pre-seed tracks are in
+the build, and a test plays each one with its fix and with a wrong option.
+
+### Free Sandbox
+
+The free Sandbox is a test bench.
+
+- Every Component, Stack, research item, and visibility step is unlocked.
+- Cash is unlimited. Burn still shows, so the player sees what a Design costs.
+- The player sets the users and an Era's Request kind mix, sets the speed, and triggers any Incident
+  in the [catalog](./11-incidents.md#catalog).
+- There are no Users to grow, no Funding rounds, no Team, no Dev Hours, and no Insight. A free
+  Sandbox is Design and traffic only.
+- The player can copy the current Company's Design into a free Sandbox, like a staging environment,
+  to test a change before making it in the Company.
+- The free Sandbox keeps its Board in local storage between visits, apart from the Company save.
+- Achievements do not count in any Sandbox.
 
 ## Challenges
 
@@ -30,7 +116,8 @@ picks a direction, and each player's best results usually come from different de
 
 ### Rules
 
-- Challenges unlock by Era reached in any company.
+- An Era's Challenges unlock when the player reaches that Era in any Company or passes that Era's
+  [Sandbox track](#sandbox-tracks).
 - A Challenge's palette is fixed. Legacy perks do not apply. Every player has the same tools.
 - The seed is fixed. Incidents in a Challenge are scripted and the same for everyone.
 - Results upload as a design plus a seed, and the server re-runs them to verify. The server score is

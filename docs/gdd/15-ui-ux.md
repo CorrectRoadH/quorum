@@ -1,6 +1,6 @@
 # 15. Interface and game feel
 
-[Index](./README.md) · Previous: [Challenges](./14-challenges.md) · Next: [Balancing](./16-balancing.md)
+[Index](./README.md) · Previous: [Sandbox, Challenges, and achievements](./14-challenges.md) · Next: [Balancing](./16-balancing.md)
 
 This document applies [pillar 4: the board is the dashboard](./01-vision.md#pillar-4-the-board-is-the-dashboard)
 and [pillar 5: respect the player](./01-vision.md#pillar-5-respect-the-player).

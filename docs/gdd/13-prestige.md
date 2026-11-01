@@ -1,6 +1,6 @@
 # 13. Exit and Legacy
 
-[Index](./README.md) · Previous: [Observability](./12-observability.md) · Next: [Challenges and achievements](./14-challenges.md)
+[Index](./README.md) · Previous: [Observability](./12-observability.md) · Next: [Sandbox, Challenges, and achievements](./14-challenges.md)
 
 The prestige layer. A company ends in an **Exit**. The Exit pays **Legacy**. Legacy buys permanent
 perks and opens new **Ventures**, which change the rules of the next company. This follows the idle

@@ -27,6 +27,7 @@ Users are not a currency. They are the state that every currency depends on.
 | Funding grants    | One grant per round raised ([Funding](#funding)).                                                                                                                                    |
 | Subscriptions     | From the Pre-seed Era, the "Paid plans" feature adds a fixed revenue per paying user per calendar day, independent of requests. This makes revenue less spiky and rewards retention. |
 | Challenge rewards | None. Challenges pay in Legacy and badges ([Challenges](./14-challenges.md)).                                                                                                        |
+| Sandbox rewards   | None. A Sandbox pays nothing in any currency ([Sandbox](./14-challenges.md#sandbox)).                                                                                                |
 
 ### The Payments drawer
 

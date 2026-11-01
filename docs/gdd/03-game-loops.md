@@ -126,6 +126,8 @@ the early Eras and Playbooks remove repeated setup.
 - **Challenges.** Fixed puzzles inspired by real events. Each one scores cost, p99, and complexity on
   three histograms ([Challenges](./14-challenges.md)).
 - **Daily drill.** A seeded incident that every player gets on the same day.
+- **Sandbox.** Guided Sandboxes teach one mechanic each, and the free Sandbox is a test bench. Neither
+  feeds the Company ([Sandbox](./14-challenges.md#sandbox)).
 - **Public Era quarters.** An endless mode in which the player must beat growth and margin targets
   each quarter ([Progression](./10-progression.md#era-7-public)).
 - **Achievements.** Achievements reward knowledge and unusual builds, not hours played.

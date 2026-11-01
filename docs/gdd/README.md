@@ -16,25 +16,25 @@ latency hides the p99.
 
 ## Table of Contents
 
-| #   | Document                                           | Answers                                                                                  |
-| --- | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 1   | [Vision and pillars](./01-vision.md)               | What the game is, who it is for, and the rules every design decision follows.            |
-| 2   | [Influences and research](./02-influences.md)      | Why players love Upload Labs, Factorio, and Opus Magnum, and why some players quit.      |
-| 3   | [Game loops](./03-game-loops.md)                   | The six nested loops, from a two-second glance to a hundred-hour mastery goal.           |
-| 4   | [Simulation](./04-simulation.md)                   | How requests, capacity, queues, latency, errors, and users are calculated.               |
-| 5   | [Components](./05-components.md)                   | Every placeable Component, its real product, its stats, and its options.                 |
-| 6   | [Runtimes and frameworks](./06-runtimes.md)        | Languages, runtime variants, and frameworks as tradeoffs, not tiers.                     |
-| 7   | [Data tier](./07-data-tier.md)                     | Databases, caches, replicas, quorums, consistency, and storage.                          |
-| 8   | [Team and velocity](./08-team-and-velocity.md)     | Engineers, Dev Hours, features, tech debt, services, and Conway's law.                   |
-| 9   | [Economy](./09-economy.md)                         | Currencies, sources and sinks, the cloud bill, pricing models, and funding.              |
-| 10  | [Progression](./10-progression.md)                 | Eras, the research tree, product features, and pacing targets.                           |
-| 11  | [Incidents and reliability](./11-incidents.md)     | The incident catalog, the incident loop, SLOs, and error budgets.                        |
-| 12  | [Observability and Insight](./12-observability.md) | Fog of war for systems: what the player can see and how they earn the right to see more. |
-| 13  | [Exit and Legacy](./13-prestige.md)                | The prestige layer: Exits, Legacy, Ventures, and Mutators.                               |
-| 14  | [Challenges and achievements](./14-challenges.md)  | Fixed puzzles with histograms, daily drills, and achievements.                           |
-| 15  | [Interface and game feel](./15-ui-ux.md)           | The board, Node cards, feedback, bulk actions, and accessibility.                        |
-| 16  | [Balancing](./16-balancing.md)                     | Every formula, every tunable constant, and the pacing model.                             |
-| 17  | [Scope and roadmap](./17-scope-and-roadmap.md)     | What ships first, what exists in code today, and open questions.                         |
+| #   | Document                                                    | Answers                                                                                   |
+| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 1   | [Vision and pillars](./01-vision.md)                        | What the game is, who it is for, and the rules every design decision follows.             |
+| 2   | [Influences and research](./02-influences.md)               | Why players love Upload Labs, Factorio, and Opus Magnum, and why some players quit.       |
+| 3   | [Game loops](./03-game-loops.md)                            | The six nested loops, from a two-second glance to a hundred-hour mastery goal.            |
+| 4   | [Simulation](./04-simulation.md)                            | How requests, capacity, queues, latency, errors, and users are calculated.                |
+| 5   | [Components](./05-components.md)                            | Every placeable Component, its real product, its stats, and its options.                  |
+| 6   | [Runtimes and frameworks](./06-runtimes.md)                 | Languages, runtime variants, and frameworks as tradeoffs, not tiers.                      |
+| 7   | [Data tier](./07-data-tier.md)                              | Databases, caches, replicas, quorums, consistency, and storage.                           |
+| 8   | [Team and velocity](./08-team-and-velocity.md)              | Engineers, Dev Hours, features, tech debt, services, and Conway's law.                    |
+| 9   | [Economy](./09-economy.md)                                  | Currencies, sources and sinks, the cloud bill, pricing models, and funding.               |
+| 10  | [Progression](./10-progression.md)                          | Eras, the research tree, product features, and pacing targets.                            |
+| 11  | [Incidents and reliability](./11-incidents.md)              | The incident catalog, the incident loop, SLOs, and error budgets.                         |
+| 12  | [Observability and Insight](./12-observability.md)          | Fog of war for systems: what the player can see and how they earn the right to see more.  |
+| 13  | [Exit and Legacy](./13-prestige.md)                         | The prestige layer: Exits, Legacy, Ventures, and Mutators.                                |
+| 14  | [Sandbox, Challenges, and achievements](./14-challenges.md) | Guided and free Sandboxes, fixed puzzles with histograms, daily drills, and achievements. |
+| 15  | [Interface and game feel](./15-ui-ux.md)                    | The board, Node cards, feedback, bulk actions, and accessibility.                         |
+| 16  | [Balancing](./16-balancing.md)                              | Every formula, every tunable constant, and the pacing model.                              |
+| 17  | [Scope and roadmap](./17-scope-and-roadmap.md)              | What ships first, what exists in code today, and open questions.                          |
 
 ## Reference documents
 

@@ -229,6 +229,16 @@ _Avoid_: prestige, reset, ascend, portal
 The permanent currency earned at Exit and spent in the Legacy shop.
 _Avoid_: prestige points, souls, tokens
 
+### Outside the Company
+
+**Sandbox**:
+A Board outside any Company that changes nothing in a Company. A guided Sandbox teaches one mechanic from a fixed Design. The free Sandbox has everything unlocked and unlimited Cash.
+_Avoid_: lab, tutorial, lesson, scenario, creative mode
+
+**Sandbox track**:
+The ordered guided Sandboxes for one Era. Passing a track unlocks that Era's Challenges.
+_Avoid_: course, campaign, chapter
+
 **Challenge**:
 A fixed puzzle outside the Company, scored on cost, tail latency, and complexity histograms.
 _Avoid_: level, mission, scenario, puzzle (in UI copy)
@@ -242,3 +252,4 @@ _Avoid_: level, mission, scenario, puzzle (in UI copy)
 - The **Simulation** turns the Design into the **Ledger** each **Step**. Every number on screen comes from the Ledger.
 - **Analytics** turns sampled traffic into **Insight**. Insight buys **Research**.
 - An **Exit** turns **Equity** × **Valuation** into **Legacy**.
+- A **Sandbox track** holds guided **Sandboxes** for one **Era**. Passing it, or reaching the Era in any **Company**, unlocks that Era's **Challenges**.

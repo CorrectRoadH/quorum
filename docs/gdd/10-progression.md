@@ -53,7 +53,8 @@ Shares of demand, in percent. Features and Ventures shift these shares.
 
 ### Era 0: Garage
 
-The tutorial, without tutorial screens.
+The tutorial, without tutorial screens. A player who wants to learn a later Era's mechanics first
+plays its [Sandbox track](./14-challenges.md#sandbox-tracks).
 
 - **Start.** 150 users, $300, and one Burstable App Server running PHP with Apache `mod_php` and
   PostgreSQL **on the same box**, connected to Users and Payments. Analytics is linked to the box.
