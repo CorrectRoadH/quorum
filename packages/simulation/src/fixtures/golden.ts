@@ -14,3 +14,38 @@ export const replay = (game: Game, steps: number): Game => {
   for (let index = 0; index < steps; index += 1) current = step(current, GOLDEN_STEP).game
   return current
 }
+
+export const GOLDEN_STEPS = 10_000
+// SIM_VERSION 2 (M4): the founder now builds Features with Dev Hours and each
+// deploy rolls for a bad deploy, so the Pre-seed replay's demand and seed move.
+// SIM_VERSION 3 (M5 Seed): the save gains Queue depth, Cache, Queue and WAF
+// options, and stored GB. The Pre-seed replay's values are unchanged; the
+// encoded Game carries the new fields, so its hash moves.
+// SIM_VERSION 4 (M5 Series A): the save gains each Node's zone, standby, copies
+// and Autoscaler settings, the incident's zone, and the error budget. The
+// Pre-seed replay's values are unchanged; the encoded Game carries the new
+// fields, so its hash moves.
+// SIM_VERSION 5 (M5 Series B): the save gains each Node's GPU type, collector,
+// GOGC, load shedding and read-your-writes, and each Link's breaker, open time
+// and failure share. The Pre-seed replay's values are unchanged; the encoded
+// Game carries the new fields, so its hash moves.
+// SIM_VERSION 6 (M6): the save gains each Node's region, quorum settings, lost
+// replica, spread, backups, fan-out and key splitting, the incident's region,
+// users in each SLO hour, the DR drill and the Public quarter. The replay's values
+// are unchanged again; only the new fields move the hash.
+// SIM_VERSION 7 (M7): the save gains the founding (Venture, Mutators, perks),
+// banked Legacy, peak users, and the wall clock of the last save. The replay's
+// values are unchanged: with the new fields removed it still hashes to aed6bacd.
+export const GOLDEN_HASH = '2b638fc7'
+
+/**
+ * The hash of the Game each Challenge's reference solution ends on
+ * (`fixtures/challenges.ts`). Node, the browsers and workerd must agree.
+ */
+export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
+  'hello-world': '6ad073ff',
+  'split-the-box': '0ba7488c',
+  slashdotted: 'cc27d67a',
+  'event-loop': 'b44ad660',
+  'too-many-connections': '19dbe862',
+}

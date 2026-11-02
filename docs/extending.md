@@ -41,10 +41,9 @@ domain. Use that endpoint as the shape for your own.
    })
    ```
 
-4. Call it from the browser. `apps/web` has no RPC client yet; copy the pattern
-   from `examples/reference/src/platform/rpc.ts` into
-   `apps/web/src/platform/rpc.ts`, then provide the layer in
-   `apps/web/src/entry.ts`:
+4. Call it from the browser through `ApiRpc` in `apps/web/src/platform/rpc.ts`
+   (the pattern from `examples/reference/src/platform/rpc.ts`). `apps/web/src/entry.ts`
+   provides its layer:
 
    ```ts
    const application = Runtime.makeApplication({

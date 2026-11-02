@@ -10,6 +10,8 @@ import { Founder } from '@template/simulation/founder'
 import { Prefs, SandboxStore } from './model.ts'
 import { play, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
+import { ChallengeSubmission } from '@template/rpc'
+import { ApiRpc } from '@/platform/rpc.ts'
 
 /* ==========================================================================
    Commands: every side effect Quorum has. The board, localStorage, the
@@ -214,10 +216,12 @@ export const LoadFounder = Command.define('LoadFounder', {
   messages: [Message.FounderLoaded],
   execute: () =>
     Effect.sync(() => {
+      // A device id for Challenge histograms, used only if the Founder has none yet.
+      const fresh = { deviceId: crypto.randomUUID(), today: new Date().toISOString().slice(0, 10) }
       try {
-        return Message.FounderLoaded({ json: window.localStorage.getItem(FOUNDER_KEY) })
+        return Message.FounderLoaded({ json: window.localStorage.getItem(FOUNDER_KEY), ...fresh })
       } catch {
-        return Message.FounderLoaded({ json: null })
+        return Message.FounderLoaded({ json: null, ...fresh })
       }
     }),
 })
@@ -258,5 +262,25 @@ export const AskPlaybook = Command.define('AskPlaybook', {
   execute: () =>
     Effect.sync(() =>
       Message.PlaybookImported({ text: window.prompt('Paste a Playbook (QPB1:…)') }),
+    ),
+})
+
+/** Sends a Challenge result for the server to re-run. A mutation, not a Query. */
+export const SubmitChallenge = Command.define('SubmitChallenge', {
+  args: { submission: ChallengeSubmission },
+  messages: [Message.ChallengeVerified, Message.ChallengeUnverified],
+  execute: ({ submission }) =>
+    Effect.gen(function* () {
+      const rpc = yield* ApiRpc
+      return yield* rpc.challengeSubmit(submission)
+    }).pipe(
+      Effect.match({
+        onSuccess: (verdict) => Message.ChallengeVerified({ verdict }),
+        onFailure: (error) =>
+          Message.ChallengeUnverified({
+            message: error.message,
+            offline: error._tag === 'RpcClientError',
+          }),
+      }),
     ),
 })

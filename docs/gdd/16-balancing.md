@@ -532,4 +532,34 @@ A second Company on the same seed with Angel network 1, Pattern recognition 1, a
 Sim minutes. The M7 exit check (a second Company reaches its Exit in 3 to 6 hours) is not measured: the
 Balanced bot does not reach Public.
 
+### Challenges (M8, batches M8.1–M8.7)
+
+| Topic                | Current build                                                                                                                                                           | Design ([14](./14-challenges.md))                    | Notes                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Scores               | Cost: mean Burn per second; Tail: request-weighted p99; Complexity: Nodes the player can change plus every Link. Cost and Tail skip the first 30 sim seconds            | Burn at target load, p99 over the run, Nodes + Links | Fixed Users, Payments, and Analytics Nodes do not count.                                       |
+| Run                  | Build on a live board, then Run replays the Design from t = 0 on the Challenge's seed with `DESIGN_TUNING`. During the run only Restart, Replace, and Resize are logged | Upload a design plus a seed                          | A refused placement or link fails the replay, as the board would refuse it.                    |
+| Step size            | 1 sim second per Step for every shipped Challenge                                                                                                                       | Not set                                              | The plan's 0.25 s made Too Many Connections take 14.7 s to verify in Node.                     |
+| Shipped              | Hello, World; Split the Box; Slashdotted; The Event Loop; Too Many Connections; and the daily drill                                                                     | 32 Challenges                                        | C10k needs slow clients; the Seed and later Challenges need authored boards.                   |
+| Hello, World         | 1,000 users (20 rps) on a throttled Burstable box; budget $0.05/s                                                                                                       | 20 rps under $0.50/s                                 | At $0.50/s any box passes; the fix is the General family at $0.05/s.                           |
+| Slashdotted          | 1,500 users, ×10 from minute 1 to minute 4; errors ≤ 2%, Cost ≤ $4/s                                                                                                    | ×10 for 3 minutes on a fixed budget                  | The reference (8 PHP-FPM servers at 40 workers, a Pooler, a Cache, Database +2) costs $3.88/s. |
+| Too Many Connections | 40 PHP-FPM servers at 40 workers, one Postgres, 20,000 users; a `connections` incident at minute 2; no refused requests                                                 | 40 App Servers, one Postgres                         | A Pooler fixes it; the start refuses 97% of requests.                                          |
+| Legacy               | 1, 1, 2, 2, 3; the daily drill pays none                                                                                                                                | 1 to 10 by difficulty                                | Awarded locally on first completion; a server rejection marks the result unverified.           |
+| Daily drill          | One of two Garage/Pre-seed boards and one of four incidents at minute 2, picked from the UTC date's FNV hash; 5 minutes; results for today or yesterday                 | 5 to 15 minutes                                      | Nothing about a drill is stored: client and server derive it from the date.                    |
+| Histograms           | Per Challenge and SIM_VERSION in D1; each device's independent best per axis; percentile = share of players whose best is worse                                         | Same                                                 | Device ids are random UUIDs, accepted as given. No rank is shown.                              |
+
+Verification time for each reference replay (wall clock):
+
+| Challenge            | Steps | Node   | workerd | Chromium | Firefox | WebKit |
+| -------------------- | ----- | ------ | ------- | -------- | ------- | ------ |
+| Hello, World         | 180   | 140 ms | 48 ms   | 122 ms   | 75 ms   | 120 ms |
+| Split the Box        | 240   | 218 ms | 101 ms  | 150 ms   | 218 ms  | 279 ms |
+| Slashdotted          | 300   | 1.5 s  | 0.96 s  | 1.4 s    | 1.8 s   | 1.6 s  |
+| The Event Loop       | 240   | 191 ms | 121 ms  | 210 ms   | 189 ms  | 156 ms |
+| Too Many Connections | 240   | 3.7 s  | 2.3 s   | 3.2 s    | 3.1 s   | 2.9 s  |
+
+The longest replay, Too Many Connections (81 Nodes), takes about 2.3 s of CPU in workerd. That fits
+the Workers Paid default of 30 s CPU per request but not the Free plan's 10 ms, so the API Worker
+needs a paid plan; no `limits.cpu_ms` change is needed for these five. Longer Challenges (Five Nines)
+will need coarser Steps.
+
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.

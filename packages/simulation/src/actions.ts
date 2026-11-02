@@ -148,7 +148,7 @@ const spend = (game: Game, price: number, what: string, apply: (game: Game) => G
 
 /* ---------- placing and removing ---------- */
 
-const blankNode = (
+export const blankNode = (
   game: Game,
   id: string,
   type: ComponentId,

@@ -16,6 +16,7 @@ import {
   stampBar,
 } from '@/components/lab/legacy.ts'
 import { objectiveBar, passedPanel, sandboxHud } from '@/components/lab/sandbox.ts'
+import { challengeBar, challengeHud, challengePanel } from '@/components/lab/challenge.ts'
 import { tradeoffCard } from '@/components/lab/tradeoff.ts'
 import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
@@ -42,7 +43,11 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(
         [h.Class(TOP)],
         [
-          model.sandbox ? sandboxHud(model, ledger, h) : hud(model, ledger, h),
+          model.challenge
+            ? challengeHud(model, ledger, h)
+            : model.sandbox
+              ? sandboxHud(model, ledger, h)
+              : hud(model, ledger, h),
           toolbar(model, h),
           // Notices stack here; when one comes or goes, the others slide over.
           h.div(
@@ -59,7 +64,11 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
               selectionBar(model, h),
               stampBar(model, h),
               expiredCertificate(model, h),
-              model.sandbox ? objectiveBar(model, h) : goalBar(nextGoal(model.game, ledger), h),
+              model.challenge
+                ? challengeBar(model, h)
+                : model.sandbox
+                  ? objectiveBar(model, h)
+                  : goalBar(nextGoal(model.game, ledger), h),
               regionTabs(model, h),
               changeBar(model, h),
               model.paused
@@ -94,6 +103,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       model.panel === 'end' ? endPanel(model, h) : h.empty,
       model.panel === 'dev' ? devPanel(model, h) : h.empty,
       model.panel === 'passed' ? passedPanel(model, h) : h.empty,
+      model.panel === 'challenge' ? challengePanel(model, h) : h.empty,
     ],
   )
 }

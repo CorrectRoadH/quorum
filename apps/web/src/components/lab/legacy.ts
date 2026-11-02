@@ -7,7 +7,7 @@ import { legacyMultiplier } from '@template/simulation/founding'
 import { valuationOf } from '@template/simulation/valuation'
 import { clock, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import { ledgerOf, type Model } from '@/game/model.ts'
+import { ledgerOf, type Model, offCompany } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -33,7 +33,7 @@ const footer = (children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
 
 /** The pill that says an Exit is on the table. */
 export const exitPill = (model: Model, h: HtmlBuilder<Message>): Html => {
-  if (model.sandbox || model.exited) return h.empty
+  if (offCompany(model) || model.exited) return h.empty
   const offers = exitOffers(model.game, ledgerOf(model))
   if (offers.length === 0) return h.empty
   return button(
@@ -281,7 +281,7 @@ export const awayPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 /** Shown while Nodes are shift-selected: save them as a Playbook. */
 export const selectionBar = (model: Model, h: HtmlBuilder<Message>): Html =>
-  model.selection.length === 0 || model.sandbox
+  model.selection.length === 0 || offCompany(model)
     ? h.empty
     : h.div(
         [

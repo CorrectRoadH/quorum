@@ -24,3 +24,9 @@ pnpm --version
 
 step 'Install workspace dependencies'
 pnpm install --frozen-lockfile
+
+step 'Install Playwright browsers for pnpm test:golden'
+(cd packages/simulation && pnpm exec playwright install chromium firefox webkit)
+if sudo -n true 2>/dev/null; then
+  (cd packages/simulation && sudo -n env "PATH=$PATH" pnpm exec playwright install-deps webkit)
+fi

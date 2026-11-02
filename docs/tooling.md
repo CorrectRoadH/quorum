@@ -10,6 +10,7 @@
 | Vite                       | Web app bundler, integrated into Alchemy's website dev/deploy flow            |
 | Alchemy                    | Local Cloudflare development and deployment through the root `alchemy.run.ts` |
 | Vitest                     | Unit and integration tests                                                    |
+| Playwright                 | Browsers for the cross-engine golden check (`pnpm test:golden`)               |
 | `effect-tsgo`              | Effect-aware TypeScript compiler, patched in after install                    |
 | `@effect/language-service` | Effect diagnostics, including per-file `allowedUnstableApis`                  |
 
@@ -30,9 +31,12 @@ pnpm check
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:golden
 pnpm dev
 pnpm dev:reference
 ```
+
+`pnpm test:golden` replays the golden Company and every Challenge's reference solution in Chromium, Firefox, and WebKit (Vitest browser mode with Playwright) and in workerd, and compares the hashes with Node's. It is not part of `pnpm test` because it needs browser binaries: install them with `pnpm --filter @template/simulation exec playwright install chromium firefox webkit`, plus `playwright install-deps webkit` on Linux (`.agents/setup` does both in an orb).
 
 `pnpm deploy` modifies Cloudflare infrastructure. It is not part of routine verification.
 `pnpm dev:reference` uses the same root entrypoint with the `reference` stage; the default stage selects `apps/web`.

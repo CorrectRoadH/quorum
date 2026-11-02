@@ -1,6 +1,7 @@
 import { Runtime } from 'foldkit'
 import { init, Message, Model, subscriptions, update, view } from './app/main.ts'
 import { startMotion } from './game/motion.ts'
+import { ApiRpc } from './platform/rpc.ts'
 import './styles.css'
 
 const application = Runtime.makeApplication({
@@ -9,6 +10,7 @@ const application = Runtime.makeApplication({
   update,
   view,
   subscriptions,
+  resources: ApiRpc.layer,
   container: document.getElementById('root'),
   devTools: { Message },
 })

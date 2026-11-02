@@ -16,6 +16,7 @@ import {
 import { foundingOf, levelOf, perkPrice } from '@template/simulation/founder'
 import { legacyMultiplier, startEra } from '@template/simulation/founding'
 import { eraOf } from '@template/simulation/lookups'
+import { CHALLENGES, challengeOpen, dailyDrill } from '@template/simulation/challenges'
 import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from '@template/simulation/sandbox'
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
@@ -437,6 +438,48 @@ const foundMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> =
   ]
 }
 
+const challengesMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const founder = model.founder
+  const drill = model.today ? dailyDrill(model.today) : null
+  const row = (id: string, name: string, detail: string, legacy: number, open: boolean) =>
+    listRow(
+      id,
+      name,
+      detail,
+      founder.completed.includes(id)
+        ? icon(h, Check, 'size-4 text-ok')
+        : open
+          ? legacy > 0
+            ? `${legacy} Legacy`
+            : ''
+          : icon(h, Lock, 'size-3.5'),
+      open ? Message.ChallengeStarted({ id }) : null,
+      false,
+      h,
+    )
+  return [
+    back('Challenges', h, legacyBadge(model, h)),
+    ...(drill ? [row(drill.id, 'Daily drill', drill.brief, 0, true)] : []),
+    ...ERAS.flatMap((era, stage) => {
+      const list = CHALLENGES.filter((challenge) => challenge.era === stage)
+      return list.length === 0
+        ? []
+        : [
+            trackLabel(era.name, h),
+            ...list.map((challenge) =>
+              row(
+                challenge.id,
+                challenge.name,
+                challenge.brief,
+                challenge.legacy,
+                challengeOpen(challenge, founder.erasReached, model.passed),
+              ),
+            ),
+          ]
+    }),
+  ]
+}
+
 const legacyMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   const founder = model.founder
   return [
@@ -502,59 +545,69 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
           ? legacyMenu(model, h)
           : model.menu === 'history'
             ? historyMenu(model, h)
-            : [
-                ...(model.saved
-                  ? [
-                      item(
-                        'Continue',
-                        `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
-                        'users lb server cache database',
-                        Message.Continued(),
-                        true,
-                        h,
-                      ),
-                    ]
-                  : []),
-                item(
-                  model.saved ? 'New company' : 'Start a company',
-                  '',
-                  'users',
-                  model.founder.history.length > 0
-                    ? Message.MenuChosen({ menu: 'found' })
-                    : Message.NewCompanyStarted(),
-                  !model.saved,
-                  h,
-                ),
-                ...(model.founder.history.length > 0
-                  ? [
-                      item(
-                        'Legacy shop',
-                        `${model.founder.legacy} Legacy`,
-                        'server',
-                        Message.MenuChosen({ menu: 'legacy' }),
-                        false,
-                        h,
-                      ),
-                      item(
-                        'History',
-                        '',
-                        'database',
-                        Message.MenuChosen({ menu: 'history' }),
-                        false,
-                        h,
-                      ),
-                    ]
-                  : []),
-                item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
-                item(
-                  'Sandbox',
-                  '',
-                  'cache database',
-                  Message.MenuChosen({ menu: 'sandbox' }),
-                  false,
-                  h,
-                ),
-              ],
+            : model.menu === 'challenges'
+              ? challengesMenu(model, h)
+              : [
+                  ...(model.saved
+                    ? [
+                        item(
+                          'Continue',
+                          `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+                          'users lb server cache database',
+                          Message.Continued(),
+                          true,
+                          h,
+                        ),
+                      ]
+                    : []),
+                  item(
+                    model.saved ? 'New company' : 'Start a company',
+                    '',
+                    'users',
+                    model.founder.history.length > 0
+                      ? Message.MenuChosen({ menu: 'found' })
+                      : Message.NewCompanyStarted(),
+                    !model.saved,
+                    h,
+                  ),
+                  ...(model.founder.history.length > 0
+                    ? [
+                        item(
+                          'Legacy shop',
+                          `${model.founder.legacy} Legacy`,
+                          'server',
+                          Message.MenuChosen({ menu: 'legacy' }),
+                          false,
+                          h,
+                        ),
+                        item(
+                          'History',
+                          '',
+                          'database',
+                          Message.MenuChosen({ menu: 'history' }),
+                          false,
+                          h,
+                        ),
+                      ]
+                    : []),
+                  item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
+                  item(
+                    'Sandbox',
+                    '',
+                    'cache database',
+                    Message.MenuChosen({ menu: 'sandbox' }),
+                    false,
+                    h,
+                  ),
+                  item(
+                    'Challenges',
+                    '',
+                    'lb server database',
+                    Message.MenuChosen({ menu: 'challenges' }),
+                    false,
+                    h,
+                  ),
+                ],
   )
 }
 

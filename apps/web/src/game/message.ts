@@ -26,6 +26,8 @@ import {
   Fanout,
   Region,
 } from '@template/simulation/state'
+import { ChallengeVerdict } from '@template/rpc'
+import { histogramQuery } from './challenge-query.ts'
 import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 
 /* ==========================================================================
@@ -35,7 +37,11 @@ import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './m
 export const Message = defineMessageUnion({
   /** The save in localStorage, read once at boot. Null when there is none. */
   SaveLoaded: { json: Schema.NullOr(Schema.String), now: Schema.Finite },
-  FounderLoaded: { json: Schema.NullOr(Schema.String) },
+  FounderLoaded: {
+    json: Schema.NullOr(Schema.String),
+    deviceId: Schema.String,
+    today: Schema.String,
+  },
   Saved: {},
   Continued: {},
   NewCompanyStarted: {},
@@ -47,6 +53,16 @@ export const Message = defineMessageUnion({
   SandboxStoreLoaded: { json: Schema.NullOr(Schema.String) },
   PrefsLoaded: { json: Schema.NullOr(Schema.String) },
   GuidedStarted: { id: SandboxId },
+  ChallengeStarted: { id: Schema.String },
+  /** Replays the Design from t = 0 and scores it. */
+  ChallengeRan: {},
+  /** Runs the rest of the run at once. */
+  ChallengeFinished: {},
+  /** Back to the build board as it was at Run. */
+  ChallengeRebuilt: {},
+  ChallengeVerified: { verdict: ChallengeVerdict },
+  ChallengeUnverified: { message: Schema.String, offline: Schema.Boolean },
+  GotHistograms: { message: histogramQuery.Message },
   FreeSandboxStarted: {},
   FreeSandboxReset: {},
   CompanyCopied: {},

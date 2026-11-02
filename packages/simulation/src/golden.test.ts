@@ -1,6 +1,14 @@
-import { Schema } from 'effect'
+import { Result, Schema } from 'effect'
 import { describe, expect, test } from 'vitest'
-import { goldenGame, replay } from './fixtures/golden.ts'
+import { CHALLENGES, runChallenge } from './challenges.ts'
+import { referenceReplay } from './fixtures/challenges.ts'
+import {
+  GOLDEN_HASH,
+  GOLDEN_STEPS,
+  REFERENCE_HASHES,
+  goldenGame,
+  replay,
+} from './fixtures/golden.ts'
 import save from './fixtures/save-v2-m3.json' with { type: 'json' }
 import { hashGame } from './hash.ts'
 import { Game } from './state.ts'
@@ -12,29 +20,6 @@ import { SIM_VERSION } from './version.ts'
  * this hash changes every replay: bump SIM_VERSION and GOLDEN_HASH together,
  * and say why in the commit.
  */
-
-const GOLDEN_STEPS = 10_000
-// SIM_VERSION 2 (M4): the founder now builds Features with Dev Hours and each
-// deploy rolls for a bad deploy, so the Pre-seed replay's demand and seed move.
-// SIM_VERSION 3 (M5 Seed): the save gains Queue depth, Cache, Queue and WAF
-// options, and stored GB. The Pre-seed replay's values are unchanged; the
-// encoded Game carries the new fields, so its hash moves.
-// SIM_VERSION 4 (M5 Series A): the save gains each Node's zone, standby, copies
-// and Autoscaler settings, the incident's zone, and the error budget. The
-// Pre-seed replay's values are unchanged; the encoded Game carries the new
-// fields, so its hash moves.
-// SIM_VERSION 5 (M5 Series B): the save gains each Node's GPU type, collector,
-// GOGC, load shedding and read-your-writes, and each Link's breaker, open time
-// and failure share. The Pre-seed replay's values are unchanged; the encoded
-// Game carries the new fields, so its hash moves.
-// SIM_VERSION 6 (M6): the save gains each Node's region, quorum settings, lost
-// replica, spread, backups, fan-out and key splitting, the incident's region,
-// users in each SLO hour, the DR drill and the Public quarter. The replay's values
-// are unchanged again; only the new fields move the hash.
-// SIM_VERSION 7 (M7): the save gains the founding (Venture, Mutators, perks),
-// banked Legacy, peak users, and the wall clock of the last save. The replay's
-// values are unchanged: with the new fields removed it still hashes to aed6bacd.
-const GOLDEN_HASH = '2b638fc7'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {
@@ -51,5 +36,15 @@ describe('determinism', () => {
     const second = replay(decode(save), 400)
     expect(hashGame(first)).toBe(hashGame(second))
     expect(hashGame(first)).not.toBe(hashGame(decode(save)))
+  })
+
+  test('every Challenge reference replay ends on its committed hash', { timeout: 60_000 }, () => {
+    const hashes = Object.fromEntries(
+      CHALLENGES.map((challenge) => {
+        const result = runChallenge(challenge, referenceReplay(challenge))
+        return [challenge.id, Result.isSuccess(result) ? result.success.hash : result.failure]
+      }),
+    )
+    expect(hashes).toEqual(REFERENCE_HASHES)
   })
 })

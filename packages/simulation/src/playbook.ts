@@ -10,6 +10,7 @@ import {
   setRuntime,
   type Action,
 } from './actions.ts'
+import { decodeText, encodeText } from './codec.ts'
 import { placeRefusal } from './founding.ts'
 import { isUnlocked } from './lookups.ts'
 import { ComponentId, GameLink, GameNode, type Game, type Region } from './state.ts'
@@ -45,7 +46,7 @@ export const Playbook = Schema.Struct({
 export type Playbook = typeof Playbook.Type
 
 /** Node options a Playbook keeps. Size, family, runtime and framework go through their actions. */
-const NODE_SETTINGS = [
+export const NODE_SETTINGS = [
   'workers',
   'sampleRate',
   'compress',
@@ -78,16 +79,16 @@ const NODE_SETTINGS = [
   'fanout',
   'split',
 ] as const
-const STACK_SETTINGS = ['size', 'family', 'runtime', 'framework'] as const
-const LINK_SETTINGS = ['timeout', 'retries', 'kinds', 'breaker'] as const
+export const STACK_SETTINGS = ['size', 'family', 'runtime', 'framework'] as const
+export const LINK_SETTINGS = ['timeout', 'retries', 'kinds', 'breaker'] as const
 
-const pick = (from: object, keys: ReadonlyArray<string>): Record<string, unknown> =>
+export const pick = (from: object, keys: ReadonlyArray<string>): Record<string, unknown> =>
   Object.fromEntries(
     keys.filter((key) => key in from).map((key) => [key, (from as Record<string, unknown>)[key]]),
   )
 
 /** Nodes every Company has one of: a Playbook links to them by type and never copies them. */
-const SHARED: ReadonlyArray<GameNode['type']> = ['users', 'payments', 'analytics']
+export const SHARED: ReadonlyArray<GameNode['type']> = ['users', 'payments', 'analytics']
 
 const fixedKey = (node: GameNode): string => `@${node.type}`
 
@@ -228,60 +229,15 @@ export const placePlaybook = (
 /* ---------- sharing ---------- */
 
 const PREFIX = 'QPB1:'
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
-
-/** JSON with every character above ASCII escaped, so each character is one byte. */
-const asciiJson = (value: unknown): string =>
-  JSON.stringify(value).replace(
-    /[\u0080-\uffff]/g,
-    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
-  )
-
-const toBase64Url = (text: string): string => {
-  let out = ''
-  for (let index = 0; index < text.length; index += 3) {
-    const a = text.charCodeAt(index)
-    const b = index + 1 < text.length ? text.charCodeAt(index + 1) : 0
-    const c = index + 2 < text.length ? text.charCodeAt(index + 2) : 0
-    const triple = (a << 16) | (b << 8) | c
-    out += ALPHABET[(triple >> 18) & 63] ?? ''
-    out += ALPHABET[(triple >> 12) & 63] ?? ''
-    if (index + 1 < text.length) out += ALPHABET[(triple >> 6) & 63] ?? ''
-    if (index + 2 < text.length) out += ALPHABET[triple & 63] ?? ''
-  }
-  return out
-}
-
-const fromBase64Url = (text: string): string | null => {
-  let out = ''
-  for (let index = 0; index < text.length; index += 4) {
-    const chunk = text.slice(index, index + 4)
-    const values = Array.from(chunk, (char) => ALPHABET.indexOf(char))
-    if (values.some((value) => value < 0) || chunk.length === 1) return null
-    const [a = 0, b = 0, c = 0, d = 0] = values
-    const triple = (a << 18) | (b << 12) | (c << 6) | d
-    out += String.fromCharCode((triple >> 16) & 255)
-    if (chunk.length > 2) out += String.fromCharCode((triple >> 8) & 255)
-    if (chunk.length > 3) out += String.fromCharCode(triple & 255)
-  }
-  return out
-}
 
 export const encodePlaybook = (playbook: Playbook): string =>
-  `${PREFIX}${toBase64Url(asciiJson(Schema.encodeSync(Playbook)(playbook)))}`
+  encodeText(PREFIX, Schema.encodeSync(Playbook)(playbook))
 
 const decode = Schema.decodeUnknownOption(Playbook)
 
 export const decodePlaybook = (text: string): Result.Result<Playbook, Refusal> => {
-  const bad = Result.fail(Refusal.NotAllowed({ reason: 'That is not a Playbook.' }))
-  const trimmed = text.trim()
-  if (!trimmed.startsWith(PREFIX)) return bad
-  const json = fromBase64Url(trimmed.slice(PREFIX.length))
-  if (json === null) return bad
-  try {
-    const parsed = decode(JSON.parse(json))
-    return parsed._tag === 'Some' ? Result.succeed(parsed.value) : bad
-  } catch {
-    return bad
-  }
+  const parsed = decode(decodeText(PREFIX, text))
+  return parsed._tag === 'Some'
+    ? Result.succeed(parsed.value)
+    : Result.fail(Refusal.NotAllowed({ reason: 'That is not a Playbook.' }))
 }

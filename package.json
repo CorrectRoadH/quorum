@@ -13,6 +13,7 @@
     "lint": "vp lint",
     "typecheck": "tsc --noEmit -p tsconfig.json && turbo run typecheck",
     "test": "turbo run test",
+    "test:golden": "pnpm --filter @template/simulation test:golden",
     "deploy": "alchemy deploy --stage prod"
   },
   "devDependencies": {

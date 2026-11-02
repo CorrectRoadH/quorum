@@ -140,3 +140,80 @@ describe('Exit and offline return', () => {
     expect(send(loaded, Message.Continued()).panel).toBe('away')
   })
 })
+
+describe('Challenges', () => {
+  const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
+    messages.reduce((current, message) => update(current, message).model, model)
+  const verdict = {
+    passed: true,
+    missed: null,
+    score: { cost: 0.05, tail: 880, complexity: 2 },
+    best: { cost: 0.05, tail: 880, complexity: 2 },
+    percentiles: { cost: 0.5, tail: 0.5, complexity: 0 },
+  }
+
+  const solved = (model: Model): Model =>
+    send(
+      model,
+      Message.ChallengeStarted({ id: 'hello-world' }),
+      Message.FamilyChosen({ nodeId: 'server', family: 'general' }),
+      Message.ChallengeRan(),
+      Message.ChallengeFinished(),
+    )
+
+  test('Run scores a provisional result, and the server confirms it', () => {
+    const company = { ...initialModel(), saved: true, game: preseedGame() }
+    const done = solved(company)
+    expect(done.challenge?.phase).toBe('result')
+    expect(done.challenge?.result?.passed).toBe(true)
+    expect(done.challenge?.verification).toBe('sending')
+    expect(done.panel).toBe('challenge')
+    const verified = send(done, Message.ChallengeVerified({ verdict }))
+    expect(verified.challenge?.verification).toBe('verified')
+    // Leaving brings the Company back untouched.
+    const left = send(verified, Message.TitleOpened())
+    expect(left.challenge).toBeNull()
+    expect(left.game).toBe(company.game)
+  })
+
+  test('a first completion pays Legacy once, and perks do not reach the board', () => {
+    const founder = { ...initialModel().founder, perks: { 'angel-network': 3 } }
+    const once = solved({ ...initialModel(), founder })
+    expect(once.founder.legacy).toBe(1)
+    expect(once.founder.completed).toEqual(['hello-world'])
+    expect(once.game.founding.perks).toEqual({})
+    const twice = solved(send(once, Message.TitleOpened()))
+    expect(twice.founder.legacy).toBe(1)
+  })
+
+  test('the Design is fixed during a run; restarts are logged as run actions', () => {
+    const running = send(
+      initialModel(),
+      Message.ChallengeStarted({ id: 'hello-world' }),
+      Message.ChallengeRan(),
+    )
+    const resized = send(running, Message.FamilyChosen({ nodeId: 'server', family: 'general' }))
+    expect(resized.game.nodes).toEqual(running.game.nodes)
+    const built = send(
+      initialModel(),
+      Message.ChallengeStarted({ id: 'hello-world' }),
+      Message.FamilyChosen({ nodeId: 'server', family: 'general' }),
+      Message.ChallengeRan(),
+    )
+    expect(send(built, Message.UndoChosen()).game.nodes).toEqual(built.game.nodes)
+    const restarted = send(running, Message.RestartChosen({ nodeId: 'server' }))
+    expect(restarted.challenge?.replay?.actions).toEqual([
+      { step: 0, action: { _tag: 'Restart', node: 'server' } },
+    ])
+  })
+
+  test('without the API Worker the result stays provisional', () => {
+    const done = solved(initialModel())
+    const offline = send(
+      done,
+      Message.ChallengeUnverified({ message: 'Failed to fetch', offline: true }),
+    )
+    expect(offline.challenge?.verification).toBe('offline')
+    expect(offline.challenge?.result?.passed).toBe(true)
+  })
+})

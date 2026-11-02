@@ -46,7 +46,7 @@ import { itemName } from '@template/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import type { Model } from '@/game/model.ts'
+import { offCompany, type Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -331,8 +331,8 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
           ),
         ],
       ),
-      game.stage === PRE_IPO_STAGE && !model.sandbox ? checklist(model, ledger, h) : h.empty,
-      game.quarter && !model.sandbox ? quarterly(model, ledger, h) : h.empty,
+      game.stage === PRE_IPO_STAGE && !offCompany(model) ? checklist(model, ledger, h) : h.empty,
+      game.quarter && !offCompany(model) ? quarterly(model, ledger, h) : h.empty,
       building(model, ledger, h),
     ],
   )
@@ -534,7 +534,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
     ],
     [
-      model.sandbox
+      offCompany(model)
         ? h.empty
         : h.button(
             [
@@ -573,7 +573,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 : h.empty,
             ],
           ),
-      model.sandbox
+      offCompany(model)
         ? h.empty
         : h.button(
             [
@@ -605,7 +605,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 : h.empty,
             ],
           ),
-      model.sandbox
+      offCompany(model)
         ? h.empty
         : toolButton(
             'Playbooks (P)',

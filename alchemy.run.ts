@@ -32,8 +32,11 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state },
   Effect.gen(function* () {
     const stage = yield* Alchemy.Stack.use((stack) => Effect.succeed(stack.stage))
+    // Verified Challenge results: per-axis bests and histograms (docs/architecture.md).
+    const Results = Cloudflare.D1.Database('Results', { migrations: './apps/backend/migrations' })
     const ApiWorker = Cloudflare.Worker('Api', {
       main: './apps/backend/src/worker.ts',
+      env: { RESULTS: Results },
       compatibility,
       observability,
       // The website reaches the API through its service binding only. Remove
@@ -50,6 +53,7 @@ export default Alchemy.Stack(
       observability,
     })
 
+    yield* Results
     yield* ApiWorker
     const website = yield* Website
     return { url: website.url }

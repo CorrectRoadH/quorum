@@ -28,6 +28,19 @@ import {
   TASKS,
 } from '@template/simulation/catalog'
 import { newGame, preseedGame } from '@template/simulation/company'
+import {
+  NO_TOTALS,
+  advanceRun,
+  beginRun,
+  challengeById,
+  resultOf,
+  stepsOf,
+  type Challenge,
+} from '@template/simulation/challenges'
+import { designOf, encodeReplay, type ReplayAction } from '@template/simulation/replay'
+import { SIM_VERSION } from '@template/simulation/version'
+import type { ApiRpc } from '@/platform/rpc.ts'
+import { histogramQuery } from './challenge-query.ts'
 import { ipoExit, takeExit } from '@template/simulation/exit'
 import {
   Founder,
@@ -41,6 +54,8 @@ import {
   toggleKeep,
   toggleMutator,
   unlockVenture,
+  completeChallenge,
+  recordEra,
 } from '@template/simulation/founder'
 import { foundCompany, perkLevel } from '@template/simulation/founding'
 import { OFFLINE_MIN, simulateAway } from '@template/simulation/offline'
@@ -93,6 +108,7 @@ import {
   WritePrefs,
   WriteSandboxStore,
   WriteSave,
+  SubmitChallenge,
 } from './commands.ts'
 import {
   STABLE_TICKS,
@@ -118,6 +134,8 @@ import {
   type Tone,
   type Tradeoff,
   type TradeoffOption,
+  offCompany,
+  type ChallengeRun,
 } from './model.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
@@ -153,6 +171,9 @@ export const initialModel = (): Model =>
     menu: 'main',
     game: newGame(),
     saved: false,
+    challenge: null,
+    histograms: histogramQuery.init(),
+    today: '',
     sandbox: null,
     company: null,
     passed: [],
@@ -189,14 +210,14 @@ export const initialModel = (): Model =>
     lastBottleneck: '',
   })
 
-export const init: Runtime.ApplicationInit<Model, Message> = () => ({
+export const init: Runtime.ApplicationInit<Model, Message, void, ApiRpc> = () => ({
   model: initialModel(),
   commands: [LoadSave({}), LoadSandboxStore({}), LoadPrefs({}), LoadFounder({})],
 })
 
 /* ---------- helpers ---------- */
 
-type Result = Update.Return<Model, Message>
+type Result = Update.Return<Model, Message, ApiRpc>
 type AnyCommand = NonNullable<Result['commands']>[number]
 
 const sync = (model: Model): AnyCommand =>
@@ -261,6 +282,9 @@ const act = (
     onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
     onSuccess: (game) => {
       if (game === model.game) return { model }
+      // A run replays the Design it started with: only logged run actions may change it.
+      if (model.challenge && model.challenge.phase !== 'build')
+        return withToast(model, 'Rebuild to change the Design.', 'warn')
       const measured = beginChange(model, label, figuresOf(solveFlow(model.game)))
       const next: Model = {
         ...measured,
@@ -285,6 +309,8 @@ const act = (
 /** Applies an undo or a redo, or says why it cannot. */
 const reverse = (model: Model, reversal: Reversal | string, verb: string): Result => {
   if (typeof reversal === 'string') return withToast(model, reversal, 'plain')
+  if (model.challenge && model.challenge.phase !== 'build')
+    return withToast(model, 'Rebuild to change the Design.', 'warn')
   const next: Model = {
     ...beginChange(model, `${verb} ${reversal.label}`, figuresOf(solveFlow(model.game))),
     game: reversal.game,
@@ -508,6 +534,7 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
 /* ---------- the clock ---------- */
 
 const tick = (model: Model): Result => {
+  if (model.challenge?.phase === 'running') return runTick(model, model.challenge)
   const owed = model.carry + STEPS_PER_TICK * model.speed
   const steps = Math.floor(owed)
   let game = model.game
@@ -622,11 +649,16 @@ const tick = (model: Model): Result => {
   }
   if (game.time - model.savedAt >= SAVE_EVERY) {
     next = { ...next, savedAt: game.time }
-    if (!next.sandbox) commands.push(WriteSave({ game }))
-    else if (next.sandbox.id === null) {
+    if (!offCompany(next)) commands.push(WriteSave({ game }))
+    else if (next.sandbox?.id === null) {
       next = { ...next, freeBoard: game }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     }
+  }
+  // Reaching an Era in a Company opens its Challenges (14 "Rules").
+  if (!offCompany(next) && !next.founder.erasReached.includes(game.stage)) {
+    next = { ...next, founder: recordEra(next.founder, game.stage) }
+    commands.push(WriteFounder({ founder: next.founder }))
   }
   if (logs.length > 0) commands.push(AppendLog({ entries: logs }))
   return { model: next, commands }
@@ -643,6 +675,8 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
   const next: Model = {
     ...initialModel(),
     founder: model.founder,
+    histograms: model.histograms,
+    today: model.today,
     route: 'lab',
     game,
     saved: true,
@@ -678,6 +712,8 @@ const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
   const next: Model = {
     ...initialModel(),
     founder: model.founder,
+    histograms: model.histograms,
+    today: model.today,
     route: 'lab',
     game,
     sandbox: run,
@@ -802,6 +838,191 @@ const listed = (model: Model, game: Game): Readonly<{ game: Game; founder: Found
   return { game: ipo.game, founder: recordExit(model.founder, ipo) }
 }
 
+/* ---------- Challenges ---------- */
+
+const histograms = histogramQuery.lift<Model, Message>({
+  parentField: 'histograms',
+  toParentMessage: (message) => Message.GotHistograms({ message }),
+})
+
+const boardOf = (challenge: Challenge): Game => ({
+  ...challenge.start(),
+  users: challenge.demand[0]?.users ?? 0,
+})
+
+/** Opens a Challenge's build board. The Company waits aside, as for a Sandbox. */
+const enterChallenge = (model: Model, id: string): Result => {
+  const challenge = challengeById(id)
+  if (!challenge) return { model }
+  const game = boardOf(challenge)
+  const next: Model = {
+    ...initialModel(),
+    founder: model.founder,
+    histograms: model.histograms,
+    today: model.today,
+    route: 'lab',
+    game,
+    challenge: {
+      id,
+      phase: 'build',
+      board: null,
+      replay: null,
+      totals: NO_TOTALS,
+      result: null,
+      verdict: null,
+      verification: 'local',
+      note: null,
+    },
+    company: offCompany(model) ? model.company : model.game,
+    saved: model.saved,
+    passed: model.passed,
+    freeBoard: model.freeBoard,
+    savedAt: game.time,
+    sampledAt: game.time,
+  }
+  const loaded = histograms.loadIfMissing(next, { challengeId: id, simVersion: SIM_VERSION })
+  return {
+    model: loaded.model,
+    commands: [
+      sync(loaded.model),
+      FitBoard({}),
+      ...(loaded.commands ?? []),
+      AppendLog({ entries: [line(game.time, 'ChallengeStarted', { challenge: id })] }),
+    ],
+  }
+}
+
+/** Run: the Design restarts from t = 0 on the Challenge's seed. Only this run is scored. */
+const startRun = (model: Model, run: ChallengeRun): Result => {
+  const challenge = challengeById(run.id)
+  if (!challenge || run.phase !== 'build') return { model }
+  const replay = {
+    v: 1 as const,
+    challenge: run.id,
+    simVersion: SIM_VERSION,
+    design: designOf(model.game),
+    actions: [],
+  }
+  return Result.match(beginRun(challenge, replay), {
+    onFailure: (reason) => withToast(model, reason, 'warn'),
+    onSuccess: (game) => {
+      const next: Model = {
+        ...model,
+        game,
+        challenge: { ...run, phase: 'running', board: model.game, replay, totals: NO_TOTALS },
+        carry: 0,
+        paused: false,
+        placing: null,
+        selected: null,
+        panel: 'none',
+        bottleneckAt: -1,
+      }
+      return { model: next, commands: [sync(next)] }
+    },
+  })
+}
+
+/** Runs canonical Steps: the clock's share, or every one left when `all`. */
+const runSteps = (
+  model: Model,
+  run: ChallengeRun,
+  all: boolean,
+): Readonly<{ model: Model; done: boolean }> => {
+  const challenge = challengeById(run.id)
+  if (!challenge || !run.replay) return { model, done: false }
+  const owed = all
+    ? Number.POSITIVE_INFINITY
+    : model.carry + (STEPS_PER_TICK * model.speed * STEP_SECONDS) / challenge.stepSeconds
+  const total = stepsOf(challenge)
+  let game = model.game
+  let totals = run.totals
+  let taken = 0
+  while (totals.step < total && taken + 1 <= owed) {
+    const next = advanceRun(challenge, run.replay, game, totals)
+    game = next.game
+    totals = next.totals
+    taken += 1
+  }
+  return {
+    model: {
+      ...model,
+      game,
+      carry: all ? 0 : owed - taken,
+      challenge: { ...run, totals },
+    },
+    done: totals.step >= total,
+  }
+}
+
+/** The run is over: the provisional result shows, and the server is asked to confirm it. */
+const finishRun = (model: Model): Result => {
+  const run = model.challenge
+  const challenge = run ? challengeById(run.id) : undefined
+  if (!run || !challenge || !run.replay) return { model }
+  const result = resultOf(challenge, model.game, run.totals)
+  const first = result.passed && !model.founder.completed.includes(run.id)
+  const founder = result.passed
+    ? completeChallenge(model.founder, run.id, challenge.legacy)
+    : model.founder
+  const next: Model = {
+    ...model,
+    founder,
+    panel: 'challenge',
+    challenge: { ...run, phase: 'result', result, verification: 'sending' },
+  }
+  const commands: Array<AnyCommand> = [
+    sync(next),
+    SubmitChallenge({
+      submission: {
+        challengeId: run.id,
+        simVersion: SIM_VERSION,
+        deviceId: founder.deviceId,
+        replay: encodeReplay(run.replay),
+      },
+    }),
+    AppendLog({
+      entries: [line(model.game.time, 'ChallengeRun', { challenge: run.id, ...result })],
+    }),
+  ]
+  if (founder !== model.founder) commands.push(WriteFounder({ founder }))
+  return first && challenge.legacy > 0
+    ? withToast(next, `First completion: +${challenge.legacy} Legacy.`, 'ok', commands)
+    : { model: next, commands }
+}
+
+const runTick = (model: Model, run: ChallengeRun): Result => {
+  const ran = runSteps(model, run, false)
+  return ran.done ? finishRun(ran.model) : { model: ran.model, commands: [sync(ran.model)] }
+}
+
+/** A run action is logged at the next Step and applied there, as the server will apply it. */
+const logRunAction = (model: Model, action: ReplayAction): Result | null => {
+  const run = model.challenge
+  if (run?.phase !== 'running' || !run.replay) return null
+  const replay = {
+    ...run.replay,
+    actions: [...run.replay.actions, { step: run.totals.step, action }],
+  }
+  return { model: { ...model, challenge: { ...run, replay } } }
+}
+
+/** Leaves a Challenge for the Challenges menu; the Company comes back as it was. */
+const leaveChallenge = (model: Model): Result => ({
+  model: {
+    ...model,
+    route: 'title',
+    menu: 'challenges',
+    panel: 'none',
+    placing: null,
+    selected: null,
+    game: model.company ?? newGame(),
+    challenge: null,
+    company: null,
+    bottleneck: null,
+    bottleneckAt: -1,
+  },
+})
+
 /* ---------- update ---------- */
 
 /** Handles a Message and adds its sound cue. Messages that route to another
@@ -839,11 +1060,12 @@ const handle = (model: Model, message: Message): Result =>
           }
         },
       }),
-    FounderLoaded: ({ json }) =>
-      Option.match(parseFounder(json), {
-        onNone: () => ({ model }),
-        onSome: (founder) => ({ model: { ...model, founder } }),
-      }),
+    FounderLoaded: ({ json, deviceId, today }) => {
+      const loaded = Option.getOrElse(parseFounder(json), () => model.founder)
+      if (loaded.deviceId) return { model: { ...model, founder: loaded, today } }
+      const founder = { ...loaded, deviceId }
+      return { model: { ...model, founder, today }, commands: [WriteFounder({ founder })] }
+    },
 
     Saved: () => ({ model: model.saved ? model : { ...model, saved: true } }),
 
@@ -875,6 +1097,7 @@ const handle = (model: Model, message: Message): Result =>
 
     TitleOpened: () => {
       if (model.exited) return leaveExited(model, 'found')
+      if (model.challenge) return leaveChallenge(model)
       if (!model.sandbox)
         return {
           model: { ...model, route: 'title', menu: 'main', panel: 'none', placing: null },
@@ -929,6 +1152,55 @@ const handle = (model: Model, message: Message): Result =>
         onNone: () => ({ model }),
         onSome: (store) => ({ model: { ...model, passed: store.passed, freeBoard: store.free } }),
       }),
+    ChallengeStarted: ({ id }) => enterChallenge(model, id),
+    ChallengeRan: () => (model.challenge ? startRun(model, model.challenge) : { model }),
+    ChallengeFinished: () => {
+      const run = model.challenge
+      if (run?.phase !== 'running') return { model }
+      return finishRun(runSteps(model, run, true).model)
+    },
+    ChallengeRebuilt: () => {
+      const run = model.challenge
+      if (!run?.board) return { model }
+      const next: Model = {
+        ...model,
+        game: run.board,
+        panel: 'none',
+        bottleneckAt: -1,
+        challenge: {
+          ...run,
+          phase: 'build',
+          board: null,
+          replay: null,
+          totals: NO_TOTALS,
+          result: null,
+          verdict: null,
+          verification: 'local',
+          note: null,
+        },
+      }
+      return { model: next, commands: [sync(next)] }
+    },
+    ChallengeVerified: ({ verdict }) => {
+      const run = model.challenge
+      if (!run) return { model }
+      const next: Model = {
+        ...model,
+        challenge: { ...run, verdict, verification: 'verified', note: null },
+      }
+      return histograms.revalidate(next, { challengeId: run.id, simVersion: SIM_VERSION })
+    },
+    ChallengeUnverified: ({ message, offline }) => {
+      const run = model.challenge
+      if (!run) return { model }
+      return {
+        model: {
+          ...model,
+          challenge: { ...run, verification: offline ? 'offline' : 'unverified', note: message },
+        },
+      }
+    },
+    GotHistograms: ({ message }) => histograms.fold(model, message),
     GuidedStarted: ({ id }) => enterSandbox(model, GUIDED[id].start(), { id, progress: START }),
     FreeSandboxStarted: () =>
       enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START }),
@@ -980,19 +1252,19 @@ const handle = (model: Model, message: Message): Result =>
           return { model: next, commands: [sync(next)] }
         }
         case 'r':
-          if (model.sandbox) return { model }
+          if (offCompany(model)) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
           )
         case 't':
-          if (model.sandbox) return { model }
+          if (offCompany(model)) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
           )
         case 'p':
-          if (model.sandbox) return { model }
+          if (offCompany(model)) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'playbooks' ? 'none' : 'playbooks' }),
@@ -1179,6 +1451,8 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     ResizeChosen: ({ nodeId, direction }) => {
+      const logged = logRunAction(model, { _tag: 'Resize', node: nodeId, direction })
+      if (logged) return logged
       const node = model.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
       const sized = COMPONENTS[node.type].sized
@@ -1338,9 +1612,11 @@ const handle = (model: Model, message: Message): Result =>
       ),
 
     ReplaceBought: ({ nodeId }) =>
+      logRunAction(model, { _tag: 'Replace', node: nodeId }) ??
       act(model, `Replaced ${nodeName(model.game, nodeId)}`, Actions.replace(model.game, nodeId)),
 
     RestartChosen: ({ nodeId }) =>
+      logRunAction(model, { _tag: 'Restart', node: nodeId }) ??
       act(model, `Restarted ${nodeName(model.game, nodeId)}`, Actions.restart(model.game, nodeId)),
 
     IndexAdded: ({ nodeId }) =>

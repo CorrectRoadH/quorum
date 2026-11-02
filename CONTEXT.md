@@ -331,6 +331,18 @@ _Avoid_: course, campaign, chapter
 A fixed puzzle outside the Company, scored on cost, tail latency, and complexity histograms.
 _Avoid_: level, mission, scenario, puzzle (in UI copy)
 
+**Replay**:
+A Challenge result as the server receives it: the Design, the run actions by Step, and the Simulation version. The server re-runs it and keeps its own score.
+_Avoid_: recording, save, solution file
+
+**Daily drill**:
+The short Challenge every player gets on one UTC day, derived from the date. It never rewards streaks.
+_Avoid_: daily challenge, daily quest, streak
+
+**Histogram**:
+The distribution of every player's best result on one axis of one Challenge, per Simulation version. Players see their percentile, never a rank.
+_Avoid_: leaderboard, ranking, high score
+
 ## Relationships
 
 - A **Company** has one **Venture**, any number of **Mutators**, and passes through **Eras** in order.
@@ -342,3 +354,4 @@ _Avoid_: level, mission, scenario, puzzle (in UI copy)
 - An **Exit** turns **Equity** × **Valuation** into **Legacy**.
 - The **Founder** keeps **Legacy**, **Perks**, and **Playbooks** from one **Company** to the next.
 - A **Sandbox track** holds guided **Sandboxes** for one **Era**. Passing it, or reaching the Era in any **Company**, unlocks that Era's **Challenges**.
+- A **Challenge** result uploads as a **Replay**; the server re-runs it and places each axis on that Challenge's **Histograms**.

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@template/rpc": "workspace:*",
+    "@template/simulation": "workspace:*",
     "effect": "4.0.0"
   }
 }

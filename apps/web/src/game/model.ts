@@ -5,6 +5,10 @@ import type { Ledger } from '@template/simulation/ledger'
 import { solveFlow } from '@template/simulation/solve'
 import { HistoryRow } from '@template/simulation/exit'
 import { Founder } from '@template/simulation/founder'
+import { ChallengeResult, RunTotals } from '@template/simulation/challenges'
+import { Replay } from '@template/simulation/replay'
+import { ChallengeVerdict } from '@template/rpc'
+import { histogramQuery } from './challenge-query.ts'
 import {
   ComponentId,
   FamilyId,
@@ -40,6 +44,7 @@ export const Panel = Schema.Literals([
   'end',
   'dev',
   'passed',
+  'challenge',
 ])
 export type Panel = typeof Panel.Type
 
@@ -48,7 +53,7 @@ export const BuildGroupKey = Schema.Literals(
 )
 
 /** The title menu's page. */
-export const Menu = Schema.Literals(['main', 'sandbox', 'found', 'legacy', 'history'])
+export const Menu = Schema.Literals(['main', 'sandbox', 'found', 'legacy', 'history', 'challenges'])
 export type Menu = typeof Menu.Type
 
 export const SandboxId = Schema.Literals(SANDBOX_IDS)
@@ -89,6 +94,36 @@ export const Exited = Schema.Struct({
   researched: Schema.Array(ResearchId),
 })
 export type Exited = typeof Exited.Type
+
+/** Where a Challenge result stands with the server: provisional until it confirms. */
+export const Verification = Schema.Literals([
+  'local',
+  'sending',
+  'verified',
+  'unverified',
+  'offline',
+])
+export type Verification = typeof Verification.Type
+
+/**
+ * The open Challenge. The player builds on a live preview, then Run replays
+ * the Design from t = 0 on the Challenge's seed; only that run is scored.
+ */
+export const ChallengeRun = Schema.Struct({
+  id: Schema.String,
+  phase: Schema.Literals(['build', 'running', 'result']),
+  /** The build board at Run, restored by Rebuild. */
+  board: Schema.NullOr(Game),
+  /** The run's replay: the Design at Run, and the actions logged since. */
+  replay: Schema.NullOr(Replay),
+  totals: RunTotals,
+  result: Schema.NullOr(ChallengeResult),
+  verdict: Schema.NullOr(ChallengeVerdict),
+  verification: Verification,
+  /** Why the server did not confirm, when it did not. */
+  note: Schema.NullOr(Schema.String),
+})
+export type ChallengeRun = typeof ChallengeRun.Type
 
 export const Tone = Schema.Literals(['plain', 'ok', 'warn', 'danger', 'primary'])
 export type Tone = typeof Tone.Type
@@ -190,6 +225,12 @@ export const Model = Schema.Struct({
   game: Game,
   /** A saved company exists, so the title screen offers Continue. */
   saved: Schema.Boolean,
+  /** The open Challenge, or null. */
+  challenge: Schema.NullOr(ChallengeRun),
+  /** Challenge histograms from the API Worker. */
+  histograms: histogramQuery.Model,
+  /** Today's UTC date, for the daily drill. */
+  today: Schema.String,
   /** The open Sandbox, or null in a Company. */
   sandbox: Schema.NullOr(SandboxRun),
   /** The Company, kept aside while a Sandbox is open. */
@@ -254,3 +295,7 @@ export const ledgerOf = (model: Model): Ledger => ({
   ...solveFlow(model.game),
   bottleneck: model.bottleneck,
 })
+
+/** The board is not the Company: a Sandbox or a Challenge is open. */
+export const offCompany = (model: Model): boolean =>
+  model.sandbox !== null || model.challenge !== null

@@ -44,6 +44,12 @@ export const Founder = Schema.Struct({
   keep: withDefault(Schema.Array(ResearchSchema), []),
   playbooks: withDefault(Schema.Array(Playbook), []),
   history: withDefault(Schema.Array(HistoryRow), []),
+  /** Eras reached in any Company: each opens its Challenges (14 "Rules"). */
+  erasReached: withDefault(Schema.Array(Schema.Finite), []),
+  /** Challenges completed once, for their badge and first-completion Legacy. */
+  completed: withDefault(Schema.Array(Schema.String), []),
+  /** A random id the browser makes once; Challenge histograms count one best per device. */
+  deviceId: withDefault(Schema.String, ''),
 })
 export type Founder = typeof Founder.Type
 
@@ -146,3 +152,20 @@ export const removePlaybook = (founder: Founder, index: number): Founder => ({
   ...founder,
   playbooks: founder.playbooks.filter((_, at) => at !== index),
 })
+
+/** Notes an Era reached in a Company. */
+export const recordEra = (founder: Founder, stage: number): Founder =>
+  founder.erasReached.includes(stage)
+    ? founder
+    : { ...founder, erasReached: [...founder.erasReached, stage] }
+
+/** A Challenge completed: its badge, and its Legacy the first time only. */
+export const completeChallenge = (founder: Founder, id: string, legacy: number): Founder =>
+  founder.completed.includes(id)
+    ? founder
+    : {
+        ...founder,
+        completed: [...founder.completed, id],
+        legacy: founder.legacy + legacy,
+        earned: founder.earned + legacy,
+      }

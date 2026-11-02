@@ -45,7 +45,7 @@ To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` fro
 
 ```text
 apps/web ─────────► packages/rpc, packages/simulation
-apps/backend ─────► packages/rpc (and packages/simulation from M8)
+apps/backend ─────► packages/rpc, packages/simulation
 examples/reference ► packages/rpc
 packages/rpc ─────► effect
 packages/simulation ► effect
@@ -55,4 +55,6 @@ The web app must not import backend implementation modules. The RPC package must
 
 ## Cloudflare scope
 
-The initial stack provisions only the website Worker and API Worker. Add D1, R2, Access, Durable Objects, or other Cloudflare services only when a product feature requires them. The example API returns a small static status response and does not imply a persistence choice.
+The stack provisions the website Worker, the API Worker, and one D1 database, `Results`, bound to the API Worker as `RESULTS`. Challenges need it: the API Worker re-runs each submitted replay and keeps every device's best per axis, and histograms and percentiles are SQL counts over those rows. KV cannot count, and a Durable Object per Challenge would need hand-written aggregation. The schema is in `apps/backend/migrations`, which Alchemy applies on deploy.
+
+The Challenges context sees only the `ResultStore` service (`apps/backend/src/contexts/challenges/store.ts`). `apps/backend/src/platform/d1-result-store.ts` implements it with SQL against a small structural `SqlRunner`, which a `D1Database` satisfies; tests run the same SQL on `node:sqlite`. Add R2, Access, Durable Objects, or other Cloudflare services only when a product feature requires them.
