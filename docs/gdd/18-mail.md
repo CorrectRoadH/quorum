@@ -96,31 +96,31 @@ tells the player what is wrong. The sender and its buttons tell the player what 
 ## Colour code
 
 A sender wears the app's own **badge**: the shape and glyph knocked out in white, as on the dock
-([Interface](./15-ui-ux.md)). The shape says what kind of party wrote. The colour comes from the
-app's palette, not from a new one, so Mail looks like part of the Board.
+([Interface](./15-ui-ux.md)). The shape and glyph say what kind of party wrote. The colour is the
+brand colour of the real company the sender parodies, so AWOL is the orange of the cloud it mocks
+and the joke reads before the name.
 
-| Kind       | Shape (build group) | Colour (app token) | Glyph       |
-| ---------- | ------------------- | ------------------ | ----------- |
-| Cloud      | Hexagon (Edge)      | `--group-edge`     | Cloud       |
-| Monitoring | Diamond (Ops)       | `--warn`           | Pulse line  |
-| Vendor     | Diamond (Ops)       | `--group-ops`      | Credit card |
-| Investor   | Chip (Compute)      | `--group-compute`  | Trend line  |
-| Finance    | Disc (Data)         | `--chart-4`        | Ledger      |
-| Customers  | Hexagon (Edge)      | `--chart-2`        | Life buoy   |
-| Mentor     | Chip (Compute)      | `--primary` (ink)  | Compass     |
-| Teammate   | Disc (Data)         | `--ok`, shifted    | Person      |
-| Security   | Diamond (Ops)       | `--danger`         | Shield      |
-| Spam       | Hexagon (Edge)      | Grey               | Barred      |
+| Kind       | Shape (build group) | Glyph       | Colours                                                                                                                |
+| ---------- | ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Cloud      | Hexagon (Edge)      | Cloud       | AWOL `#FF9900`, Gooble `#4285F4`, Azzure `#0078D4`, Cloudscare `#F38020`                                               |
+| Monitoring | Diamond (Ops)       | Pulse line  | PagerDooty `#06AC38`, Grafauna `#F46800`, Centry `#6C5FC7`                                                             |
+| Vendor     | Diamond (Ops)       | Credit card | Swipe `#635BFF`, PayPaul `#0070E0`                                                                                     |
+| Investor   | Chip (Compute)      | Trend line  | Sand Hill Road Runner `#4B5FC8`, Sequel `#00A36C`, Why Combinator `#FF6600`                                            |
+| Finance    | Disc (Data)         | Ledger      | QuickBroke `#2CA01C`, Zero `#13B5EA`                                                                                   |
+| Customers  | Hexagon (Edge)      | Life buoy   | Zenfail `#2F7B80`, Intercomatose `#1F8DED`                                                                             |
+| Mentor     | Chip (Compute)      | Compass     | No brand, so a tribute: Lamportant LaTeX teal `#008080`, Dijkstrah Dutch orange `#FF7F00`, Hoppertunity navy `#2B5B9C` |
+| Teammate   | Disc (Data)         | Person      | A green, shifted by a stable hash of their id                                                                          |
+| Security   | Diamond (Ops)       | Shield      | Commonly Vulnerable & Exposed `#1E6FBF`, National Vulnerability Dumpster `#3E78B2`                                     |
+| Spam       | Hexagon (Edge)      | Barred      | The brand it parodies: Datadug `#632CA6`, Slowflake `#29B5E8`, TalentBro `#0A66C2`, Incohere `#FF7759`, and so on      |
 
 Rules:
 
 - Colour is never the only signal. The shape, the glyph, and the kind label repeat it
   ([Accessibility](./15-ui-ux.md#accessibility)).
 - A sender's badge is the same everywhere: the list, the reader, and the "Show on Board" highlight.
-- Phishing copies a real sender's name, badge, and subject but not its address. The address is the
-  tell ([Phishing](#spam-and-phishing)); spam always wears the grey badge.
-- A teammate keeps the green hue, shifted a little by a stable hash of their id, so no two
-  engineers match.
+- A brand colour too dark to read on the dark theme is lifted to a lighter shade of the same hue.
+- Phishing copies a real sender's name, badge, colour, and subject but not its address. The address
+  is the tell ([Phishing](#spam-and-phishing)).
 
 ## Threads
 
@@ -411,12 +411,9 @@ Challenge, which has no Inbox.
 ## Mail bench (Sandbox)
 
 Mail belongs to a Company, but a Sandbox shows the Inbox too, with a **bench** under the tabs for
-trying Mail without waiting for it. Pick a sample, then Send, ×10, or ×50. Samples cover every kind:
-one per sender kind, each CVE, a CVE misfiled in Spam, a hire request, a rewrite proposal, a customer
-ticket, each spam pitch (phishing traps included), a **repeating thread** that reuses one key to
-test Threads, and a random world event. **Resolve threads** resolves open advice; **Clear** empties
+trying Mail without waiting for it. Pick a sample and Send it, or send ×10 or ×50 random samples. The picker groups one sample per advice topic, one per Step event topic, each CVE and a CVE misfiled in Spam, the hire request, each rewrite language, the customer ticket, and every spam and trap sender, plus a **repeating thread** that reuses one key and a random world event. A topic without a sample fails typecheck. Each send picks another of the topic's letters. **Resolve threads** resolves open advice; **Clear** empties
 the Inbox. Sandbox Mail follows the same rules as a Company's, and the Inbox keeps the newest 40,
-so ×50 also tests the cap. Challenges have no Inbox.
+so a ×50 burst also tests the cap. Challenges have no Inbox.
 
 ## Delivery order
 

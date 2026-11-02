@@ -80,7 +80,15 @@ import {
 import { forceIncident } from '@quorum/simulation/director'
 import { StepEvent } from '@quorum/simulation/events'
 import { nextAdvice } from '@quorum/simulation/goals'
-import { EVENT_EVERY, SAMPLES, eventFact, eventMail, factOf, type Fact } from './mail.ts'
+import {
+  EVENT_EVERY,
+  SAMPLES,
+  eventFact,
+  randomSample,
+  eventMail,
+  factOf,
+  type Fact,
+} from './mail.ts'
 import type { EventMail } from './copy/index.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { buildItems, eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
@@ -2425,11 +2433,13 @@ const handle = (model: Model, message: Message): Result =>
     },
     MailSampleChosen: ({ id }) => ({ model: { ...model, mailSample: id } }),
     MailGenerated: ({ count }) => {
-      const sample = SAMPLES.find((entry) => entry.id === model.mailSample) ?? SAMPLES[0]
-      if (!sample) return { model }
+      // Send uses the chosen sample; a burst of 10 or 50 draws a random sample for each Mail.
+      const chosen = SAMPLES.find((entry) => entry.id === model.mailSample) ?? SAMPLES[0]
+      if (!chosen) return { model }
       let next = model
       for (let sent = 0; sent < count; sent += 1) {
         const n = Math.max(0, ...next.inbox.map((mail) => mail.id)) + 1
+        const sample = count === 1 ? chosen : randomSample(next.game, n)
         next = mailed(next, sample.make(next.game, n), next.game.time)
       }
       return { model: reading(next, null) }

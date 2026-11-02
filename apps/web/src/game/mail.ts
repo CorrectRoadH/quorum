@@ -1,4 +1,10 @@
-import type { Advice, AdviceAction } from '@quorum/simulation/goals'
+import type {
+  Advice,
+  AdviceAction,
+  AdviceFrom,
+  AdviceTopic,
+  AdviceVars,
+} from '@quorum/simulation/goals'
 import type { Game } from '@quorum/simulation/state'
 import { COMPONENTS } from '@quorum/simulation/catalog'
 import {
@@ -15,6 +21,8 @@ import {
   type Cve,
   type CveVars,
   type EventMail,
+  type EventTopic,
+  type EventVars,
   type Letters,
   type Pitch,
   type SenderKind,
@@ -32,8 +40,10 @@ export interface Sender {
   readonly name: string
   readonly address: string
   readonly kind: SenderKind
-  /** The colour: the avatar, the row's left bar, and the label chip. */
-  readonly hue: number
+  /** The badge colour: the real company's brand colour, or a teammate's own green. */
+  readonly color: string
+  /** The kind whose badge it wears: a phishing copy wears the badge of what it fakes. */
+  readonly looks: SenderKind
   readonly sign: string
 }
 
@@ -48,20 +58,6 @@ export const KIND_LABEL: Record<SenderKind, string> = {
   teammate: 'Team',
   security: 'Security',
   spam: 'Spam',
-}
-
-/** One fixed hue per kind; a teammate's hue drifts a little, so no two match. */
-const HUE: Record<SenderKind, number> = {
-  cloud: 245,
-  monitoring: 75,
-  vendor: 345,
-  investor: 305,
-  finance: 220,
-  customers: 205,
-  mentor: 285,
-  teammate: 150,
-  security: 25,
-  spam: 0,
 }
 
 const hashOf = (...parts: ReadonlyArray<number | string>): number => {
@@ -79,13 +75,15 @@ const pick = <A>(items: ReadonlyArray<A>, ...parts: ReadonlyArray<number | strin
 
 export const senderOf = (id: string): Sender => {
   const known = SENDERS[id]
-  if (known) return { ...known, hue: HUE[known.kind] }
+  if (known) return { ...known, looks: known.looks ?? known.kind }
   const mate = pick(TEAMMATES, id.replace('mate:', ''))
   return {
     kind: 'teammate',
     name: mate.name,
     address: `${mate.name.toLowerCase().replace(/[^a-z]+/g, '.')}@quorum.team`,
-    hue: HUE.teammate + (hashOf(id) % 5) * 9 - 18,
+    // Teammates have no brand: each wears a green that drifts a little, so no two match.
+    color: `oklch(0.52 0.12 ${150 + (hashOf(id) % 5) * 9 - 18})`,
+    looks: 'teammate',
     sign: mate.sign,
   }
 }
@@ -246,119 +244,226 @@ export const eventMail = (game: Game, bucket: number): Fact | null => {
 
 export interface Sample {
   readonly id: string
+  /** The picker's heading for this sample. */
+  readonly group: string
   readonly label: string
   /** `n` is unique per send, so each one starts its own Thread unless the sample repeats a key. */
   readonly make: (game: Game, n: number) => Fact
 }
 
-const adviceSample = (id: string, label: string, make: (n: number) => Advice): Sample => ({
-  id,
-  label,
-  make: (game, n) => factOf(make(n), game, n),
-})
-
 const own = (fact: Fact, n: number): Fact => ({ ...fact, key: `${fact.key}#${n}` })
+
+const ROUND: ReadonlyArray<AdviceAction> = [
+  { id: 'raise', label: 'Raise' },
+  { id: 'decline', label: 'Decline' },
+]
+
+/** One case of every advice topic. A topic missing here fails typecheck. */
+const ADVICE_SAMPLES: {
+  readonly [T in AdviceTopic]: {
+    readonly label: string
+    readonly from: AdviceFrom
+    readonly vars: AdviceVars[T]
+    readonly actions?: ReadonlyArray<AdviceAction>
+  }
+} = {
+  credits: { label: 'CPU credits exhausted', from: 'cloud', vars: { node: 'App Server' } },
+  draining: { label: 'CPU credits nearly gone', from: 'cloud', vars: { node: 'App Server' } },
+  cpu: { label: 'CPU at 100%', from: 'cloud', vars: { node: 'App Server' } },
+  memory: { label: 'Out of memory', from: 'cloud', vars: { node: 'App Server' } },
+  'memory-shared': {
+    label: 'Out of memory, Postgres shares the box',
+    from: 'cloud',
+    vars: { node: 'App Server' },
+  },
+  network: { label: 'Network at line rate', from: 'cloud', vars: { node: 'Load Balancer' } },
+  disk: { label: 'Working set left RAM', from: 'cloud', vars: { node: 'Database' } },
+  workers: { label: 'All workers busy', from: 'monitoring', vars: { node: 'App Server' } },
+  'workers-pool': {
+    label: 'All workers busy, pool',
+    from: 'monitoring',
+    vars: { node: 'App Server', runtime: 'Python' },
+  },
+  connections: { label: 'Postgres refuses connections', from: 'monitoring', vars: {} },
+  throughput: { label: 'Past its throughput', from: 'monitoring', vars: { node: 'Cache' } },
+  limit: { label: 'Limits the Design', from: 'monitoring', vars: { node: 'Database' } },
+  failed: { label: 'Node failed', from: 'monitoring', vars: { node: 'Database' } },
+  restarting: { label: 'Node restarting', from: 'monitoring', vars: { node: 'App Server' } },
+  'slow-query-fix': { label: 'Query has no index, Add index', from: 'monitoring', vars: {} },
+  'slow-query': { label: 'Query has no index, no research', from: 'monitoring', vars: {} },
+  'failing-writes': { label: 'Writes failing', from: 'monitoring', vars: { kind: 'Write' } },
+  failing: { label: 'Requests failing', from: 'monitoring', vars: { kind: 'Upload' } },
+  stranded: { label: 'Requests with nowhere to go', from: 'monitoring', vars: { node: 'CDN' } },
+  drawer: { label: 'Payments drawer full', from: 'vendor', vars: {} },
+  collect: { label: 'Revenue waiting', from: 'vendor', vars: {} },
+  negative: { label: 'Cash negative', from: 'finance', vars: {} },
+  guidance: { label: 'Quarterly Guidance', from: 'finance', vars: {} },
+  round: { label: 'Term sheet', from: 'investor', vars: { round: 'Series A' }, actions: ROUND },
+  research: { label: 'Spend your Insight', from: 'mentor', vars: {} },
+  ipo: { label: 'Going public', from: 'mentor', vars: { users: '1,000,000' } },
+  grow: {
+    label: 'Grow to the next round',
+    from: 'mentor',
+    vars: { round: 'Seed', users: '1,000' },
+  },
+}
+
+/** One case of every Step event topic, and the event that sends it. */
+const EVENT_SAMPLES: {
+  readonly [T in EventTopic]: {
+    readonly label: string
+    readonly tag: string
+    readonly vars: EventVars[T]
+  }
+} = {
+  'incident-instance': {
+    label: 'Instance failed',
+    tag: 'IncidentStarted',
+    vars: { node: 'App Server' },
+  },
+  'incident-slow-query': { label: 'Slow query', tag: 'IncidentStarted', vars: {} },
+  'incident-poison': { label: 'Poison message', tag: 'IncidentStarted', vars: {} },
+  'incident-ddos': { label: 'DDoS (Cloudscare)', tag: 'IncidentStarted', vars: {} },
+  'incident-stampede': { label: 'Cache stampede', tag: 'IncidentStarted', vars: {} },
+  'incident-zone': { label: 'Zone outage', tag: 'IncidentStarted', vars: { zone: 'B' } },
+  'incident-psp': { label: 'Payment provider outage', tag: 'IncidentStarted', vars: {} },
+  resolved: {
+    label: 'Incident over',
+    tag: 'IncidentResolved',
+    vars: { incident: 'Zone outage' },
+  },
+  'resolved-action': {
+    label: 'Incident over, with action item',
+    tag: 'IncidentResolved',
+    vars: { incident: 'Cache stampede', action: 'Request coalescing' },
+  },
+  drawer: { label: 'Drawer full', tag: 'DrawerFull', vars: {} },
+  oom: { label: 'Out of memory, restarted', tag: 'OutOfMemory', vars: { node: 'App Server' } },
+  credits: { label: 'Out of CPU credits', tag: 'CreditsExhausted', vars: { node: 'App Server' } },
+  alert: {
+    label: 'Alert fired',
+    tag: 'AlertFired',
+    vars: { alert: 'Error rate above 1%', seconds: '30' },
+  },
+  'alert-ignored': {
+    label: 'Alert ignored',
+    tag: 'AlertIgnored',
+    vars: { alert: 'A Node above 90% load' },
+  },
+  hired: { label: 'New hire says hello', tag: 'Hired', vars: {} },
+  finished: { label: 'Task finished', tag: 'WorkFinished', vars: { item: 'Add index' } },
+  deployed: { label: 'Deployed', tag: 'Deployed', vars: { features: 'Search, Uploads' } },
+  'deployed-bad': { label: 'Bad deploy', tag: 'Deployed', vars: { features: 'Checkout' } },
+  migration: { label: 'Migration step', tag: 'MigrationShifted', vars: { share: '25%' } },
+}
+
+const entries = <K extends string, V>(record: { readonly [P in K]: V }): ReadonlyArray<[K, V]> =>
+  Object.entries(record) as Array<[K, V]>
+
+/** A random sample for the bench's ×10 and ×50: the `n`th send of a burst. */
+export const randomSample = (game: Game, n: number): Sample => pick(SAMPLES, game.seed, 'bench', n)
 
 export const SAMPLES: ReadonlyArray<Sample> = [
   {
     id: 'random',
+    group: 'Mixed',
     label: 'A random event',
     make: (game, n) => eventMail(game, n) ?? spamFact(SPAM[0]!, game, n),
   },
-  adviceSample('cloud', 'Cloud: out of memory', (n) => ({
-    key: `cloud:memory#${n}`,
-    from: 'cloud',
-    subject: 'App Server: out of memory, swapping',
-    text: 'App Server is out of RAM and swapping.',
-    topic: 'memory',
-    vars: { node: 'App Server' },
-    actions: [],
+  {
+    id: 'thread',
+    group: 'Mixed',
+    label: 'Repeating thread (same key)',
+    make: (game, n) =>
+      factOf(
+        {
+          key: 'cloud:cpu:sandbox',
+          from: 'cloud',
+          subject: '',
+          text: '',
+          topic: 'cpu',
+          vars: { node: 'App Server' },
+          actions: [],
+        },
+        game,
+        n,
+      ),
+  },
+  ...entries(ADVICE_SAMPLES).map(([topic, sample]): Sample => ({
+    id: `advice:${topic}`,
+    group: 'Advice',
+    label: `${KIND_LABEL[sample.from]}: ${sample.label}`,
+    make: (game, n) =>
+      factOf(
+        {
+          key: `${sample.from}:${topic}#${n}`,
+          from: sample.from,
+          subject: '',
+          text: '',
+          topic,
+          vars: sample.vars,
+          actions: sample.actions ?? [],
+        },
+        game,
+        n,
+      ),
   })),
-  adviceSample('monitoring', 'Alerts: node failed', (n) => ({
-    key: `monitoring:failed#${n}`,
-    from: 'monitoring',
-    subject: 'Database failed',
-    text: 'Database failed.',
-    topic: 'failed',
-    vars: { node: 'Database' },
-    actions: [],
-  })),
-  adviceSample('vendor', 'Vendor: drawer full', (n) => ({
-    key: `vendor:drawer#${n}`,
-    from: 'vendor',
-    subject: 'Your payout drawer is full',
-    text: 'The Payments drawer is full.',
-    topic: 'drawer',
-    vars: {},
-    actions: [],
-  })),
-  adviceSample('investor', 'Investor: term sheet', (n) => ({
-    key: `investor:round#${n}`,
-    from: 'investor',
-    subject: 'Seed term sheet',
-    text: 'Investors are calling.',
-    topic: 'round',
-    vars: { round: 'Seed' },
-    actions: [
-      { id: 'raise', label: 'Raise' },
-      { id: 'decline', label: 'Decline' },
-    ],
-  })),
-  adviceSample('finance', 'Finance: negative cash', (n) => ({
-    key: `finance:negative#${n}`,
-    from: 'finance',
-    subject: 'Your balance is negative',
-    text: 'Cash is negative.',
-    topic: 'negative',
-    vars: {},
-    actions: [],
-  })),
-  adviceSample('mentor', 'Mentor: spend Insight', (n) => ({
-    key: `mentor:research#${n}`,
-    from: 'mentor',
-    subject: 'You are sitting on Insight',
-    text: 'Open Research and spend your Insight.',
-    topic: 'research',
-    vars: {},
-    actions: [],
-  })),
-  adviceSample('thread', 'Repeating thread (same key)', () => ({
-    key: 'cloud:cpu:sandbox',
-    from: 'cloud',
-    subject: 'App Server: CPU at 100%',
-    text: 'App Server is out of CPU.',
-    topic: 'cpu',
-    vars: { node: 'App Server' },
-    actions: [],
+  ...entries(EVENT_SAMPLES).map(([topic, sample]): Sample => ({
+    id: `event:${topic}`,
+    group: 'What happened',
+    label: sample.label,
+    make: (game, n) =>
+      own(
+        eventFact(
+          { _tag: sample.tag, engineerId: mateOf(game, n).replace('mate:', '') },
+          { topic, vars: sample.vars } as EventMail,
+          game,
+          n,
+        ),
+        n,
+      ),
   })),
   ...CVES.map((cve): Sample => ({
     id: `cve-${cve.id}`,
-    label: `CVE: ${cve.id}`,
+    group: 'World',
+    label: `CVE: ${cve.id}, ${cve.title}`,
     make: (game, n) => own(cveFact(cve, game, false, n), n),
   })),
   {
     id: 'cve-spam',
+    group: 'World',
     label: 'CVE misfiled in Spam',
     make: (game, n) => own(cveFact(CVES[0]!, game, true, n), n),
   },
   {
     id: 'hire',
+    group: 'World',
     label: 'Teammate: hire request',
     make: (game, n) => own(hireFact(game, mateOf(game, n), n), n),
   },
-  {
-    id: 'rewrite',
-    label: 'Teammate: rewrite proposal',
-    make: (game, n) => own(rewriteFact(game, mateOf(game, n), n), n),
-  },
+  ...REWRITES.map((rewrite): Sample => ({
+    id: `rewrite:${rewrite.language}`,
+    group: 'World',
+    label: `Teammate: rewrite it in ${rewrite.language}`,
+    make: (game, n) => {
+      const mate = mateOf(game, n)
+      const key = `team:rewrite:${mate}#${n}`
+      return fact(key, mate, write(rewrite.letters, {}, mate, game, key, n), [
+        { id: 'team', label: 'Open Team' },
+        { id: 'decline', label: 'Decline' },
+      ])
+    },
+  })),
   {
     id: 'customer',
+    group: 'World',
     label: 'Customer: it is slow',
     make: (game, n) => own(customerFact(game, n), n),
   },
   ...SPAM.map((pitch): Sample => ({
     id: pitch.sender,
-    label: `Spam: ${SENDERS[pitch.sender]?.name ?? pitch.sender}`,
+    group: 'Spam',
+    label: `${pitch.actions ? 'Trap' : 'Spam'}: ${SENDERS[pitch.sender]?.name ?? pitch.sender}`,
     make: (game, n) => own(spamFact(pitch, game, n), n),
   })),
 ]
@@ -384,6 +489,7 @@ export const eventFact = (
   event: { readonly _tag: string; readonly [field: string]: unknown },
   mail: EventMail,
   game: Game,
+  salt: number | string = '',
 ): Fact => {
   const about =
     [event.nodeId, event.rule, event.engineerId].find((v) => typeof v === 'string') ?? ''
@@ -397,5 +503,5 @@ export const eventFact = (
       : `mate:${typeof event.engineerId === 'string' ? event.engineerId : (game.engineers[0]?.id ?? 'e0')}`)
   // Each topic carries its own vars; the record type cannot say so.
   const letters = EVENTS[mail.topic] as unknown as Letters<EventMail['vars']>
-  return fact(key, sender, write(letters, mail.vars, sender, game, key))
+  return fact(key, sender, write(letters, mail.vars, sender, game, key, salt))
 }

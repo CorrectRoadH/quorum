@@ -16,13 +16,18 @@ import {
   User,
   X,
   type IconNode,
+  Dices,
 } from 'lucide'
 import { button } from '@/components/ui/button'
 import { clock } from '@/game/format.ts'
 import { KIND_LABEL, SAMPLES, senderOf, type Sender, type SenderKind } from '@/game/mail.ts'
 import type { BuildGroup } from '@quorum/simulation/catalog'
 import { Kbd } from '@/components/ui/kbd'
-import { nativeSelect, nativeSelectOption } from '@/components/ui/native-select'
+import {
+  nativeSelect,
+  nativeSelectOptGroup,
+  nativeSelectOption,
+} from '@/components/ui/native-select'
 import { Message } from '@/game/message.ts'
 import type { Folder, Mail, Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
@@ -37,24 +42,23 @@ import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, groupBadge } from './bits.ts'
    ========================================================================== */
 
 /** The badge each kind of sender wears: a shape from the build groups, a glyph, a colour. */
-const BADGE: Record<SenderKind, { group: BuildGroup; glyph: IconNode; color?: string }> = {
+const BADGE: Record<SenderKind, { group: BuildGroup; glyph: IconNode }> = {
   cloud: { group: 'edge', glyph: Cloud },
-  monitoring: { group: 'ops', glyph: Activity, color: 'var(--warn)' },
+  monitoring: { group: 'ops', glyph: Activity },
   vendor: { group: 'ops', glyph: CreditCard },
   investor: { group: 'compute', glyph: TrendingUp },
-  finance: { group: 'data', glyph: Landmark, color: 'var(--chart-4)' },
-  customers: { group: 'edge', glyph: LifeBuoy, color: 'var(--chart-2)' },
-  mentor: { group: 'compute', glyph: Compass, color: 'var(--primary)' },
-  teammate: { group: 'data', glyph: User, color: 'var(--ok)' },
-  security: { group: 'ops', glyph: ShieldAlert, color: 'var(--danger)' },
+  finance: { group: 'data', glyph: Landmark },
+  customers: { group: 'edge', glyph: LifeBuoy },
+  mentor: { group: 'compute', glyph: Compass },
+  teammate: { group: 'data', glyph: User },
+  security: { group: 'ops', glyph: ShieldAlert },
   spam: { group: 'edge', glyph: Ban },
 }
 
+/** The shape and glyph say what kind of party wrote; the colour is the brand it parodies. */
 const badge = (sender: Sender, size: string, h: HtmlBuilder<Message>): Html => {
-  const { group, glyph, color } = BADGE[sender.kind]
-  // Each teammate drifts a little in hue, so no two engineers match.
-  const own = sender.kind === 'teammate' ? `oklch(0.52 0.12 ${sender.hue})` : color
-  return groupBadge(group, glyph, size, h, sender.kind === 'spam', own)
+  const { group, glyph } = BADGE[sender.looks]
+  return groupBadge(group, glyph, size, h, false, sender.color)
 }
 
 const inFolder = (mail: Mail, folder: Folder): boolean =>
@@ -340,9 +344,15 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
           size: 'sm',
           value: model.mailSample,
           onChange: (id) => Message.MailSampleChosen({ id }),
-          wrapperClass: 'w-56',
-          options: SAMPLES.map((sample) =>
-            nativeSelectOption({ value: sample.id, label: sample.label }, h),
+          wrapperClass: 'w-64',
+          options: [...new Set(SAMPLES.map((sample) => sample.group))].map((group) =>
+            nativeSelectOptGroup(
+              { label: group },
+              SAMPLES.filter((sample) => sample.group === group).map((sample) =>
+                nativeSelectOption({ value: sample.id, label: sample.label }, h),
+              ),
+              h,
+            ),
           ),
         },
         h,
@@ -353,9 +363,14 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
             onClick: Message.MailGenerated({ count }),
             variant: count === 1 ? 'default' : 'outline',
             size: 'sm',
-            attributes: [h.Key(`send-${count}`)],
+            attributes: [
+              h.Key(`send-${count}`),
+              ...(count === 1
+                ? []
+                : [h.AriaLabel(`Send ${count} random`), h.Title(`Send ${count} random`)]),
+            ],
           },
-          count === 1 ? 'Send' : `×${count}`,
+          count === 1 ? 'Send' : [icon(h, Dices, 'size-3.5'), `×${count}`],
           h,
         ),
       ),
@@ -379,7 +394,7 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.DataAttribute('exit', 'gesture'),
       h.AriaLabel('Inbox'),
       h.Class(
-        `absolute right-3 bottom-[68px] z-30 flex h-[min(440px,calc(100%-96px))] w-[min(720px,calc(100%-24px))] flex-col overflow-hidden ${FLOAT} enter-panel compact:inset-x-2 compact:right-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+136px)] compact:w-auto`,
+        `absolute right-3 bottom-[68px] z-30 flex h-[min(520px,calc(100%-96px))] w-[min(720px,calc(100%-24px))] flex-col overflow-hidden ${FLOAT} enter-panel compact:inset-x-2 compact:right-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+136px)] compact:w-auto`,
       ),
     ],
     [
