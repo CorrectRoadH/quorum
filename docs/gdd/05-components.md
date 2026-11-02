@@ -57,7 +57,7 @@ details are in [Data tier](./07-data-tier.md). Runtime details for App Servers a
 | Platform      | [Autoscaler](#autoscaler)                                | `hpa`  | Autoscaling              | Series A |
 | Platform      | [Service Mesh](#service-mesh)                            | `mesh` | Service mesh             | Series B |
 | Platform      | [CI/CD Pipeline](#cicd-pipeline)                         | `ci`   | Continuous delivery      | Pre-seed |
-| Platform      | [Feature Flags](#feature-flags)                          | `ff`   | Feature flags            | Series A |
+| Platform      | [Feature Flags](#feature-flags)                          | `ff`   | Feature flags            | Seed     |
 | Platform      | [Secrets and Certificates](#secrets-and-certificates)    | `pki`  | Certificate automation   | Seed     |
 | Observability | [Analytics](#analytics)                                  | `otel` | Starter                  | Garage   |
 | Observability | [Payments](#payments)                                    | `pay`  | Starter                  | Garage   |
@@ -440,8 +440,11 @@ multiplies feature velocity ([Team and velocity](./08-team-and-velocity.md#deplo
 
 Real products: LaunchDarkly, Unleash.
 
-Ships features dark and turns them on gradually. A feature behind a flag cannot cause a bad-deploy
-incident larger than its rollout percentage, and the player can turn it off in one click. Flags also
+Ships features dark and turns them on gradually, in steps of 5%, 25%, 50%, and 100% of users
+([Rollout](./08-team-and-velocity.md#rollout)). A feature behind a flag cannot cause a bad-deploy
+incident larger than its rollout percentage, and the player can turn it off in one click. Users who
+do not have a feature yet form the holdout group that measures its lift
+([Measured lift](./08-team-and-velocity.md#measured-lift)). Flags also
 enable graceful degradation: turning off expensive features during an incident
 ([Incidents](./11-incidents.md#mitigation-toolbox)).
 

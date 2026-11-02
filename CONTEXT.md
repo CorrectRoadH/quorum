@@ -277,6 +277,22 @@ _Avoid_: DH points, effort, time
 A product change built with Dev Hours that grows the market or revenue and changes load.
 _Avoid_: upgrade, perk, improvement
 
+**Rollout**:
+The share of users who have a Feature: 5%, 25%, 50%, or 100% behind a Feature Flag.
+_Avoid_: release, exposure (in UI copy), percentage
+
+**Adoption**:
+The share of a Feature's users who use it, which grows over calendar time after it ships.
+_Avoid_: usage, uptake, engagement
+
+**Lift**:
+A Feature's realized effect, measured against the users who do not have it yet.
+_Avoid_: impact, uplift, result
+
+**Upkeep**:
+The share of a Service's Dev Hours that keeps its live Features running.
+_Avoid_: maintenance tax, KTLO, overhead
+
 **Tech debt**:
 A per-Service percentage that slows Dev Hours and raises Incident chances until paid down.
 _Avoid_: mess, cruft

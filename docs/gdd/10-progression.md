@@ -249,7 +249,7 @@ visible so that the player can plan ([Interface](./15-ui-ux.md#research-screen))
 | `backoff-jitter`       | Backoff with jitter      | Seed     | 400     | `timeouts`                       | Retry policy option                                                   |
 | `cert-automation`      | Certificate automation   | Seed     | 300     | —                                | Secrets and Certificates                                              |
 | `blue-green`           | Blue-green deploys       | Seed     | 900     | `ci`                             | Deploy strategy                                                       |
-| `feature-flags`        | Feature flags            | Series A | 1,500   | `ci`                             | Feature Flags                                                         |
+| `feature-flags`        | Feature flags            | Seed     | 800     | `ci`                             | Feature Flags                                                         |
 | `circuit-breakers`     | Circuit breakers         | Series A | 2,500   | `backoff-jitter`                 | Link option                                                           |
 | `bulkheads`            | Bulkheads                | Series A | 3,500   | `circuit-breakers`               | Link option                                                           |
 | `load-shedding`        | Priority load shedding   | Series A | 4,000   | `timeouts`                       | When saturated, drop the lowest-value kinds first                     |
@@ -386,23 +386,23 @@ language ([Runtimes](./06-runtimes.md#variants-by-language)).
 
 ### Track: Product and business
 
-| ID                   | Name                    | Era      | ◇         | Requires         | Effect                                               |
-| -------------------- | ----------------------- | -------- | --------- | ---------------- | ---------------------------------------------------- |
-| `stripe`             | Stripe Billing          | Garage   | 30        | —                | Payments collect automatically                       |
-| `funnels`            | Funnel analytics        | Pre-seed | 150       | —                | Growth +10%                                          |
-| `code-review`        | Code review             | Pre-seed | 120       | —                | Shows hidden costs of features before they ship      |
-| `testing-culture`    | Automated tests         | Pre-seed | 150       | `ci`             | Bad-deploy chance −30%                               |
-| `ab-testing`         | A/B testing             | Seed     | 700       | `funnels`        | Feature effects +20%                                 |
-| `hiring-pipeline`    | Hiring pipeline         | Seed     | 600       | —                | Time to hire −30%                                    |
-| `trunk-based`        | Trunk-based development | Seed     | 800       | `ci`             | Deploy frequency +50%                                |
-| `platform-team`      | Platform team           | Series A | 3,000     | `containers`     | Team type                                            |
-| `sre-team`           | SRE team                | Series A | 4,000     | `on-call`        | Team type                                            |
-| `service-boundaries` | Service boundaries      | Series B | 15,000    | —                | Split services                                       |
-| `data-team`          | Data team               | Series B | 10,000    | `data-warehouse` | Team type                                            |
-| `enterprise-sales`   | Enterprise sales        | Series B | 20,000    | —                | B2B market +30%; outages cost SLA credits            |
-| `security-team`      | Security team           | Pre-IPO  | 200,000   | —                | Team type                                            |
-| `investor-relations` | Investor relations      | Pre-IPO  | 300,000   | —                | Valuation multiple +2                                |
-| `guidance-modeling`  | Guidance modeling       | Public   | 1,000,000 | —                | Shows the probability of beating each guidance level |
+| ID                   | Name                    | Era      | ◇         | Requires                   | Effect                                               |
+| -------------------- | ----------------------- | -------- | --------- | -------------------------- | ---------------------------------------------------- |
+| `stripe`             | Stripe Billing          | Garage   | 30        | —                          | Payments collect automatically                       |
+| `funnels`            | Funnel analytics        | Pre-seed | 150       | —                          | Growth +10%                                          |
+| `code-review`        | Code review             | Pre-seed | 120       | —                          | Shows hidden costs of features before they ship      |
+| `testing-culture`    | Automated tests         | Pre-seed | 150       | `ci`                       | Bad-deploy chance −30%                               |
+| `ab-testing`         | A/B testing             | Seed     | 700       | `funnels`, `feature-flags` | Measures each Feature's lift against a holdout group |
+| `hiring-pipeline`    | Hiring pipeline         | Seed     | 600       | —                          | Time to hire −30%                                    |
+| `trunk-based`        | Trunk-based development | Seed     | 800       | `ci`                       | Deploy frequency +50%                                |
+| `platform-team`      | Platform team           | Series A | 3,000     | `containers`               | Team type                                            |
+| `sre-team`           | SRE team                | Series A | 4,000     | `on-call`                  | Team type                                            |
+| `service-boundaries` | Service boundaries      | Series B | 15,000    | —                          | Split services                                       |
+| `data-team`          | Data team               | Series B | 10,000    | `data-warehouse`           | Team type                                            |
+| `enterprise-sales`   | Enterprise sales        | Series B | 20,000    | —                          | B2B market +30%; outages cost SLA credits            |
+| `security-team`      | Security team           | Pre-IPO  | 200,000   | —                          | Team type                                            |
+| `investor-relations` | Investor relations      | Pre-IPO  | 300,000   | —                          | Valuation multiple +2                                |
+| `guidance-modeling`  | Guidance modeling       | Public   | 1,000,000 | —                          | Shows the probability of beating each guidance level |
 
 ## Pacing targets for the first company
 

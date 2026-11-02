@@ -45,6 +45,11 @@ Formatting: SI suffixes only (k, M, B, T). No letter suffixes such as "aa".
 | Declined-round growth | —        | 0.7 × `g`                       | [Funding](./09-economy.md#funding)                               |
 | Valuation scale       | —        | 7.5 × 10⁻⁵                      | [Valuation scale](#valuation-scale)                              |
 | Coordination penalty  | `k`      | 0.08                            | [Team](./08-team-and-velocity.md#coordination)                   |
+| Dev Hours per day     | —        | 8 per engineer, 6.4 founder     | [Team](./08-team-and-velocity.md#dev-hours)                      |
+| Adoption time         | `τ`      | 7 calendar days                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
+| Lift spread           | `σ`      | 1.0                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
+| Upkeep ceiling        | —        | 0.4 × S / (S + 2,000), max 0.6  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
+| Market gain cap       | —        | +100% of the Era market         | [Sizes](./08-team-and-velocity.md#sizes)                         |
 | Link timeout          | —        | 30 s                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
 | Drawer size           | —        | 60 s of revenue                 | [Economy](./09-economy.md#the-payments-drawer)                   |
 | Offline cap           | —        | 8 h                             | [Simulation](./04-simulation.md#offline-progress)                |
@@ -584,5 +589,37 @@ axe-core 4.11 (WCAG 2.0/2.1 A and AA plus best practices), before and after:
 | Lab, Team panel open    | 0 violations; `aria-hidden-focus` incomplete (build dock) | 0; none |
 | Lab, panel closed       | 1 violation                                               | 0       |
 | Daily drill (Challenge) | 1 serious `color-contrast` (`.text-ok`, 3.64:1)           | 0       |
+
+### Features: sizes, outcomes, and upkeep (designed, not built)
+
+[Features](./08-team-and-velocity.md#features) now have real sizes, rolled outcomes, rollouts,
+adoption, measured lift, and upkeep. None of it is built.
+
+| Topic         | Current build                                                                               | This design                                                  | What closes it                                                    |
+| ------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Dev Hours     | `effective × velocity × pace / 60` per sim s: about 2 DH per engineer per calendar day live | 8 DH per engineer per calendar day, on the Team's calendar   | DH flow at `calendarPace`, not `pace`; re-run the pacing bots     |
+| Feature sizes | 6 to 120 DH                                                                                 | 4 to 1,440 DH                                                | New `dh` values in `catalog/work.ts`                              |
+| Requirements  | Paid plans, Notifications center, Recommendations only                                      | Every row of the Features table                              | New `requires` values; Data residency also needs an EU region     |
+| Effects       | Certain, at full strength on deploy                                                         | Rolled outcome × rollout × adoption                          | An outcome roll on queue and an `adoption` field per live Feature |
+| Market gains  | Multiply                                                                                    | Add, capped at +100% of the Era market                       | `marketOf` in `features.ts`                                       |
+| Feature Flags | Not built                                                                                   | Seed research and Component; rollout steps; turn off; remove | The Component, a rollout per Feature, and a Remove work item      |
+| A/B testing   | Not built (designed as "Feature effects +20%")                                              | Measures lift against the holdout                            | Counting sampled requests per group on the Analytics tap          |
+| Upkeep        | None                                                                                        | `0.4 × S / (S + 2,000) × (1 + debt)`, max 0.6                | A per-service share taken before the backlog                      |
+
+A rough budget checks that the sizes fit the Eras at the live pace, where a calendar day is one real
+minute. It multiplies each Era's live length by the effective engineers the bots reach:
+
+| Era      | Live length | Effective engineers | DH in the Era | Feature DH in the Era |
+| -------- | ----------- | ------------------- | ------------- | --------------------- |
+| Garage   | ~6 min      | 0.8 (the founder)   | ~38           | 28                    |
+| Pre-seed | ~10 min     | ~2                  | ~160          | 160                   |
+| Seed     | ~14 min     | ~4                  | ~450          | 264                   |
+| Series A | ~28 min     | ~9                  | ~2,000        | 2,320                 |
+
+Before upkeep, a player can build most of each Era's Features but not all of Series A. That is the
+intended choice. Upkeep and Engineering tasks take their share, so the bots must re-measure the
+milestone times before the values are final. At the design pace the Team's calendar is 24× slower
+than live, so Dev Hours are too. This is one more reason to make the live calendar pace the design
+value.
 
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.
