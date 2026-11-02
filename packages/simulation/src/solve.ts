@@ -36,6 +36,7 @@ import {
   type Kind,
   type RequestKind,
 } from './catalog.ts'
+import { insightPerk, ventureOf } from './founding.ts'
 import { calendarMinute, clockOf, cosTurns } from './calendar.ts'
 import { FLAT_CAPACITY, NO_RESOURCES, type Calls } from './capacity.ts'
 import {
@@ -123,14 +124,30 @@ export const weekly = (time: number): number => {
   return day >= 5 ? WEEKEND_FACTOR : 1
 }
 
+/** The Venture's daily cycle. The default Venture runs the slice's curve. */
+const ventureDiurnal = (game: Game): number => {
+  const venture = ventureOf(game)
+  if (venture.id === 'b2b-saas') return diurnal(game.time)
+  const minute = calendarMinute(game.time) % 1440
+  return 1 + venture.amplitude * cosTurns((minute - venture.peak * 60) / 1440)
+}
+
+/** The Venture's weekly cycle. */
+const ventureWeekly = (game: Game): number => {
+  const venture = ventureOf(game)
+  if (venture.id === 'b2b-saas') return weekly(game.time)
+  const day = Math.floor(calendarMinute(game.time) / 1440) % 7
+  return day >= 5 ? venture.weekend : 1
+}
+
 export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const mix = mixOf(game)
   const spike = game.incident?.kind === 'spike' ? game.incident.magnitude : 1
   const cycle = game.sandbox
     ? 1
     : regional(game)
-      ? regionalCycle(game.time) * weekly(game.time)
-      : diurnal(game.time) * weekly(game.time)
+      ? regionalCycle(game.time) * ventureWeekly(game)
+      : ventureDiurnal(game) * ventureWeekly(game)
   const total = game.users * RPS_PER_USER * cycle * spike
   const demand: Partial<Record<RequestKind, number>> = {}
   for (const kind of REQUEST_KINDS) {
@@ -934,7 +951,7 @@ const ledgerOf = (
     }, 0)
     const capacity = grown(ANALYTICS_CAPACITY, 2, tap.size - 1)
     const sampled = isDown(tap) ? 0 : Math.min(volume * rate, capacity)
-    insight += sampled * INSIGHT_YIELD * (2 - apdex)
+    insight += sampled * INSIGHT_YIELD * (2 - apdex) * insightPerk(game)
     nodes[tapId] = {
       ...(nodes[tapId] as NodeLedger),
       inbound: volume * rate,

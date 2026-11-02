@@ -1,5 +1,7 @@
 import { Effect, Schema } from 'effect'
 import {
+  MUTATOR_IDS,
+  VENTURE_IDS,
   COMPONENT_IDS,
   FAMILY_IDS,
   FEATURE_IDS,
@@ -33,6 +35,8 @@ export const LanguageId = Schema.Literals(LANGUAGE_IDS)
 export const PolicyId = Schema.Literals(POLICY_IDS)
 export const FeatureId = Schema.Literals(FEATURE_IDS)
 export const FixId = Schema.Literals(FIXES)
+export const VentureId = Schema.Literals(VENTURE_IDS)
+export const MutatorId = Schema.Literals(MUTATOR_IDS)
 
 export const LbPolicy = Schema.Literals(['weighted', 'round-robin', 'least-conn', 'p2c'])
 export type LbPolicy = typeof LbPolicy.Type
@@ -428,6 +432,20 @@ export const Quarter = Schema.Struct({
 })
 export type Quarter = typeof Quarter.Type
 
+/**
+ * What the Company was founded with (13): its Venture, its Mutators, and the
+ * Founder's perk levels at founding. The Simulation reads this, never the
+ * Founder record, so a save is self-contained.
+ */
+export const Founding = Schema.Struct({
+  venture: VentureId,
+  mutators: Schema.Array(MutatorId),
+  perks: Schema.Record(Schema.String, Schema.Finite),
+})
+export type Founding = typeof Founding.Type
+
+export const DEFAULT_FOUNDING: Founding = { venture: 'b2b-saas', mutators: [], perks: {} }
+
 export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
 export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
@@ -501,5 +519,12 @@ export const Game = Schema.Struct({
   drill: Schema.NullOr(Drill).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   /** The current Public quarter; null before the IPO. */
   quarter: Schema.NullOr(Quarter).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  founding: Founding.pipe(Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_FOUNDING))),
+  /** Legacy this Company already paid: the IPO pays at listing, and Step down pays the rest. */
+  banked: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** The most users the Company ever had. */
+  peak: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** Wall-clock milliseconds of the last save, written by the browser for offline progress. */
+  wall: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
 })
 export type Game = typeof Game.Type

@@ -47,10 +47,11 @@ import {
   type Tuning,
 } from './catalog.ts'
 import { newGame } from './company.ts'
+import { foundCompany } from './founding.ts'
 import type { Ledger } from './ledger.ts'
 import { burnOf, eraOf, has, isDown, ramOf, researchReady } from './lookups.ts'
 import { bottleneckOf, solveFlow } from './solve.ts'
-import type { Game, GameNode } from './state.ts'
+import type { Founding, Game, GameNode } from './state.ts'
 import { step } from './step.ts'
 import { languageOfService, salaryOf, serviceOf, signingOf, stackOf } from './team.ts'
 import { addIndex, changeStack, hire, moveItem, queueTask, rushItem } from './work.ts'
@@ -591,8 +592,10 @@ export const runBot = (
   tuning: Tuning = DESIGN_TUNING,
   strategy: Strategy = 'balanced',
   untilStage = 2,
+  /** A later Company: founded with the Founder's perks, Venture and Mutators. */
+  founding: Founding | null = null,
 ): BotRun => {
-  let game = newGame(seed)
+  let game = founding ? foundCompany(seed, founding) : newGame(seed)
   const milestones: Partial<Record<Milestone, number>> = {}
   const margins: Array<MarginRecord> = []
   const mark = (milestone: Milestone) => {

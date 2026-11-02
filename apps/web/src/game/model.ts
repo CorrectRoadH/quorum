@@ -3,6 +3,8 @@ import { BUILD_GROUPS, type BuildGroup } from '@template/simulation/catalog'
 import { Progress, SANDBOX_IDS } from '@template/simulation/sandbox'
 import type { Ledger } from '@template/simulation/ledger'
 import { solveFlow } from '@template/simulation/solve'
+import { HistoryRow } from '@template/simulation/exit'
+import { Founder } from '@template/simulation/founder'
 import {
   ComponentId,
   FamilyId,
@@ -28,6 +30,10 @@ export const Panel = Schema.Literals([
   'none',
   'research',
   'team',
+  'exit',
+  'exited',
+  'away',
+  'playbooks',
   'help',
   'offer',
   'era',
@@ -42,7 +48,7 @@ export const BuildGroupKey = Schema.Literals(
 )
 
 /** The title menu's page. */
-export const Menu = Schema.Literals(['main', 'sandbox'])
+export const Menu = Schema.Literals(['main', 'sandbox', 'found', 'legacy', 'history'])
 export type Menu = typeof Menu.Type
 
 export const SandboxId = Schema.Literals(SANDBOX_IDS)
@@ -60,6 +66,29 @@ export const SandboxStore = Schema.Struct({
   free: Schema.NullOr(Game),
 })
 export type SandboxStore = typeof SandboxStore.Type
+
+/** What happened while the player was away (15 "Offline return"). */
+export const Away = Schema.Struct({
+  seconds: Schema.Finite,
+  away: Schema.Finite,
+  usersBefore: Schema.Finite,
+  usersAfter: Schema.Finite,
+  cash: Schema.Finite,
+  insight: Schema.Finite,
+  devHours: Schema.Finite,
+  peak: Schema.Finite,
+  peakHour: Schema.Finite,
+  peakNode: Schema.NullOr(Schema.String),
+  lost: Schema.Boolean,
+})
+export type Away = typeof Away.Type
+
+/** The Company that just exited: its history row, and the research it could pass on. */
+export const Exited = Schema.Struct({
+  row: HistoryRow,
+  researched: Schema.Array(ResearchId),
+})
+export type Exited = typeof Exited.Type
 
 export const Tone = Schema.Literals(['plain', 'ok', 'warn', 'danger', 'primary'])
 export type Tone = typeof Tone.Type
@@ -170,7 +199,15 @@ export const Model = Schema.Struct({
   /** The free Sandbox as the player left it. */
   freeBoard: Schema.NullOr(Game),
   selected: Schema.NullOr(Schema.String),
+  /** Nodes picked with shift for a Playbook. */
+  selection: Schema.Array(Schema.String),
   placing: Schema.NullOr(ComponentId),
+  /** The Founder's Playbook being placed, by index. */
+  stamping: Schema.NullOr(Schema.Finite),
+  /** The player across Companies, kept apart from the Company save. */
+  founder: Founder,
+  away: Schema.NullOr(Away),
+  exited: Schema.NullOr(Exited),
   /** The region tab the board shows. */
   region: Region,
   panel: Panel,

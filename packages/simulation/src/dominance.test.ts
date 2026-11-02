@@ -245,7 +245,8 @@ const beats = (a: Scores, b: Scores): ReadonlyArray<string> => {
 
 describe('the dominance test', () => {
   for (const set of OPTION_SETS)
-    test(`${set.name}: every option beats every sibling somewhere`, { timeout: 60_000 }, () => {
+    // The runtimes set takes about 62 s alone on a 2-core machine.
+    test(`${set.name}: every option beats every sibling somewhere`, { timeout: 240_000 }, () => {
       const table = set.options.map(([name, apply]) => ({
         name,
         scores: DESIGNS.map(([, start]) => score(apply(start()))),

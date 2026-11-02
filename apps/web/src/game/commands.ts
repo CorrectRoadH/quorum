@@ -6,6 +6,7 @@ import { solveFlow } from '@template/simulation/solve'
 import { regionView } from '@template/simulation/regions'
 import { ComponentId, Game, Region } from '@template/simulation/state'
 import { Message } from './message.ts'
+import { Founder } from '@template/simulation/founder'
 import { Prefs, SandboxStore } from './model.ts'
 import { play, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
@@ -18,24 +19,41 @@ import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 export const SAVE_KEY = 'quorum.save.v2'
 export const SANDBOX_KEY = 'quorum.sandbox.v1'
 export const PREFS_KEY = 'quorum.prefs.v1'
+export const FOUNDER_KEY = 'quorum.founder.v1'
+
+/** A Playbook following the pointer on the board. */
+const StampArg = Schema.NullOr(
+  Schema.Array(
+    Schema.Struct({
+      type: ComponentId,
+      dx: Schema.Finite,
+      dy: Schema.Finite,
+      ghost: Schema.Boolean,
+    }),
+  ),
+)
 
 export const SyncBoard = Command.define('SyncBoard', {
   args: {
     game: Game,
     bottleneck: Schema.NullOr(Schema.String),
     selected: Schema.NullOr(Schema.String),
+    selection: Schema.Array(Schema.String),
     placing: Schema.NullOr(ComponentId),
+    stamp: StampArg,
     history: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
     region: Region,
   },
   messages: [Message.Synced],
-  execute: ({ game, bottleneck, selected, placing, history, region }) =>
+  execute: ({ game, bottleneck, selected, selection, placing, stamp, history, region }) =>
     Effect.sync(() =>
       setBoard('board', {
         game: regionView(game, region),
         ledger: { ...solveFlow(game), bottleneck },
         selected,
+        selection,
         placing,
+        stamp,
         history,
         region,
       }),
@@ -54,9 +72,9 @@ export const LoadSave = Command.define('LoadSave', {
   execute: () =>
     Effect.sync(() => {
       try {
-        return Message.SaveLoaded({ json: window.localStorage.getItem(SAVE_KEY) })
+        return Message.SaveLoaded({ json: window.localStorage.getItem(SAVE_KEY), now: Date.now() })
       } catch {
-        return Message.SaveLoaded({ json: null })
+        return Message.SaveLoaded({ json: null, now: Date.now() })
       }
     }),
 })
@@ -67,7 +85,8 @@ export const WriteSave = Command.define('WriteSave', {
   execute: ({ game }) =>
     Effect.sync(() => {
       try {
-        window.localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+        // The wall clock goes in at the last moment: it is the only one, for offline progress.
+        window.localStorage.setItem(SAVE_KEY, JSON.stringify({ ...game, wall: Date.now() }))
       } catch {
         // A full or blocked storage loses the save, not the game.
       }
@@ -173,4 +192,71 @@ export const PlaySound = Command.define('PlaySound', {
   messages: [Message.Synced],
   execute: ({ sound, pitch, spatial }) =>
     Effect.sync(() => play(sound, pitch, spatial)).pipe(Effect.as(Message.Synced())),
+})
+
+/** Forgets the Company save: after an Exit there is nothing to continue. */
+export const ClearSave = Command.define('ClearSave', {
+  args: {},
+  messages: [Message.Synced],
+  execute: () =>
+    Effect.sync(() => {
+      try {
+        window.localStorage.removeItem(SAVE_KEY)
+      } catch {
+        // Nothing to forget.
+      }
+      return Message.Synced()
+    }),
+})
+
+export const LoadFounder = Command.define('LoadFounder', {
+  args: {},
+  messages: [Message.FounderLoaded],
+  execute: () =>
+    Effect.sync(() => {
+      try {
+        return Message.FounderLoaded({ json: window.localStorage.getItem(FOUNDER_KEY) })
+      } catch {
+        return Message.FounderLoaded({ json: null })
+      }
+    }),
+})
+
+export const WriteFounder = Command.define('WriteFounder', {
+  args: { founder: Founder },
+  messages: [Message.Synced],
+  execute: ({ founder }) =>
+    Effect.sync(() => {
+      try {
+        window.localStorage.setItem(FOUNDER_KEY, JSON.stringify(founder))
+      } catch {
+        // A full or blocked storage loses the record, not the Company.
+      }
+      return Message.Synced()
+    }),
+})
+
+/** Copies text to the clipboard, and says whether it worked. */
+export const CopyText = Command.define('CopyText', {
+  args: { text: Schema.String, done: Schema.String },
+  messages: [Message.ToastRaised],
+  execute: ({ text, done }) =>
+    Effect.promise(async () => {
+      try {
+        await navigator.clipboard.writeText(text)
+        return Message.ToastRaised({ message: done, tone: 'ok' })
+      } catch {
+        return Message.ToastRaised({ message: 'The clipboard is blocked.', tone: 'warn' })
+      }
+    }),
+})
+
+/** Asks for a Playbook string. */
+export const AskPlaybook = Command.define('AskPlaybook', {
+  args: {},
+  messages: [Message.PlaybookImported],
+  execute: () =>
+    Effect.sync(() =>
+      Message.PlaybookImported({ text: window.prompt('Paste a Playbook (QPB1:…)') }),
+    ),
 })

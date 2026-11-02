@@ -20,6 +20,8 @@ type BoardMessage =
   | ReturnType<typeof Message.NodePlaced>
   | ReturnType<typeof Message.EmptyTapped>
   | ReturnType<typeof Message.FooterPressed>
+  | ReturnType<typeof Message.NodeToggled>
+  | ReturnType<typeof Message.SelectionBoxed>
 
 const BoardMounted = Mount.defineStream('BoardMounted', {
   args: {},
@@ -31,6 +33,8 @@ const BoardMounted = Mount.defineStream('BoardMounted', {
     Message.NodePlaced,
     Message.EmptyTapped,
     Message.FooterPressed,
+    Message.NodeToggled,
+    Message.SelectionBoxed,
   ],
   execute: ({ element }) =>
     Stream.callback<BoardMessage>((queue) =>
@@ -46,6 +50,8 @@ const BoardMounted = Mount.defineStream('BoardMounted', {
               onUnlink: (from, to) => offer(Message.LinkCut({ from, to })),
               onPlace: (x, y) => offer(Message.NodePlaced({ x, y })),
               onEmptyTap: () => offer(Message.EmptyTapped()),
+              onNodeToggle: (nodeId) => offer(Message.NodeToggled({ nodeId })),
+              onBox: (ids) => offer(Message.SelectionBoxed({ ids: [...ids] })),
             }),
           ),
           (detach) => Effect.sync(detach),

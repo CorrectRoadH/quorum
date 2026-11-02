@@ -8,7 +8,7 @@ import { cheatCash, cheatInsight } from '@/game/cheats.ts'
 import { clock, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
-import { SPEEDS } from '@/game/update.ts'
+import { speedsOf } from '@/game/update.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
@@ -121,6 +121,8 @@ const KEYS: ReadonlyArray<readonly [string, string]> = [
   ['1–4', 'Build group'],
   ['R', 'Research'],
   ['T', 'Team'],
+  ['P', 'Playbooks'],
+  ['Shift+click', 'Select for a Playbook'],
   ['U', 'Resize selected'],
   ['Z', 'Undo'],
   ['Shift+Z', 'Redo'],
@@ -350,7 +352,7 @@ export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.span([h.Class(EYEBROW)], ['Speed']),
               h.div(
                 [h.Class('flex gap-2')],
-                SPEEDS.map((speed) =>
+                speedsOf(model.game).map((speed) =>
                   button(
                     {
                       onClick: Message.SpeedChosen({ speed }),
@@ -386,6 +388,7 @@ export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
                     Message.CheatInsight(),
                     h,
                   ),
+                  secondaryButton('+20 Legacy', Message.CheatLegacy(), h),
                 ],
               ),
             ],

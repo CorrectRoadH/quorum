@@ -25,6 +25,7 @@ import {
 import { advanceIncident, directIncidents } from './director.ts'
 import { StepEvent, type AlertRule } from './events.ts'
 import { churnFactor, growthFactor } from './features.ts'
+import { growthPerk } from './founding.ts'
 import type { Ledger } from './ledger.ts'
 import {
   drawerSize,
@@ -71,6 +72,7 @@ export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): n
     era.growth *
     pace *
     growthFactor(game) *
+    growthPerk(game) *
     (game.declined ? DECLINED_GROWTH : 1) *
     (has(game, 'funnels') ? FUNNEL_GROWTH : 1)
   return rate * game.users * Math.max(0, 1 - game.users / ledger.market) * health
@@ -303,7 +305,17 @@ const advanceAlarms = (
   return { alarms: next, falseAlarms: { day, ...counts } }
 }
 
-export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING): StepResult => {
+/**
+ * Advances the Company by `seconds`. `offline` is the return from time away
+ * (04 "Offline progress"): revenue goes straight to Cash, no incident starts,
+ * and users grow only while the Era's SLO holds.
+ */
+export const step = (
+  game: Game,
+  seconds: number,
+  tuning: Tuning = LIVE_TUNING,
+  offline = false,
+): StepResult => {
   const ledger = solveFlow(game)
   const events: Array<StepEvent> = []
 
@@ -314,7 +326,7 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
   let spilled = game.spilled
   if (game.sandbox) {
     // A Sandbox has no money: placing is free, and revenue and Burn are only figures.
-  } else if (has(game, 'stripe')) {
+  } else if (has(game, 'stripe') || offline) {
     cash += earned
   } else {
     const room = Math.max(0, drawerSize(game, ledger.revenue) - pending)
@@ -331,9 +343,9 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
       node.type === 'storage' ? total + (ledger.nodes[node.id]?.inbound ?? 0) : total,
     0,
   )
-  const users = game.sandbox
-    ? game.users
-    : Math.max(20, game.users + growthOf(game, ledger, tuning.pace) * seconds)
+  const growth = growthOf(game, ledger, tuning.pace)
+  const held = !offline || growth <= 0 || ledger.errorShare <= 1 - eraOf(game).slo
+  const users = game.sandbox ? game.users : Math.max(20, game.users + (held ? growth : 0) * seconds)
   const apdex = game.apdex + (ledger.apdex - game.apdex) * Math.min(1, seconds / APDEX_WINDOW)
   // Sim time stays on a microsecond grid, so ten 0.1 s Steps make exactly one second.
   const time = Math.round((game.time + seconds) * 1e6) / 1e6
@@ -368,6 +380,7 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
     pending,
     spilled,
     users,
+    peak: Math.max(game.peak, users),
     apdex,
     alarms,
     falseAlarms,
@@ -385,12 +398,14 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
   const running = advanceIncident(next, ledger, seconds)
   next = running.game
   events.push(...running.events)
-  const team = advanceTeam(next, ledger, seconds, tuning)
+  const team = advanceTeam(next, ledger, seconds, tuning, offline)
   next = team.game
   events.push(...team.events)
-  const directed = directIncidents(next, ledger, tuning.incidentGap)
-  next = directed.game
-  events.push(...directed.events)
+  if (!offline) {
+    const directed = directIncidents(next, ledger, tuning.incidentGap)
+    next = directed.game
+    events.push(...directed.events)
+  }
 
   return { game: next, ledger, events }
 }

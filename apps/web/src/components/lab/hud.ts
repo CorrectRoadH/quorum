@@ -2,6 +2,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Circle,
   CircleCheck,
+  BookCopy,
   CircleHelp,
   DatabaseZap,
   Expand,
@@ -603,6 +604,15 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                   )
                 : h.empty,
             ],
+          ),
+      model.sandbox
+        ? h.empty
+        : toolButton(
+            'Playbooks (P)',
+            BookCopy,
+            Message.PanelOpened({ panel: model.panel === 'playbooks' ? 'none' : 'playbooks' }),
+            model.panel === 'playbooks',
+            h,
           ),
       toolButton(
         'How to play (H)',

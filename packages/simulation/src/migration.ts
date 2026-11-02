@@ -6,10 +6,12 @@ import {
   MIGRATION_FACTORS,
   MIGRATION_STEPS,
   MIGRATION_TRANCHES,
+  MONOLITH_MIGRATION,
   RUNTIMES,
   type FrameworkId,
   type RuntimeId,
 } from './catalog.ts'
+import { hasMutator } from './founding.ts'
 import { Refusal, setFramework, setRuntime, type Action } from './actions.ts'
 import type { Game, GameNode, Migration } from './state.ts'
 import { enqueue, serviceOf, stackOf, withService } from './team.ts'
@@ -34,7 +36,15 @@ export const migrationFactor = (from: StackTarget, to: StackTarget): number => {
 
 /** Dev Hours to move the whole codebase, to a tenth. */
 export const migrationCost = (game: Game, to: StackTarget): number =>
-  Math.max(0.5, Math.round(serviceOf(game).codebase * migrationFactor(stackOf(game), to) * 10) / 10)
+  Math.max(
+    0.5,
+    Math.round(
+      serviceOf(game).codebase *
+        migrationFactor(stackOf(game), to) *
+        (hasMutator(game, 'legacy-monolith') ? MONOLITH_MIGRATION : 1) *
+        10,
+    ) / 10,
+  )
 
 /** Dev Hours of one step: its tranche of the total. */
 export const trancheOf = (migration: Migration, step: number): number =>

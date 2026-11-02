@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
-import { TASK_IDS } from '@template/simulation/catalog'
+import { EXIT_IDS, PERK_IDS, TASK_IDS } from '@template/simulation/catalog'
 import {
   CacheEngine,
   Collector,
@@ -10,6 +10,8 @@ import {
   FeatureId,
   FrameworkId,
   IncidentId,
+  MutatorId,
+  VentureId,
   LbPolicy,
   PmMode,
   PolicyId,
@@ -32,7 +34,8 @@ import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './m
 
 export const Message = defineMessageUnion({
   /** The save in localStorage, read once at boot. Null when there is none. */
-  SaveLoaded: { json: Schema.NullOr(Schema.String) },
+  SaveLoaded: { json: Schema.NullOr(Schema.String), now: Schema.Finite },
+  FounderLoaded: { json: Schema.NullOr(Schema.String) },
   Saved: {},
   Continued: {},
   NewCompanyStarted: {},
@@ -66,6 +69,9 @@ export const Message = defineMessageUnion({
   LinkRequested: { from: Schema.String, to: Schema.String },
   LinkCut: { from: Schema.String, to: Schema.String },
   EmptyTapped: {},
+  NodeToggled: { nodeId: Schema.String },
+  SelectionBoxed: { ids: Schema.Array(Schema.String) },
+  SelectionCleared: {},
   /** The button at the bottom of a Node card. */
   FooterPressed: { nodeId: Schema.String },
 
@@ -174,6 +180,23 @@ export const Message = defineMessageUnion({
   MigrationCancelled: {},
   RolledBack: {},
 
+  /** Exits, the Founder, and the Legacy shop (13). */
+  ExitTaken: { exit: Schema.Literals(EXIT_IDS) },
+  KeepToggled: { id: ResearchId },
+  PerkBought: { id: Schema.Literals(PERK_IDS) },
+  VentureChosen: { id: VentureId },
+  MutatorToggled: { id: MutatorId },
+  CompanyFounded: {},
+  AwayClosed: {},
+
+  /** Playbooks. */
+  PlaybookSaved: {},
+  PlaybookChosen: { index: Schema.Finite },
+  PlaybookDeleted: { index: Schema.Finite },
+  PlaybookExported: { index: Schema.Finite },
+  PlaybookImportAsked: {},
+  PlaybookImported: { text: Schema.NullOr(Schema.String) },
+
   RoundRaised: {},
   RoundDeclined: {},
   PostmortemFiled: { id: Schema.Finite, take: Schema.Boolean },
@@ -185,6 +208,7 @@ export const Message = defineMessageUnion({
   CheatCash: {},
   CheatInsight: {},
   CheatRound: {},
+  CheatLegacy: {},
   IncidentForced: { kind: IncidentId },
   LogExported: {},
   LogCleared: {},

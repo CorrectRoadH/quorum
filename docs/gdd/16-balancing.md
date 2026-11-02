@@ -504,4 +504,32 @@ The Balanced bot does not reach Series C: on seed 3 it holds 255,000 users at 20
 M6's exit check (IPO in 9–12 hours) is not measured. `series-c.test.ts` and the Series C Sandboxes play
 the Series C to Public mechanics on built Designs.
 
+### Exit and Legacy (M7, batches M7.1–M7.7)
+
+| Topic              | Current build                                                                                                                                                               | Design ([13](./13-prestige.md))                        | Notes                                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Legacy             | floor(√(payout / $1M) × Venture multiplier × (1 + Σ Mutator shares)), minus Legacy already banked by this Company                                                           | Same formula; combination of multipliers not specified | The IPO banks Legacy at the raise; a later Step down pays only the difference.                          |
+| Exits              | Acqui-hire from Series A, Acquisition from Series B, IPO at the Pre-IPO raise, Step down once Public; the streak bonus is +0.1 per beat quarter, up to +1                   | Same Exits; streak bonus not sized                     | Valuation is M6's `valuationOf`. The streak bonus is proposed.                                          |
+| Time dilation      | Adds 20× and 40× to the 1×, 3×, 10× speeds                                                                                                                                  | Multiplies the top speed                               | Extra speeds read better than a scaled top speed.                                                       |
+| Head start         | Level 1 only: start at Pre-seed                                                                                                                                             | Levels to later Eras                                   | Later levels skip content the bots have not paced.                                                      |
+| Playbook slots     | 1 slot with no perk, then 2, 5, 10, 25                                                                                                                                      | Slots come from the perk                               | One free slot so every player meets Playbooks.                                                          |
+| Unlocks            | The first Exit unlocks Bootstrapped indie and every Mutator                                                                                                                 | Achievements                                           | Achievements are M9.                                                                                    |
+| Ventures           | B2B SaaS (default, keeps today's evening curve), Consumer social, Fintech, Streaming, Game backend, AI startup, E-commerce, Bootstrapped                                    | 12 Ventures                                            | Developer platform, Healthcare, Ad tech, and Government contract are deferred: their kinds are missing. |
+| Mutators           | Nine of 13's ten; Chaos Monkey weights instance incidents ×4 from Seed; HN front page weights traffic spikes ×3; Legacy monolith starts at 40 kloc, 0.4 debt, migrations ×3 | Nine Mutators                                          | Shared tenancy is skipped: CPU steal has no model yet.                                                  |
+| Autopilot perk     | Not built                                                                                                                                                                   | Policies for upgrades, research, hiring                | The M4 autopilot already covers hiring and Features.                                                    |
+| Offline progress   | 10 s Steps, no incidents, no Bad deploys, growth only while errors stay under 1 − SLO, 5% churn floor; cap 8, 12, 18, 24 h                                                  | Same rules, 1 s budget for 8 h                         | 8 h takes about 2.4 s in Node (0.7 ms per solve). `offline.test.ts` guards 20 s.                        |
+| Simulation version | SIM_VERSION 7, GOLDEN_HASH `2b638fc7`                                                                                                                                       |                                                        | Only the four new Game fields moved the hash; without them the replay still hashes to `aed6bacd`.       |
+
+A second Company on the same seed with Angel network 1, Pattern recognition 1, and Founder's reputation
+1 (10 Legacy) against a first Company, Balanced bot (`legacy-pacing.test.ts`):
+
+| Seed | First: Pre-seed | First: Seed | Second: Pre-seed | Second: Seed |
+| ---- | --------------- | ----------- | ---------------- | ------------ |
+| 1    | 12.4            | 36.7        | 11.3             | 34.0         |
+| 2    | 12.4            | 40.1        | 11.3             | 37.3         |
+| 3    | 12.4            | 38.5        | 11.3             | 34.3         |
+
+Sim minutes. The M7 exit check (a second Company reaches its Exit in 3 to 6 hours) is not measured: the
+Balanced bot does not reach Public.
+
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.

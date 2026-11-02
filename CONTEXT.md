@@ -309,6 +309,14 @@ _Avoid_: prestige, reset, ascend, portal
 The permanent currency earned at Exit and spent in the Legacy shop.
 _Avoid_: prestige points, souls, tokens
 
+**Founder**:
+The player across Companies: the record of Legacy, Legacy shop perks, Playbooks, unlocked Ventures and Mutators, and the company history. It survives every Exit.
+_Avoid_: profile, account, player save, meta
+
+**Perk**:
+A permanent upgrade bought in the Legacy shop, with levels.
+_Avoid_: upgrade, talent, bonus
+
 ### Outside the Company
 
 **Sandbox**:
@@ -332,4 +340,5 @@ _Avoid_: level, mission, scenario, puzzle (in UI copy)
 - The **Simulation** turns the Design into the **Ledger** each **Step**. Every number on screen comes from the Ledger.
 - **Analytics** turns sampled traffic into **Insight**. Insight buys **Research**.
 - An **Exit** turns **Equity** × **Valuation** into **Legacy**.
+- The **Founder** keeps **Legacy**, **Perks**, and **Playbooks** from one **Company** to the next.
 - A **Sandbox track** holds guided **Sandboxes** for one **Era**. Passing it, or reaching the Era in any **Company**, unlocks that Era's **Challenges**.

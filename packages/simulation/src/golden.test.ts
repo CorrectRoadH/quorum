@@ -31,7 +31,10 @@ const GOLDEN_STEPS = 10_000
 // replica, spread, backups, fan-out and key splitting, the incident's region,
 // users in each SLO hour, the DR drill and the Public quarter. The replay's values
 // are unchanged again; only the new fields move the hash.
-const GOLDEN_HASH = 'aed6bacd'
+// SIM_VERSION 7 (M7): the save gains the founding (Venture, Mutators, perks),
+// banked Legacy, peak users, and the wall clock of the last save. The replay's
+// values are unchanged: with the new fields removed it still hashes to aed6bacd.
+const GOLDEN_HASH = '2b638fc7'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {

@@ -58,6 +58,15 @@ import {
 } from './lookups.ts'
 import { link } from './company.ts'
 import { isGlobal, openRegions } from './regions.ts'
+import {
+  alumniOf,
+  dilutionOf,
+  grantOf,
+  perkLevel,
+  placeRefusal,
+  runtimeRefusal,
+  ventureOf,
+} from './founding.ts'
 import { startIncident, zoned } from './director.ts'
 import { IPO_BURN_SECONDS, PRE_IPO_STAGE, ipoReady, newDrill } from './ipo.ts'
 import { firstQuarter, guidanceOpen } from './quarters.ts'
@@ -219,6 +228,8 @@ export const place = (
   if (def.fixed) return notAllowed(`${def.name} cannot be placed.`)
   if (!isUnlocked(game, type) && def.unlock)
     return no(Refusal.Locked({ what: def.name, research: RESEARCH[def.unlock].name }))
+  const banned = placeRefusal(game, type, region)
+  if (banned) return notAllowed(banned)
   if (!openRegions(game).includes(region)) return notAllowed('Open that region first.')
   const node = blankNode(game, `n${game.nextId}`, type, x, y, region)
   return spend(game, priceOf(game, type), def.name, (paid) => ({
@@ -419,6 +430,8 @@ export const setRuntime = (game: Game, id: string, runtime: RuntimeId): Action =
     const def = RUNTIMES[runtime]
     if (!runtimeReady(game, runtime) && def.research)
       return no(Refusal.Locked({ what: def.name, research: RESEARCH[def.research].name }))
+    const banned = runtimeRefusal(game, runtime)
+    if (banned) return notAllowed(banned)
     if (node.runtime === runtime) return ok(game)
     const framework = FRAMEWORKS[node.framework].language === def.language ? node.framework : 'none'
     return ok(
@@ -935,6 +948,10 @@ const advanceEra = (game: Game, raised: boolean, firstIncidentAfter: number): Ac
   }
   const era = eraOf(game)
   const stage = game.stage + 1
+  const bootstrapped = ventureOf(game).bootstrapped
+  if (raised && bootstrapped && game.stage !== PRE_IPO_STAGE)
+    return notAllowed('A bootstrapped Company takes no rounds.')
+  const dilution = bootstrapped ? 0 : dilutionOf(game, era.dilution)
   // The IPO: no declining it, a grant of Burn, and quarters from now on.
   if (game.stage === PRE_IPO_STAGE) {
     if (!raised) return notAllowed('The IPO cannot be declined.')
@@ -943,18 +960,23 @@ const advanceEra = (game: Game, raised: boolean, firstIncidentAfter: number): Ac
       ...game,
       stage,
       cash: game.cash + ledger.burn * IPO_BURN_SECONDS,
-      equity: game.equity * (1 - era.dilution),
+      equity: game.equity * (1 - dilution),
       declined: false,
       quarter: firstQuarter(game, ledger.revenue),
     })
   }
+  // Alumni network: former colleagues join when hiring opens.
+  const alumni = stage === 1 ? alumniOf(game, perkLevel(game, 'alumni-network')) : []
   return ok({
     ...game,
     stage,
-    cash: game.cash + (raised ? era.grant : 0),
-    equity: raised ? game.equity * (1 - era.dilution) : game.equity,
-    declined: !raised,
+    cash: game.cash + (raised ? grantOf(game, era.grant) : 0),
+    equity: raised ? game.equity * (1 - dilution) : game.equity,
+    // A bootstrapped Company declines every round, and grows at the full rate.
+    declined: !raised && !bootstrapped,
     nextIncidentAt: stage === 1 ? game.time + firstIncidentAfter : game.nextIncidentAt,
+    engineers: alumni.length > 0 ? [...game.engineers, ...alumni] : game.engineers,
+    workSeq: game.workSeq + alumni.length,
   })
 }
 
@@ -971,6 +993,9 @@ export const offer = (game: Game) => {
   if (!next) return null
   // The IPO pays a thousand seconds of Burn (plan 5.19).
   const grant =
-    game.stage === PRE_IPO_STAGE ? solveFlow(game).burn * IPO_BURN_SECONDS : eraOf(game).grant
-  return { era: next, grant, dilution: eraOf(game).dilution }
+    game.stage === PRE_IPO_STAGE
+      ? solveFlow(game).burn * IPO_BURN_SECONDS
+      : grantOf(game, eraOf(game).grant)
+  const dilution = ventureOf(game).bootstrapped ? 0 : dilutionOf(game, eraOf(game).dilution)
+  return { era: next, grant, dilution, bootstrapped: ventureOf(game).bootstrapped }
 }

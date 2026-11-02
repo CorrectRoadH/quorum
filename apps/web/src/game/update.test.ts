@@ -108,3 +108,35 @@ describe('Tradeoff cards', () => {
     expect(send(pinned, Message.OptionConfirmed()).game.nodes).toEqual(locked.game.nodes)
   })
 })
+
+describe('Exit and offline return', () => {
+  const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
+    messages.reduce((current, message) => update(current, message).model, model)
+
+  test('an Exit pays Legacy, writes history, and the next company starts fresh with the record', () => {
+    const game = { ...preseedGame(), stage: 4, users: 200_000, cash: 1e8 }
+    const exited = send({ ...inLab(), game }, Message.ExitTaken({ exit: 'acquisition' }))
+    expect(exited.panel).toBe('exited')
+    expect(exited.founder.history).toHaveLength(1)
+    expect(exited.founder.legacy).toBe(exited.founder.history[0]?.legacy)
+    const title = send(exited, Message.TitleOpened())
+    expect(title.route).toBe('title')
+    expect(title.menu).toBe('found')
+    const next = send(title, Message.CompanyFounded())
+    expect(next.route).toBe('lab')
+    expect(next.game.stage).toBe(0)
+    expect(next.founder.history).toHaveLength(1)
+  })
+
+  test('a save from an hour ago plays the hour out and shows the return', () => {
+    const game = { ...preseedGame(), wall: 1_000_000 }
+    const loaded = send(
+      initialModel(),
+      Message.SaveLoaded({ json: JSON.stringify(game), now: 1_000_000 + 3_600_000 }),
+    )
+    expect(loaded.game.time).toBeCloseTo(game.time + 3_600)
+    expect(loaded.away?.seconds).toBe(3_600)
+    expect(loaded.game.incident).toBeNull()
+    expect(send(loaded, Message.Continued()).panel).toBe('away')
+  })
+})

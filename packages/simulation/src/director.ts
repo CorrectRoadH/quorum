@@ -10,7 +10,6 @@ import {
   INCIDENT_IDS,
   LEAK_RATE,
   MIN_WEAKNESS,
-  OPEN_ACTION_WEIGHT,
   RUNTIMES,
   SLO_FROM_STAGE,
   STORM_TRIGGER,
@@ -21,6 +20,7 @@ import {
   HOME_REGION,
 } from './catalog.ts'
 import { StepEvent } from './events.ts'
+import { mutatorWeight, openActionWeight } from './founding.ts'
 import type { Ledger } from './ledger.ts'
 import { eraOf, has, isDown, ramOf, researchReady, restarted, zoned } from './lookups.ts'
 
@@ -480,7 +480,8 @@ export const directIncidents = (
             // Tech debt makes every incident likelier (08 "Tech debt").
             (1 + serviceOf(game).debt) *
             (id === game.lastIncident ? REPEAT_WEIGHT : 1) *
-            (unaddressed(game, id) ? OPEN_ACTION_WEIGHT : 1),
+            (unaddressed(game, id) ? openActionWeight(game) : 1) *
+            mutatorWeight(game, id),
         ] as const,
     ),
     roll,

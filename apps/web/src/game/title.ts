@@ -3,7 +3,18 @@ import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowLeft, ArrowRight, Check, Download, Lock } from 'lucide'
 import { icon } from '@/lib/icons'
-import { ERAS } from '@template/simulation/catalog'
+import {
+  ERAS,
+  MUTATORS,
+  MUTATOR_IDS,
+  PERKS,
+  PERK_IDS,
+  VENTURES,
+  VENTURE_IDS,
+  EXITS,
+} from '@template/simulation/catalog'
+import { foundingOf, levelOf, perkPrice } from '@template/simulation/founder'
+import { legacyMultiplier, startEra } from '@template/simulation/founding'
 import { eraOf } from '@template/simulation/lookups'
 import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from '@template/simulation/sandbox'
 import { clock, compact } from './format.ts'
@@ -289,6 +300,183 @@ const sandboxMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html>
   ),
 ]
 
+const back = (label: string, h: HtmlBuilder<Message>, right: Html = h.empty): Html =>
+  h.div(
+    [
+      h.Key('back'),
+      h.Class('flex shrink-0 items-center justify-between gap-2 pr-[calc(var(--u)*1)]'),
+    ],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.OnClick(Message.MenuChosen({ menu: 'main' })),
+          h.Class(
+            'press flex h-[calc(var(--u)*2.6)] items-center gap-2 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-[max(13px,calc(var(--u)*1.05))] font-semibold hover:bg-muted',
+          ),
+        ],
+        [icon(h, ArrowLeft, 'size-4 text-muted-foreground'), label],
+      ),
+      right,
+    ],
+  )
+
+const legacyBadge = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.span(
+    [h.Class('font-mono text-[max(11px,calc(var(--u)*0.8))] tabular-nums text-muted-foreground')],
+    [`${model.founder.legacy} Legacy`],
+  )
+
+/** A row of a list page: a name, a short figure, and a state on the right. */
+const listRow = (
+  key: string,
+  label: string,
+  detail: string,
+  right: Html | string,
+  message: Message | null,
+  selected: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.button(
+    [
+      h.Key(key),
+      h.Type('button'),
+      h.Disabled(message === null),
+      ...(message ? [h.OnClick(message)] : []),
+      h.AriaPressed(selected ? 'true' : 'false'),
+      h.Class(
+        `press flex min-h-[calc(var(--u)*2.4)] w-full items-center justify-between gap-3 rounded-[calc(var(--u)*0.8)] px-[calc(var(--u)*1.5)] py-[calc(var(--u)*0.35)] text-left ${
+          selected
+            ? 'bg-muted text-foreground'
+            : message
+              ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              : 'cursor-not-allowed text-muted-foreground/45'
+        }`,
+      ),
+    ],
+    [
+      h.span(
+        [h.Class('flex min-w-0 flex-col')],
+        [
+          h.span([h.Class('text-[max(13px,calc(var(--u)*1))] font-medium')], [label]),
+          detail
+            ? h.span(
+                [h.Class('truncate text-[max(11px,calc(var(--u)*0.72))] opacity-70')],
+                [detail],
+              )
+            : h.empty,
+        ],
+      ),
+      typeof right === 'string'
+        ? h.span(
+            [h.Class('shrink-0 font-mono text-[max(11px,calc(var(--u)*0.78))] tabular-nums')],
+            [right],
+          )
+        : right,
+    ],
+  )
+
+const foundMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const founder = model.founder
+  const founding = foundingOf(founder)
+  return [
+    back('New company', h, legacyBadge(model, h)),
+    trackLabel('Venture', h),
+    ...VENTURE_IDS.map((id) => {
+      const def = VENTURES[id]
+      const owned = founder.ventures.includes(id)
+      return listRow(
+        id,
+        def.name,
+        def.summary,
+        owned
+          ? id === founding.venture
+            ? icon(h, Check, 'size-4 text-ok')
+            : `×${def.legacy.toFixed(1)}`
+          : def.bootstrapped
+            ? icon(h, Lock, 'size-3.5')
+            : `${def.cost} Legacy`,
+        owned || (!def.bootstrapped && founder.legacy >= def.cost)
+          ? Message.VentureChosen({ id })
+          : null,
+        id === founding.venture,
+        h,
+      )
+    }),
+    trackLabel('Mutators', h),
+    ...MUTATOR_IDS.map((id) =>
+      listRow(
+        id,
+        MUTATORS[id].name,
+        MUTATORS[id].rule,
+        founder.mutators.includes(id)
+          ? founding.mutators.includes(id)
+            ? icon(h, Check, 'size-4 text-ok')
+            : `+${Math.round(MUTATORS[id].legacy * 100)}%`
+          : icon(h, Lock, 'size-3.5'),
+        founder.mutators.includes(id) ? Message.MutatorToggled({ id }) : null,
+        founding.mutators.includes(id),
+        h,
+      ),
+    ),
+    h.div(
+      [
+        h.Key('rule'),
+        h.Class('mx-[calc(var(--u)*1.5)] my-[calc(var(--u)*0.4)] h-px shrink-0 bg-hairline'),
+      ],
+      [],
+    ),
+    item(
+      'Found',
+      `${startEra(founding)} · Legacy ×${legacyMultiplier(founding).toFixed(2)}`,
+      'users lb server',
+      Message.CompanyFounded(),
+      true,
+      h,
+    ),
+  ]
+}
+
+const legacyMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const founder = model.founder
+  return [
+    back('Legacy shop', h, legacyBadge(model, h)),
+    ...PERK_IDS.map((id) => {
+      const def = PERKS[id]
+      const level = levelOf(founder, id)
+      const price = perkPrice(founder, id)
+      return listRow(
+        id,
+        `${def.name} ${level}/${def.costs.length}`,
+        def.effect,
+        price === null ? icon(h, Check, 'size-4 text-ok') : `${price} Legacy`,
+        price !== null && founder.legacy >= price ? Message.PerkBought({ id }) : null,
+        false,
+        h,
+      )
+    }),
+  ]
+}
+
+const historyMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  back('History', h),
+  ...(model.founder.history.length === 0
+    ? [trackLabel('No Exits yet', h)]
+    : model.founder.history
+        .map((row, index) =>
+          listRow(
+            `h${index}`,
+            `${EXITS[row.exit].name} · ${VENTURES[row.founding.venture].name}`,
+            `${ERAS[row.stage]?.name ?? ''} · ${compact(row.peak)} users · ${clock(row.time)}`,
+            `+${row.legacy}`,
+            null,
+            false,
+            h,
+          ),
+        )
+        .toReversed()),
+]
+
 const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   return h.nav(
@@ -308,30 +496,65 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
     ],
     model.menu === 'sandbox'
       ? sandboxMenu(model, h)
-      : [
-          ...(model.saved
-            ? [
+      : model.menu === 'found'
+        ? foundMenu(model, h)
+        : model.menu === 'legacy'
+          ? legacyMenu(model, h)
+          : model.menu === 'history'
+            ? historyMenu(model, h)
+            : [
+                ...(model.saved
+                  ? [
+                      item(
+                        'Continue',
+                        `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+                        'users lb server cache database',
+                        Message.Continued(),
+                        true,
+                        h,
+                      ),
+                    ]
+                  : []),
                 item(
-                  'Continue',
-                  `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
-                  'users lb server cache database',
-                  Message.Continued(),
-                  true,
+                  model.saved ? 'New company' : 'Start a company',
+                  '',
+                  'users',
+                  model.founder.history.length > 0
+                    ? Message.MenuChosen({ menu: 'found' })
+                    : Message.NewCompanyStarted(),
+                  !model.saved,
                   h,
                 ),
-              ]
-            : []),
-          item(
-            model.saved ? 'New company' : 'Start a company',
-            '',
-            'users',
-            Message.NewCompanyStarted(),
-            !model.saved,
-            h,
-          ),
-          item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
-          item('Sandbox', '', 'cache database', Message.MenuChosen({ menu: 'sandbox' }), false, h),
-        ],
+                ...(model.founder.history.length > 0
+                  ? [
+                      item(
+                        'Legacy shop',
+                        `${model.founder.legacy} Legacy`,
+                        'server',
+                        Message.MenuChosen({ menu: 'legacy' }),
+                        false,
+                        h,
+                      ),
+                      item(
+                        'History',
+                        '',
+                        'database',
+                        Message.MenuChosen({ menu: 'history' }),
+                        false,
+                        h,
+                      ),
+                    ]
+                  : []),
+                item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
+                item(
+                  'Sandbox',
+                  '',
+                  'cache database',
+                  Message.MenuChosen({ menu: 'sandbox' }),
+                  false,
+                  h,
+                ),
+              ],
   )
 }
 

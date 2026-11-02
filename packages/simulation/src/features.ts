@@ -8,6 +8,7 @@ import {
   type FeatureDef,
   type RequestKind,
 } from './catalog.ts'
+import { ventureOf } from './founding.ts'
 import { eraOf } from './lookups.ts'
 import type { Game } from './state.ts'
 
@@ -48,19 +49,36 @@ export const mixOf = (game: Game): Partial<Record<RequestKind, number>> => {
   for (const feature of shipped(game))
     for (const [kind, factor] of Object.entries(feature.load) as Array<[RequestKind, number]>)
       if (shares[kind] !== undefined) shares[kind] = (shares[kind] ?? 0) * factor
-  return shares
+  return ventureMix(game, shares)
+}
+
+/** The Venture's mix changes, on the kinds the Era has, with the total kept. */
+const ventureMix = (
+  game: Game,
+  shares: Partial<Record<RequestKind, number>>,
+): Partial<Record<RequestKind, number>> => {
+  const changes = Object.entries(ventureOf(game).mix) as Array<[RequestKind, number]>
+  if (!changes.some(([kind]) => (shares[kind] ?? 0) > 0)) return shares
+  const before = Object.values(shares).reduce((sum, share) => sum + (share ?? 0), 0)
+  const next = { ...shares }
+  for (const [kind, factor] of changes)
+    if (next[kind] !== undefined) next[kind] = (next[kind] ?? 0) * factor
+  const after = Object.values(next).reduce((sum, share) => sum + (share ?? 0), 0)
+  for (const kind of Object.keys(next) as Array<RequestKind>)
+    next[kind] = after > 0 ? ((next[kind] ?? 0) * before) / after : 0
+  return next
 }
 
 /** Most users the market holds: the Era's, grown by Features. */
 export const marketOf = (game: Game): number =>
-  eraOf(game).market * product(game, (feature) => feature.market)
+  eraOf(game).market * product(game, (feature) => feature.market) * ventureOf(game).market
 
 export const growthFactor = (game: Game): number => product(game, (feature) => feature.growth)
 export const churnFactor = (game: Game): number => product(game, (feature) => feature.churn)
 
 /** What a request of `kind` earns relative to its catalog value. */
 export const valueFactor = (game: Game, kind: RequestKind): number =>
-  product(game, (feature) => feature.value[kind] ?? 1)
+  product(game, (feature) => feature.value[kind] ?? 1) * ventureOf(game).value
 
 /** How big a response of `kind` is relative to its profile. */
 export const payloadFactor = (game: Game, kind: RequestKind): number =>

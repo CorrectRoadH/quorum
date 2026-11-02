@@ -8,6 +8,7 @@ import {
 import {
   CORE_TEAM,
   DEFAULT_ALERT_RULES,
+  DEFAULT_FOUNDING,
   NO_FALSE_ALARMS,
   monolith,
   type Game,
@@ -142,6 +143,10 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   budget: [],
   drill: null,
   quarter: null,
+  founding: DEFAULT_FOUNDING,
+  banked: 0,
+  peak: 0,
+  wall: 0,
 })
 
 /**

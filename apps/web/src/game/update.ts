@@ -4,6 +4,9 @@ import * as Actions from '@template/simulation/actions'
 import {
   ALERT_RULES,
   BUILD_GROUPS,
+  DILATION_SPEEDS,
+  EXITS,
+  PERKS,
   CACHE_ENGINES,
   COMPONENTS,
   FAMILIES,
@@ -25,6 +28,29 @@ import {
   TASKS,
 } from '@template/simulation/catalog'
 import { newGame, preseedGame } from '@template/simulation/company'
+import { ipoExit, takeExit } from '@template/simulation/exit'
+import {
+  Founder,
+  buyPerk,
+  emptyFounder,
+  founded,
+  foundingOf,
+  recordExit,
+  removePlaybook,
+  savePlaybook,
+  toggleKeep,
+  toggleMutator,
+  unlockVenture,
+} from '@template/simulation/founder'
+import { foundCompany, perkLevel } from '@template/simulation/founding'
+import { OFFLINE_MIN, simulateAway } from '@template/simulation/offline'
+import {
+  capture,
+  decodePlaybook,
+  encodePlaybook,
+  ghostReason,
+  placePlaybook,
+} from '@template/simulation/playbook'
 import { forceIncident } from '@template/simulation/director'
 import { StepEvent } from '@template/simulation/events'
 import { nextGoal } from '@template/simulation/goals'
@@ -48,6 +74,11 @@ import { step } from '@template/simulation/step'
 import { serviceOf } from '@template/simulation/team'
 import * as Work from '@template/simulation/work'
 import {
+  AskPlaybook,
+  ClearSave,
+  CopyText,
+  LoadFounder,
+  WriteFounder,
   AppendLog,
   ClearLog,
   ClearToast,
@@ -108,6 +139,12 @@ const HISTORY_POINTS = 144
 const HISTORY_EVERY = 10
 export const SPEEDS = [1, 3, 10] as const
 
+/** The Company speeds: Time dilation adds 20× and 40× (plan M7.3). */
+export const speedsOf = (game: Game): ReadonlyArray<number> => [
+  ...SPEEDS,
+  ...(DILATION_SPEEDS[perkLevel(game, 'time-dilation')] ?? []),
+]
+
 /* ---------- init ---------- */
 
 export const initialModel = (): Model =>
@@ -121,7 +158,12 @@ export const initialModel = (): Model =>
     passed: [],
     freeBoard: null,
     selected: null,
+    selection: [],
     placing: null,
+    stamping: null,
+    founder: emptyFounder(),
+    away: null,
+    exited: null,
     region: 'na',
     panel: 'none',
     researchFocus: null,
@@ -149,7 +191,7 @@ export const initialModel = (): Model =>
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: initialModel(),
-  commands: [LoadSave({}), LoadSandboxStore({}), LoadPrefs({})],
+  commands: [LoadSave({}), LoadSandboxStore({}), LoadPrefs({}), LoadFounder({})],
 })
 
 /* ---------- helpers ---------- */
@@ -162,10 +204,25 @@ const sync = (model: Model): AnyCommand =>
     game: model.game,
     bottleneck: model.bottleneck,
     selected: model.selected,
+    selection: model.selection,
     placing: model.placing,
+    stamp: stampOf(model),
     history: model.nodeHistory,
     region: model.region,
   })
+
+/** The Playbook being placed, as the board draws it: ghosts where research is missing. */
+const stampOf = (model: Model) => {
+  if (model.stamping === null) return null
+  const playbook = model.founder.playbooks[model.stamping]
+  if (!playbook) return null
+  return playbook.nodes.map((node) => ({
+    type: node.type,
+    dx: node.dx,
+    dy: node.dy,
+    ghost: ghostReason(model.game, node, model.region) !== null,
+  }))
+}
 
 /** The Model with a toast raised, and the Command that clears it later. */
 const toasted = (model: Model, message: string, tone: Tone): [Model, AnyCommand] => {
@@ -585,6 +642,7 @@ const BUILD_KEYS: Record<string, (typeof BUILD_GROUPS)[number]['key']> = {
 const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
   const next: Model = {
     ...initialModel(),
+    founder: model.founder,
     route: 'lab',
     game,
     saved: true,
@@ -619,6 +677,7 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
 const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
   const next: Model = {
     ...initialModel(),
+    founder: model.founder,
     route: 'lab',
     game,
     sandbox: run,
@@ -681,6 +740,68 @@ const afterRound = (model: Model, game: Game): Partial<Model> => ({
   selected: model.selected,
 })
 
+/* ---------- the Founder ---------- */
+
+const decodeFounder = Schema.decodeUnknownOption(Founder)
+
+const parseFounder = (json: string | null): Option.Option<Founder> => {
+  if (json === null) return Option.none()
+  try {
+    return decodeFounder(JSON.parse(json))
+  } catch {
+    return Option.none()
+  }
+}
+
+/** Applies a change to the Founder record, saves it, or says why not. */
+const changeFounder = (
+  model: Model,
+  change: Result.Result<Founder, Actions.Refusal>,
+  done?: string,
+): Result =>
+  Result.match(change, {
+    onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
+    onSuccess: (founder) => {
+      const next: Model = { ...model, founder }
+      const commands = [WriteFounder({ founder })]
+      return done ? withToast(next, done, 'ok', commands) : { model: next, commands }
+    },
+  })
+
+/** Founds the next Company with the Founder's Venture, Mutators, perks and kept research. */
+const found = (model: Model): Result => {
+  const founder = founded(model.founder)
+  const game = foundCompany(model.game.seed + 7919, foundingOf(model.founder), model.founder.keep)
+  const started = startCompany({ ...model, founder }, game, game.stage >= 1 ? 'era' : 'help')
+  return {
+    ...started,
+    commands: [...(started.commands ?? []), WriteFounder({ founder })],
+  }
+}
+
+/** Leaves an exited Company for the title screen: nothing to continue, nothing to save. */
+const leaveExited = (model: Model, menu: Model['menu']): Result => ({
+  model: {
+    ...model,
+    route: 'title',
+    menu,
+    panel: 'none',
+    exited: null,
+    saved: false,
+    game: newGame(model.game.seed),
+    selected: null,
+    selection: [],
+    stamping: null,
+    placing: null,
+  },
+})
+
+/** The IPO lists the Company: Legacy for the listing, and the Company goes on as Public. */
+const listed = (model: Model, game: Game): Readonly<{ game: Game; founder: Founder }> => {
+  const ipo = ipoExit(game, solveFlow(game))
+  return { game: ipo.game, founder: recordExit(model.founder, ipo) }
+}
+
 /* ---------- update ---------- */
 
 /** Handles a Message and adds its sound cue. Messages that route to another
@@ -694,25 +815,45 @@ const route = (model: Model, message: Message): Result => {
 
 const handle = (model: Model, message: Message): Result =>
   Message.match<Result>(message, {
-    SaveLoaded: ({ json }) =>
+    SaveLoaded: ({ json, now }) =>
       Option.match(parseSave(json), {
         onNone: () => ({ model }),
-        onSome: (game) => ({
-          model: {
-            ...model,
-            game,
-            saved: true,
-            savedAt: game.time,
-            sampledAt: game.time,
-            bottleneckAt: -1,
-          },
-        }),
+        onSome: (saved) => {
+          // Time away plays out at 1×: a real second is a sim second (04 "Offline progress").
+          const away = saved.wall > 0 ? (now - saved.wall) / 1_000 : 0
+          const back = away >= OFFLINE_MIN && !saved.sandbox ? simulateAway(saved, away) : null
+          const game = back?.game ?? saved
+          return {
+            model: {
+              ...model,
+              game,
+              saved: true,
+              savedAt: game.time,
+              sampledAt: game.time,
+              bottleneckAt: -1,
+              away: back?.report ?? null,
+            },
+            commands: back
+              ? [AppendLog({ entries: [line(game.time, 'OfflineReturned', { ...back.report })] })]
+              : [],
+          }
+        },
+      }),
+    FounderLoaded: ({ json }) =>
+      Option.match(parseFounder(json), {
+        onNone: () => ({ model }),
+        onSome: (founder) => ({ model: { ...model, founder } }),
       }),
 
     Saved: () => ({ model: model.saved ? model : { ...model, saved: true } }),
 
     Continued: () => {
-      const next: Model = { ...model, route: 'lab', panel: 'none', paused: false }
+      const next: Model = {
+        ...model,
+        route: 'lab',
+        panel: model.away ? 'away' : 'none',
+        paused: false,
+      }
       return {
         model: next,
         commands: [
@@ -722,10 +863,18 @@ const handle = (model: Model, message: Message): Result =>
       }
     },
 
-    NewCompanyStarted: () => startCompany(model, newGame(model.game.seed + 7919), 'help'),
-    PreseedStarted: () => startCompany(model, preseedGame(model.game.seed + 7919), 'era'),
+    NewCompanyStarted: () => found(model),
+    CompanyFounded: () => found(model),
+    PreseedStarted: () =>
+      startCompany(
+        model,
+        { ...preseedGame(model.game.seed + 7919), founding: foundingOf(model.founder) },
+        'era',
+      ),
+    AwayClosed: () => ({ model: { ...model, panel: 'none', away: null } }),
 
     TitleOpened: () => {
+      if (model.exited) return leaveExited(model, 'found')
       if (!model.sandbox)
         return {
           model: { ...model, route: 'title', menu: 'main', panel: 'none', placing: null },
@@ -748,7 +897,8 @@ const handle = (model: Model, message: Message): Result =>
       }
       return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
     },
-    MenuChosen: ({ menu }) => ({ model: { ...model, menu } }),
+    MenuChosen: ({ menu }) =>
+      model.exited ? leaveExited(model, menu) : { model: { ...model, menu } },
 
     PrefsLoaded: ({ json }) =>
       Option.match(parsePrefs(json), {
@@ -799,8 +949,9 @@ const handle = (model: Model, message: Message): Result =>
     Ticked: () => tick(model),
 
     SpeedCycled: () => {
-      const index = SPEEDS.indexOf(model.speed as (typeof SPEEDS)[number])
-      return { model: { ...model, speed: SPEEDS[(index + 1) % SPEEDS.length] ?? 1 } }
+      const speeds = speedsOf(model.game)
+      const index = speeds.indexOf(model.speed)
+      return { model: { ...model, speed: speeds[(index + 1) % speeds.length] ?? 1 } }
     },
     SpeedChosen: ({ speed }) => ({ model: { ...model, speed } }),
     PauseToggled: () => ({ model: { ...model, paused: !model.paused } }),
@@ -812,7 +963,12 @@ const handle = (model: Model, message: Message): Result =>
       const selected = model.selected
       switch (key) {
         case 'Escape': {
+          if (model.exited) return leaveExited(model, 'found')
           if (model.tradeoff) return { model: { ...model, tradeoff: null } }
+          if (model.stamping !== null || model.selection.length > 0) {
+            const cleared: Model = { ...model, stamping: null, selection: [] }
+            return { model: cleared, commands: [sync(cleared)] }
+          }
           const next: Model =
             model.placing !== null
               ? { ...model, placing: null }
@@ -834,6 +990,12 @@ const handle = (model: Model, message: Message): Result =>
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
+          )
+        case 'p':
+          if (model.sandbox) return { model }
+          return route(
+            model,
+            Message.PanelOpened({ panel: model.panel === 'playbooks' ? 'none' : 'playbooks' }),
           )
         case '?':
         case 'h':
@@ -892,6 +1054,36 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     NodePlaced: ({ x, y }) => {
+      const playbook = model.stamping === null ? null : model.founder.playbooks[model.stamping]
+      if (playbook) {
+        const placed = placePlaybook(model.game, playbook, x, y, model.region)
+        return act(
+          model,
+          `Placed ${playbook.name}`,
+          Result.map(placed, (result) => result.game),
+          {
+            undoable: true,
+            patch: () => ({ stamping: null }),
+            note: () =>
+              Result.match(placed, {
+                onFailure: () => null,
+                onSuccess: (result): Note =>
+                  result.ghosts.length > 0
+                    ? [
+                        `Placed ${result.placed}. ${result.ghosts.length} need research: ${[
+                          ...new Set(
+                            result.ghosts.map((ghost) =>
+                              ghostReason(model.game, ghost, model.region),
+                            ),
+                          ),
+                        ].join(', ')}.`,
+                        'warn',
+                      ]
+                    : [`Placed ${playbook.name}.`, 'ok'],
+              }),
+          },
+        )
+      }
       const type = model.placing
       if (!type) return { model }
       return act(
@@ -914,8 +1106,30 @@ const handle = (model: Model, message: Message): Result =>
       const next: Model = {
         ...model,
         selected: nodeId,
+        selection: [],
         tradeoff: model.selected === nodeId ? model.tradeoff : null,
       }
+      return { model: next, commands: [sync(next)] }
+    },
+    NodeToggled: ({ nodeId }) => {
+      const selection = model.selection.includes(nodeId)
+        ? model.selection.filter((id) => id !== nodeId)
+        : [
+            ...model.selection,
+            ...(model.selected && model.selection.length === 0 && model.selected !== nodeId
+              ? [model.selected]
+              : []),
+            nodeId,
+          ]
+      const next: Model = { ...model, selection, selected: null, tradeoff: null }
+      return { model: next, commands: [sync(next)] }
+    },
+    SelectionBoxed: ({ ids }) => {
+      const next: Model = { ...model, selection: [...ids], selected: null, tradeoff: null }
+      return { model: next, commands: [sync(next)] }
+    },
+    SelectionCleared: () => {
+      const next: Model = { ...model, selection: [] }
       return { model: next, commands: [sync(next)] }
     },
 
@@ -950,8 +1164,8 @@ const handle = (model: Model, message: Message): Result =>
       ),
 
     EmptyTapped: () => {
-      if (model.selected === null) return { model }
-      const next: Model = { ...model, selected: null, tradeoff: null }
+      if (model.selected === null && model.selection.length === 0) return { model }
+      const next: Model = { ...model, selected: null, selection: [], tradeoff: null }
       return { model: next, commands: [sync(next)] }
     },
 
@@ -1385,8 +1599,21 @@ const handle = (model: Model, message: Message): Result =>
         note: () => ['Rolled back. The Features ship again with the next deploy.', 'ok'],
       }),
 
-    RoundRaised: () =>
-      act(model, 'Raised a round', Actions.raise(model.game), { patch: afterRound }),
+    RoundRaised: () => {
+      if (model.game.stage !== PRE_IPO_STAGE || !Actions.canRaise(model.game))
+        return act(model, 'Raised a round', Actions.raise(model.game), { patch: afterRound })
+      const ipo = listed(model, model.game)
+      const result = act({ ...model, founder: ipo.founder }, 'Listed', Actions.raise(ipo.game), {
+        patch: afterRound,
+        note: (game) => [`Listed. +${game.banked} Legacy.`, 'primary'],
+      })
+      return result.model.game === model.game
+        ? withToast(model, 'The IPO did not go through.', 'warn')
+        : {
+            ...result,
+            commands: [...(result.commands ?? []), WriteFounder({ founder: ipo.founder })],
+          }
+    },
 
     RoundDeclined: () =>
       act(model, 'Declined a round', Actions.decline(model.game), { patch: afterRound }),
@@ -1399,10 +1626,102 @@ const handle = (model: Model, message: Message): Result =>
       })
     },
 
+    ExitTaken: ({ exit }) =>
+      Result.match(takeExit(model.game, solveFlow(model.game), exit), {
+        onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
+        onSuccess: (result) => {
+          const founder = recordExit(model.founder, result)
+          const next: Model = {
+            ...model,
+            founder,
+            panel: 'exited',
+            paused: true,
+            saved: false,
+            selected: null,
+            selection: [],
+            stamping: null,
+            exited: { row: result.row, researched: model.game.researched },
+          }
+          return {
+            model: next,
+            commands: [
+              WriteFounder({ founder }),
+              ClearSave({}),
+              AppendLog({
+                entries: [
+                  line(model.game.time, 'Exited', {
+                    exit: EXITS[exit].name,
+                    payout: result.row.payout,
+                    legacy: result.legacy,
+                  }),
+                ],
+              }),
+            ],
+          }
+        },
+      }),
+    KeepToggled: ({ id }) => changeFounder(model, toggleKeep(model.founder, id)),
+    PerkBought: ({ id }) =>
+      changeFounder(model, buyPerk(model.founder, id), `${PERKS[id].name} bought.`),
+    VentureChosen: ({ id }) => changeFounder(model, unlockVenture(model.founder, id)),
+    MutatorToggled: ({ id }) => changeFounder(model, toggleMutator(model.founder, id)),
+
+    PlaybookSaved: () => {
+      const playbook = capture(
+        model.game,
+        model.selection,
+        `Playbook ${model.founder.playbooks.length + 1}`,
+      )
+      if (!playbook) return withToast(model, 'Shift-click the Nodes to save first.', 'plain')
+      const saved = changeFounder(
+        { ...model, selection: [] },
+        savePlaybook(model.founder, playbook),
+        `Saved ${playbook.name}: ${playbook.nodes.length} Nodes.`,
+      )
+      if (saved.model.founder === model.founder) return saved
+      return { ...saved, commands: [...(saved.commands ?? []), sync(saved.model)] }
+    },
+    PlaybookChosen: ({ index }) => {
+      if (!model.founder.playbooks[index]) return { model }
+      const next: Model = {
+        ...model,
+        stamping: index,
+        panel: 'none',
+        placing: null,
+        selected: null,
+      }
+      return { model: next, commands: [sync(next)] }
+    },
+    PlaybookDeleted: ({ index }) => {
+      const founder = removePlaybook(model.founder, index)
+      return { model: { ...model, founder }, commands: [WriteFounder({ founder })] }
+    },
+    PlaybookExported: ({ index }) => {
+      const playbook = model.founder.playbooks[index]
+      if (!playbook) return { model }
+      return {
+        model,
+        commands: [CopyText({ text: encodePlaybook(playbook), done: `Copied ${playbook.name}.` })],
+      }
+    },
+    PlaybookImportAsked: () => ({ model, commands: [AskPlaybook({})] }),
+    PlaybookImported: ({ text }) =>
+      text === null
+        ? { model }
+        : changeFounder(
+            model,
+            Result.flatMap(decodePlaybook(text), (playbook) =>
+              savePlaybook(model.founder, playbook),
+            ),
+            'Playbook imported.',
+          ),
+
     PanelOpened: ({ panel }) => ({
       model: { ...model, panel, placing: null, researchFocus: null },
     }),
-    PanelClosed: () => ({ model: { ...model, panel: 'none' } }),
+    // An exited Company has nothing left to play: closing its panel goes to the next one.
+    PanelClosed: () =>
+      model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
 
     CheatCash: () => {
       const next: Model = {
@@ -1417,6 +1736,10 @@ const handle = (model: Model, message: Message): Result =>
         game: { ...model.game, insight: model.game.insight + cheatInsight(model.game) },
       },
     }),
+    CheatLegacy: () => {
+      const founder = { ...model.founder, legacy: model.founder.legacy + 20 }
+      return withToast({ ...model, founder }, '+20 Legacy.', 'plain', [WriteFounder({ founder })])
+    },
     CheatRound: () => {
       const next = nextEra(model.game)
       if (!next || isFinalEra(model.game)) return withToast(model, 'No round to skip to.', 'plain')
@@ -1424,15 +1747,21 @@ const handle = (model: Model, message: Message): Result =>
       // A playtest skips the IPO checklist.
       if (ready.stage === PRE_IPO_STAGE) {
         const ledger = solveFlow(ready)
-        const listed: Game = {
-          ...ready,
+        const ipo = listed(model, ready)
+        const listedGame: Game = {
+          ...ipo.game,
           stage: ready.stage + 1,
           equity: ready.equity * (1 - eraOf(ready).dilution),
           cash: ready.cash + ledger.burn * IPO_BURN_SECONDS,
           quarter: firstQuarter(ready, ledger.revenue),
         }
-        const next: Model = { ...model, ...afterRound(model, listed), game: listed }
-        return { model: next, commands: [sync(next)] }
+        const next: Model = {
+          ...model,
+          ...afterRound(model, listedGame),
+          game: listedGame,
+          founder: ipo.founder,
+        }
+        return { model: next, commands: [sync(next), WriteFounder({ founder: ipo.founder })] }
       }
       return act({ ...model, game: ready }, `Skipped to ${next.name}`, Actions.raise(ready), {
         patch: afterRound,

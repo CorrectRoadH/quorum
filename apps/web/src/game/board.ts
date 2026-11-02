@@ -92,13 +92,26 @@ export type BoardEvents = Readonly<{
   onUnlink: (from: string, to: string) => void
   onPlace: (x: number, y: number) => void
   onEmptyTap: () => void
+  /** Shift-click: add a Node to the selection, or take it out. */
+  onNodeToggle: (nodeId: string) => void
+  /** Shift-drag on empty space: select every Node the box touches. */
+  onBox: (ids: ReadonlyArray<string>) => void
 }>
+
+/** A Playbook following the pointer: its Nodes relative to the top-left corner. */
+export type Stamp = ReadonlyArray<
+  Readonly<{ type: ComponentId; dx: number; dy: number; ghost: boolean }>
+>
 
 export type BoardState = Readonly<{
   game: Game
   ledger: Ledger
   selected: string | null
+  /** Nodes picked with shift for a Playbook. */
+  selection: ReadonlyArray<string>
   placing: ComponentId | null
+  /** A Playbook being placed: the next click puts its top-left corner there. */
+  stamp: Stamp | null
   /** Each Node's utilization, one point per 10 sim seconds. */
   history: Readonly<Record<string, ReadonlyArray<number>>>
   /** The region tab on show; its Nodes, and the Nodes they reach elsewhere, are drawn. */
@@ -1543,6 +1556,7 @@ type Gesture =
     }
   | { kind: 'node'; id: string; dx: number; dy: number; x: number; y: number; moved: boolean }
   | { kind: 'link'; from: string; at: Pt }
+  | { kind: 'box'; from: Pt; at: Pt }
   | null
 
 class BoardController {
@@ -1875,6 +1889,10 @@ class BoardController {
         }
         if (event.button !== 0) return
         canvas.setPointerCapture(event.pointerId)
+        if (this.state?.stamp) {
+          this.events.onPlace(Math.round(point.x / 8) * 8, Math.round(point.y / 8) * 8)
+          return
+        }
         if (this.state?.placing) {
           this.events.onPlace(point.x - CARD_W / 2, point.y - heightOf(this.state.placing) / 2)
           return
@@ -1907,6 +1925,10 @@ class BoardController {
             y: event.clientY,
             moved: false,
           }
+          return
+        }
+        if (event.shiftKey) {
+          this.gesture = { kind: 'box', from: point, at: point }
           return
         }
         if (this.hoverLink) {
@@ -1978,7 +2000,7 @@ class BoardController {
           canvas.style.cursor = 'grabbing'
           return
         }
-        if (gesture?.kind === 'link') {
+        if (gesture?.kind === 'link' || gesture?.kind === 'box') {
           gesture.at = point
           const target = this.nodeAt(point)
           const next = target && target.id !== gesture.from ? target.id : null
@@ -1988,6 +2010,10 @@ class BoardController {
             this.snapTo = next
           }
           canvas.style.cursor = 'crosshair'
+          return
+        }
+        if (this.state?.stamp) {
+          canvas.style.cursor = 'copy'
           return
         }
         if (this.state?.placing) {
@@ -2045,7 +2071,8 @@ class BoardController {
           this.events.onNodeMove(gesture.id, this.dragged.x, this.dragged.y)
         } else {
           this.dragged = null
-          if (node && inFooter(node, point)) this.events.onFooter(gesture.id)
+          if (event.shiftKey) this.events.onNodeToggle(gesture.id)
+          else if (node && inFooter(node, point)) this.events.onFooter(gesture.id)
           else this.events.onNodeTap(gesture.id)
         }
       }
@@ -2057,6 +2084,23 @@ class BoardController {
           this.snapTo = null
           this.events.onLink(gesture.from, target.id)
         } else this.springBack(gesture.from)
+      }
+      if (gesture.kind === 'box') {
+        const left = Math.min(gesture.from.x, point.x)
+        const right = Math.max(gesture.from.x, point.x)
+        const top = Math.min(gesture.from.y, point.y)
+        const bottom = Math.max(gesture.from.y, point.y)
+        this.events.onBox(
+          this.nodes()
+            .filter(
+              (node) =>
+                node.x < right &&
+                node.x + CARD_W > left &&
+                node.y < bottom &&
+                node.y + heightOf(node.type) > top,
+            )
+            .map((node) => node.id),
+        )
       }
     }
     canvas.addEventListener('pointerup', (event) => finish(event, false), { signal })
@@ -2122,7 +2166,7 @@ class BoardController {
         state.game,
         node,
         state.ledger,
-        state.selected === node.id,
+        state.selected === node.id || state.selection.includes(node.id),
         this.pressed === node.id,
         colors,
         state.history[node.id] ?? [],
@@ -2356,6 +2400,37 @@ class BoardController {
             3 + 5 * (1 - this.snapGlow),
           ).stroke({ color: colors.accent, width: 2, alpha: this.snapGlow })
         }
+      }
+    }
+
+    if (gesture?.kind === 'box') {
+      const left = Math.min(gesture.from.x, gesture.at.x)
+      const top = Math.min(gesture.from.y, gesture.at.y)
+      this.overlay
+        .rect(
+          left,
+          top,
+          Math.abs(gesture.at.x - gesture.from.x),
+          Math.abs(gesture.at.y - gesture.from.y),
+        )
+        .fill({ color: colors.accent, alpha: 0.08 })
+        .stroke({ color: colors.accent, width: 1.5, alpha: 0.8 })
+    }
+    if (state.stamp) {
+      const x = Math.round(this.pointer.x / 8) * 8
+      const y = Math.round(this.pointer.y / 8) * 8
+      for (const entry of state.stamp) {
+        silhouette(
+          this.overlay,
+          COMPONENTS[entry.type].group,
+          x + entry.dx,
+          y + entry.dy,
+          CARD_W,
+          heightOf(entry.type),
+          0,
+        )
+          .fill({ color: entry.ghost ? colors.danger : colors.accent, alpha: 0.1 })
+          .stroke({ color: entry.ghost ? colors.danger : colors.accent, width: 2, alpha: 0.85 })
       }
     }
 

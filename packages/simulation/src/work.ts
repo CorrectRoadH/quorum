@@ -443,7 +443,13 @@ const complete = (game: Game, item: WorkItem): Game => {
 }
 
 /** Ships what waits, at the next deploy slot. Nothing ships on top of a bad deploy. */
-const deploy = (game: Game, ledger: Ledger, tuning: Tuning, events: Array<StepEvent>): Game => {
+const deploy = (
+  game: Game,
+  ledger: Ledger,
+  tuning: Tuning,
+  events: Array<StepEvent>,
+  offline: boolean,
+): Game => {
   const service = serviceOf(game)
   if (game.time < service.nextDeployAt) return game
   const slot = withService(game, { nextDeployAt: game.time + deployEvery(game, tuning) })
@@ -458,7 +464,8 @@ const deploy = (game: Game, ledger: Ledger, tuning: Tuning, events: Array<StepEv
       fixes: service.fixes.filter((fix) => fix !== 'fix-leak'),
     },
   )
-  const chance = badDeployChance(next, tuning)
+  // No incident starts while the player is away (04 "Offline progress").
+  const chance = offline ? 0 : badDeployChance(next, tuning)
   let bad = false
   if (chance > 0) {
     const [roll, seed] = nextRandom(next.seed)
@@ -483,6 +490,7 @@ export const advanceTeam = (
   ledger: Ledger,
   seconds: number,
   tuning: Tuning = LIVE_TUNING,
+  offline = false,
 ): Advance => {
   if (game.sandbox) return { game, events: [] }
   const events: Array<StepEvent> = []
@@ -545,6 +553,6 @@ export const advanceTeam = (
     events.push(StepEvent.WorkFinished({ item }))
   }
 
-  next = deploy(next, ledger, tuning, events)
+  next = deploy(next, ledger, tuning, events, offline)
   return { game: next, events }
 }

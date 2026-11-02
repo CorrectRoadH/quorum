@@ -1,3 +1,4 @@
+import { sloOf } from './founding.ts'
 import { ERROR_BUDGET_FACTORS, SLO_FROM_STAGE, SLO_WINDOW_HOURS } from './catalog.ts'
 import { ERROR_CAUSES } from './distribution.ts'
 import type { Ledger } from './ledger.ts'
@@ -33,7 +34,7 @@ export type Budget = Readonly<{
 }>
 
 export const budgetOf = (game: Game): Budget => {
-  const slo = eraOf(game).slo
+  const slo = sloOf(game, eraOf(game).slo)
   let requests = 0
   let failed = 0
   for (const entry of game.budget) {
