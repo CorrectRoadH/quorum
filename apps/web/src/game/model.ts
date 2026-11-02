@@ -28,6 +28,7 @@ import {
    ========================================================================== */
 
 export const Route = Schema.Literals(['title', 'lab'])
+export const Gate = Schema.Literals(['shut', 'clocking', 'open'])
 export type Route = typeof Route.Type
 
 export const Panel = Schema.Literals([
@@ -239,6 +240,8 @@ export type Undo = typeof Undo.Type
 export const Model = Schema.Struct({
   route: Route,
   menu: Menu,
+  /** The clock-in splash before the title: shut until the first click or key press, which lets the title play sound. */
+  gate: Gate,
   /** The Company, or the Sandbox while one is open. */
   game: Game,
   /** A saved company exists, so the title screen offers Continue. */

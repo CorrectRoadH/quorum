@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { newGame, preseedGame } from '@template/simulation/company'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
-import { initialModel, update } from './update.ts'
+import { init, initialModel, update } from './update.ts'
 
 /* The clock: 100 ms Steps under a 250 ms UI tick, and the Bottleneck search once per sim second. */
 
@@ -235,6 +235,21 @@ describe('M9: sound, achievements, glossary, keys', () => {
     names(update(model, Message.Ticked()).commands)
       .filter((command) => command.name === 'PlaySound')
       .map((command) => command.args['sound'])
+
+  test('a fresh load waits for one clock-in before the title, and a return skips it', () => {
+    const shut = init().model
+    expect(shut.gate).toBe('shut')
+    expect(update(shut, Message.KeyPressed({ key: 'Escape' })).model.gate).toBe('shut')
+    const clocking = update(shut, Message.KeyPressed({ key: 'a' }))
+    expect(clocking.model.gate).toBe('clocking')
+    expect(names(clocking.commands).map((command) => command.args['sound'])).toContain('clockin')
+    const again = names(update(clocking.model, Message.ClockedIn()).commands)
+    expect(again.filter((command) => command.name !== 'AppendLog')).toEqual([])
+    const open = update(clocking.model, Message.TitleRevealed()).model
+    expect(open.gate).toBe('open')
+    const lab = update(open, Message.NewCompanyStarted()).model
+    expect(update(lab, Message.TitleOpened()).model.gate).toBe('open')
+  })
 
   test('an incident plays its sound, unless muted', () => {
     expect(sounds(incidentDue())).toContain('incident')

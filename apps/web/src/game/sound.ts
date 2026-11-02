@@ -25,6 +25,14 @@ type Note = readonly [at: number, row: Row]
  *  The louder, longer ones are for things that happen rarely. */
 const SOUNDS = {
   /* ---- the title screen ---- */
+  /** The badge goes in: it slides, latches, and the reader beeps twice. */
+  clockin: [
+    [0, [0.05, 0, 900, 0.05, 0.12, 0.06, 4, 1]],
+    [270, [0.2, 0.03, 1250, 0, 0.003, 0.02, 1, 2]],
+    [285, [0.16, 0, 180, 0, 0.01, 0.05, 0, 1]],
+    [380, [0.2, 0, 1760, 0, 0.07, 0.02, 0, 1]],
+    [480, [0.2, 0, 2349, 0, 0.11, 0.03, 0, 1]],
+  ],
   /** A plate pops up: a short bubble pop, a sine that flicks up in pitch. */
   burst: [[0, [0.6, 0.05, 320, 0, 0.01, 0.06, 0, 1, 24]]],
   /** A part pops onto its plate. */

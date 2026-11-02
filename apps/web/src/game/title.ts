@@ -668,6 +668,86 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 /* --------------------------------------------------------------------------
+   The clock-in splash. Browsers play sound only after a click or key press,
+   so a fresh load opens on a badge reader: the badge goes in, the reader
+   beeps, and the title boots with its sounds.
+   -------------------------------------------------------------------------- */
+
+const ReaderClock = Mount.define('ReaderClock', {
+  messages: [Message.Synced],
+  execute: ({ element }) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const show = () =>
+          (element.textContent = new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }))
+        show()
+        return setInterval(show, 1000)
+      }),
+      (timer) => Effect.sync(() => clearInterval(timer)),
+    ).pipe(Effect.as(Message.Synced())),
+})
+
+const reader = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Key('reader'), h.Class(`reader ${model.gate === 'clocking' ? 'is-in' : ''}`)],
+    [
+      h.div(
+        [h.Class('reader-body')],
+        [
+          ...['top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3'].map((at) =>
+            h.span([h.Class(`reader-screw ${at}`)], []),
+          ),
+          h.div(
+            [h.Class('reader-screen'), h.AriaLive('polite')],
+            [
+              h.span([h.Class('reader-time'), h.OnMount(ReaderClock())], ['--:--']),
+              h.span(
+                [h.Class('reader-status')],
+                [
+                  h.span([h.Class('reader-status-out')], ['Insert badge']),
+                  h.span([h.Class('reader-status-in')], ['Clocked in']),
+                ],
+              ),
+            ],
+          ),
+          h.span([h.Class('reader-led')], []),
+          h.span([h.Class('reader-slot')], []),
+        ],
+      ),
+      h.div(
+        [h.Class('reader-well')],
+        [
+          h.button(
+            [
+              h.Type('button'),
+              h.AriaLabel('Clock in'),
+              h.OnClick(Message.ClockedIn()),
+              h.Class('reader-card'),
+            ],
+            [
+              h.svg(
+                [h.ViewBox('0 0 100 194'), h.Class('reader-card-mark'), h.AriaHidden(true)],
+                [
+                  ...GLYPHS[0]!.paths.map((d) =>
+                    h.path([h.D(d), h.Fill('none'), h.Stroke('currentColor'), h.StrokeWidth('22')]),
+                  ),
+                  h.circle([h.Class('fill-signal'), h.Cx('89'), h.Cy('180'), h.R('14')]),
+                ],
+              ),
+              h.span([h.Class('reader-card-chip')], []),
+              h.span([h.Class('reader-card-name')], ['Founder']),
+            ],
+          ),
+        ],
+      ),
+    ],
+  )
+
+/* --------------------------------------------------------------------------
    The overlay: the cable from the menu's port to the bench's lead, and the
    requests that ride it, four per bench loop.
    -------------------------------------------------------------------------- */
@@ -783,31 +863,33 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
     [
       h.div([h.Class('title-grid pointer-events-none absolute inset-0')], []),
       frame(h),
-      h.div(
-        [h.Class('title-stage relative')],
-        [
-          h.div(
-            [h.Class('title-art')],
+      model.gate !== 'open'
+        ? reader(model, h)
+        : h.div(
+            [h.Key('stage'), h.Class('title-stage relative')],
             [
-              h.svg(
+              h.div(
+                [h.Class('title-art')],
                 [
-                  h.ViewBox('0 0 1600 1000'),
-                  h.Class('pointer-events-none absolute inset-0 size-full overflow-visible'),
-                  h.AriaHidden(true),
+                  h.svg(
+                    [
+                      h.ViewBox('0 0 1600 1000'),
+                      h.Class('pointer-events-none absolute inset-0 size-full overflow-visible'),
+                      h.AriaHidden(true),
+                    ],
+                    [h.polygon([h.Class('title-floor'), h.Points(FLOOR)])],
+                  ),
+                  h.div([
+                    h.Key('bench'),
+                    h.Class('title-bench absolute'),
+                    h.Style({ left: x(BENCH.left), top: y(BENCH.top), width: x(BENCH.width) }),
+                    h.OnMount(BenchMounted()),
+                  ]),
                 ],
-                [h.polygon([h.Class('title-floor'), h.Points(FLOOR)])],
               ),
-              h.div([
-                h.Key('bench'),
-                h.Class('title-bench absolute'),
-                h.Style({ left: x(BENCH.left), top: y(BENCH.top), width: x(BENCH.width) }),
-                h.OnMount(BenchMounted()),
-              ]),
+              h.div([h.Class('title-ui')], [wordmark(h), menu(model, h), overlay(h)]),
             ],
           ),
-          h.div([h.Class('title-ui')], [wordmark(h), menu(model, h), overlay(h)]),
-        ],
-      ),
-      stamp(h),
+      model.gate === 'open' ? stamp(h) : h.empty,
     ],
   )

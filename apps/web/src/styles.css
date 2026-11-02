@@ -1005,6 +1005,238 @@ details.fold[open]::details-content {
   }
 }
 
+/* --------------------------------------------------------------------------
+   The clock-in splash (title.ts): a wall badge reader. The badge hangs out of
+   the slot; on a click it slides in, the LED turns green, the screen says so,
+   and the reader steps back for the title.
+   -------------------------------------------------------------------------- */
+.reader {
+  position: relative;
+  width: 240px;
+  height: 440px;
+  animation: reader-in 500ms var(--ease-out) both;
+}
+.reader.is-in {
+  animation: reader-out 300ms ease-in 750ms both;
+}
+@keyframes reader-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes reader-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.reader-body {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 300px;
+  border-radius: 28px;
+  background: linear-gradient(170deg, oklch(0.3 0.006 260), oklch(0.19 0.004 260) 60%);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.14),
+    inset 0 -3px 0 oklch(0 0 0 / 0.45),
+    0 0 0 1px oklch(0 0 0 / 0.6),
+    0 40px 70px -24px oklch(0 0 0 / 0.9);
+}
+.reader-screw {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background:
+    linear-gradient(135deg, transparent 42%, oklch(0 0 0 / 0.55) 42% 58%, transparent 58%),
+    radial-gradient(circle at 35% 30%, oklch(0.5 0.004 260), oklch(0.22 0.004 260));
+  box-shadow: 0 1px 0 oklch(1 0 0 / 0.08);
+}
+.reader-screen {
+  position: absolute;
+  inset: 30px 26px auto;
+  height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(0deg, oklch(1 0 0 / 0.025) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 40%, oklch(0.24 0.04 220), oklch(0.13 0.02 230));
+  box-shadow:
+    inset 0 2px 8px oklch(0 0 0 / 0.8),
+    0 1px 0 oklch(1 0 0 / 0.1);
+  color: var(--signal);
+  font-family: var(--font-mono);
+  text-shadow: 0 0 10px oklch(0.8 0.12 225 / 0.55);
+}
+.reader-time {
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+.reader-status {
+  display: grid;
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.reader-status > * {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+.reader-status-out {
+  animation: reader-blink 1.6s steps(1, end) infinite;
+}
+.reader-status-in {
+  visibility: hidden;
+  color: var(--ok);
+  text-shadow: 0 0 10px oklch(0.74 0.15 155 / 0.6);
+}
+.is-in .reader-status-out {
+  animation: reader-hide 0s 320ms forwards;
+}
+.is-in .reader-status-in {
+  animation: reader-show 0s 320ms forwards;
+}
+@keyframes reader-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes reader-hide {
+  to {
+    visibility: hidden;
+  }
+}
+@keyframes reader-show {
+  to {
+    visibility: visible;
+  }
+}
+.reader-led {
+  position: absolute;
+  top: 168px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: oklch(0.78 0.15 70);
+  box-shadow: 0 0 10px oklch(0.78 0.15 70 / 0.8);
+  animation: reader-blink 1.6s steps(1, end) infinite;
+  transition:
+    background-color 120ms,
+    box-shadow 120ms;
+}
+.is-in .reader-led {
+  animation: none;
+  background: var(--ok);
+  box-shadow: 0 0 14px oklch(0.74 0.15 155 / 0.9);
+  transition-delay: 300ms;
+}
+/* The slot's mouth; the well below it starts at its middle, so the badge's
+   top edge disappears into it. */
+.reader-slot {
+  position: absolute;
+  top: 228px;
+  left: 30px;
+  right: 30px;
+  height: 14px;
+  border-radius: 7px;
+  background: oklch(0.08 0 0);
+  box-shadow:
+    inset 0 3px 4px oklch(0 0 0 / 0.9),
+    0 1px 0 oklch(1 0 0 / 0.12),
+    0 -1px 0 oklch(0 0 0 / 0.5);
+}
+.reader-well {
+  position: absolute;
+  top: 235px;
+  left: 40px;
+  right: 40px;
+  bottom: 0;
+  overflow: hidden;
+  padding: 0 10px 20px;
+}
+.reader-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 186px;
+  overflow: hidden;
+  border-radius: 0 0 14px 14px;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 0%, oklch(0.8 0.12 225 / 0.1), transparent 70%),
+    linear-gradient(170deg, oklch(0.34 0.006 260), oklch(0.23 0.005 260));
+  box-shadow:
+    inset 1px 0 0 oklch(1 0 0 / 0.08),
+    inset -1px 0 0 oklch(0 0 0 / 0.3),
+    inset 0 -2px 0 oklch(0 0 0 / 0.35),
+    0 14px 22px -8px oklch(0 0 0 / 0.85);
+  color: oklch(0.88 0.004 260);
+  cursor: pointer;
+  transform: translateY(-14px);
+  transition: transform 220ms var(--ease-out);
+}
+@media (hover: hover) {
+  .reader:not(.is-in) .reader-card:hover {
+    transform: translateY(-24px);
+  }
+}
+.reader-card:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+.is-in .reader-card {
+  transform: translateY(-100%);
+  transition: transform 300ms cubic-bezier(0.55, 0, 0.3, 1);
+}
+.reader-card-mark {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  width: 34px;
+  margin-left: -17px;
+  overflow: visible;
+}
+.reader-card-mark circle {
+  filter: drop-shadow(0 0 4px oklch(0.8 0.12 225 / 0.8));
+}
+.reader-card-chip {
+  position: absolute;
+  left: 16px;
+  bottom: 18px;
+  width: 30px;
+  height: 22px;
+  border-radius: 5px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 32%,
+      oklch(0 0 0 / 0.3) 32% 36%,
+      transparent 36% 64%,
+      oklch(0 0 0 / 0.3) 64% 68%,
+      transparent 68%
+    ),
+    linear-gradient(0deg, transparent 46%, oklch(0 0 0 / 0.3) 46% 54%, transparent 54%),
+    linear-gradient(160deg, oklch(0.72 0.006 260), oklch(0.5 0.006 260));
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.3);
+}
+.reader-card-name {
+  position: absolute;
+  right: 16px;
+  bottom: 22px;
+  color: oklch(0.7 0.006 260);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 /* The Reduce motion setting, whatever the system says: animations and transitions end at once. */
 :root[data-motion='reduce'] :not(.title-menu),
 :root[data-motion='reduce'] ::before,

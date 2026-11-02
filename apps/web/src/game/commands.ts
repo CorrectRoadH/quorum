@@ -199,6 +199,13 @@ export const ClearToast = Command.define('ClearToast', {
   execute: ({ id }) => Effect.sleep('3600 millis').pipe(Effect.as(Message.ToastCleared({ id }))),
 })
 
+/** Waits out the clock-in, then shows the title. */
+export const RevealTitle = Command.define('RevealTitle', {
+  args: {},
+  messages: [Message.TitleRevealed],
+  execute: () => Effect.sleep('1100 millis').pipe(Effect.as(Message.TitleRevealed())),
+})
+
 export const AppendLog = Command.define('AppendLog', {
   args: { entries: Schema.Array(LogEntry) },
   messages: [Message.Synced],

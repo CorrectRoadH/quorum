@@ -47,6 +47,9 @@ export const Message = defineMessageUnion({
   NewCompanyStarted: {},
   PreseedStarted: {},
   TitleOpened: {},
+  /** The badge goes into the reader on the splash; the title follows. */
+  ClockedIn: {},
+  TitleRevealed: {},
   MenuChosen: { menu: Menu },
 
   /** Guided and free Sandboxes, and the Sandbox store read once at boot. */

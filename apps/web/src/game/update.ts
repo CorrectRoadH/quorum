@@ -116,6 +116,7 @@ import {
   LoadSandboxStore,
   LoadSave,
   PlaySound,
+  RevealTitle,
   SyncBoard,
   ToggleFullscreen,
   WritePrefs,
@@ -184,6 +185,7 @@ export const initialModel = (): Model =>
   Model.make({
     route: 'title',
     menu: 'main',
+    gate: 'open',
     game: newGame(),
     saved: false,
     challenge: null,
@@ -230,7 +232,7 @@ export const initialModel = (): Model =>
   })
 
 export const init: Runtime.ApplicationInit<Model, Message, void, ApiRpc> = () => ({
-  model: initialModel(),
+  model: { ...initialModel(), gate: 'shut' },
   commands: [LoadSave({}), LoadSandboxStore({}), LoadPrefs({}), LoadFounder({})],
 })
 
@@ -450,6 +452,18 @@ const settled = (next: Model): Result => ({
     ApplySettings({ muted: next.muted, motion: next.motion }),
   ],
 })
+
+/** Puts the badge in the reader, once: it beeps, and the title follows. */
+const clockIn = (model: Model): Result =>
+  model.gate !== 'shut'
+    ? { model }
+    : {
+        model: { ...model, gate: 'clocking' },
+        commands: [
+          ...(model.muted ? [] : [PlaySound({ sound: 'clockin', pitch: 1, spatial: false })]),
+          RevealTitle({}),
+        ],
+      }
 
 /** Earns achievements: the Founder record, a toast each, and a chime unless muted. */
 const achieve = (
@@ -1224,6 +1238,8 @@ const handle = (model: Model, message: Message): Result =>
       }
       return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
     },
+    ClockedIn: () => clockIn(model),
+    TitleRevealed: () => ({ model: { ...model, gate: 'open' } }),
     MenuChosen: ({ menu }) =>
       model.exited ? leaveExited(model, menu) : { model: { ...model, menu } },
 
@@ -1347,7 +1363,7 @@ const handle = (model: Model, message: Message): Result =>
     BoardFitted: () => ({ model, commands: [FitBoard({})] }),
 
     KeyPressed: ({ key }) => {
-      if (model.route !== 'lab') return { model }
+      if (model.route !== 'lab') return key === 'Escape' ? { model } : clockIn(model)
       const selected = model.selected
       switch (key) {
         case 'Escape': {
