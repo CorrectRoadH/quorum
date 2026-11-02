@@ -9,7 +9,8 @@
       "dependsOn": ["^typecheck"]
     },
     "test": {
-      "dependsOn": ["^test"]
+      "dependsOn": ["^test"],
+      "env": ["SLOW_TESTS"]
     },
     "dev": {
       "cache": false,

@@ -1,5 +1,6 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
+import { SLOW } from '../slow.ts'
 import {
   connect,
   disconnect,
@@ -243,7 +244,7 @@ const beats = (a: Scores, b: Scores): ReadonlyArray<string> => {
   return wins
 }
 
-describe('the dominance test', () => {
+describe.skipIf(!SLOW)('the dominance test', () => {
   for (const set of OPTION_SETS)
     // The runtimes set takes about 62 s alone on a 2-core machine.
     test(`${set.name}: every option beats every sibling somewhere`, { timeout: 240_000 }, () => {

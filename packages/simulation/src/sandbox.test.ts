@@ -1,5 +1,6 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
+import { SLOW } from '../slow.ts'
 import * as Actions from './actions.ts'
 import type { Action } from './actions.ts'
 import { Result as R } from 'effect'
@@ -224,7 +225,7 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
     expect(play('read-mostly', bigger, LONG).objective).toBe(1)
   })
 
-  test('Stampede: coalesce the misses, then warm the Cache before traffic', () => {
+  test.skipIf(!SLOW)('Stampede: coalesce the misses, then warm the Cache before traffic', () => {
     const guard =
       (change: Readonly<{ coalesce?: boolean; warming?: boolean }>): Plan =>
       (game, passed) =>
@@ -246,7 +247,7 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
     expect(play('stampede', bigger, LONG).objective).toBe(2)
   })
 
-  test('Slow Uploads: a Queue and a Worker take uploads off the App Servers', () => {
+  test.skipIf(!SLOW)('Slow Uploads: a Queue and a Worker take uploads off the App Servers', () => {
     const queue =
       (dlq: boolean): Plan =>
       (game, passed) => {
@@ -509,15 +510,19 @@ describe('the Series C track', () => {
     expect(play('missed-write', all, LONG).objective).toBe(1)
   }, 60_000)
 
-  test('Hot Key: splitting keys passes; a bigger store does not', () => {
-    const split: Plan = (game, passed) =>
-      passed === 1 ? ok(Actions.setSplit(game, 'wide', true)) : game
-    passesInTime(play('hot-key', split, LONG), 2)
-    expect(play('hot-key', idle, LONG).objective).toBe(1)
-    const bigger: Plan = (game, passed) =>
-      passed === 1 ? ok(Actions.resize(game, 'wide', 1)) : game
-    expect(play('hot-key', bigger, LONG).objective).toBe(1)
-  }, 60_000)
+  test.skipIf(!SLOW)(
+    'Hot Key: splitting keys passes; a bigger store does not',
+    () => {
+      const split: Plan = (game, passed) =>
+        passed === 1 ? ok(Actions.setSplit(game, 'wide', true)) : game
+      passesInTime(play('hot-key', split, LONG), 2)
+      expect(play('hot-key', idle, LONG).objective).toBe(1)
+      const bigger: Plan = (game, passed) =>
+        passed === 1 ? ok(Actions.resize(game, 'wide', 1)) : game
+      expect(play('hot-key', bigger, LONG).objective).toBe(1)
+    },
+    60_000,
+  )
 })
 
 describe('the free Sandbox', () => {

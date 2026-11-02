@@ -26,6 +26,8 @@ jobs:
       - run: pnpm check
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          SLOW_TESTS: '1'
       - run: pnpm build
 
   deploy:

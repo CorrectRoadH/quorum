@@ -15,6 +15,16 @@ import { runBot } from './pacing.ts'
 const SEEDS = [1, 2, 3]
 const LIMIT = 96 * 60
 
+const balancedRuns = new Map<number, number>()
+/** Balanced's time to Seed, played once per seed however many tests compare against it. */
+const balancedSeed = (seed: number): number => {
+  const known = balancedRuns.get(seed)
+  if (known !== undefined) return known
+  const time = runBot(seed, LIMIT).milestones.seed ?? 0
+  balancedRuns.set(seed, time)
+  return time
+}
+
 describe('the other pacing bots', { timeout: 60_000 }, () => {
   test('Greedy, who only buys bigger boxes, is no faster than 27 minutes', () => {
     for (const seed of SEEDS) {
@@ -27,7 +37,7 @@ describe('the other pacing bots', { timeout: 60_000 }, () => {
     for (const seed of SEEDS) {
       const stubborn = runBot(seed, LIMIT, DESIGN_TUNING, 'stubborn')
       expect(stubborn.game.stage).toBe(2)
-      const balanced = runBot(seed, LIMIT).milestones.seed ?? 0
+      const balanced = balancedSeed(seed)
       expect(stubborn.milestones.seed ?? Infinity).toBeLessThanOrEqual(1.6 * balanced)
     }
   })
@@ -38,7 +48,7 @@ describe('the other pacing bots', { timeout: 60_000 }, () => {
     const times: Array<string> = []
     for (const seed of SEEDS) {
       const polyglot = runBot(seed, LIMIT, DESIGN_TUNING, 'polyglot')
-      const balanced = runBot(seed, LIMIT).milestones.seed ?? 0
+      const balanced = balancedSeed(seed)
       expect(polyglot.game.stage).toBe(2)
       expect(polyglot.milestones.seed ?? 0).toBeGreaterThanOrEqual(0.7 * balanced)
       times.push(

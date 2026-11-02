@@ -36,6 +36,8 @@ pnpm dev
 pnpm dev:reference
 ```
 
+`pnpm test` skips the multi-minute simulation checks (the dominance test, the Balanced bot through Series B, and the heaviest Sandboxes). Run `SLOW_TESTS=1 pnpm test` to include them; CI does.
+
 `pnpm test:golden` replays the golden Company and every Challenge's reference solution in Chromium, Firefox, and WebKit (Vitest browser mode with Playwright) and in workerd, and compares the hashes with Node's. It is not part of `pnpm test` because it needs browser binaries: install them with `pnpm --filter @template/simulation exec playwright install chromium firefox webkit`, plus `playwright install-deps webkit` on Linux (`.agents/setup` does both in an orb).
 
 `pnpm deploy` modifies Cloudflare infrastructure. It is not part of routine verification.
