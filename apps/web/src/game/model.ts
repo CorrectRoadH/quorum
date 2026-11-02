@@ -12,6 +12,7 @@ import {
   GameNode,
   ResearchId,
   RuntimeId,
+  Region,
 } from '@template/simulation/state'
 
 /* ==========================================================================
@@ -170,6 +171,8 @@ export const Model = Schema.Struct({
   freeBoard: Schema.NullOr(Game),
   selected: Schema.NullOr(Schema.String),
   placing: Schema.NullOr(ComponentId),
+  /** The region tab the board shows. */
+  region: Region,
   panel: Panel,
   /** The research item the Research panel shows in its side pane; null picks one. */
   researchFocus: Schema.NullOr(ResearchId),

@@ -38,6 +38,8 @@ import {
 } from './lookups.ts'
 import { recordBudget } from './slo.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
+import { advanceDrill } from './ipo.ts'
+import { advanceQuarter } from './quarters.ts'
 import type { Alarms, FalseAlarms, Game, GameLink, GameNode, Sample } from './state.ts'
 import { advanceTeam } from './work.ts'
 
@@ -196,6 +198,7 @@ const advanceNode = (
   }
   if (node.type === 'server' || node.type === 'worker') next = scale(game, next, ledger, seconds)
   if (node.type === 'queue') next = { ...next, depth: depthAfter(game, ledger, node, seconds) }
+  if (node.lost > 0) next = { ...next, lost: Math.max(0, node.lost - seconds) }
   // A Database in a retry storm queues what it cannot take, and drains once it can.
   if (
     node.type === 'database' &&
@@ -372,6 +375,8 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
     servedKinds: firsts.length > 0 ? [...game.servedKinds, ...firsts] : game.servedKinds,
     stored: puts > 0 ? game.stored + (puts * UPLOAD_MB * seconds) / 1_000 : game.stored,
     budget: recordBudget(game, ledger, seconds),
+    drill: advanceDrill({ ...game, time }, ledger),
+    quarter: advanceQuarter({ ...game, time }, ledger),
     time,
     earned: game.earned + earned,
     history: crossedSecond ? [...game.history, sample].slice(-HISTORY) : game.history,

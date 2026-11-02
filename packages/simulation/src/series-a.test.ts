@@ -229,16 +229,21 @@ describe('the error budget', () => {
   test('at 99.9%, one failure in a thousand spends it all, and a spent budget halves velocity', () => {
     const company: Game = { ...seriesA(4_000, 'go'), sandbox: false, researched: RESEARCH }
     expect(
-      budgetOf({ ...company, budget: [{ hour: 0, requests: 1_000_000, failed: 1_000 }] }).left,
+      budgetOf({ ...company, budget: [{ hour: 0, requests: 1_000_000, failed: 1_000, users: 0 }] })
+        .left,
     ).toBeCloseTo(0, 9)
-    const budget = [{ hour: 0, requests: 1_000_000, failed: 1_100 }]
+    const budget = [{ hour: 0, requests: 1_000_000, failed: 1_100, users: 0 }]
     expect(budgetOf({ ...company, budget }).left).toBeLessThan(0)
     expect(
-      budgetOf({ ...company, budget: [{ hour: 0, requests: 1_000_000, failed: 250 }] }).left,
+      budgetOf({ ...company, budget: [{ hour: 0, requests: 1_000_000, failed: 250, users: 0 }] })
+        .left,
     ).toBeCloseTo(0.75, 9)
     expect(budgetVelocity({ ...company, budget })).toBe(0.5)
     expect(
-      budgetVelocity({ ...company, budget: [{ hour: 0, requests: 1_000_000, failed: 0 }] }),
+      budgetVelocity({
+        ...company,
+        budget: [{ hour: 0, requests: 1_000_000, failed: 0, users: 0 }],
+      }),
     ).toBe(1.1)
     // Without the research, or before Series A, the budget changes nothing.
     expect(budgetVelocity({ ...company, budget, researched: [] })).toBe(1)

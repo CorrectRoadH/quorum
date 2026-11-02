@@ -49,7 +49,7 @@ export const DESIGN_TUNING: Tuning = {
 }
 
 /** The design's cost index per Era (16 "Cost index"). The live game uses `EraDef.costIndex`. */
-export const DESIGN_COST_INDEX: ReadonlyArray<number> = [1, 1, 25, 120, 120, 160]
+export const DESIGN_COST_INDEX: ReadonlyArray<number> = [1, 1, 25, 120, 120, 160, 190, 190]
 
 /** The design's salary index per Era (16 "Cost index"). The live game uses `EraDef.salaryIndex`. */
-export const DESIGN_SALARY_INDEX: ReadonlyArray<number> = [1, 1, 12, 100, 400, 1_400]
+export const DESIGN_SALARY_INDEX: ReadonlyArray<number> = [1, 1, 12, 100, 400, 1_400, 2_700, 2_700]

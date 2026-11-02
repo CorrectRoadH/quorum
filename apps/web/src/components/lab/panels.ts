@@ -1,6 +1,7 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Download, Trash2, X } from 'lucide'
 import { offer } from '@template/simulation/actions'
+import { PRE_IPO_STAGE } from '@template/simulation/ipo'
 import { INCIDENTS, INCIDENT_IDS } from '@template/simulation/catalog'
 import { eraOf, isFinalEra, nextEra } from '@template/simulation/lookups'
 import { cheatCash, cheatInsight } from '@/game/cheats.ts'
@@ -195,8 +196,9 @@ export const helpPanel = (h: HtmlBuilder<Message>): Html =>
 export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
   const deal = offer(model.game)
   if (!deal) return h.empty
+  const ipo = model.game.stage === PRE_IPO_STAGE
   return shell(
-    `${deal.era.name} round`,
+    ipo ? 'IPO' : `${deal.era.name} round`,
     [],
     [
       h.div(
@@ -205,7 +207,7 @@ export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.div(
             [h.Class('flex flex-col gap-3 rounded-xl bg-raised p-4 shadow-raised')],
             [
-              h.span([h.Class('text-[15px] font-semibold')], ['Raise']),
+              h.span([h.Class('text-[15px] font-semibold')], [ipo ? 'Go public' : 'Raise']),
               h.div(
                 [h.Class('flex flex-1 flex-col gap-0.5 text-[13px] text-muted-foreground')],
                 [
@@ -216,31 +218,33 @@ export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
                       `Equity ${Math.round(model.game.equity * 100)}% → ${Math.round(model.game.equity * (1 - deal.dilution) * 100)}%`,
                     ],
                   ),
-                  h.span([], ['Full growth']),
+                  h.span([], [ipo ? 'Quarters begin' : 'Full growth']),
                 ],
               ),
-              primaryButton('Raise', Message.RoundRaised(), h),
+              primaryButton(ipo ? 'Go public' : 'Raise', Message.RoundRaised(), h),
             ],
           ),
-          h.div(
-            [
-              h.Class(
-                'flex flex-col gap-3 rounded-xl bg-nested p-4 shadow-[inset_0_0_0_1px_var(--hairline-soft)]',
-              ),
-            ],
-            [
-              h.span([h.Class('text-[15px] font-semibold')], ['Decline']),
-              h.div(
-                [h.Class('flex flex-1 flex-col gap-0.5 text-[13px] text-muted-foreground')],
+          ipo
+            ? h.empty
+            : h.div(
                 [
-                  h.span([], ['No Cash']),
-                  h.span([], [`Equity stays ${Math.round(model.game.equity * 100)}%`]),
-                  h.span([], ['Growth × 0.7']),
+                  h.Class(
+                    'flex flex-col gap-3 rounded-xl bg-nested p-4 shadow-[inset_0_0_0_1px_var(--hairline-soft)]',
+                  ),
+                ],
+                [
+                  h.span([h.Class('text-[15px] font-semibold')], ['Decline']),
+                  h.div(
+                    [h.Class('flex flex-1 flex-col gap-0.5 text-[13px] text-muted-foreground')],
+                    [
+                      h.span([], ['No Cash']),
+                      h.span([], [`Equity stays ${Math.round(model.game.equity * 100)}%`]),
+                      h.span([], ['Growth × 0.7']),
+                    ],
+                  ),
+                  secondaryButton('Decline', Message.RoundDeclined(), h),
                 ],
               ),
-              secondaryButton('Decline', Message.RoundDeclined(), h),
-            ],
-          ),
         ],
       ),
     ],
@@ -287,7 +291,7 @@ export const eraPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 export const endPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   shell(
-    'End of the slice',
+    'IPO',
     [],
     [
       h.div(
@@ -302,7 +306,10 @@ export const endPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             h.Alt(''),
             h.Class('w-full max-w-[520px] short:max-h-[30dvh] short:w-auto'),
           ]),
-          h.span([h.Class('text-[30px] font-semibold tracking-[-0.035em]')], ['Seed reached.']),
+          h.span(
+            [h.Class('text-[30px] font-semibold tracking-[-0.035em]')],
+            ['The company is public.'],
+          ),
           stats(
             'max-w-[640px] grid-cols-4 narrow:grid-cols-2 narrow:[&>:nth-child(n+3)]:border-t',
             [

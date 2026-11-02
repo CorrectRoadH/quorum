@@ -61,10 +61,10 @@ const LLM: ReadonlyArray<GameNode> = [node('llm', 'llm', 760, 680)]
 const WITH_LLM: ReadonlyArray<readonly [string, string]> = [['server', 'llm']]
 
 describe('the Series B Era', () => {
-  test('raises at 1,000,000 users for $18M, and Series C is the placeholder end', () => {
+  test('raises at 1,000,000 users for $18M into Series C', () => {
     expect(ERAS[4]?.raiseAt).toBe(1_000_000)
     expect(ERAS[4]?.grant).toBe(18_000_000)
-    expect(ERAS[5]?.raiseAt).toBe(Number.POSITIVE_INFINITY)
+    expect(ERAS[5]?.name).toBe('Series C')
     const mix = Object.values(ERAS[4]?.mix ?? {}).reduce((sum, share) => sum + (share ?? 0), 0)
     expect(mix).toBeCloseTo(1, 9)
   })

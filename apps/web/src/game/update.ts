@@ -10,7 +10,9 @@ import {
   FEATURES,
   FRAMEWORKS,
   INCIDENTS,
+  BACKUPS,
   COLLECTORS,
+  REGION_INFO,
   MIGRATION_STEPS,
   POLICIES,
   KINDS,
@@ -40,6 +42,8 @@ import {
 import { previewOf } from '@template/simulation/preview'
 import { bottleneckOf, solveFlow } from '@template/simulation/solve'
 import { Game } from '@template/simulation/state'
+import { IPO_BURN_SECONDS, PRE_IPO_STAGE } from '@template/simulation/ipo'
+import { firstQuarter } from '@template/simulation/quarters'
 import { step } from '@template/simulation/step'
 import { serviceOf } from '@template/simulation/team'
 import * as Work from '@template/simulation/work'
@@ -118,6 +122,7 @@ export const initialModel = (): Model =>
     freeBoard: null,
     selected: null,
     placing: null,
+    region: 'na',
     panel: 'none',
     researchFocus: null,
     buildGroup: null,
@@ -159,6 +164,7 @@ const sync = (model: Model): AnyCommand =>
     selected: model.selected,
     placing: model.placing,
     history: model.nodeHistory,
+    region: model.region,
   })
 
 /** The Model with a toast raised, and the Command that clears it later. */
@@ -891,7 +897,7 @@ const handle = (model: Model, message: Message): Result =>
       return act(
         model,
         `Placed ${COMPONENTS[type].name}`,
-        Actions.place(model.game, type, Math.round(x / 8) * 8, Math.round(y / 8) * 8),
+        Actions.place(model.game, type, Math.round(x / 8) * 8, Math.round(y / 8) * 8, model.region),
         {
           undoable: true,
           patch: (_, game) => ({ placing: null, selected: game.nodes.at(-1)?.id ?? null }),
@@ -1234,6 +1240,69 @@ const handle = (model: Model, message: Message): Result =>
 
     RuleDisabled: () => act(model, 'Disabled the WAF rule', Actions.disableRule(model.game)),
 
+    RegionPicked: ({ region }) => {
+      const next = { ...model, region, selected: null }
+      return { model: next, commands: [sync(next), FitBoard({})] }
+    },
+
+    RegionOpened: ({ region }) =>
+      act(model, `Opened ${REGION_INFO[region].name}`, Actions.openRegion(model.game, region), {
+        undoable: true,
+        patch: () => ({ region, selected: null }),
+      }),
+
+    NodeRegionChosen: ({ nodeId, region }) =>
+      act(
+        model,
+        `Moved to ${REGION_INFO[region].name}`,
+        Actions.setRegion(model.game, nodeId, region),
+        { undoable: true },
+      ),
+
+    QuorumChosen: ({ nodeId, n, r, w }) =>
+      act(model, `N${n} R${r} W${w}`, Actions.setQuorum(model.game, nodeId, n, r, w), {
+        undoable: true,
+      }),
+
+    SpreadChosen: ({ nodeId, spread }) =>
+      act(
+        model,
+        spread ? 'Spread across regions' : 'One region',
+        Actions.setSpread(model.game, nodeId, spread),
+        { undoable: true },
+      ),
+
+    BackupChosen: ({ nodeId, backup }) =>
+      act(model, `Backups ${BACKUPS[backup].name}`, Actions.setBackup(model.game, nodeId, backup), {
+        undoable: true,
+      }),
+
+    FanoutChosen: ({ nodeId, fanout }) =>
+      act(
+        model,
+        fanout === 'push' ? 'Fan-out on write' : 'Fan-out on read',
+        Actions.setFanout(model.game, nodeId, fanout),
+        { undoable: true },
+      ),
+
+    SplitChosen: ({ nodeId, split }) =>
+      act(
+        model,
+        split ? 'Hot keys split' : 'Hot keys not split',
+        Actions.setSplit(model.game, nodeId, split),
+        { undoable: true },
+      ),
+
+    RoutesRolledBack: () =>
+      act(model, 'Rolled back the routes', Actions.rollBackRoutes(model.game)),
+
+    LeaderFenced: () => act(model, 'Fenced the old leader', Actions.fenceLeader(model.game)),
+
+    DrillRun: () => act(model, 'DR drill', Actions.runDrill(model.game)),
+
+    GuidanceChosen: ({ growth, margin }) =>
+      act(model, 'Guidance', Actions.setGuidance(model.game, growth, margin)),
+
     ReportCancelled: () => act(model, 'Cancelled the report', Actions.cancelReport(model.game)),
 
     VolumeExpanded: () => act(model, 'Expanded the volume', Actions.expandVolume(model.game)),
@@ -1352,6 +1421,19 @@ const handle = (model: Model, message: Message): Result =>
       const next = nextEra(model.game)
       if (!next || isFinalEra(model.game)) return withToast(model, 'No round to skip to.', 'plain')
       const ready = { ...model.game, users: Math.max(model.game.users, eraOf(model.game).raiseAt) }
+      // A playtest skips the IPO checklist.
+      if (ready.stage === PRE_IPO_STAGE) {
+        const ledger = solveFlow(ready)
+        const listed: Game = {
+          ...ready,
+          stage: ready.stage + 1,
+          equity: ready.equity * (1 - eraOf(ready).dilution),
+          cash: ready.cash + ledger.burn * IPO_BURN_SECONDS,
+          quarter: firstQuarter(ready, ledger.revenue),
+        }
+        const next: Model = { ...model, ...afterRound(model, listed), game: listed }
+        return { model: next, commands: [sync(next)] }
+      }
       return act({ ...model, game: ready }, `Skipped to ${next.name}`, Actions.raise(ready), {
         patch: afterRound,
       })

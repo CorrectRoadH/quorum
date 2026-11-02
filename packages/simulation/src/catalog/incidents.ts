@@ -26,6 +26,12 @@ export const INCIDENT_IDS = [
   'report-db',
   'gpu-shortage',
   'regex',
+  'region',
+  'partition',
+  'hot-key',
+  'bgp',
+  'audit',
+  'dr-drill',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -304,6 +310,72 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     prevention: 'Roll rules out to a canary first. Disable the rule to end it.',
     actions: [],
   },
+  region: {
+    id: 'region',
+    name: 'Region outage',
+    era: 5,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 180,
+    cause: 'A whole region failed. Its board went grey.',
+    prevention: 'A second region, GeoDNS to send users there, and data that lives in both.',
+    actions: ['multi-region', 'geo-dns'],
+  },
+  partition: {
+    id: 'partition',
+    name: 'Network partition',
+    era: 5,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 45,
+    cause: 'Regions lost contact. Calls between them timed out, and leader-based writes diverged.',
+    prevention: 'A consensus store keeps one leader. Fence the old leader to end it.',
+    actions: ['consensus'],
+  },
+  'hot-key': {
+    id: 'hot-key',
+    name: 'Hot key',
+    era: 5,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 90,
+    cause: 'A celebrity posted. 30% of reads asked for one key, and its shard saturated.',
+    prevention: 'Split hot keys across shards and cache them in the App Servers.',
+    actions: ['hybrid-fanout'],
+  },
+  bgp: {
+    id: 'bgp',
+    name: 'BGP misconfiguration',
+    era: 5,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 120,
+    cause: 'A routing change withdrew the company from the internet. No region was reachable.',
+    prevention: 'Review routing changes. Roll back to end it.',
+    actions: [],
+  },
+  audit: {
+    id: 'audit',
+    name: 'Audit finding',
+    era: 6,
+    severity: 3,
+    escalatesTo: 2,
+    duration: 10,
+    cause: 'A SOC 2 auditor found a gap. The DR drill no longer counts.',
+    prevention: 'A Security team fixes findings before they reset anything.',
+    actions: ['security-team'],
+  },
+  'dr-drill': {
+    id: 'dr-drill',
+    name: 'DR drill',
+    era: 6,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'A scripted failure of the home region, to measure recovery.',
+    prevention: 'Serve every kind from another region within the hour, without losing writes.',
+    actions: [],
+  },
 }
 
 /** A quarter-end report scans this many times what a report usually does. */
@@ -370,3 +442,11 @@ export const SLO_FROM_STAGE = 3
 export const SLO_WINDOW_HOURS = 168
 /** Velocity with more than half the budget left, between, and spent. */
 export const ERROR_BUDGET_FACTORS = { ahead: 1.1, normal: 1, spent: 0.5 } as const
+
+/** The DR drill fails the home region for this long; it passes when the Design recovers sooner (10 "Era 6"). */
+export const DRILL_SECONDS = 60
+/** The IPO checklist: recovery under one calendar hour, data loss under five calendar minutes. */
+export const DRILL_RTO = 60
+export const DRILL_RPO = 5
+/** Recovered: the error share is back under this. */
+export const DRILL_RECOVERED = 0.01

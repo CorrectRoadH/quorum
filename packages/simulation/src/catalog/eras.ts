@@ -40,7 +40,7 @@ export type EraDef = Readonly<{
   arrivals: string
 }>
 
-/** Series B's mix (10 "Request mix by Era"). The Series C placeholder keeps it. */
+/** Series B's mix (10 "Request mix by Era"). */
 const SERIES_B_MIX: Partial<Record<RequestKind, number>> = {
   page: 0.18,
   read: 0.22,
@@ -55,6 +55,26 @@ const SERIES_B_MIX: Partial<Record<RequestKind, number>> = {
   job: 0.02,
   report: 0.03,
   ai: 0.05,
+}
+
+/** The mix from Series C on (10 "Request mix by Era": Series C+). */
+const SERIES_C_MIX: Partial<Record<RequestKind, number>> = {
+  page: 0.14,
+  read: 0.18,
+  write: 0.08,
+  login: 0.02,
+  search: 0.06,
+  upload: 0.02,
+  bot: 0.07,
+  media: 0.1,
+  rt: 0.08,
+  buy: 0.03,
+  job: 0.02,
+  report: 0.02,
+  ai: 0.06,
+  feed: 0.08,
+  hook: 0.02,
+  push: 0.02,
 }
 
 export const ERAS: ReadonlyArray<EraDef> = [
@@ -168,16 +188,51 @@ export const ERAS: ReadonlyArray<EraDef> = [
     incidentInterval: 480,
     maxSeverity: 1,
     market: 14_000_000,
-    raiseAt: Number.POSITIVE_INFINITY,
-    grant: 0,
-    dilution: 0,
+    raiseAt: 10_000_000,
+    grant: 150_000_000,
+    dilution: 0.12,
     growth: 0.0005,
     apdexTarget: 0.92,
     costIndex: 4,
     salaryIndex: 4,
-    mix: SERIES_B_MIX,
-    question: 'The slice ends here.',
-    arrivals: 'Series C content is not built yet. Keep playing to stress your design.',
+    mix: SERIES_C_MIX,
+    question: 'What happens when your users live on four continents?',
+    arrivals: 'Feeds, webhooks and push. Regions, GeoDNS, quorums and consensus.',
+  },
+  {
+    name: 'Pre-IPO',
+    slo: 0.9995,
+    incidentInterval: 600,
+    maxSeverity: 1,
+    market: 70_000_000,
+    raiseAt: 50_000_000,
+    // The IPO pays IPO_BURN_SECONDS of Burn instead of a fixed grant (ipo.ts).
+    grant: 0,
+    dilution: 0.15,
+    growth: 0.0003,
+    apdexTarget: 0.93,
+    costIndex: 4,
+    salaryIndex: 4,
+    mix: SERIES_C_MIX,
+    question: 'Can you prove the company is ready to go public?',
+    arrivals: 'The IPO checklist: reliability, SOC 2, a DR drill, data residency, the Rule of 40.',
+  },
+  {
+    name: 'Public',
+    slo: 0.9999,
+    incidentInterval: 600,
+    maxSeverity: 1,
+    market: 6_000_000_000,
+    raiseAt: Number.POSITIVE_INFINITY,
+    grant: 0,
+    dilution: 0,
+    growth: 0.0002,
+    apdexTarget: 0.94,
+    costIndex: 4,
+    salaryIndex: 4,
+    mix: SERIES_C_MIX,
+    question: 'Can you beat your guidance every quarter?',
+    arrivals: 'Quarters, guidance and the market multiple. The game is endless.',
   },
 ]
 

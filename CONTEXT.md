@@ -77,6 +77,26 @@ _Avoid_: level, tier, spec
 A failure domain inside a region. Every zoned Node sits in one; a call between zones adds latency and Egress, and a zone outage takes down every Node in it.
 _Avoid_: availability zone, AZ (in UI copy), datacenter, rack
 
+**Region**:
+A continent the Company runs in: North America, Europe, Asia-Pacific, or South America. Each open region has its own Users and its own tab on the Board; a call between regions pays the round trip.
+_Avoid_: datacenter, cloud region (in UI copy), geo
+
+**Region tab**:
+The Board's view of one region: its Nodes, the global ones, and the Nodes elsewhere they link to. Every tab shows one Design.
+_Avoid_: board (for a single region), map, planet
+
+**Quorum**:
+The replicas a Wide-column Store waits for: R on a read and W on a write, of N per key. R + W > N means every read sees the latest write.
+_Avoid_: consensus (that is Distributed SQL), majority
+
+**Spread**:
+A Wide-column Store or Distributed SQL Node that replicates across the open regions, so it serves through a Region outage.
+_Avoid_: global table, geo-replicated
+
+**Hot key**:
+One key that takes a large share of reads, so the shard that holds it saturates while the rest idle.
+_Avoid_: celebrity problem (in UI copy), hotspot
+
 **Copy**:
 One of the identical machines a scaled App Server or Worker Node runs. An Autoscaler adds and removes copies; the Node stays one card.
 _Avoid_: replica (that is the read replica Component), instance, pod (in UI copy)
@@ -190,6 +210,22 @@ _Avoid_: downtime allowance
 **Retry storm**:
 A metastable failure: a brief slowdown plus retries keeps a Node overloaded after the trigger ends.
 _Avoid_: thundering herd, cascade
+
+**DR drill**:
+A scripted outage of the home region that measures recovery time (RTO) and data lost (RPO) for the IPO checklist.
+_Avoid_: disaster test, failover test
+
+**IPO checklist**:
+The six things Pre-IPO must hold at once to go public: users, reliability, SOC 2, a passed DR drill, data residency, and the Rule of 40.
+_Avoid_: IPO requirements, gates
+
+**Quarter**:
+Seven calendar days of the Public Era. The player sets guidance at its start; beating it raises the Valuation multiple, missing it lowers it.
+_Avoid_: season, period
+
+**Guidance**:
+The revenue growth and margin the Company promises for a Quarter.
+_Avoid_: forecast, target (alone)
 
 **Postmortem**:
 The card after an Incident that records its cost and opens one action item: a prevention that, until researched, makes the Incident twice as likely.

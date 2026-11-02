@@ -33,6 +33,10 @@ import {
   type RequestKind,
   type ResearchId,
   type RuntimeId,
+  HOME_REGION,
+  OPEN_REGION_PRICE,
+  QUORUM_N,
+  REGION_INFO,
 } from './catalog.ts'
 import {
   frameworkReady,
@@ -53,7 +57,11 @@ import {
   vcpuOf,
 } from './lookups.ts'
 import { link } from './company.ts'
-import { zoned } from './director.ts'
+import { isGlobal, openRegions } from './regions.ts'
+import { startIncident, zoned } from './director.ts'
+import { IPO_BURN_SECONDS, PRE_IPO_STAGE, ipoReady, newDrill } from './ipo.ts'
+import { firstQuarter, guidanceOpen } from './quarters.ts'
+import { solveFlow } from './solve.ts'
 import type { AlertRule } from './events.ts'
 import type {
   CacheEngine,
@@ -68,6 +76,9 @@ import type {
   Retries,
   ScaleSignal,
   Zone,
+  Region,
+  Backup,
+  Fanout,
 } from './state.ts'
 
 /* ==========================================================================
@@ -128,7 +139,14 @@ const spend = (game: Game, price: number, what: string, apply: (game: Game) => G
 
 /* ---------- placing and removing ---------- */
 
-const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: number): GameNode => {
+const blankNode = (
+  game: Game,
+  id: string,
+  type: ComponentId,
+  x: number,
+  y: number,
+  region: Region = HOME_REGION,
+): GameNode => {
   const stack = game.nodes.find((node) => node.type === 'server')
   return {
     id,
@@ -178,15 +196,31 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     gogc: 100,
     shed: false,
     ryw: false,
+    region,
+    n: 3,
+    r: 1,
+    w: 1,
+    lost: 0,
+    spread: false,
+    backup: 'none',
+    fanout: 'pull',
+    split: false,
   }
 }
 
-export const place = (game: Game, type: ComponentId, x: number, y: number): Action => {
+export const place = (
+  game: Game,
+  type: ComponentId,
+  x: number,
+  y: number,
+  region: Region = HOME_REGION,
+): Action => {
   const def = COMPONENTS[type]
   if (def.fixed) return notAllowed(`${def.name} cannot be placed.`)
   if (!isUnlocked(game, type) && def.unlock)
     return no(Refusal.Locked({ what: def.name, research: RESEARCH[def.unlock].name }))
-  const node = blankNode(game, `n${game.nextId}`, type, x, y)
+  if (!openRegions(game).includes(region)) return notAllowed('Open that region first.')
+  const node = blankNode(game, `n${game.nextId}`, type, x, y, region)
   return spend(game, priceOf(game, type), def.name, (paid) => ({
     ...paid,
     nextId: paid.nextId + 1,
@@ -652,6 +686,116 @@ export const setRyw = (game: Game, id: string, ryw: boolean): Action =>
     return ok(node.ryw === ryw ? game : patch(game, id, { ryw }))
   })
 
+/* ---------- regions (docs/adr/0005) ---------- */
+
+/** Opens a region: its own Users Node, and a tab on the board. Needs Multiple regions. */
+export const openRegion = (game: Game, region: Region): Action => {
+  if (!has(game, 'multi-region'))
+    return no(Refusal.Locked({ what: 'Regions', research: RESEARCH['multi-region'].name }))
+  if (openRegions(game).includes(region)) return notAllowed('That region is open.')
+  const home = game.nodes.find((node) => node.type === 'users')
+  const id = `users-${region}`
+  const users: GameNode = {
+    ...blankNode(game, id, 'users', home?.x ?? 80, home?.y ?? 280, region),
+    warm: 1,
+  }
+  return spend(
+    game,
+    game.sandbox ? 0 : Math.round(OPEN_REGION_PRICE * eraOf(game).costIndex),
+    REGION_INFO[region].name,
+    (paid) => ({ ...paid, nodes: [...paid.nodes, users] }),
+  )
+}
+
+/** Moves a Node to another open region. It restarts there. */
+export const setRegion = (game: Game, id: string, region: Region): Action =>
+  withNode(game, id, (node) => {
+    if (COMPONENTS[node.type].fixed || isGlobal(node))
+      return notAllowed(`${COMPONENTS[node.type].name} serves every region.`)
+    if (!openRegions(game).includes(region)) return notAllowed('Open that region first.')
+    if (node.region === region) return ok(game)
+    return ok(
+      patch(game, id, {
+        region,
+        ...(COMPONENTS[node.type].sized && !isDown(node) ? restarted(node) : {}),
+      }),
+    )
+  })
+
+/** Sets a Wide-column Store's N, R and W (07 "Wide-column Store"). */
+export const setQuorum = (game: Game, id: string, n: number, r: number, w: number): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'wide') return notAllowed('Only a Wide-column Store has quorums.')
+    if (!QUORUM_N.some((entry) => entry === n) || r < 1 || w < 1 || r > n || w > n)
+      return notAllowed('R and W are between 1 and N; N is 1 to 5.')
+    return ok(patch(game, id, { n, r, w }))
+  })
+
+/** Spreads a Wide-column Store or Distributed SQL Node across the open regions. */
+export const setSpread = (game: Game, id: string, spread: boolean): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'wide' && node.type !== 'dsql')
+      return notAllowed('Only a Wide-column Store or Distributed SQL spreads across regions.')
+    if (spread && openRegions(game).length < 2) return notAllowed('Open a second region first.')
+    return ok(node.spread === spread ? game : patch(game, id, { spread }))
+  })
+
+/** Sets a Database's backups. Needs Point-in-time recovery. */
+export const setBackup = (game: Game, id: string, backup: Backup): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'database') return notAllowed('Only a Database keeps backups.')
+    if (backup !== 'none' && !has(game, 'pitr'))
+      return no(Refusal.Locked({ what: 'Backups', research: RESEARCH.pitr.name }))
+    return ok(node.backup === backup ? game : patch(game, id, { backup }))
+  })
+
+/** Pull or push feeds on an App Server (07 "Fan-out"). */
+export const setFanout = (game: Game, id: string, fanout: Fanout): Action =>
+  withNode(game, id, (node) =>
+    node.type !== 'server'
+      ? notAllowed('Only App Servers build feeds.')
+      : ok(node.fanout === fanout ? game : patch(game, id, { fanout })),
+  )
+
+/** Splits hot keys across a Cache's or Wide-column Store's shards. Needs Hybrid fan-out. */
+export const setSplit = (game: Game, id: string, split: boolean): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'cache' && node.type !== 'wide')
+      return notAllowed('Only a Cache or Wide-column Store splits keys.')
+    if (split && !has(game, 'hybrid-fanout'))
+      return no(Refusal.Locked({ what: 'Key splitting', research: RESEARCH['hybrid-fanout'].name }))
+    return ok(node.split === split ? game : patch(game, id, { split }))
+  })
+
+/** Rolls back the routing change that withdrew the Company from the internet. */
+export const rollBackRoutes = (game: Game): Action =>
+  endIncident(game, 'bgp', 'No routing change to roll back.')
+
+/** Fences the old leader: the partition's writes stop diverging. */
+export const fenceLeader = (game: Game): Action =>
+  endIncident(game, 'partition', 'No partition to fence.')
+
+/** Runs the DR drill: the home region fails for a minute (10 "Era 6"). Needs Disaster recovery drills. */
+export const runDrill = (game: Game): Action => {
+  if (!has(game, 'dr-drills'))
+    return no(Refusal.Locked({ what: 'The DR drill', research: RESEARCH['dr-drills'].name }))
+  if (game.incident) return notAllowed('Wait for the incident to end.')
+  if (game.drill && !game.drill.done) return notAllowed('A drill is running.')
+  const ledger = solveFlow(game)
+  const started = startIncident(game, ledger, 'dr-drill', 0)
+  if (!started) return notAllowed('Nothing runs in the home region.')
+  return ok({ ...started.game, drill: newDrill(game, ledger) })
+}
+
+/** Sets the quarter's guidance, on its first calendar day. */
+export const setGuidance = (game: Game, growth: number, margin: number): Action => {
+  if (!game.quarter) return notAllowed('Guidance starts after the IPO.')
+  if (!guidanceOpen(game)) return notAllowed('Guidance is set on the first day of a quarter.')
+  if (![0, 1, 2].includes(growth) || ![0, 1, 2].includes(margin))
+    return notAllowed('Pick a level for each.')
+  return ok({ ...game, quarter: { ...game.quarter, growth, margin } })
+}
+
 /** Ends an incident that one action ends. */
 const endIncident = (game: Game, kind: IncidentId, refusal: string): Action =>
   game.incident?.kind === kind
@@ -775,15 +919,35 @@ export const collect = (game: Game): Game => ({
 })
 
 export const canRaise = (game: Game): boolean =>
-  !game.sandbox && !isFinalEra(game) && game.users >= eraOf(game).raiseAt
+  !game.sandbox &&
+  !isFinalEra(game) &&
+  game.users >= eraOf(game).raiseAt &&
+  (game.stage !== PRE_IPO_STAGE || ipoReady(game, solveFlow(game)))
 
 const advanceEra = (game: Game, raised: boolean, firstIncidentAfter: number): Action => {
   if (!canRaise(game)) {
     const era = eraOf(game)
-    return notAllowed(`Reach ${era.raiseAt.toLocaleString('en-US')} users first.`)
+    return notAllowed(
+      game.stage === PRE_IPO_STAGE && game.users >= era.raiseAt
+        ? 'Complete the IPO checklist first.'
+        : `Reach ${era.raiseAt.toLocaleString('en-US')} users first.`,
+    )
   }
   const era = eraOf(game)
   const stage = game.stage + 1
+  // The IPO: no declining it, a grant of Burn, and quarters from now on.
+  if (game.stage === PRE_IPO_STAGE) {
+    if (!raised) return notAllowed('The IPO cannot be declined.')
+    const ledger = solveFlow(game)
+    return ok({
+      ...game,
+      stage,
+      cash: game.cash + ledger.burn * IPO_BURN_SECONDS,
+      equity: game.equity * (1 - era.dilution),
+      declined: false,
+      quarter: firstQuarter(game, ledger.revenue),
+    })
+  }
   return ok({
     ...game,
     stage,
@@ -804,5 +968,9 @@ export const decline = (game: Game, firstIncidentAfter = FIRST_INCIDENT_AFTER): 
 
 export const offer = (game: Game) => {
   const next = nextEra(game)
-  return next ? { era: next, grant: eraOf(game).grant, dilution: eraOf(game).dilution } : null
+  if (!next) return null
+  // The IPO pays a thousand seconds of Burn (plan 5.19).
+  const grant =
+    game.stage === PRE_IPO_STAGE ? solveFlow(game).burn * IPO_BURN_SECONDS : eraOf(game).grant
+  return { era: next, grant, dilution: eraOf(game).dilution }
 }

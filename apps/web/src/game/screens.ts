@@ -1,6 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { dock } from '@/components/lab/dock.ts'
-import { changeBar, goalBar, hud, toolbar } from '@/components/lab/hud.ts'
+import { changeBar, goalBar, hud, regionTabs, toolbar } from '@/components/lab/hud.ts'
 import { badDeploy, expiredCertificate, pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
 import { devPanel, endPanel, eraPanel, helpPanel, offerPanel } from '@/components/lab/panels.ts'
@@ -48,6 +48,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
               badDeploy(model, h),
               expiredCertificate(model, h),
               model.sandbox ? objectiveBar(model, h) : goalBar(nextGoal(model.game, ledger), h),
+              regionTabs(model, h),
               changeBar(model, h),
               model.paused
                 ? h.div(

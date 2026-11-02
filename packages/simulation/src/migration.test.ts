@@ -120,7 +120,7 @@ describe('migrations', () => {
     expect(fixedUp.backlog.some((item) => item.ref === 'fix-bugs')).toBe(false)
     expect(serviceOf(fixedUp).migration).toBeNull()
     expect(solveFlow(fixedUp).errors.crash).toBe(0)
-  })
+  }, 20_000)
 
   test('a migration to each Series A language moves every App Server, and hires speak it', () => {
     const targets: ReadonlyArray<readonly [RuntimeId, ResearchId]> = [

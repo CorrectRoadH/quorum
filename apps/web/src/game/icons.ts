@@ -1,5 +1,8 @@
 import {
   Activity,
+  BellRing,
+  Columns3,
+  Network,
   Boxes,
   ChartLine,
   Combine,
@@ -75,6 +78,9 @@ export const COMPONENT_ICONS: Record<ComponentId, IconNode> = {
   warehouse: Warehouse,
   gpu: Microchip,
   llm: Sparkles,
+  msgp: BellRing,
+  wide: Columns3,
+  dsql: Network,
 }
 
 export const GROUP_ICONS: Record<BuildGroup, IconNode> = {

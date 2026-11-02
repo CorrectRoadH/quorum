@@ -27,6 +27,9 @@ export const COMPONENT_IDS = [
   'warehouse',
   'gpu',
   'llm',
+  'msgp',
+  'wide',
+  'dsql',
 ] as const
 export type ComponentId = (typeof COMPONENT_IDS)[number]
 
@@ -190,6 +193,9 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
       'charge',
       'q-scan',
       'infer',
+      'notify',
+      'callout',
+      'k-write',
     ],
     stack: true,
     limiting: true,
@@ -205,8 +211,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 90,
     sized: true,
     latency: 2,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
-    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan', 'k-write'],
+    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan', 'k-write'],
     maxOut: 0,
     limiting: true,
     coldStart: true,
@@ -252,11 +258,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 80,
     burn: 0.03,
     latency: 0.3,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
-    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan', 'k-write'],
+    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan', 'k-write'],
     unlock: 'pooling',
     steps: 4,
-    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan', 'k-write'],
     limiting: true,
   }),
   cache: def({
@@ -270,11 +276,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 150,
     burn: 0.06,
     latency: 0.5,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan', 'k-write'],
     fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan'],
     unlock: 'caching',
     steps: 8,
-    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan', 'k-write'],
     limiting: true,
     coldStart: true,
   }),
@@ -365,7 +371,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     sized: true,
     latency: 0,
     accepts: ['task'],
-    sends: ['q-read', 'q-write'],
+    sends: ['q-read', 'q-write', 'notify', 'callout'],
     unlock: 'background-jobs',
     stack: true,
     limiting: true,
@@ -413,6 +419,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: ['charge'],
     maxOut: 0,
     unlock: 'checkout',
+    steps: 8,
     limiting: true,
   }),
   autoscaler: def({
@@ -488,7 +495,53 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     accepts: ['infer'],
     maxOut: 0,
     unlock: 'hosted-models',
-    steps: 4,
+    steps: 8,
+    limiting: true,
+  }),
+  msgp: def({
+    id: 'msgp',
+    code: 'msgp',
+    name: 'Push Provider',
+    product: 'Amazon SNS',
+    group: 'data',
+    blurb: 'Sends push notifications and email. Paid per message, 10,000 a second.',
+    cost: 0,
+    latency: 100,
+    accepts: ['notify'],
+    maxOut: 0,
+    unlock: 'notifications',
+    limiting: true,
+  }),
+  wide: def({
+    id: 'wide',
+    code: 'wide',
+    name: 'Wide-column Store',
+    product: 'Apache Cassandra',
+    group: 'data',
+    blurb: 'Replicates each key to N nodes. Reads ask R of them, writes wait for W.',
+    cost: 1_200,
+    burn: 1.2,
+    latency: 3,
+    accepts: ['q-read', 'q-write', 'q-tx', 'k-write'],
+    maxOut: 0,
+    unlock: 'leaderless',
+    steps: 6,
+    limiting: true,
+  }),
+  dsql: def({
+    id: 'dsql',
+    code: 'dsql',
+    name: 'Distributed SQL',
+    product: 'CockroachDB',
+    group: 'data',
+    blurb: 'SQL on Raft. Every write waits for a majority of its replicas.',
+    cost: 2_500,
+    burn: 2.4,
+    latency: 3,
+    accepts: ['q-read', 'q-write', 'q-tx'],
+    maxOut: 0,
+    unlock: 'consensus',
+    steps: 6,
     limiting: true,
   }),
 }
@@ -576,7 +629,7 @@ export const WARMED = 0.8
 /** Payment Provider fee per successful checkout (09 "Third-party fees"): a share of the value plus a fixed part. */
 export const PSP_RATE = 0.029
 export const PSP_FIXED = 0.3
-/** Checkouts per second the Payment Provider takes. */
+/** Checkouts per second the Payment Provider takes at its first usage tier; each tier doubles it. */
 export const PSP_CAPACITY = 1_000
 
 /** Zones a Node can sit in (05 "Zones and regions"). */
@@ -653,3 +706,35 @@ export const FIRST_KIND_INSIGHT = 20
 export const INSIGHT_YIELD = 0.5
 /** Samples per second Analytics keeps at size 1. Each size step doubles it. */
 export const ANALYTICS_CAPACITY = 4
+
+/** Push Provider: messages per second, and the price of one × cost index (05 "Push and Email Provider"). Price proposed. */
+export const MSGP_RATE = 10_000
+export const MSGP_PRICE = 0.001
+
+/**
+ * Wide-column Store (07 "Wide-column Store"): replica operations per second at size 1 (three
+ * nodes at 10,000 each). A write costs N of them, a read R. The replication settings it offers.
+ */
+export const WIDE_OPS = 30_000
+export const QUORUM_N = [1, 2, 3, 4, 5] as const
+/** Share of a weak-quorum store's reads that miss the latest write, per unit of write share. Proposed. */
+export const WIDE_STALE = 0.5
+/** Overlap is not linearizability: checkouts on a quorum store still see these (07). Proposed. */
+export const WIDE_TX_STALE = 0.02
+export const WIDE_TX_DUPLICATE = 0.01
+
+/** Distributed SQL: transactions per second at size 1 (three nodes at 2,000), and what a read costs of one. */
+export const DSQL_TX = 6_000
+export const DSQL_READ_COST = 0.25
+/** A spread store replicates to at most this many regions. */
+export const SPREAD_REGIONS = 3
+
+/** Backups (07 "Backups"): RPO in calendar minutes, and Burn on top of the Database's. Costs proposed. */
+export const BACKUPS = {
+  none: { name: 'None', rpo: Number.POSITIVE_INFINITY, burn: 0 },
+  nightly: { name: 'Nightly', rpo: 1_440, burn: 0.05 },
+  pitr: { name: 'PITR', rpo: 2, burn: 0.15 },
+} as const
+
+/** During a hot key, this share of reads asks for one key, which lives on one shard (07 "Fan-out"). */
+export const HOT_KEY_SHARE = 0.3

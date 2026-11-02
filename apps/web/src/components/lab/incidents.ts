@@ -140,20 +140,29 @@ export const badDeploy = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 /** An expired certificate on screen: every request fails until it is renewed. */
+/** Incidents one action ends, with no Node to select: a banner with the fix. */
+const BANNERS = {
+  certificate: { label: 'Renew', message: Message.CertificateRenewed() },
+  bgp: { label: 'Roll back', message: Message.RoutesRolledBack() },
+  partition: { label: 'Fence leader', message: Message.LeaderFenced() },
+} as const
+
 export const expiredCertificate = (model: Model, h: HtmlBuilder<Message>): Html => {
-  if (model.game.incident?.kind !== 'certificate') return h.empty
+  const kind = model.game.incident?.kind
+  if (kind !== 'certificate' && kind !== 'bgp' && kind !== 'partition') return h.empty
+  const banner = BANNERS[kind]
   return h.div(
     [
-      h.Key('certificate'),
+      h.Key(kind),
       h.Class(
         'pointer-events-auto enter-down flex items-center gap-2.5 rounded-xl bg-danger py-1.5 pr-1.5 pl-3.5 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_0_0_1px_color-mix(in_oklch,var(--danger),black_25%),0_10px_24px_-8px_color-mix(in_oklch,var(--danger)_60%,transparent)]',
       ),
     ],
     [
-      h.span([], [INCIDENTS.certificate.name]),
+      h.span([], [INCIDENTS[kind].name]),
       button(
-        { onClick: Message.CertificateRenewed(), size: 'sm', variant: 'outline' },
-        [icon(h, FileBadge, 'size-3.5'), 'Renew'],
+        { onClick: banner.message, size: 'sm', variant: 'outline' },
+        [icon(h, FileBadge, 'size-3.5'), banner.label],
         h,
       ),
     ],

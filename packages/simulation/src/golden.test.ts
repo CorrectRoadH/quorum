@@ -27,7 +27,11 @@ const GOLDEN_STEPS = 10_000
 // GOGC, load shedding and read-your-writes, and each Link's breaker, open time
 // and failure share. The Pre-seed replay's values are unchanged; the encoded
 // Game carries the new fields, so its hash moves.
-const GOLDEN_HASH = 'bf00cf54'
+// SIM_VERSION 6 (M6): the save gains each Node's region, quorum settings, lost
+// replica, spread, backups, fan-out and key splitting, the incident's region,
+// users in each SLO hour, the DR drill and the Public quarter. The replay's values
+// are unchanged again; only the new fields move the hash.
+const GOLDEN_HASH = 'aed6bacd'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {

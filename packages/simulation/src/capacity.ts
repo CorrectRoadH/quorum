@@ -32,10 +32,13 @@ import {
   BACKEND_KINDS,
   type BackendKind,
   type RequestKind,
+  FOLLOWERS,
+  HYBRID_READS,
+  HYBRID_WRITES,
 } from './catalog.ts'
 import { combineTail } from './distribution.ts'
 import type { Kind } from './catalog.ts'
-import { payloadFactor, queryFactor } from './features.ts'
+import { mixOf, payloadFactor, queryFactor } from './features.ts'
 import { asLogin, has, networkOf, payloadOf, profileOf, ramOf, vcpuOf } from './lookups.ts'
 import { fixed } from './team.ts'
 import type { Game, GameNode } from './state.ts'
@@ -159,6 +162,14 @@ export const callsOf = (
   const calls: Partial<Record<BackendKind, number>> = {
     ...profile.calls,
     'q-read': (profile.calls['q-read'] ?? 0) * (orm ? ORM_READS : 1),
+  }
+  // Fan-out on write (07 "Fan-out"): a feed reads one timeline, and each write fills its
+  // followers' timelines. Hybrid pulls the celebrities' posts instead of pushing them.
+  if (node.fanout === 'push') {
+    const hybrid = has(game, 'hybrid-fanout')
+    if (kind === 'feed') calls['q-read'] = hybrid ? HYBRID_READS : 1
+    if (kind === 'write' && (mixOf(game).feed ?? 0) > 0)
+      calls['k-write'] = FOLLOWERS * (hybrid ? HYBRID_WRITES : 1)
   }
   // The async part's calls: a Worker makes them once the kind goes through a Queue.
   if (offloaded && profile.offload > 0) calls.task = 1

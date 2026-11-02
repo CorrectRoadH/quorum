@@ -227,8 +227,8 @@ describe('Features', () => {
     expect(decoded.services).toEqual(game.services)
   })
 
-  test('every Feature belongs to an Era the build has: Garage to Series B', () => {
-    for (const feature of Object.values(FEATURES)) expect(feature.era).toBeLessThanOrEqual(4)
+  test('every Feature belongs to an Era the build has: Garage to Public', () => {
+    for (const feature of Object.values(FEATURES)) expect(feature.era).toBeLessThanOrEqual(7)
   })
 })
 

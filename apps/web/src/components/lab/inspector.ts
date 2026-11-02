@@ -31,7 +31,10 @@ import {
   STANDBY_TYPES,
   ZONES,
   type RequestKind,
+  BACKUPS,
+  REGION_INFO,
 } from '@template/simulation/catalog'
+import { isGlobal, openRegions, regional } from '@template/simulation/regions'
 import type { Ledger } from '@template/simulation/ledger'
 import {
   burnOf,
@@ -931,6 +934,9 @@ const KIND_SHORT: Record<RequestKind, string> = {
   job: 'Export',
   report: 'Report',
   ai: 'AI',
+  feed: 'Feed',
+  hook: 'Webhook',
+  push: 'Push',
 }
 
 const dnsTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
@@ -1044,6 +1050,148 @@ const placement = (node: GameNode, h: HtmlBuilder<Message>): Html =>
             ),
           ]
         : []),
+    ],
+    h,
+  )
+
+/** The region a Node runs in, once a second region is open. */
+const regionSection = (
+  game: Game,
+  node: GameNode,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> => {
+  const open = openRegions(game)
+  if (open.length < 2 || isGlobal(node) || COMPONENTS[node.type].fixed) return []
+  return [
+    section(
+      'Region',
+      [
+        picker(
+          'region',
+          open.map((region) => [region, REGION_INFO[region].short] as const),
+          node.region,
+          (region) => Message.NodeRegionChosen({ nodeId: node.id, region }),
+          h,
+        ),
+      ],
+      h,
+    ),
+  ]
+}
+
+/** A store that can replicate across the open regions. */
+const spreading = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> =>
+  openRegions(game).length < 2
+    ? []
+    : [
+        section(
+          'Regions',
+          [
+            picker(
+              'spread',
+              [
+                [false, 'One'],
+                [true, 'Spread'],
+              ],
+              node.spread,
+              (spread) => Message.SpreadChosen({ nodeId: node.id, spread }),
+              h,
+            ),
+          ],
+          h,
+        ),
+      ]
+
+const QUORUM = [1, 2, 3, 4, 5] as const
+
+/** N, R and W (07 "Wide-column Store"), then key splitting and regions. */
+const wide = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  section(
+    'Quorum',
+    [
+      picker(
+        'n',
+        QUORUM.map((n) => [n, `N${n}`] as const),
+        node.n,
+        (n) =>
+          Message.QuorumChosen({
+            nodeId: node.id,
+            n,
+            r: Math.min(node.r, n),
+            w: Math.min(node.w, n),
+          }),
+        h,
+      ),
+      picker(
+        'r',
+        QUORUM.filter((r) => r <= node.n).map((r) => [r, `R${r}`] as const),
+        node.r,
+        (r) => Message.QuorumChosen({ nodeId: node.id, n: node.n, r, w: node.w }),
+        h,
+      ),
+      picker(
+        'w',
+        QUORUM.filter((w) => w <= node.n).map((w) => [w, `W${w}`] as const),
+        node.w,
+        (w) => Message.QuorumChosen({ nodeId: node.id, n: node.n, r: node.r, w }),
+        h,
+      ),
+    ],
+    h,
+  ),
+  ...(has(game, 'hybrid-fanout') ? [splitting(node, h)] : []),
+  ...spreading(game, node, h),
+]
+
+const backups = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Backups',
+    [
+      picker(
+        'backup',
+        (Object.keys(BACKUPS) as ReadonlyArray<keyof typeof BACKUPS>).map(
+          (id) => [id, BACKUPS[id].name] as const,
+        ),
+        node.backup,
+        (backup) => Message.BackupChosen({ nodeId: node.id, backup }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+const fanout = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Feeds',
+    [
+      picker(
+        'fanout',
+        [
+          ['pull', 'Pull'],
+          ['push', 'Push'],
+        ],
+        node.fanout,
+        (choice) => Message.FanoutChosen({ nodeId: node.id, fanout: choice }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+const splitting = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Hot keys',
+    [
+      picker(
+        'split',
+        [
+          [false, 'One shard'],
+          [true, 'Split'],
+        ],
+        node.split,
+        (split) => Message.SplitChosen({ nodeId: node.id, split }),
+        h,
+      ),
     ],
     h,
   )
@@ -1442,6 +1590,12 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...(node.type === 'pooler' ? [pooler(node, h)] : []),
           ...(node.type === 'autoscaler' ? [autoscaler(node, h)] : []),
           ...(has(game, 'multi-az') && zoned(node) ? [placement(node, h)] : []),
+          ...regionSection(game, node, h),
+          ...(node.type === 'wide' ? wide(game, node, h) : []),
+          ...(node.type === 'dsql' ? spreading(game, node, h) : []),
+          ...(node.type === 'database' && has(game, 'pitr') ? [backups(node, h)] : []),
+          ...(node.type === 'server' && regional(game) ? [fanout(node, h)] : []),
+          ...(node.type === 'cache' && has(game, 'hybrid-fanout') ? [splitting(node, h)] : []),
           ...(node.type === 'dns' && has(game, 'health-checks') ? [dnsTtl(node, h)] : []),
           ...(has(game, 'timeouts') ? calls(game, node, h) : []),
         ],

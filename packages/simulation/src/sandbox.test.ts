@@ -466,6 +466,60 @@ describe('the Series B track', () => {
   }, 60_000)
 })
 
+/** Opens a region with an App Server behind its Users, wired like the home ones. */
+const regionServer = (game: Game, region: 'eu' | 'apac'): Game => {
+  let next = ok(Actions.place(ok(Actions.openRegion(game, region)), 'server', 600, 300, region))
+  const id = lastId(next)
+  next = {
+    ...next,
+    nodes: next.nodes.map((node) => (node.id === id ? { ...node, size: 3, runtime: 'go' } : node)),
+  }
+  for (const to of ['wide', 'storage', 'psp', 'llm', 'queue', 'search', 'warehouse'])
+    next = ok(Actions.connect(next, id, to))
+  return ok(Actions.connect(next, `users-${region}`, id))
+}
+
+describe('the Series C track', () => {
+  test('Far Away: a second region with GeoDNS passes; bigger home servers do not', () => {
+    const regions: Plan = (game, passed) =>
+      passed === 1
+        ? ok(Actions.setSpread(regionServer(regionServer(game, 'eu'), 'apac'), 'wide', true))
+        : game
+    passesInTime(play('far-away', regions, LONG), 2)
+    expect(play('far-away', idle, LONG).objective).toBe(1)
+    const bigger: Plan = (game, passed) =>
+      passed === 1
+        ? {
+            ...game,
+            nodes: game.nodes.map((node) => (node.type === 'server' ? { ...node, size: 6 } : node)),
+          }
+        : game
+    expect(play('far-away', bigger, LONG).objective).toBe(1)
+  }, 60_000)
+
+  test('Missed Write: R + W > N passes; more replicas at R = W = 1 do not, and W = N fails with a replica down', () => {
+    const quorum: Plan = (game, passed) =>
+      passed === 0 ? ok(Actions.setQuorum(game, 'wide', 3, 2, 2)) : game
+    passesInTime(play('missed-write', quorum, LONG), 2)
+    const more: Plan = (game, passed) =>
+      passed === 0 ? ok(Actions.setQuorum(game, 'wide', 5, 1, 1)) : game
+    expect(play('missed-write', more, LONG).objective).toBe(0)
+    const all: Plan = (game, passed) =>
+      passed === 0 ? ok(Actions.setQuorum(game, 'wide', 3, 1, 3)) : game
+    expect(play('missed-write', all, LONG).objective).toBe(1)
+  }, 60_000)
+
+  test('Hot Key: splitting keys passes; a bigger store does not', () => {
+    const split: Plan = (game, passed) =>
+      passed === 1 ? ok(Actions.setSplit(game, 'wide', true)) : game
+    passesInTime(play('hot-key', split, LONG), 2)
+    expect(play('hot-key', idle, LONG).objective).toBe(1)
+    const bigger: Plan = (game, passed) =>
+      passed === 1 ? ok(Actions.resize(game, 'wide', 1)) : game
+    expect(play('hot-key', bigger, LONG).objective).toBe(1)
+  }, 60_000)
+})
+
 describe('the free Sandbox', () => {
   test('holds demand flat, spends nothing, and starts no incidents', () => {
     let game = freeSandbox()

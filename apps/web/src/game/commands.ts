@@ -3,7 +3,8 @@ import { Schema } from 'effect'
 import { Command } from 'foldkit'
 import { fitBoard, setBoard } from './board.ts'
 import { solveFlow } from '@template/simulation/solve'
-import { ComponentId, Game } from '@template/simulation/state'
+import { regionView } from '@template/simulation/regions'
+import { ComponentId, Game, Region } from '@template/simulation/state'
 import { Message } from './message.ts'
 import { Prefs, SandboxStore } from './model.ts'
 import { play, SOUND_NAMES } from './sound.ts'
@@ -25,16 +26,18 @@ export const SyncBoard = Command.define('SyncBoard', {
     selected: Schema.NullOr(Schema.String),
     placing: Schema.NullOr(ComponentId),
     history: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
+    region: Region,
   },
   messages: [Message.Synced],
-  execute: ({ game, bottleneck, selected, placing, history }) =>
+  execute: ({ game, bottleneck, selected, placing, history, region }) =>
     Effect.sync(() =>
       setBoard('board', {
-        game,
+        game: regionView(game, region),
         ledger: { ...solveFlow(game), bottleneck },
         selected,
         placing,
         history,
+        region,
       }),
     ).pipe(Effect.as(Message.Synced())),
 })

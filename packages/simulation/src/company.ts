@@ -74,6 +74,15 @@ export const node = (
   gogc: 100,
   shed: false,
   ryw: false,
+  region: 'na',
+  n: 3,
+  r: 1,
+  w: 1,
+  lost: 0,
+  spread: false,
+  backup: 'none',
+  fanout: 'pull',
+  split: false,
   ...extra,
 })
 
@@ -131,6 +140,8 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   badDeploys: 0,
   stored: 0,
   budget: [],
+  drill: null,
+  quarter: null,
 })
 
 /**

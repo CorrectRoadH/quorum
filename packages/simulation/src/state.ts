@@ -9,6 +9,7 @@ import {
   LANGUAGE_IDS,
   POLICY_IDS,
   REQUEST_KINDS,
+  REGIONS,
   RESEARCH_IDS,
   RUNTIME_IDS,
   START_KLOC,
@@ -60,6 +61,15 @@ export const Collector = Schema.Literals(['g1', 'parallel', 'zgc'])
 export type Collector = typeof Collector.Type
 
 /** What an Autoscaler reads: CPU, or the Node's whole load, slots and memory included. */
+export const Region = Schema.Literals(REGIONS)
+export type Region = typeof Region.Type
+
+export const Backup = Schema.Literals(['none', 'nightly', 'pitr'])
+export type Backup = typeof Backup.Type
+
+export const Fanout = Schema.Literals(['pull', 'push'])
+export type Fanout = typeof Fanout.Type
+
 export const ScaleSignal = Schema.Literals(['cpu', 'load'])
 export type ScaleSignal = typeof ScaleSignal.Type
 
@@ -147,6 +157,19 @@ export const GameNode = Schema.Struct({
   shed: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   /** An App Server sends reads that follow a write to the primary (Read-your-writes routing). */
   ryw: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  region: Region.pipe(Schema.withDecodingDefaultKey(Effect.succeed('na' as const))),
+  /** Wide-column Store: replicas per key, replicas a read asks, replicas a write waits for. */
+  n: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
+  r: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))),
+  w: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))),
+  /** Sim seconds one of its replicas stays lost (a Wide-column Store keeps serving). */
+  lost: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** A Wide-column Store or Distributed SQL Node replicates across regions. */
+  spread: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  backup: Backup.pipe(Schema.withDecodingDefaultKey(Effect.succeed('none' as const))),
+  fanout: Fanout.pipe(Schema.withDecodingDefaultKey(Effect.succeed('pull' as const))),
+  /** A Cache splits hot keys across its shards. */
+  split: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 })
 export type GameNode = typeof GameNode.Type
 
@@ -195,6 +218,7 @@ export const Incident = Schema.Struct({
   magnitude: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(3))),
   /** The zone a zone outage took down. */
   zone: Schema.NullOr(Zone).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  region: Schema.NullOr(Region).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 })
 export type Incident = typeof Incident.Type
 
@@ -233,6 +257,8 @@ export const BudgetHour = Schema.Struct({
   hour: Schema.Finite,
   requests: Schema.Finite,
   failed: Schema.Finite,
+  /** Users at the end of the hour, for growth over the week (09 "Valuation"); 0 when unknown. */
+  users: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
 })
 export type BudgetHour = typeof BudgetHour.Type
 
@@ -368,6 +394,40 @@ export const monolith = (fixes: ReadonlyArray<typeof FixId.Type>): Service => ({
  */
 const OLD_MONOLITH = monolith(['eager-loading', 'session-state'])
 
+/** The DR drill (10 "Era 6"): when it began, how long recovery took, and the data it would lose. */
+export const Drill = Schema.Struct({
+  startedAt: Schema.Finite,
+  /** Calendar minutes until the error share fell under 1%, or null until then. */
+  rto: Schema.NullOr(Schema.Finite),
+  /** Calendar minutes of writes the failed region would lose. */
+  rpo: Schema.Finite,
+  done: Schema.Boolean,
+  passed: Schema.Boolean,
+})
+export type Drill = typeof Drill.Type
+
+export const QuarterResult = Schema.Struct({
+  beat: Schema.Boolean,
+  growth: Schema.Finite,
+  margin: Schema.Finite,
+})
+export type QuarterResult = typeof QuarterResult.Type
+
+/** A Public quarter (10 "Era 7"): the guidance set at its start, and where it started from. */
+export const Quarter = Schema.Struct({
+  index: Schema.Finite,
+  startedAt: Schema.Finite,
+  /** Guidance levels, 0 to 2: revenue growth 5/10/20%, margin 10/20/30%. */
+  growth: Schema.Finite,
+  margin: Schema.Finite,
+  revenue: Schema.Finite,
+  streak: Schema.Finite,
+  /** What beats and misses added to the valuation multiple. */
+  bonus: Schema.Finite,
+  last: Schema.NullOr(QuarterResult),
+})
+export type Quarter = typeof Quarter.Type
+
 export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
 export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
@@ -438,5 +498,8 @@ export const Game = Schema.Struct({
   stored: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** The last calendar week of requests and failures, by hour: the SLO window. */
   budget: Schema.Array(BudgetHour).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  drill: Schema.NullOr(Drill).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** The current Public quarter; null before the IPO. */
+  quarter: Schema.NullOr(Quarter).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 })
 export type Game = typeof Game.Type

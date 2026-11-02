@@ -39,6 +39,8 @@ import {
   type RequestProfile,
   type ResearchId,
   type RuntimeId,
+  BACKUPS,
+  SPREAD_REGIONS,
 } from './catalog.ts'
 import type { Game, GameNode } from './state.ts'
 
@@ -198,12 +200,27 @@ export const grown = (base: number, factor: number, steps: number): number => {
   return value
 }
 
+/** Regions a spread store replicates to: the open regions, at most SPREAD_REGIONS. */
+export const spreadCount = (game: Game): number =>
+  Math.min(
+    SPREAD_REGIONS,
+    new Set([
+      'na',
+      ...game.nodes.filter((node) => node.type === 'users').map((node) => node.region),
+    ]).size,
+  )
+
 /** Dollars per second a Node costs while it exists, down or not. */
 export const burnOf = (game: Game, node: GameNode): number => {
   const def = COMPONENTS[node.type]
   const index = eraOf(game).costIndex
   if (def.sized) {
-    const one = vcpuOf(node) * VCPU_PRICE * FAMILIES[node.family].price * index
+    const box = vcpuOf(node) * VCPU_PRICE * FAMILIES[node.family].price * index
+    // Backups store snapshots or the WAL on top of the box (07 "Backups").
+    const one =
+      node.type === 'database' && node.backup !== 'none'
+        ? box * (1 + BACKUPS[node.backup].burn)
+        : box
     // A standby is a second box; pods pack onto shared nodes.
     if (node.standby) return one * 2
     if (copiesOf(node) === 1 && !inCluster(game, node)) return one
@@ -214,6 +231,9 @@ export const burnOf = (game: Game, node: GameNode): number => {
   if (node.type === 'auth') return game.users * AUTH_PRICE_PER_USER
   if (node.type === 'storage') return (def.burn + game.stored * STORAGE_PRICE) * index
   if (node.type === 'gpu') return GPU_TYPES[node.gpu].burn * flatScale(node) * index
+  // A spread store runs its nodes in each region it replicates to.
+  if ((node.type === 'wide' || node.type === 'dsql') && node.spread)
+    return def.burn * flatScale(node) * index * spreadCount(game)
   return def.burn * flatScale(node) * index * (node.standby ? 2 : 1)
 }
 

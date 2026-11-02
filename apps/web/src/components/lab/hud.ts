@@ -1,6 +1,9 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
+  Circle,
+  CircleCheck,
   CircleHelp,
+  DatabaseZap,
   Expand,
   FlaskConical,
   Gem,
@@ -22,11 +25,20 @@ import {
   UsersRound,
   Wallet,
 } from 'lucide'
-import { researchList } from '@template/simulation/catalog'
+import { OPEN_REGION_PRICE, REGIONS, REGION_INFO, researchList } from '@template/simulation/catalog'
+import { openRegions, regional } from '@template/simulation/regions'
 import { canRaise } from '@template/simulation/actions'
 import type { Ledger } from '@template/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@template/simulation/lookups'
+import { PRE_IPO_STAGE, checklistOf } from '@template/simulation/ipo'
+import {
+  GUIDANCE_GROWTH,
+  GUIDANCE_MARGIN,
+  guidanceOpen,
+  quarterGrowth,
+} from '@template/simulation/quarters'
 import { budgetOf, budgeted } from '@template/simulation/slo'
+import { marginOf, valuationOf } from '@template/simulation/valuation'
 import { clockOf } from '@template/simulation/solve'
 import { devHoursRate } from '@template/simulation/team'
 import { itemName } from '@template/simulation/work'
@@ -121,7 +133,7 @@ const slo = (game: Model['game'], h: HtmlBuilder<Message>): Html => {
       ? budget.left > 0
         ? `${Math.round(left * 100)}% left`
         : 'spent'
-      : `/ ${Math.round(budget.slo * 1_000) / 10}%`,
+      : `/ ${Number((budget.slo * 100).toFixed(2))}%`,
     budget.left > 0.5 ? 'ok' : budget.left > 0 ? 'warn' : 'danger',
     h,
     `Availability this week against ${percent(budget.slo)}. The error budget: ${budget.left > 0 ? `${Math.round(left * 100)}% left` : 'spent'}.`,
@@ -179,7 +191,10 @@ const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
               className: 'enter-pop shine mt-1 w-full',
               attributes: [h.Key('offer'), h.DataAttribute('exit', 'gesture')],
             },
-            [icon(h, Rocket, 'size-3.5'), `${next.name} offer`],
+            [
+              icon(h, Rocket, 'size-3.5'),
+              game.stage === PRE_IPO_STAGE ? 'IPO' : `${next.name} offer`,
+            ],
             h,
           )
         : h.empty,
@@ -315,7 +330,148 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
           ),
         ],
       ),
+      game.stage === PRE_IPO_STAGE && !model.sandbox ? checklist(model, ledger, h) : h.empty,
+      game.quarter && !model.sandbox ? quarterly(model, ledger, h) : h.empty,
       building(model, ledger, h),
+    ],
+  )
+}
+
+/** One line of the IPO checklist or the quarter: a mark, a name and its figure. */
+const line = (name: string, value: string, tone: Tone, h: HtmlBuilder<Message>, mark?: boolean) =>
+  h.div(
+    [h.Key(name), h.Class('flex h-6 items-center gap-2 px-2.5 text-[11.5px]')],
+    [
+      mark === undefined
+        ? h.empty
+        : icon(
+            h,
+            mark ? CircleCheck : Circle,
+            cn('size-3.5 shrink-0', mark ? 'text-ok' : 'text-muted-foreground'),
+          ),
+      h.span([h.Class('text-muted-foreground')], [name]),
+      h.span(
+        [h.Class(cn(FIGURE, 'ml-auto text-[10.5px] whitespace-nowrap', toneText(tone)))],
+        [value],
+      ),
+    ],
+  )
+
+/** The IPO checklist (10 "Era 6"): every item at once opens the IPO. */
+const checklist = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  const items = checklistOf(game, ledger)
+  const drillReady = has(game, 'dr-drills') && !game.incident && !(game.drill && !game.drill.done)
+  return h.div(
+    [h.Key('ipo'), h.Class(`flex flex-col py-1 ${WELL} compact:hidden`)],
+    [
+      ...items.map((item) => line(item.label, item.value, item.met ? 'ok' : 'plain', h, item.met)),
+      has(game, 'dr-drills')
+        ? h.div(
+            [h.Class('px-1.5 pt-1')],
+            [
+              button(
+                {
+                  onClick: Message.DrillRun(),
+                  variant: 'outline',
+                  size: 'sm',
+                  className: 'w-full',
+                  attributes: [h.Disabled(!drillReady)],
+                },
+                [icon(h, DatabaseZap, 'size-3.5'), 'Run DR drill'],
+                h,
+              ),
+            ],
+          )
+        : h.empty,
+    ],
+  )
+}
+
+const LEVELS = ['Low', 'Mid', 'High'] as const
+
+/** A guidance picker: three levels, open on a quarter's first day. */
+const guidance = (
+  label: string,
+  values: ReadonlyArray<number>,
+  chosen: number,
+  pick: (level: number) => Message,
+  open: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [h.Key(label), h.Class('flex h-7 items-center gap-1 px-2.5 text-[11.5px]')],
+    [
+      h.span([h.Class('mr-auto text-muted-foreground')], [label]),
+      ...values.map((value, level) =>
+        h.button(
+          [
+            h.Type('button'),
+            h.Title(`${LEVELS[level]}: ${value}%`),
+            h.Disabled(!open && level !== chosen),
+            h.AriaPressed(level === chosen ? 'true' : 'false'),
+            h.OnClick(pick(level)),
+            h.Class(
+              cn(
+                FIGURE,
+                'h-6 min-w-9 rounded-md px-1.5 text-[10.5px] disabled:opacity-35',
+                level === chosen ? 'bg-foreground text-background' : 'hover:bg-foreground/5',
+              ),
+            ),
+          ],
+          [`${value}%`],
+        ),
+      ),
+    ],
+  )
+
+/** The Public quarter (10 "Era 7"): days left, guidance, and the market's verdict. */
+const quarterly = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  const quarter = game.quarter
+  if (!quarter) return h.empty
+  const day = Math.min(7, Math.floor((game.time - quarter.startedAt) / 1_440) + 1)
+  const value = valuationOf(game, ledger)
+  const open = guidanceOpen(game)
+  const growth = quarterGrowth(quarter, ledger)
+  return h.div(
+    [h.Key('quarter'), h.Class(`flex flex-col py-1 ${WELL} compact:hidden`)],
+    [
+      line(`Quarter ${quarter.index}`, `day ${day} of 7`, 'plain', h),
+      guidance(
+        'Growth',
+        GUIDANCE_GROWTH,
+        quarter.growth,
+        (level) => Message.GuidanceChosen({ growth: level, margin: quarter.margin }),
+        open,
+        h,
+      ),
+      guidance(
+        'Margin',
+        GUIDANCE_MARGIN,
+        quarter.margin,
+        (level) => Message.GuidanceChosen({ growth: quarter.growth, margin: level }),
+        open,
+        h,
+      ),
+      line(
+        'So far',
+        `${growth >= 0 ? '+' : ''}${growth.toFixed(1)}% · ${marginOf(ledger).toFixed(0)}%`,
+        growth >= (GUIDANCE_GROWTH[quarter.growth] ?? 0) &&
+          marginOf(ledger) >= (GUIDANCE_MARGIN[quarter.margin] ?? 0)
+          ? 'ok'
+          : 'warn',
+        h,
+      ),
+      line('Valuation', `${money(value.valuation)} · ×${value.multiple.toFixed(1)}`, 'plain', h),
+      quarter.last
+        ? line(
+            `Q${quarter.index - 1}`,
+            quarter.last.beat ? `Beat · streak ${quarter.streak}` : 'Missed',
+            quarter.last.beat ? 'ok' : 'danger',
+            h,
+          )
+        : h.empty,
     ],
   )
 }
@@ -570,5 +726,53 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.Class(`enter-down ${pill}`),
     ],
     [body, undo ? undoButton(!model.change && !!delta?.worse, h) : h.empty],
+  )
+}
+
+/**
+ * One tab per region from Series C (05 "Zones and regions"). Open regions are
+ * tabs; with Multiple regions, each closed one offers to open, at its price.
+ */
+export const regionTabs = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  const open = openRegions(game)
+  if (open.length < 2 && !(has(game, 'multi-region') && regional(game))) return h.empty
+  return h.nav(
+    [
+      h.Key('regions'),
+      h.AriaLabel('Regions'),
+      h.Class(
+        'pointer-events-auto flex items-center gap-0.5 rounded-xl bg-surface p-1 shadow-card',
+      ),
+    ],
+    REGIONS.map((region) => {
+      const isOpen = open.includes(region)
+      const info = REGION_INFO[region]
+      return h.button(
+        [
+          h.Key(region),
+          h.Type('button'),
+          h.Title(
+            isOpen
+              ? info.name
+              : `Open ${info.name}: ${money(game.sandbox ? 0 : OPEN_REGION_PRICE * eraOf(game).costIndex)}`,
+          ),
+          h.AriaPressed(model.region === region ? 'true' : 'false'),
+          h.OnClick(isOpen ? Message.RegionPicked({ region }) : Message.RegionOpened({ region })),
+          h.Class(
+            cn(
+              FIGURE,
+              'h-7 rounded-lg px-2.5 text-[11.5px] font-medium',
+              model.region === region
+                ? 'bg-foreground text-background'
+                : isOpen
+                  ? 'hover:bg-foreground/5'
+                  : 'text-muted-foreground opacity-60 hover:opacity-100',
+            ),
+          ),
+        ],
+        [isOpen ? info.short : `+ ${info.short}`],
+      )
+    }),
   )
 }

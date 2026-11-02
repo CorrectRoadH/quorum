@@ -89,6 +89,8 @@ export const nextGoal = (game: Game, ledger: Ledger): string => {
     (entry) => !has(game, entry.id) && researchReady(game, entry.id) && game.insight >= entry.cost,
   )
   if (affordable && game.researched.length < 3) return 'Open Research and spend your Insight.'
-  if (!next) return 'The slice ends here. Keep growing to stress your design.'
+  if (!next) return 'Meet the guidance you set for this quarter.'
+  if (next.name === 'Public')
+    return `Grow to ${eraOf(game).raiseAt.toLocaleString('en-US')} users and clear the IPO checklist to go public.`
   return `Grow to ${eraOf(game).raiseAt.toLocaleString('en-US')} users to raise the ${next.name} round.`
 }

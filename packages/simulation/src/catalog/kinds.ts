@@ -15,6 +15,9 @@ export const REQUEST_KINDS = [
   'job',
   'report',
   'ai',
+  'feed',
+  'hook',
+  'push',
 ] as const
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
@@ -31,6 +34,9 @@ export const BACKEND_KINDS = [
   'charge',
   'q-scan',
   'infer',
+  'notify',
+  'callout',
+  'k-write',
 ] as const
 export type BackendKind = (typeof BACKEND_KINDS)[number]
 
@@ -72,6 +78,12 @@ export const KINDS: Record<Kind, KindInfo> = {
   charge: { label: 'Charge', value: 0, color: 0x2e9d57 },
   'q-scan': { label: 'Scan', value: 0, color: 0x5b6abf },
   infer: { label: 'Inference', value: 0, color: 0xb04fc7 },
+  feed: { label: 'Feed', value: 0.6, color: 0xc9a227 },
+  hook: { label: 'Webhook', value: 0.8, color: 0x6d8f3a },
+  push: { label: 'Notify', value: 0.1, color: 0xd96b9a },
+  notify: { label: 'Push message', value: 0, color: 0xd96b9a },
+  callout: { label: 'Customer call', value: 0, color: 0x6d8f3a },
+  'k-write': { label: 'Timeline write', value: 0, color: 0xc9a227 },
 }
 
 export type RequestProfile = Readonly<{
@@ -87,7 +99,7 @@ export type RequestProfile = Readonly<{
    * Backend calls the async part makes: a Worker sends them once the kind goes
    * through a Queue; without one, the App Server makes them inline.
    */
-  asyncCalls: Readonly<Partial<Record<'q-read' | 'q-write', number>>>
+  asyncCalls: Readonly<Partial<Record<'q-read' | 'q-write' | 'notify' | 'callout', number>>>
   /** An ORM turns this kind's reads into N+1 queries. */
   orm: boolean
   /** KB the response sends over the network. */
@@ -309,6 +321,53 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     inKB: 0,
     offload: 0,
     scored: true,
+  }, // A timeline: pull reads 20 follows' posts, push reads one precomputed timeline (07 "Fan-out").
+  feed: {
+    cpu: 6,
+    native: false,
+    apdex: 300,
+    calls: { 'q-read': 20 },
+    asyncCalls: {},
+    orm: false,
+    payloadKB: 30,
+    asyncKB: 30,
+    stream: false,
+    compressible: true,
+    inKB: 0,
+    offload: 0,
+    scored: true,
+  },
+  // A webhook to a customer's server: slow and unreliable. Through a Queue a Worker waits on it.
+  hook: {
+    cpu: 2,
+    native: false,
+    apdex: 1_000,
+    calls: {},
+    asyncCalls: { callout: 1 },
+    orm: false,
+    payloadKB: 2,
+    asyncKB: 2,
+    stream: false,
+    compressible: false,
+    inKB: 0,
+    offload: 0.9,
+    scored: true,
+  },
+  // A notification: one message to the Push and Email Provider, best sent from a Worker.
+  push: {
+    cpu: 0.5,
+    native: false,
+    apdex: 1_000,
+    calls: {},
+    asyncCalls: { notify: 1 },
+    orm: false,
+    payloadKB: 1,
+    asyncKB: 1,
+    stream: false,
+    compressible: false,
+    inKB: 0,
+    offload: 0.9,
+    scored: true,
   },
 }
 
@@ -356,3 +415,14 @@ export const GZIP_CPU = 1.1
 
 /** Login CPU, in reference ms, when an Auth Provider does the hashing. */
 export const LOGIN_DELEGATED_CPU = 2
+
+/** A customer's webhook endpoint: slow and unreliable (04 "Request kinds"). Proposed. */
+export const CALLOUT_MS = 800
+export const CALLOUT_FAILURE = 0.02
+/**
+ * Fan-out on write (07 "Fan-out"): a post becomes one timeline write per follower, and a
+ * feed reads one timeline. Hybrid pulls the celebrities' posts. Followers are proposed.
+ */
+export const FOLLOWERS = 20
+export const HYBRID_WRITES = 0.5
+export const HYBRID_READS = 2

@@ -8,6 +8,10 @@ import {
   EGRESS_ORIGIN,
   PSP_FIXED,
   PSP_RATE,
+  CALLOUT_FAILURE,
+  CALLOUT_MS,
+  EGRESS_CROSS_REGION,
+  MSGP_PRICE,
   LAG_SURGE,
   LLM_PRICE,
   SCAN_PRICE,
@@ -15,7 +19,6 @@ import {
   STUFFING_MAGNITUDE,
   COMPONENTS,
   DIURNAL_AMPLITUDE,
-  CALENDAR_START,
   FRAMEWORKS,
   INSIGHT_YIELD,
   KINDS,
@@ -33,6 +36,7 @@ import {
   type Kind,
   type RequestKind,
 } from './catalog.ts'
+import { calendarMinute, clockOf, cosTurns } from './calendar.ts'
 import { FLAT_CAPACITY, NO_RESOURCES, type Calls } from './capacity.ts'
 import {
   ERROR_CAUSES,
@@ -77,6 +81,14 @@ import {
   type Rates,
   type Solver,
 } from './rules.ts'
+import {
+  isGlobal,
+  placeMs,
+  regional,
+  regionalCycle,
+  userRoutes,
+  type UserRoute,
+} from './regions.ts'
 import type { Game, GameLink, GameNode } from './state.ts'
 import { payrollOf } from './team.ts'
 
@@ -97,58 +109,7 @@ const REPLICA_LAG_PER_WRITE = 2
 
 /* ---------- demand and the calendar ---------- */
 
-/** Minutes since the calendar began. One sim second is one calendar minute. */
-export const calendarMinute = (time: number): number => CALENDAR_START + time
-
-export const clockOf = (time: number) => {
-  const minute = calendarMinute(time)
-  return {
-    day: Math.floor(minute / 1440) + 1,
-    hour: Math.floor((minute % 1440) / 60),
-    minute: Math.floor(minute % 60),
-  }
-}
-
-const PI = 3.141592653589793
-
-/** Taylor series of cos and sin around 0, exact to double precision on [−π/4, π/4]. */
-const cosSeries = (x: number): number => {
-  const xx = x * x
-  let term = 1
-  let sum = 1
-  for (let n = 2; n <= 20; n += 2) {
-    term *= -xx / ((n - 1) * n)
-    sum += term
-  }
-  return sum
-}
-const sinSeries = (x: number): number => {
-  const xx = x * x
-  let term = x
-  let sum = x
-  for (let n = 3; n <= 21; n += 2) {
-    term *= -xx / ((n - 1) * n)
-    sum += term
-  }
-  return sum
-}
-
-/**
- * cos(2π × turns) with only + − × ÷ and floor, so every engine gets the same
- * bits (04 "Determinism"). The angle folds into [0, π/4] by symmetry first.
- */
-export const cosTurns = (turns: number): number => {
-  const t = turns - Math.floor(turns)
-  // cos is even and has period 1 in turns: fold to [0, 1/2].
-  const half = t > 0.5 ? 1 - t : t
-  // cos(π − x) = −cos(x): fold to [0, 1/4].
-  const sign = half > 0.25 ? -1 : 1
-  const quarter = half > 0.25 ? 0.5 - half : half
-  // cos(x) = sin(π/2 − x): fold to [0, 1/8].
-  return quarter > 0.125
-    ? sign * sinSeries((0.25 - quarter) * 2 * PI)
-    : sign * cosSeries(quarter * 2 * PI)
-}
+export { calendarMinute, clockOf, cosTurns }
 
 /** The daily cycle: 1 + A × cos(2π × (hour − 20) / 24). */
 export const diurnal = (time: number): number => {
@@ -165,7 +126,11 @@ export const weekly = (time: number): number => {
 export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const mix = mixOf(game)
   const spike = game.incident?.kind === 'spike' ? game.incident.magnitude : 1
-  const cycle = game.sandbox ? 1 : diurnal(game.time) * weekly(game.time)
+  const cycle = game.sandbox
+    ? 1
+    : regional(game)
+      ? regionalCycle(game.time) * weekly(game.time)
+      : diurnal(game.time) * weekly(game.time)
   const total = game.users * RPS_PER_USER * cycle * spike
   const demand: Partial<Record<RequestKind, number>> = {}
   for (const kind of REQUEST_KINDS) {
@@ -325,6 +290,8 @@ type Inputs = Readonly<{
   nominal: ReadonlyMap<string, number>
   /** App Servers whose database is down or overloaded: a deep health check takes them out. */
   sick: ReadonlySet<string>
+  /** Share of the demand each Users Node takes in. */
+  intake: ReadonlyMap<string, number>
 }>
 
 const NO_CALLS: Calls = {}
@@ -359,6 +326,22 @@ const probeCapacity = (inputs: Inputs, solver: Solver, node: GameNode): number =
   return model.utilization > 0 ? 1 / model.utilization : 1_000
 }
 
+/** A Users Node's share of the demand. */
+const intakeOf = (demand: Partial<Record<RequestKind, number>>, share: number) => {
+  if (share === 1) return { ...demand }
+  const rates: Partial<Record<Kind, number>> = {}
+  for (const kind of Object.keys(demand) as Array<RequestKind>)
+    if (share > 0) rates[kind] = (demand[kind] ?? 0) * share
+  return rates
+}
+
+/** A customer's webhook endpoint: slow, and it fails now and then (04 "Request kinds"). */
+const CALLOUT: Outcome = failSome(
+  through(hop({ fixed: CALLOUT_MS / 2, variable: CALLOUT_MS / 2 })),
+  CALLOUT_FAILURE,
+  'upstream',
+)
+
 const forward = (inputs: Inputs): Pass => {
   const { game, graph, demand } = inputs
   const solver = solverOf(inputs)
@@ -370,7 +353,8 @@ const forward = (inputs: Inputs): Pass => {
   const links = new Map<string, Rates>()
 
   const route = (node: GameNode, kind: Kind, rate: number) => {
-    if (rate <= 0) return
+    // A webhook's call goes to a customer's server, outside the Design.
+    if (rate <= 0 || kind === 'callout') return
     const targets = splitOf(inputs, node, kind)
     if (targets.length === 0) {
       const entry = stranded.get(node.id) ?? { rate: 0, kinds: new Set<Kind>() }
@@ -397,7 +381,10 @@ const forward = (inputs: Inputs): Pass => {
   }
 
   for (const node of graph.order) {
-    const rates = node.type === 'users' ? { ...demand } : (arriving.get(node.id) ?? {})
+    const rates =
+      node.type === 'users'
+        ? intakeOf(demand, inputs.intake.get(node.id) ?? 0)
+        : (arriving.get(node.id) ?? {})
     arriving.set(node.id, rates)
     const rule = RULES[node.type]
     const model = rule.model(solver, node, rates)
@@ -594,15 +581,25 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   const failureOn = (node: GameNode, child: GameNode, kind: Kind): number =>
     1 - attempt(node, child, kind).success
 
-  /** A call that leaves its zone pays the cross-zone hop on top. */
+  /** A call that leaves its zone or region pays the hop on top. */
   const placed = (node: GameNode, child: GameNode, kind: Kind): Outcome => {
-    const extra = zoneMs(node, child)
+    // A partition cuts calls between regions until it heals.
+    if (
+      game.incident?.kind === 'partition' &&
+      node.region !== child.region &&
+      node.type !== 'users' &&
+      !isGlobal(node) &&
+      !isGlobal(child)
+    )
+      return failed('timeout')
+    const extra = placeMs(game, node, child)
     const answer = call(node, child, kind)
     return extra > 0 ? through(hop({ fixed: extra }), [[answer, 1]]) : answer
   }
 
   /** What one request of `kind` sent from `node` to its targets gets back. */
   const downstream = (node: GameNode, kind: Kind, extraHop = 0): Outcome => {
+    if (kind === 'callout') return CALLOUT
     const mixed = blend(
       splitOf(inputs, node, kind).map(([child, weight]) => [placed(node, child, kind), weight]),
     )
@@ -617,7 +614,8 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
       if (policy.open) return total
       const attempts =
         policy.retry === 'none' ? 1 : amplification(policy, failureOn(node, child, kind))
-      const each = heldFor(outcome(child, kind), policy.timeout) + extraHop + zoneMs(node, child)
+      const each =
+        heldFor(outcome(child, kind), policy.timeout) + extraHop + placeMs(game, node, child)
       return total + weight * attempts * Math.min(policy.timeout, each)
     }, 0)
 
@@ -702,6 +700,10 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
         failures.set(`${link.from}>${link.to}:${kind}`, link.failure)
   const nominal = new Map<string, number>()
   const sick = new Set<string>()
+  const routes = userRoutes(game, (node) => (graph.routes.get(node.id)?.length ?? 0) > 0)
+  const intake = new Map<string, number>()
+  for (const entry of routes)
+    if (entry.source) intake.set(entry.source.id, (intake.get(entry.source.id) ?? 0) + entry.share)
   const seed: Inputs = {
     game,
     graph,
@@ -713,6 +715,7 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
     failures,
     nominal,
     sick,
+    intake,
   }
   const seedSolver = solverOf(seed)
   for (const node of game.nodes) nominal.set(node.id, probeCapacity(seed, seedSolver, node))
@@ -732,6 +735,7 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       failures,
       nominal,
       sick: new Set(sick),
+      intake,
     }
     pass = forward(inputs)
     outcomes = outcomesOf(inputs, pass)
@@ -752,7 +756,7 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       const blended: Partial<Record<BackendKind, number>> = {}
       for (const kind of COMPONENTS[node.type].sends) {
         if (!isBackendKind(kind)) continue
-        const fresh = outcomes.held(node, kind, hopMs(game))
+        const fresh = kind === 'callout' ? CALLOUT_MS : outcomes.held(node, kind, hopMs(game))
         blended[kind] = index === 0 ? fresh : ((previous[kind] ?? 0) + fresh) / 2
       }
       nextLatency.set(node.id, blended)
@@ -780,7 +784,7 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
     failures = nextFailures
   }
   if (!pass || !outcomes) throw new Error('The solve ran no passes.')
-  return ledgerOf(game, graph, demand, pass, outcomes)
+  return ledgerOf(game, graph, demand, pass, outcomes, routes)
 }
 
 const ledgerOf = (
@@ -789,8 +793,24 @@ const ledgerOf = (
   demand: Partial<Record<RequestKind, number>>,
   pass: Pass,
   outcomes: ReturnType<typeof outcomesOf>,
+  routes: ReadonlyArray<UserRoute>,
 ): Ledger => {
-  const users = game.nodes.find((node) => node.type === 'users')
+  /** What one request of `kind` gets back, over every region's users. */
+  const answerOf = (kind: RequestKind): Outcome => {
+    const only = routes.length === 1 ? routes[0] : undefined
+    if (only && only.extraMs === 0)
+      return only.source ? outcomes.outcome(only.source, kind) : failed('stranded')
+    const mixed = blend(
+      routes.map((entry) => {
+        const answer = entry.source ? outcomes.outcome(entry.source, kind) : failed('stranded')
+        return [
+          entry.extraMs > 0 ? through(hop({ fixed: entry.extraMs }), [[answer, 1]]) : answer,
+          entry.share,
+        ] as const
+      }),
+    )
+    return mixed ?? failed('stranded')
+  }
 
   // What users get back, per kind.
   const kinds: Partial<Record<RequestKind, KindLedger>> = {}
@@ -805,7 +825,7 @@ const ledgerOf = (
   for (const kind of REQUEST_KINDS) {
     const rate = demand[kind] ?? 0
     if (rate <= 0) continue
-    const result = users ? outcomes.outcome(users, kind) : failed('stranded')
+    const result = answerOf(kind)
     const apdex = apdexOf(result, PROFILES[kind].apdex)
     kinds[kind] = {
       rate,
@@ -990,10 +1010,15 @@ const ledgerOf = (
       const [from, to] = key.split('>')
       const source = graph.byId.get(from ?? '')
       const target = graph.byId.get(to ?? '')
-      if (!source || !target || zoneMs(source, target) === 0) continue
+      if (!source || !target) continue
+      // Between regions (09 "Egress": $0.02/GB); global Components are reached at no charge.
+      const crossRegion = source.region !== target.region && !isGlobal(source) && !isGlobal(target)
+      if (!crossRegion && zoneMs(source, target) === 0) continue
       for (const [kind, rate] of Object.entries(carried) as Array<[Kind, number]>) {
         const kb = isBackendKind(kind) ? BACKEND_KB : PROFILES[kind as RequestKind].payloadKB
-        egress += ((rate * kb) / 1_000_000) * EGRESS_CROSS_ZONE * 2
+        egress += crossRegion
+          ? ((rate * kb) / 1_000_000) * EGRESS_CROSS_REGION
+          : ((rate * kb) / 1_000_000) * EGRESS_CROSS_ZONE * 2
       }
     }
     egress *= eraOf(game).costIndex
@@ -1015,6 +1040,7 @@ const ledgerOf = (
     if (done <= 0 || isDown(node)) continue
     if (node.type === 'warehouse') usage += done * SCAN_PRICE
     if (node.type === 'llm') usage += ((done * TOKENS_PER_PROMPT) / 1_000) * LLM_PRICE
+    if (node.type === 'msgp') usage += done * MSGP_PRICE
   }
   const thirdParty = usage > 0 ? fees + usage * eraOf(game).costIndex : fees
 

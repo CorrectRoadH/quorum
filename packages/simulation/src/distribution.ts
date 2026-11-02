@@ -331,3 +331,13 @@ export const percentile = (outcome: Outcome, q: number): number => {
   }
   return high
 }
+
+/**
+ * Mean of the k-th fastest of n replicas whose times are exponential with mean 1:
+ * Σ 1/i for i from n − k + 1 to n (07 "Wide-column Store": a quorum waits for the k-th reply).
+ */
+export const kthFastest = (k: number, n: number): number => {
+  let sum = 0
+  for (let i = Math.max(1, n - k + 1); i <= n; i += 1) sum += 1 / i
+  return sum
+}

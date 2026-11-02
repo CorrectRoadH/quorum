@@ -83,7 +83,12 @@ export const recordBudget = (
   if (last && last.hour === hour)
     return [
       ...kept.slice(0, -1),
-      { hour, requests: last.requests + requests, failed: last.failed + failed },
+      {
+        hour,
+        requests: last.requests + requests,
+        failed: last.failed + failed,
+        users: game.users,
+      },
     ]
-  return [...kept, { hour, requests, failed }]
+  return [...kept, { hour, requests, failed, users: game.users }]
 }

@@ -20,6 +20,9 @@ import {
   RuntimeId,
   ScaleSignal,
   Zone,
+  Backup,
+  Fanout,
+  Region,
 } from '@template/simulation/state'
 import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 
@@ -125,6 +128,18 @@ export const Message = defineMessageUnion({
   ShedChosen: { nodeId: Schema.String, shed: Schema.Boolean },
   RywChosen: { nodeId: Schema.String, ryw: Schema.Boolean },
   RuleDisabled: {},
+  RegionPicked: { region: Region },
+  RegionOpened: { region: Region },
+  NodeRegionChosen: { nodeId: Schema.String, region: Region },
+  QuorumChosen: { nodeId: Schema.String, n: Schema.Finite, r: Schema.Finite, w: Schema.Finite },
+  SpreadChosen: { nodeId: Schema.String, spread: Schema.Boolean },
+  BackupChosen: { nodeId: Schema.String, backup: Backup },
+  FanoutChosen: { nodeId: Schema.String, fanout: Fanout },
+  SplitChosen: { nodeId: Schema.String, split: Schema.Boolean },
+  RoutesRolledBack: {},
+  LeaderFenced: {},
+  DrillRun: {},
+  GuidanceChosen: { growth: Schema.Finite, margin: Schema.Finite },
   ReportCancelled: {},
   VolumeExpanded: {},
   CertificateRenewed: {},

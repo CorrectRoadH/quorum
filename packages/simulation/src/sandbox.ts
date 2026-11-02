@@ -50,6 +50,9 @@ export const SANDBOX_IDS = [
   'gc-pauses',
   'retry-storm',
   'analytics-primary',
+  'far-away',
+  'missed-write',
+  'hot-key',
 ] as const
 export type SandboxId = (typeof SANDBOX_IDS)[number]
 
@@ -201,6 +204,61 @@ const SERIES_B_RESEARCH: ReadonlyArray<ResearchId> = [
   'hosted-models',
   'data-warehouse',
 ]
+
+const FAR_USERS = 8_000
+const FAR_READ_MS = 140
+const MISSED_USERS = 8_000
+const HOT_USERS = 1_000_000
+
+/** What a Series C Design needs besides App Servers and its store: files, checkouts, AI, pushes, and async work. */
+const seriesCData = (scale = 1): ReadonlyArray<GameNode> => [
+  node('search', 'search', 1120, 60, { size: 2 + scale }),
+  node('warehouse', 'warehouse', 1120, 220),
+  node('storage', 'storage', 880, 420),
+  node('psp', 'psp', 880, 560, { size: scale }),
+  node('llm', 'llm', 880, 700, { size: 1 + scale }),
+  node('msgp', 'msgp', 880, 840),
+  node('queue', 'queue', 360, 40),
+  node('worker', 'worker', 880, 60, { size: scale > 1 ? 9 : 4, runtime: 'go' }),
+]
+const seriesCLinks = (
+  servers: ReadonlyArray<string>,
+  store: string,
+): ReadonlyArray<readonly [string, string]> => [
+  ['users', 'lb'],
+  ['queue', 'worker'],
+  ['worker', store],
+  ['worker', 'msgp'],
+  ...servers.flatMap((server): ReadonlyArray<readonly [string, string]> => [
+    ['lb', server],
+    [server, store],
+    [server, 'storage'],
+    [server, 'psp'],
+    [server, 'llm'],
+    [server, 'queue'],
+    [server, 'search'],
+    [server, 'warehouse'],
+  ]),
+]
+const SERIES_C_RESEARCH: ReadonlyArray<ResearchId> = [
+  ...SERIES_B_RESEARCH,
+  'notifications',
+  'replication',
+  'sharding',
+  'leaderless',
+  'multi-region',
+  'geo-dns',
+]
+
+/** Users served, with Apdex above `apdex`, at every request kind. */
+const answered =
+  (apdex: number) =>
+  (_: Game, ledger: Ledger): boolean =>
+    ledger.errorShare < 0.01 && ledger.apdex >= apdex
+
+/** API reads come back fresh: under 0.5% stale or failed. */
+const fresh = (_: Game, ledger: Ledger): boolean =>
+  (ledger.kinds.read?.success ?? 1) >= 0.995 && ledger.errorShare < 0.01
 
 export const GUIDED: Record<SandboxId, GuidedSandbox> = {
   'out-of-credits': {
@@ -821,6 +879,107 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       },
     ],
   },
+  'far-away': {
+    id: 'far-away',
+    name: 'Far Away',
+    stage: 5,
+    start: () =>
+      board(
+        5,
+        FAR_USERS,
+        SERIES_C_RESEARCH,
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 3,
+              runtime: 'go',
+            }),
+          ),
+          node('wide', 'wide', 880, 220, { size: 2, n: 3, r: 2, w: 2 }),
+          ...seriesCData(),
+        ],
+        seriesCLinks(['server1', 'server2'], 'wide'),
+      ),
+    objectives: [
+      { goal: 'Serve every request for 2 minutes.', hold: 120, met: answered(0.5) },
+      {
+        goal: `Half your users live outside North America. Get API reads under ${FAR_READ_MS} ms on average for 2 minutes.`,
+        hold: 120,
+        met: (game, ledger) =>
+          answered(0.5)(game, ledger) && (ledger.kinds.read?.mean ?? 0) <= FAR_READ_MS,
+      },
+    ],
+  },
+  'missed-write': {
+    id: 'missed-write',
+    name: 'Missed Write',
+    stage: 5,
+    start: () =>
+      board(
+        5,
+        MISSED_USERS,
+        SERIES_C_RESEARCH,
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 3,
+              runtime: 'go',
+            }),
+          ),
+          node('wide', 'wide', 880, 220, { size: 2, n: 3, r: 1, w: 1 }),
+          ...seriesCData(),
+        ],
+        seriesCLinks(['server1', 'server2'], 'wide'),
+      ),
+    objectives: [
+      {
+        goal: 'Every API read must see the latest write. Hold it for 2 minutes.',
+        hold: 120,
+        met: fresh,
+      },
+      {
+        goal: 'A replica will fail. Keep reads fresh and errors under 1% for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'instance', only: 'wide', survive: true },
+        met: fresh,
+      },
+    ],
+  },
+  'hot-key': {
+    id: 'hot-key',
+    name: 'Hot Key',
+    stage: 5,
+    start: () =>
+      board(
+        5,
+        HOT_USERS,
+        [...SERIES_C_RESEARCH, 'hybrid-fanout'],
+        [
+          node('lb', 'lb', 360, 280, { size: 5 }),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 7,
+              runtime: 'go',
+              replicas: 2,
+            }),
+          ),
+          node('wide', 'wide', 880, 220, { size: 4, n: 3, r: 2, w: 2 }),
+          ...seriesCData(4),
+        ],
+        seriesCLinks(['server1', 'server2'], 'wide'),
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 2 minutes.', hold: 120, met: answered(0.9) },
+      {
+        goal: 'A celebrity will post. Keep Apdex above 0.85 for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'hot-key', survive: true },
+        met: answered(0.85),
+      },
+    ],
+  },
 }
 
 export const TRACKS: ReadonlyArray<
@@ -831,6 +990,7 @@ export const TRACKS: ReadonlyArray<
   { stage: 2, sandboxes: ['stampede', 'slow-uploads', 'bots'] },
   { stage: 3, sandboxes: ['zone-outage', 'cold-start', 'stale-checkout'] },
   { stage: 4, sandboxes: ['gc-pauses', 'retry-storm', 'analytics-primary'] },
+  { stage: 5, sandboxes: ['far-away', 'missed-write', 'hot-key'] },
 ]
 
 /** A guided Sandbox opens when the one before it in its track has passed. */

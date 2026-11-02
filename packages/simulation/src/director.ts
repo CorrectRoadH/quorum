@@ -18,6 +18,7 @@ import {
   WARMED,
   type ComponentId,
   type IncidentId,
+  HOME_REGION,
 } from './catalog.ts'
 import { StepEvent } from './events.ts'
 import type { Ledger } from './ledger.ts'
@@ -25,7 +26,8 @@ import { eraOf, has, isDown, ramOf, researchReady, restarted, zoned } from './lo
 
 export { zoned }
 import { nextRandom, pickWeighted } from './random.ts'
-import type { Game, GameLink, GameNode, Incident, Postmortem, Zone } from './state.ts'
+import type { Game, GameLink, GameNode, Incident, Postmortem, Region, Zone } from './state.ts'
+import { isGlobal, survivesRegion } from './regions.ts'
 import { collectorOf } from './capacity.ts'
 import { fixed, serviceOf } from './team.ts'
 
@@ -141,6 +143,40 @@ export const fragileZones = (game: Game): ReadonlyArray<Zone> => {
   return [...zones].toSorted()
 }
 
+/** Links between Nodes in two regions, neither of them global. */
+const crossRegionLinks = (game: Game): number =>
+  game.links.filter((link) => {
+    const from = game.nodes.find((node) => node.id === link.from)
+    const to = game.nodes.find((node) => node.id === link.to)
+    return (
+      from &&
+      to &&
+      from.region !== to.region &&
+      !isGlobal(from) &&
+      !isGlobal(to) &&
+      from.type !== 'users'
+    )
+  }).length
+
+/** Caches and Wide-column Stores that answer reads: where a celebrity's key lands. */
+const hotKeyTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
+  game.nodes.filter(
+    (node) =>
+      (node.type === 'cache' || node.type === 'wide') && !isDown(node) && busy(ledger, node),
+  )
+
+/** The region with the most region-bound live Nodes. */
+const busiestRegion = (game: Game): Region | undefined => {
+  const counts = new Map<Region, number>()
+  for (const node of game.nodes)
+    if (!survivesRegion(game, node) && !isDown(node))
+      counts.set(node.region, (counts.get(node.region) ?? 0) + 1)
+  return [...counts.entries()].reduce<readonly [Region, number] | undefined>(
+    (best, entry) => (!best || entry[1] > best[1] ? entry : best),
+    undefined,
+  )?.[0]
+}
+
 /** How hard this incident would hit the current Design: 0 when it has nothing to hit, else 0.2 to 3. */
 export const weaknessOf = (game: Game, ledger: Ledger, kind: IncidentId): number => {
   if (INCIDENTS[kind].era > game.stage) return 0
@@ -251,6 +287,26 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number => {
     'gpu-shortage': () =>
       gpuTargets(game, ledger).length > 0 ? (hasNode(game, 'llm') ? 0.5 : 2) : 0,
     regex: () => (hasNode(game, 'waf') ? 1 : 0),
+    // 3.0 once the Company could open a second region and every region-bound Node sits in one.
+    region: () => {
+      const bound = game.nodes.filter((node) => !survivesRegion(game, node) && !isDown(node))
+      if (bound.length === 0) return 0
+      const regions = new Set(bound.map((node) => node.region))
+      return regions.size === 1 ? (has(game, 'multi-region') ? 3 : 0.5) : 0.3
+    },
+    // Calls between regions time out; a consensus store keeps a single leader through it.
+    partition: () => (crossRegionLinks(game) > 0 ? (hasNode(game, 'dsql') ? 0.5 : 2) : 0),
+    'hot-key': () => {
+      const targets = hotKeyTargets(game, ledger)
+      if (targets.length === 0 || (ledger.kinds.feed?.rate ?? 0) <= 0) return 0
+      return targets.every((node) => node.split) && has(game, 'hybrid-fanout') ? 0.3 : 2
+    },
+    // Nothing prevents it: rare, and it ends with a rollback.
+    bgp: () => 0.2,
+    // An auditor resets the DR drill; a Security team fixes the gap first.
+    audit: () => (game.drill?.passed && !has(game, 'security-team') ? 1.5 : 0),
+    // Only the player starts a drill.
+    'dr-drill': () => 0,
   }
   return weakness[kind]()
 }
@@ -301,6 +357,10 @@ export const startIncident = (
       ),
     ),
     Match.when('gpu-shortage', () => pickWeighted(gpuTargets(game, ledger), roll)),
+    Match.when('hot-key', () => {
+      const targets = hotKeyTargets(game, ledger)
+      return targets[Math.floor(roll * targets.length)]
+    }),
     Match.orElse(() => undefined),
   )
   // A zone outage strikes a zone the Design depends on, or else the busiest one.
@@ -321,8 +381,13 @@ export const startIncident = (
     'retry-storm',
     'gc-storm',
     'gpu-shortage',
+    'hot-key',
   ] as const
   if ((targeted as ReadonlyArray<IncidentId>).includes(kind) && !target) return null
+  // A Region outage strikes the region most of the Design depends on; the DR drill, home.
+  const region =
+    kind === 'dr-drill' ? HOME_REGION : kind === 'region' ? (busiestRegion(game) ?? null) : null
+  if (kind === 'region' && region === null) return null
   const incident: Incident = {
     kind,
     remaining: incidentDuration(game, kind),
@@ -339,39 +404,52 @@ export const startIncident = (
         ? SPIKE_MAGNITUDE[0] + (SPIKE_MAGNITUDE[1] - SPIKE_MAGNITUDE[0]) * roll
         : SPIKE_MAGNITUDE[0],
     zone,
+    region,
   }
   // A stampede: the Cache restarted empty, or mostly warm with Cache warming.
   // A zone outage downs its zone for the incident; a Node with a standby fails over.
   const nodes = game.nodes.map((node) =>
-    zone !== null && zoned(node) && node.zone === zone && !isDown(node)
+    region !== null && node.region === region && !survivesRegion(game, node) && !isDown(node)
       ? {
           ...node,
-          down: node.standby ? failoverSeconds(game) : incidentDuration(game, 'zone'),
+          down: incidentDuration(game, kind),
           downCause: 'failure' as const,
           downAt: game.time,
         }
-      : node.id !== target?.id
-        ? node
-        : kind === 'instance'
-          ? {
-              ...node,
-              // A standby takes over: the Node is back once failover finishes.
-              down: node.standby ? failoverSeconds(game) : -1,
-              downCause: 'failure' as const,
-              downAt: game.time,
-            }
-          : kind === 'stampede'
-            ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
-            : kind === 'gpu-shortage'
+      : zone !== null && zoned(node) && node.zone === zone && !isDown(node)
+        ? {
+            ...node,
+            down: node.standby ? failoverSeconds(game) : incidentDuration(game, 'zone'),
+            downCause: 'failure' as const,
+            downAt: game.time,
+          }
+        : node.id !== target?.id
+          ? node
+          : kind === 'instance' && node.type === 'wide'
+            ? // A Wide-column Store loses one replica and keeps serving the quorums it can still form.
+              { ...node, lost: incidentDuration(game, kind) }
+            : kind === 'instance'
               ? {
                   ...node,
-                  down: incidentDuration(game, kind),
+                  // A standby takes over: the Node is back once failover finishes.
+                  down: node.standby ? failoverSeconds(game) : -1,
                   downCause: 'failure' as const,
                   downAt: game.time,
                 }
-              : node,
+              : kind === 'stampede'
+                ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
+                : kind === 'gpu-shortage'
+                  ? {
+                      ...node,
+                      down: incidentDuration(game, kind),
+                      downCause: 'failure' as const,
+                      downAt: game.time,
+                    }
+                  : node,
   )
-  return { game: { ...game, nodes, incident, lastIncident: kind }, incident }
+  // An audit finding resets the DR drill: it must pass again.
+  const drill = kind === 'audit' ? null : game.drill
+  return { game: { ...game, nodes, drill, incident, lastIncident: kind }, incident }
 }
 
 /** Rolls the next incident when one is due. */

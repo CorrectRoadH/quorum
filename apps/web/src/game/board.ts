@@ -55,6 +55,9 @@ import {
   ZONES,
   type BuildGroup,
   type ComponentId,
+  MSGP_PRICE,
+  REGION_INFO,
+  rttOf,
 } from '@template/simulation/catalog'
 import type { Ledger } from '@template/simulation/ledger'
 import {
@@ -68,7 +71,8 @@ import {
   zoned,
   zoneMs,
 } from '@template/simulation/lookups'
-import type { Game, GameNode } from '@template/simulation/state'
+import { isGlobal } from '@template/simulation/regions'
+import type { Game, GameNode, Region } from '@template/simulation/state'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
@@ -97,6 +101,8 @@ export type BoardState = Readonly<{
   placing: ComponentId | null
   /** Each Node's utilization, one point per 10 sim seconds. */
   history: Readonly<Record<string, ReadonlyArray<number>>>
+  /** The region tab on show; its Nodes, and the Nodes they reach elsewhere, are drawn. */
+  region: Region
 }>
 
 export const CARD_W = 216
@@ -159,6 +165,12 @@ const layoutOf = (type: ComponentId): Layout => {
     case 'gpu':
       return { rows: 4, inRow: 0, outRow: null, footer: true }
     case 'llm':
+      return { rows: 3, inRow: 0, outRow: null, footer: true }
+    case 'msgp':
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
+    case 'wide':
+      return { rows: 4, inRow: 0, outRow: null, footer: true }
+    case 'dsql':
       return { rows: 3, inRow: 0, outRow: null, footer: true }
   }
 }
@@ -1021,6 +1033,30 @@ const rowsOf = (
       ]
     case 'llm':
       return [{ ...inbound, name: 'Prompts' }, capacity, latency]
+    case 'msgp':
+      return [
+        { ...inbound, name: 'Messages' },
+        capacity,
+        {
+          glyph: 'cost',
+          name: 'Cost',
+          value: `${money((own.inbound - own.dropped) * MSGP_PRICE * eraOf(game).costIndex)}/s`,
+        },
+      ]
+    case 'wide':
+      return [
+        inbound,
+        capacity,
+        {
+          glyph: 'policy',
+          name: 'Quorum',
+          value: `N${node.n} R${node.r} W${node.w}`,
+          tone: node.r + node.w > node.n ? 'plain' : 'warn',
+        },
+        latency,
+      ]
+    case 'dsql':
+      return [inbound, capacity, latency]
   }
 }
 
@@ -1031,7 +1067,7 @@ const membersOf = (game: Game, node: GameNode): ReadonlyArray<GameNode> =>
   )
 
 /** The header's right label: the size, the copies, and the zone once zones are researched. */
-const levelOf = (game: Game, node: GameNode): string => {
+const levelOf = (game: Game, node: GameNode, region: Region | null = null): string => {
   const def = COMPONENTS[node.type]
   const size = def.sized ? (SIZES[node.size]?.name ?? '') : def.steps > 1 ? `S${node.size}` : ''
   const copies = `${node.replicas > 1 ? ` ×${node.replicas}` : ''}${node.pending > 0 ? ` +${node.pending}` : ''}`
@@ -1041,7 +1077,14 @@ const levelOf = (game: Game, node: GameNode): string => {
     has(game, 'multi-az') && zoned(node)
       ? `${node.zone.toUpperCase()}${node.standby ? `+${standby.toUpperCase()}` : ''} · `
       : ''
-  return `${zone}${size}${copies}`
+  // A Node from another region shows where it is and the round trip to reach it.
+  const remote =
+    region !== null && node.region !== region && !isGlobal(node) && !node.spread
+      ? `${REGION_INFO[node.region].short} ${rttOf(region, node.region)} ms · `
+      : node.spread && (node.type === 'wide' || node.type === 'dsql')
+        ? 'Spread · '
+        : ''
+  return `${remote}${zone}${size}${copies}`
 }
 
 const footerOf = (game: Game, node: GameNode): Footer | null => {
@@ -1243,6 +1286,7 @@ class NodeView {
     pressed: boolean,
     colors: Palette,
     history: ReadonlyArray<number>,
+    region: Region | null,
   ): void {
     const own = ledger.nodes[node.id]
     if (!own) return
@@ -1266,7 +1310,7 @@ class NodeView {
       selected,
       Math.ceil(node.down),
       node.warm < 1,
-      levelOf(game, node),
+      levelOf(game, node, region),
     ])
     if (digest === this.digest) return
     this.digest = digest
@@ -1412,7 +1456,7 @@ class NodeView {
             ? `${def.name} · cold`
             : def.name
     this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
-    this.level.text = levelOf(game, node)
+    this.level.text = levelOf(game, node, region)
     this.level.style.fill = colors.muted
     // A long title gives way to the level: it is cut with an ellipsis before the two touch.
     const room = this.level.x - this.level.width - 18 - this.title.x
@@ -1668,15 +1712,20 @@ class BoardController {
     const top = short ? 120 : phone ? 160 : 120
     const bottom = short ? 70 : phone ? 90 : 210
     const room = Math.max(1, h - top - bottom)
+    // The stats panel sits on the left on desktop: keep cards out from under it.
+    const left = phone || short ? 0 : 380
+    const across = Math.max(1, w - left - 24)
     // Below this zoom the card text is too small to read; pan to see the rest.
     const scale = Math.max(
       phone ? MIN_FIT_SCALE_PHONE : MIN_FIT_SCALE,
-      Math.min(1.1, Math.min(w / (maxX - minX), room / (maxY - minY))),
+      Math.min(1.1, Math.min(across / (maxX - minX), room / (maxY - minY))),
     )
     this.world.scale.set(scale)
     // A Design wider than the phone starts at its left edge, where the Users are.
     const x =
-      phone && (maxX - minX) * scale > w ? -minX * scale : w / 2 - ((minX + maxX) / 2) * scale
+      phone && (maxX - minX) * scale > w
+        ? -minX * scale
+        : left + across / 2 - ((minX + maxX) / 2) * scale
     this.world.position.set(x, top + room / 2 - ((minY + maxY) / 2) * scale)
     this.fitted = true
     this.drawGrid()
@@ -2077,6 +2126,7 @@ class BoardController {
         this.pressed === node.id,
         colors,
         state.history[node.id] ?? [],
+        state.region,
       )
     }
     for (const [id, view] of this.views) {

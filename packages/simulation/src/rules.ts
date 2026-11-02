@@ -14,6 +14,16 @@ import {
   REGEX_CAPACITY,
   SLOW_CHARGE_MS,
   TOKENS_PER_PROMPT,
+  DSQL_READ_COST,
+  DSQL_TX,
+  HOT_KEY_SHARE,
+  MSGP_RATE,
+  SPREAD_REGIONS,
+  WIDE_OPS,
+  WIDE_STALE,
+  WIDE_TX_DUPLICATE,
+  WIDE_TX_STALE,
+  rttOf,
   TIERED_MEDIA_HIT,
   COALESCED,
   COMPONENTS,
@@ -52,6 +62,7 @@ import {
   blend,
   failSome,
   failed,
+  kthFastest,
   through,
   type Hop,
   type Outcome,
@@ -59,6 +70,7 @@ import {
 import { mixOf, payloadFactor, queryFactor } from './features.ts'
 import { flatScale, grown, has, hopMs, inCluster, transferMs } from './lookups.ts'
 import { buggy } from './migration.ts'
+import { spreadRegions } from './regions.ts'
 import type { Game, GameNode } from './state.ts'
 import { badDeployShare, fixed } from './team.ts'
 
@@ -259,7 +271,9 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     serve: passOn,
     // An expired certificate: every browser refuses the site until it is renewed.
     outcome: (answer, node, kind) =>
-      answer.game.incident?.kind === 'certificate' ? failed('down') : relay(answer, node, kind),
+      answer.game.incident?.kind === 'certificate' || answer.game.incident?.kind === 'bgp'
+        ? failed('down')
+        : relay(answer, node, kind),
     connections: noConnections,
     probe: noProbe,
   },
@@ -414,7 +428,13 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     probe: noProbe,
   },
   cache: {
-    model: flat({ fixed: 0.5, variable: 0.2 }, cacheCapacity),
+    model: (solver, node, arriving) =>
+      flatModel(
+        cacheCapacity(node) / hotKeyFactor(solver.game, node),
+        arriving,
+        { fixed: 0.5, variable: 0.2 },
+        solver.boost(node),
+      ),
     serve: (serve, node, rates, share) => {
       const reads = rates['q-read'] ?? 0
       const writes = rates['q-write'] ?? 0
@@ -581,7 +601,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   psp: {
     model: (solver, node, arriving) =>
       flatModel(
-        PSP_CAPACITY,
+        PSP_CAPACITY * flatScale(node),
         arriving,
         {
           fixed: 400,
@@ -623,6 +643,75 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     outcome: (answer, _, kind) => through(answer.ownHop(kind)),
     ...terminal,
   },
+  // A Managed Component: 10,000 messages a second, paid per message.
+  msgp: {
+    model: (solver, node, arriving) =>
+      flatModel(
+        MSGP_RATE * flatScale(node),
+        arriving,
+        { fixed: 100, variable: 10 },
+        solver.boost(node),
+      ),
+    outcome: (answer, _, kind) => through(answer.ownHop(kind)),
+    ...terminal,
+  },
+  // Leaderless quorums: a read waits for R replies, a write for W, of N replicas.
+  wide: {
+    model: (solver, node, arriving) => {
+      const { reads, writes } = splitWork(arriving)
+      const ops = reads * quorumR(node) + writes * quorumN(node)
+      const rate = reads + writes
+      const capacity =
+        (WIDE_OPS * flatScale(node)) / hotKeyFactor(solver.game, node) / (ops > 0 ? ops / rate : 1)
+      const model = flatModel(capacity, arriving, { fixed: 1, variable: 0 }, solver.boost(node))
+      const wait = model.service['q-read']?.variable ?? 0
+      const service: Record<string, { fixed: number; variable: number }> = {}
+      for (const kind of Object.keys(arriving))
+        service[kind] = {
+          fixed: 1,
+          variable:
+            wait +
+            WIDE_REPLICA_MS *
+              kthFastest(kind === 'q-read' ? quorumR(node) : quorumW(node), quorumN(node)),
+        }
+      return { ...model, service }
+    },
+    outcome: (answer, node, kind) => {
+      const n = quorumN(node)
+      // One replica lost: a quorum that needs every replica cannot form.
+      const short = node.lost > 0 ? 1 : 0
+      const needed = kind === 'q-read' ? quorumR(node) : quorumW(node)
+      if (needed > n - short) return failed('refused')
+      const reply = through(answer.ownHop(kind))
+      // Overlap is not linearizability: a checkout on a quorum store still goes wrong now and then.
+      if (kind === 'q-tx')
+        return failSome({ ...reply, stale: WIDE_TX_STALE }, WIDE_TX_DUPLICATE, 'duplicate')
+      if (kind !== 'q-read') return reply
+      return { ...reply, stale: wideStale(answer.pass.arriving.get(node.id) ?? {}, node) }
+    },
+    ...terminal,
+    probe: () => ({ 'q-read': 1 }),
+  },
+  // Consensus: a write waits for a majority of its regions; a read asks the leaseholder.
+  dsql: {
+    model: (solver, node, arriving) => {
+      const { reads, writes } = splitWork(arriving)
+      const rate = reads + writes
+      const work = reads * DSQL_READ_COST + writes
+      const capacity = (DSQL_TX * flatScale(node)) / (work > 0 ? work / rate : 1)
+      const model = flatModel(capacity, arriving, { fixed: 3, variable: 1 }, solver.boost(node))
+      const majority = majorityMs(solver.game, node)
+      const service: Record<string, { fixed: number; variable: number }> = {}
+      for (const kind of Object.keys(arriving)) {
+        const base = model.service[kind] ?? { fixed: 3, variable: 1 }
+        service[kind] = kind === 'q-read' ? base : { ...base, fixed: base.fixed + majority }
+      }
+      return { ...model, service }
+    },
+    outcome: (answer, _, kind) => through(answer.ownHop(kind)),
+    ...terminal,
+    probe: () => ({ 'q-tx': 1 }),
+  },
   // A Managed Component with a rate limit: past it, prompts fail as `throttled` at once.
   llm: {
     model: (solver, node, arriving) =>
@@ -644,3 +733,54 @@ export const gpuCapacity = (node: GameNode): number =>
 /** Whether a Node takes a kind on an inbound Link. */
 export const accepts = (node: GameNode, kind: Kind): boolean =>
   COMPONENTS[node.type].accepts.includes(kind)
+
+/* ---------- quorums, consensus and hot keys ---------- */
+
+/** Mean ms one Wide-column replica takes to answer. Proposed. */
+export const WIDE_REPLICA_MS = 2
+
+export const quorumN = (node: GameNode): number => Math.max(1, Math.min(5, node.n))
+export const quorumR = (node: GameNode): number => Math.max(1, Math.min(quorumN(node), node.r))
+export const quorumW = (node: GameNode): number => Math.max(1, Math.min(quorumN(node), node.w))
+
+/** R + W > N: every read asks a replica that took the latest write (07 "Wide-column Store"). */
+export const strongQuorum = (node: GameNode): boolean =>
+  quorumR(node) + quorumW(node) > quorumN(node)
+
+const splitWork = (arriving: Rates) => {
+  const reads = arriving['q-read'] ?? 0
+  const writes = (arriving['q-write'] ?? 0) + (arriving['q-tx'] ?? 0) + (arriving['k-write'] ?? 0)
+  return { reads, writes }
+}
+
+/** Share of a weak quorum's reads that miss the latest write: more writes, fewer replicas asked. */
+export const wideStale = (arriving: Rates, node: GameNode): number => {
+  if (strongQuorum(node)) return 0
+  const { reads, writes } = splitWork(arriving)
+  const writeShare = reads + writes > 0 ? writes / (reads + writes) : 0
+  const missed = (quorumN(node) - quorumW(node)) / quorumN(node)
+  return Math.min(0.5, WIDE_STALE * writeShare * missed * (2 / (quorumR(node) + 1)) + 0.05 * missed)
+}
+
+/**
+ * Ms a consensus write waits for its majority: the ⌈n/2⌉-th smallest round trip
+ * from the leader's region, itself counting as 0 (07 "Distributed SQL").
+ */
+export const majorityMs = (game: Game, node: GameNode): number => {
+  const regions = spreadRegions(game, node, SPREAD_REGIONS)
+  const trips = regions.map((region) => rttOf(node.region, region)).toSorted((a, b) => a - b)
+  const majority = Math.floor(trips.length / 2) + 1
+  return trips[majority - 1] ?? 0
+}
+
+/**
+ * During a Hot key, 30% of the reads ask one key on one shard (07 "Fan-out"):
+ * the Node's capacity divides by this. Splitting hot keys spreads them again.
+ */
+export const hotKeyFactor = (game: Game, node: GameNode): number => {
+  const incident = game.incident
+  if (incident?.kind !== 'hot-key' || incident.nodeId !== node.id) return 1
+  if (node.split && has(game, 'hybrid-fanout')) return 1
+  const shards = Math.max(2, flatScale(node))
+  return HOT_KEY_SHARE * shards + 1 - HOT_KEY_SHARE
+}
