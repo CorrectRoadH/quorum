@@ -1,3 +1,5 @@
+import * as Effect from 'effect/Effect'
+import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Antenna,
@@ -24,6 +26,10 @@ import {
   ChartColumnIncreasing,
   ChartLine,
   Check,
+  Cpu,
+  Database,
+  Server,
+  X,
   FileArchive,
   Flame,
   Funnel,
@@ -57,7 +63,6 @@ import {
 import { siStripe } from 'simple-icons'
 import {
   COMPONENTS,
-  ERAS,
   RESEARCH,
   RESEARCH_TRACKS,
   researchList,
@@ -76,125 +81,14 @@ import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, SCROLL, groupBadge } from './bits.ts'
-import { shell } from './panels.ts'
+import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, groupBadge } from './bits.ts'
+import { NODE_SIZE, eraName, researchLayout, type Layout, type Placed } from './research-layouts.ts'
 
 /* ==========================================================================
-   Research as a tech tree: a lane per track, a column per Era, and a line
-   from each prerequisite to what it opens. The layout comes from the
-   catalog alone, so it is computed once and the lines need no measuring.
-   Click an item to read it in the side pane; research it from there.
+   Research, fullscreen. The tree (research-layouts.ts) scrolls under a fixed
+   header. Click an item to read it in the detail card; research it from
+   there.
    ========================================================================== */
-
-const NODE_W = 176
-const NODE_H = 48
-const GAP_X = 12
-const GAP_Y = 8
-const PAD = 12
-const SLOTS = 2
-const COLUMN_W = SLOTS * NODE_W + (SLOTS - 1) * GAP_X + PAD * 2
-const LABEL_W = 132
-const HEADER_H = 30
-/** The column that stands for the Eras after the next one. */
-const LATER_W = 120
-
-type Placed = Readonly<{ entry: ResearchDef; x: number; y: number }>
-type Lane = Readonly<{ track: ResearchTrack; label: string; y: number; h: number }>
-
-const ERA_COLUMNS = [...new Set(researchList.map((entry) => entry.era))].toSorted((a, b) => a - b)
-
-const slotX = (column: number, slot: number): number =>
-  LABEL_W + column * COLUMN_W + PAD + slot * (NODE_W + GAP_X)
-
-/**
- * Places every item so no line crosses a node. Within a cell, in order:
- * an item and its in-cell follow-up share a line; an item whose prerequisite
- * is in an earlier Era starts its own line, so the line runs straight in;
- * an item whose prerequisite is in a lane above takes the same slot, so the
- * line drops straight down; the rest fill the free slots.
- */
-const layoutFor = (columns: number) => {
-  const eras = ERA_COLUMNS.slice(0, columns)
-  const placed = new Map<ResearchId, Placed>()
-  const lanes: Array<Lane> = []
-  let top = HEADER_H
-  // A track with nothing in the visible Eras has no lane yet.
-  const tracks = RESEARCH_TRACKS.filter((track) =>
-    researchList.some((entry) => entry.track === track.key && eras.includes(entry.era)),
-  )
-  for (const track of tracks) {
-    // Slot assignments per column: grid[column][line][slot].
-    const grid = eras.map((era, column) => {
-      const cell = researchList.filter((entry) => entry.track === track.key && entry.era === era)
-      const inCell = new Set(cell.map((entry) => entry.id))
-      const rows: Array<Array<ResearchDef | null>> = []
-      const put = (entry: ResearchDef, slot: number | null) => {
-        const line =
-          slot === null
-            ? rows.findIndex((row) => row.includes(null))
-            : rows.findIndex((row) => row[slot] === null)
-        const row = line >= 0 ? rows[line] : null
-        if (row) row[slot ?? row.indexOf(null)] = entry
-        else {
-          const fresh: Array<ResearchDef | null> = Array.from({ length: SLOTS }, () => null)
-          fresh[slot ?? 0] = entry
-          rows.push(fresh)
-        }
-      }
-      const parent = (entry: ResearchDef) => {
-        const id = entry.requires.find((needed) => !inCell.has(needed))
-        return id ? RESEARCH[id] : null
-      }
-      const roots = cell.filter((entry) => !entry.requires.some((id) => inCell.has(id)))
-      const chained = roots.filter((root) => cell.some((entry) => entry.requires.includes(root.id)))
-      for (const root of chained)
-        rows.push([root, ...cell.filter((entry) => entry.requires.includes(root.id))])
-      const loose = roots.filter((root) => !chained.includes(root))
-      const earlier = loose.filter((entry) => parent(entry)?.track === track.key)
-      const above = loose.filter((entry) => {
-        const from = parent(entry)
-        return from !== null && from.track !== track.key
-      })
-      for (const entry of earlier)
-        rows.push([entry, ...Array.from({ length: SLOTS - 1 }, () => null)])
-      for (const entry of above) {
-        const from = placed.get(parent(entry)?.id ?? entry.id)
-        const slot = from ? Math.round((from.x - slotX(column, 0)) / (NODE_W + GAP_X)) : 0
-        put(entry, Math.max(0, Math.min(SLOTS - 1, slot)))
-      }
-      for (const entry of loose.filter((item) => !earlier.includes(item) && !above.includes(item)))
-        put(entry, null)
-      // Place now, so later columns of this lane can line up with it.
-      rows.forEach((row, line) =>
-        row.forEach((entry, slot) => {
-          if (entry)
-            placed.set(entry.id, {
-              entry,
-              x: slotX(column, slot),
-              y: top + PAD + line * (NODE_H + GAP_Y),
-            })
-        }),
-      )
-      return rows
-    })
-    const lines = Math.max(1, ...grid.map((rows) => rows.length))
-    const h = PAD * 2 + lines * NODE_H + (lines - 1) * GAP_Y
-    lanes.push({ track: track.key, label: track.label, y: top, h })
-    top += h
-  }
-  const later = researchList.filter((entry) => entry.era > (eras.at(-1) ?? 0)).length
-  const width = LABEL_W + eras.length * COLUMN_W + (later > 0 ? LATER_W : 0)
-  return { eras, later, placed, lanes, width, height: top }
-}
-
-/** The tree shows the current and the next Era; later Eras collapse to a count (15). */
-const layouts = new Map<number, ReturnType<typeof layoutFor>>()
-const layoutOf = (game: Game): ReturnType<typeof layoutFor> => {
-  const columns = ERA_COLUMNS.filter((era) => era <= game.stage + 1).length
-  const cached = layouts.get(columns) ?? layoutFor(columns)
-  layouts.set(columns, cached)
-  return cached
-}
 
 /** Items that list `id` as a prerequisite. */
 const followUps = (id: ResearchId): ReadonlyArray<ResearchDef> =>
@@ -381,16 +275,40 @@ const researchMark = (
   )
 }
 
-/* ---------- the tree ---------- */
+/* ---------- nodes ---------- */
 
 const NODE_CLASS: Record<State, string> = {
   owned: 'bg-nested shadow-[inset_0_0_0_1px_var(--hairline-soft)]',
   buy: 'bg-raised shadow-raised hover:brightness-[0.985]',
   saving: 'bg-raised shadow-raised hover:brightness-[0.985]',
-  locked: 'border border-dashed border-border hover:bg-foreground/[0.03]',
+  locked: 'border border-dashed border-border bg-canvas hover:bg-foreground/[0.03]',
 }
 
-/** A node's icon, name and price or status; `grey` draws it uncoloured. */
+/** The price, or a check once researched. Affordable: a filled pill, the one loud thing on the tree. */
+const price = (entry: ResearchDef, state: State, grey: boolean, h: HtmlBuilder<Message>): Html =>
+  state === 'owned'
+    ? h.span(
+        [h.Class('flex items-center gap-1 text-[11px] text-ok')],
+        [icon(h, Check, 'size-3'), 'Researched'],
+      )
+    : h.span(
+        [
+          h.Class(
+            cn(
+              FIGURE,
+              'flex w-fit items-center gap-1 text-[11px]',
+              state === 'buy'
+                ? '-ml-0.5 rounded-md bg-primary-fill px-1.5 text-on-primary-fill shadow-primary'
+                : grey
+                  ? 'text-muted-foreground'
+                  : 'text-foreground',
+            ),
+          ),
+        ],
+        [state === 'locked' ? icon(h, Lock, 'size-2.5') : h.empty, `${compact(entry.cost)} ◆`],
+      )
+
+/** A card's icon, name and price or status; `grey` draws it uncoloured. */
 const face = (
   game: Game,
   entry: ResearchDef,
@@ -418,119 +336,85 @@ const face = (
             open ? icon(h, TriangleAlert, 'size-3 shrink-0 text-warn') : h.empty,
           ],
         ),
-        state === 'owned'
-          ? h.span(
-              [h.Class('flex items-center gap-1 text-[11px] text-ok')],
-              [icon(h, Check, 'size-3'), 'Researched'],
-            )
-          : h.span(
-              [
-                h.Class(
-                  cn(
-                    FIGURE,
-                    'flex w-fit items-center gap-1 text-[11px]',
-                    // Affordable: the price is a filled pill, the one loud thing on the tree.
-                    state === 'buy'
-                      ? '-ml-0.5 rounded-md bg-primary-fill px-1.5 text-on-primary-fill shadow-primary'
-                      : grey
-                        ? 'text-muted-foreground'
-                        : 'text-foreground',
-                  ),
-                ),
-              ],
-              [
-                state === 'locked' ? icon(h, Lock, 'size-2.5') : h.empty,
-                `${compact(entry.cost)} ◆`,
-              ],
-            ),
+        price(entry, state, grey, h),
       ],
     ),
   ]
+}
+
+/** A card node. Saving up: the card is the progress bar, a coloured copy wiping in from the left. */
+const card = (game: Game, entry: ResearchDef, state: State, h: HtmlBuilder<Message>) => {
+  const share = Math.min(1, game.insight / entry.cost)
+  const color = colorOf(LOOKS[entry.id])
+  return state === 'saving'
+    ? [
+        ...face(game, entry, state, true, h),
+        h.span(
+          [
+            h.Key('fill'),
+            h.AriaHidden(true),
+            h.Class(
+              'absolute inset-0 flex items-center gap-2.5 px-2.5 transition-[clip-path] duration-500 ease-linear',
+            ),
+            h.Style({
+              background: `linear-gradient(to right, color-mix(in oklab, ${color} 8%, var(--raised-top)), color-mix(in oklab, ${color} 22%, var(--raised-top)))`,
+              'clip-path': `inset(0 ${(1 - share) * 100}% 0 0)`,
+            }),
+          ],
+          face(game, entry, state, false, h),
+        ),
+        h.span(
+          [
+            h.Key('edge'),
+            h.AriaHidden(true),
+            h.Class('absolute inset-y-0 w-[1.5px] transition-[left] duration-500 ease-linear'),
+            h.Style({ left: `${share * 100}%`, background: color, opacity: '0.55' }),
+          ],
+          [],
+        ),
+      ]
+    : face(game, entry, state, state === 'locked', h)
 }
 
 const node = (model: Model, place: Placed, focused: boolean, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   const { entry } = place
   const state = stateOf(game, entry)
-  const share = Math.min(1, game.insight / entry.cost)
-  const color = colorOf(LOOKS[entry.id])
+  // Beyond the next Era: in the fog.
+  const far = entry.era > game.stage + 1 && state === 'locked'
   return h.button(
     [
       h.Key(entry.id),
       h.Type('button'),
+      h.DataAttribute('research', entry.id),
       h.AriaPressed(focused ? 'true' : 'false'),
       h.OnClick(Message.ResearchFocused({ id: entry.id })),
       h.OnDoubleClick(Message.ResearchBought({ id: entry.id })),
       h.Style({
         left: `${place.x}px`,
         top: `${place.y}px`,
-        width: `${NODE_W}px`,
-        height: `${NODE_H}px`,
+        width: `${NODE_SIZE.w}px`,
+        height: `${NODE_SIZE.h}px`,
       }),
       h.Class(
         cn(
-          'press absolute flex items-center gap-2.5 overflow-hidden rounded-xl px-2.5 text-left transition-[filter,box-shadow,outline-color]',
+          'press absolute flex items-center gap-2.5 overflow-hidden rounded-xl px-2.5 text-left transition-[filter,box-shadow,outline-color,opacity]',
           NODE_CLASS[state],
           focused
             ? 'outline-2 outline-offset-2 outline-primary-strong'
             : 'outline-2 outline-offset-2 outline-transparent',
+          far && !focused ? 'opacity-45' : '',
         ),
       ),
     ],
-    state === 'saving'
-      ? [
-          // Saving up: the card is the progress bar. It rests grey, and a
-          // coloured copy wipes in from the left as Insight comes in.
-          ...face(game, entry, state, true, h),
-          h.span(
-            [
-              h.Key('fill'),
-              h.AriaHidden(true),
-              h.Class(
-                'absolute inset-0 flex items-center gap-2.5 px-2.5 transition-[clip-path] duration-500 ease-linear',
-              ),
-              h.Style({
-                background: `linear-gradient(to right, color-mix(in oklab, ${color} 8%, var(--raised-top)), color-mix(in oklab, ${color} 22%, var(--raised-top)))`,
-                'clip-path': `inset(0 ${(1 - share) * 100}% 0 0)`,
-              }),
-            ],
-            face(game, entry, state, false, h),
-          ),
-          h.span(
-            [
-              h.Key('edge'),
-              h.AriaHidden(true),
-              h.Class('absolute inset-y-0 w-[1.5px] transition-[left] duration-500 ease-linear'),
-              h.Style({ left: `${share * 100}%`, background: color, opacity: '0.55' }),
-            ],
-            [],
-          ),
-        ]
-      : face(game, entry, state, state === 'locked', h),
+    card(game, entry, state, h),
   )
 }
 
-/** One prerequisite line: across when the follow-up is to the right, else down. */
-const connector = (from: Placed, to: Placed): string => {
-  if (to.x >= from.x + NODE_W) {
-    const ax = from.x + NODE_W
-    const ay = from.y + NODE_H / 2
-    const bx = to.x
-    const by = to.y + NODE_H / 2
-    const bend = Math.max(6, (bx - ax) / 2)
-    return `M${ax} ${ay} C${ax + bend} ${ay} ${bx - bend} ${by} ${bx} ${by}`
-  }
-  const ax = from.x + NODE_W / 2
-  const ay = from.y + NODE_H
-  const bx = to.x + NODE_W / 2
-  const by = to.y
-  const bend = Math.max(6, (by - ay) / 2)
-  return `M${ax} ${ay} C${ax} ${ay + bend} ${bx} ${by - bend} ${bx} ${by}`
-}
+/* ---------- lines ---------- */
 
-const lines = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html => {
-  const layout = layoutOf(model.game)
-  return h.svg(
+const wires = (model: Model, layout: Layout, focus: ResearchDef, h: HtmlBuilder<Message>): Html =>
+  h.svg(
     [
       h.AriaHidden(true),
       h.Xmlns('http://www.w3.org/2000/svg'),
@@ -539,158 +423,195 @@ const lines = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html 
       h.Height(String(layout.height)),
       h.Fill('none'),
     ],
-    researchList.flatMap((entry) =>
-      entry.requires.flatMap((id) => {
-        const from = layout.placed.get(id)
-        const to = layout.placed.get(entry.id)
-        if (!from || !to) return []
-        const done = has(model.game, id)
-        const lit = focus.id === entry.id || focus.id === id
-        return [
-          h.path(
+    layout.wires.map((wire) => {
+      const done = wire.from
+        ? has(model.game, wire.from)
+        : wire.to
+          ? has(model.game, wire.to)
+          : false
+      const lit = focus.id === wire.to || focus.id === wire.from
+      return h.path(
+        [
+          h.Key(wire.key),
+          h.D(wire.d),
+          h.StrokeWidth(lit ? '2.25' : wire.root ? '2' : '1.5'),
+          h.StrokeLinecap('round'),
+          h.StrokeLinejoin('round'),
+          h.Class(
+            cn(
+              lit
+                ? 'stroke-primary-strong'
+                : done
+                  ? 'stroke-foreground/40'
+                  : wire.root
+                    ? 'stroke-foreground/15'
+                    : 'stroke-foreground/20',
+              'transition-[stroke] duration-150',
+            ),
+          ),
+          ...(done || wire.root ? [] : [h.Attribute('stroke-dasharray', '3 4')]),
+        ],
+        [],
+      )
+    }),
+  )
+
+/* ---------- the backdrop: Eras and tracks ---------- */
+
+const TRACK_ICONS: Record<ResearchTrack, IconNode> = {
+  infrastructure: Server,
+  data: Database,
+  reliability: HeartPulse,
+  observability: ChartLine,
+  performance: Gauge,
+  runtimes: Cpu,
+  frameworks: Boxes,
+  security: ShieldCheck,
+  product: Rocket,
+}
+
+const progressOf = (game: Game, track: ResearchTrack) => {
+  const entries = researchList.filter((entry) => entry.track === track)
+  return { owned: entries.filter((entry) => has(game, entry.id)).length, total: entries.length }
+}
+
+const progressBar = (
+  game: Game,
+  track: ResearchTrack,
+  className: string,
+  h: HtmlBuilder<Message>,
+) => {
+  const { owned, total } = progressOf(game, track)
+  return h.div(
+    [h.Class(cn('flex items-center gap-2', className))],
+    [
+      h.span(
+        [h.Class('h-1 flex-1 overflow-hidden rounded-full bg-well shadow-well')],
+        [
+          h.span(
             [
-              h.Key(`${id}>${entry.id}`),
-              h.D(connector(from, to)),
-              h.StrokeWidth(lit ? '2' : '1.5'),
-              h.StrokeLinecap('round'),
-              h.Class(
-                cn(
-                  lit
-                    ? 'stroke-primary-strong'
-                    : done
-                      ? 'stroke-foreground/35'
-                      : 'stroke-foreground/20',
-                  'transition-[stroke] duration-150',
-                ),
-              ),
-              ...(done ? [] : [h.Attribute('stroke-dasharray', '3 4')]),
+              h.Class('block h-full rounded-full bg-ok'),
+              h.Style({ width: `${(owned / total) * 100}%` }),
             ],
             [],
           ),
-        ]
-      }),
-    ),
+        ],
+      ),
+      h.span([h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))], [`${owned}/${total}`]),
+    ],
   )
 }
 
-const tree = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html => {
+const eraLabel = (game: Game, era: number, h: HtmlBuilder<Message>) => [
+  era > game.stage ? icon(h, Lock, 'size-3') : h.empty,
+  eraName(era),
+  era === game.stage ? h.span([h.Class('size-1.5 rounded-full bg-ok')], []) : h.empty,
+]
+
+const backdrop = (model: Model, layout: Layout, h: HtmlBuilder<Message>) => {
   const game = model.game
-  const layout = layoutOf(game)
-  return h.div(
-    [
-      h.Class('relative shrink-0'),
-      h.Style({ width: `${layout.width}px`, height: `${layout.height}px` }),
-    ],
-    [
-      // Era columns, with the ones not reached yet washed out.
-      ...layout.eras.map((era, column) =>
-        h.div(
+  // One band per Era, the current one tinted and the ones ahead washed out.
+  const bands = layout.bands.map((band) =>
+    h.div(
+      [
+        h.Key(`era-${band.era}`),
+        h.Class(
+          cn(
+            'absolute border-t border-hairline',
+            band.era === game.stage
+              ? 'bg-ok/[0.035]'
+              : band.era > game.stage + 1
+                ? 'bg-foreground/[0.04]'
+                : band.era > game.stage
+                  ? 'bg-foreground/[0.02]'
+                  : '',
+          ),
+        ),
+        h.Style({
+          left: `${band.x}px`,
+          top: `${band.y}px`,
+          width: `${band.w}px`,
+          height: `${band.h}px`,
+        }),
+      ],
+      [
+        h.span(
           [
-            h.Key(`era-${era}`),
             h.Class(
               cn(
-                'absolute top-0 bottom-0 border-l border-hairline',
-                era > game.stage ? 'bg-foreground/[0.025]' : '',
+                EYEBROW,
+                'absolute top-3 left-5 flex items-center gap-1.5',
+                band.era === game.stage ? 'text-foreground' : '',
               ),
             ),
-            h.Style({ left: `${LABEL_W + column * COLUMN_W}px`, width: `${COLUMN_W}px` }),
           ],
-          [
-            h.span(
-              [
-                h.Class(
-                  cn(
-                    EYEBROW,
-                    'absolute top-1.5 flex items-center gap-1.5',
-                    era === game.stage ? 'text-foreground' : '',
-                  ),
-                ),
-                h.Style({ left: `${PAD}px` }),
-              ],
-              [
-                era > game.stage ? icon(h, Lock, 'size-3') : h.empty,
-                ERAS[era]?.name ?? '',
-                era === game.stage ? h.span([h.Class('size-1.5 rounded-full bg-ok')], []) : h.empty,
-              ],
-            ),
-          ],
+          eraLabel(game, band.era, h),
         ),
-      ),
-      layout.later > 0
-        ? h.div(
-            [
-              h.Key('era-later'),
-              h.Title(`${layout.later} items in later Eras`),
-              h.Class('absolute top-0 bottom-0 border-l border-hairline bg-foreground/[0.025]'),
-              h.Style({
-                left: `${LABEL_W + layout.eras.length * COLUMN_W}px`,
-                width: `${LATER_W}px`,
-              }),
-            ],
-            [
-              h.span(
-                [
-                  h.Class(cn(EYEBROW, 'absolute top-1.5 flex items-center gap-1.5')),
-                  h.Style({ left: `${PAD}px` }),
-                ],
-                [icon(h, Lock, 'size-3'), `+${layout.later}`],
-              ),
-            ],
-          )
-        : h.empty,
-      // Track lanes: a label with progress, and a hairline between lanes.
-      ...layout.lanes.map((lane, index) => {
-        const entries = researchList.filter((entry) => entry.track === lane.track)
-        const owned = entries.filter((entry) => has(game, entry.id)).length
-        return h.div(
-          [
-            h.Key(`lane-${lane.track}`),
-            h.Class(cn('absolute right-0 left-0', index > 0 ? 'border-t border-hairline' : '')),
-            h.Style({ top: `${lane.y}px`, height: `${lane.h}px` }),
-          ],
-          [
-            h.div(
-              [
-                h.Class('absolute flex flex-col gap-1.5'),
-                h.Style({ left: '0px', top: `${PAD + 4}px`, width: `${LABEL_W - 20}px` }),
-              ],
-              [
-                h.span([h.Class('text-[13px] font-semibold')], [lane.label]),
-                h.div(
-                  [h.Class('flex items-center gap-2')],
-                  [
-                    h.span(
-                      [h.Class('h-1 flex-1 overflow-hidden rounded-full bg-well shadow-well')],
-                      [
-                        h.span(
-                          [
-                            h.Class('block h-full rounded-full bg-ok'),
-                            h.Style({ width: `${(owned / entries.length) * 100}%` }),
-                          ],
-                          [],
-                        ),
-                      ],
-                    ),
-                    h.span(
-                      [h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))],
-                      [`${owned}/${entries.length}`],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        )
-      }),
-      lines(model, focus, h),
-      ...[...layout.placed.values()].map((place) =>
-        node(model, place, place.entry.id === focus.id, h),
-      ),
-    ],
+      ],
+    ),
   )
+  const roots = layout.tracks.map((track) =>
+    h.div(
+      [
+        h.Key(`root-${track.track}`),
+        h.Class(
+          'absolute flex w-[180px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2',
+        ),
+        h.Style({ left: `${track.x}px`, top: `${track.y}px` }),
+      ],
+      [
+        h.span(
+          [h.Class('grid size-14 place-items-center rounded-2xl bg-surface shadow-card')],
+          [icon(h, TRACK_ICONS[track.track], 'size-6')],
+        ),
+        h.span([h.Class('text-[14px] font-semibold')], [track.label]),
+        progressBar(game, track.track, 'w-28', h),
+      ],
+    ),
+  )
+  return [...bands, ...roots]
 }
 
-/* ---------- the side pane ---------- */
+/* ---------- scrolling ---------- */
+
+/**
+ * The screen scrolls like a page. It opens with the focused item in view,
+ * and scrolls to an item when the player focuses one that is off screen.
+ */
+const scrollTo = (host: HTMLElement, target: Element, behavior: ScrollBehavior) => {
+  const box = target.getBoundingClientRect()
+  const view = host.getBoundingClientRect()
+  if (
+    box.left > view.left &&
+    box.right < view.right &&
+    box.top > view.top + 80 &&
+    box.bottom < view.bottom - 80
+  )
+    return
+  target.scrollIntoView({ block: 'center', inline: 'center', behavior })
+}
+
+const ResearchScroll = Mount.define('ResearchScroll', {
+  messages: [Message.Synced],
+  execute: ({ element }) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const host = element as HTMLElement
+        const focused = host.querySelector('[aria-pressed="true"]')
+        if (focused) scrollTo(host, focused, 'instant')
+        const watch = new MutationObserver((changes) => {
+          for (const change of changes)
+            if ((change.target as Element).getAttribute('aria-pressed') === 'true')
+              scrollTo(host, change.target as Element, 'smooth')
+        })
+        watch.observe(host, { subtree: true, attributes: true, attributeFilter: ['aria-pressed'] })
+        return watch
+      }),
+      (watch) => Effect.sync(() => watch.disconnect()),
+    ).pipe(Effect.as(Message.Synced())),
+})
+
+/* ---------- the detail card ---------- */
 
 const linkRow = (game: Game, entry: ResearchDef, h: HtmlBuilder<Message>): Html =>
   h.button(
@@ -723,7 +644,7 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
       : state === 'buy'
         ? `Research · ${compact(entry.cost)} ◆`
         : entry.era > game.stage
-          ? `Opens in ${ERAS[entry.era]?.name ?? ''}`
+          ? `Opens in ${eraName(entry.era)}`
           : missing.length > 0
             ? `Needs ${missing.map((id) => RESEARCH[id].name).join(', ')}`
             : `${compact(entry.cost - game.insight)} ◆ more`
@@ -732,7 +653,10 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
     [
       h.Key('detail'),
       h.Class(
-        'flex w-[300px] shrink-0 flex-col border-l border-hairline bg-nested narrow:max-h-[46%] narrow:w-auto narrow:border-t narrow:border-l-0',
+        cn(
+          FLOAT,
+          'absolute right-4 bottom-4 z-10 flex max-h-[calc(100%-96px)] w-[320px] flex-col overflow-hidden compact:right-3 compact:bottom-3 compact:left-3 compact:max-h-[46%] compact:w-auto',
+        ),
       ),
     ],
     [
@@ -750,7 +674,7 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
                     [h.Class('text-[16px] leading-tight font-semibold tracking-[-0.02em]')],
                     [entry.name],
                   ),
-                  h.span([h.Class(EYEBROW)], [`${track} · ${ERAS[entry.era]?.name ?? ''}`]),
+                  h.span([h.Class(EYEBROW)], [`${track} · ${eraName(entry.era)}`]),
                 ],
               ),
             ],
@@ -809,32 +733,81 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
   )
 }
 
+/* ---------- the screen ---------- */
+
 export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
   const focus = focusOf(model)
-  return shell(
-    'Research',
+  const layout = researchLayout()
+  return h.div(
     [
-      h.span(
-        [h.Class(cn(FIGURE, 'flex items-baseline gap-1.5 text-[15px]'))],
-        [
-          compact(model.game.insight),
-          h.span([h.Class('text-[11px] text-muted-foreground')], ['Insight ◆']),
-        ],
-      ),
+      h.Key('research'),
+      h.DataAttribute('exit', 'gesture'),
+      h.Class('absolute inset-0 z-30 bg-canvas enter-backdrop'),
     ],
     [
       h.div(
-        [h.Class('flex min-h-0 flex-1 border-t border-hairline narrow:flex-col')],
+        [h.Key('scroll'), h.OnMount(ResearchScroll()), h.Class(`absolute inset-0 ${SCROLL}`)],
         [
+          // Room above for the header, and to the right and below for the detail card.
           h.div(
-            [h.Class(`min-h-0 min-w-0 flex-1 px-5 pt-2 pb-5 ${SCROLL}`)],
-            [tree(model, focus, h)],
+            [h.Class('w-fit pt-20 pr-[360px] pb-10 pl-4 compact:pr-4 compact:pb-[50vh]')],
+            [
+              h.div(
+                [
+                  h.Class('relative'),
+                  h.Style({ width: `${layout.width}px`, height: `${layout.height}px` }),
+                ],
+                [
+                  ...backdrop(model, layout, h),
+                  wires(model, layout, focus, h),
+                  ...[...layout.placed.values()].map((place) =>
+                    node(model, place, place.entry.id === focus.id, h),
+                  ),
+                ],
+              ),
+            ],
           ),
-          detail(model, focus, h),
         ],
       ),
+      h.div(
+        [
+          h.Class(
+            'pointer-events-none absolute inset-x-4 top-4 z-10 flex items-start justify-between gap-3 compact:inset-x-3 compact:top-[max(12px,env(safe-area-inset-top))]',
+          ),
+        ],
+        [
+          h.div(
+            [h.Class(cn(PANEL, 'pointer-events-auto flex items-baseline gap-4 px-4 py-2.5'))],
+            [
+              h.span([h.Class('text-[17px] font-semibold tracking-[-0.025em]')], ['Research']),
+              h.span(
+                [h.Class(cn(FIGURE, 'flex items-baseline gap-1.5 text-[15px]'))],
+                [
+                  compact(model.game.insight),
+                  h.span([h.Class('text-[11px] text-muted-foreground')], ['Insight ◆']),
+                ],
+              ),
+            ],
+          ),
+          h.div(
+            [h.Class(cn(PANEL, 'pointer-events-auto p-1'))],
+            [
+              button(
+                {
+                  onClick: Message.PanelClosed(),
+                  variant: 'ghost',
+                  size: 'icon',
+                  className: 'text-muted-foreground',
+                  attributes: [h.AriaLabel('Close (Esc)')],
+                },
+                icon(h, X, 'size-4'),
+                h,
+              ),
+            ],
+          ),
+        ],
+      ),
+      detail(model, focus, h),
     ],
-    'max-w-[1260px]',
-    h,
   )
 }

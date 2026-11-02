@@ -217,9 +217,10 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
 
 ## Research screen
 
-- Tracks as columns, Eras as rows. Locked items of the current and the next Era are visible and
-  greyed, with their requirements, so the player can plan one Era ahead. Later Eras collapse to a
-  count of their items.
+- A fullscreen tree that scrolls. Each track is a tree that grows up from its root, through one
+  band per Era. Items with no prerequisite in their track branch off the track's trunk.
+- Locked items are visible and greyed, with their requirements, so the player can plan ahead.
+  Items beyond the next Era are faded. The screen opens scrolled to the focused item.
 - Each item shows its cost, its effect in one line, and what it unlocks.
 - A queue: the player can queue items, and they are bought automatically when Insight allows.
 
