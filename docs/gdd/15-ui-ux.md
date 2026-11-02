@@ -156,7 +156,8 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
 | Research  | `R`          | The tree by track ([Research screen](#research-screen))                    |
 | Team      | `T`          | Teams, engineers, the backlog, policies, DORA metrics                      |
 | Cost      | `C`          | The cloud bill by line, per service, and per kind                          |
-| Incidents | `I`          | The active incident, history, postmortems, runbooks                        |
+| Inbox     | `I`          | Mail: advice, offers, and reports ([Mail](./18-mail.md))                   |
+| Incidents | —            | The active incident, history, postmortems, runbooks                        |
 | Glossary  | `G`          | The engineering glossary, with discovered entries highlighted              |
 | Company   | `E`          | Era, milestone, funding, Equity, valuation, the IPO checklist              |
 
@@ -168,6 +169,8 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
 - A queue: the player can queue items, and they are bought automatically when Insight allows.
 
 ## Notifications
+
+Advice and offers are Mail ([Mail](./18-mail.md)). The rules below cover what stays on the Board.
 
 - One banner at a time at the top of the board. Incidents take priority.
 - No sounds or popups for routine events. A short sound for an incident and for an Era milestone,

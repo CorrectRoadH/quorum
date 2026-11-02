@@ -11,7 +11,6 @@ import {
   Gem,
   Hammer,
   type IconNode,
-  Lightbulb,
   Menu,
   Pause,
   Play,
@@ -670,20 +669,6 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 const pill = `flex max-w-[480px] compact:max-w-none items-center gap-2.5 rounded-xl bg-surface px-3 py-2 text-[12.5px] shadow-card`
-
-/** The pill stays and its text swaps, so a new goal morphs in rather than snapping. */
-export const goalBar = (text: string, h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [
-      h.Key('goal'),
-      h.DataAttribute('morph', 'notice'),
-      h.Class(`${pill} short:hidden max-2xl:max-w-[380px]`),
-    ],
-    [
-      icon(h, Lightbulb, 'size-3.5 shrink-0 text-warn'),
-      h.span([h.Key(text), h.DataAttribute('exit', 'notice'), h.Class('swap')], [text]),
-    ],
-  )
 
 /** Settling while the Design settles, then what the change did, with Undo. */
 const undoButton = (danger: boolean, h: HtmlBuilder<Message>): Html =>

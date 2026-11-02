@@ -1,4 +1,5 @@
 import { canRaise } from '@template/simulation/actions'
+import { senderOf } from './mail.ts'
 import type { Message } from './message.ts'
 import type { Model, Tone } from './model.ts'
 import type { Sound } from './sound.ts'
@@ -116,6 +117,15 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
 const tickCue = (before: Model, after: Model): Cue | null => {
   if (after.panel === 'passed' && before.panel !== 'passed') return event('fanfare')
   if (!before.sandbox && canRaise(after.game) && !canRaise(before.game)) return event('ready')
+  // Mail that wants attention: a provider, an alarm, or an advisory.
+  const urgent = after.inbox.some(
+    (mail) =>
+      mail.time > before.game.time &&
+      !mail.read &&
+      !mail.spam &&
+      ['cloud', 'monitoring', 'security'].includes(senderOf(mail.sender).kind),
+  )
+  if (urgent) return event('warn')
   if (after.delta && after.delta.id !== before.delta?.id)
     return after.delta.worse ? event('warn') : event('settle')
   return null

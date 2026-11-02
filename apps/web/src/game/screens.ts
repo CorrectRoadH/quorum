@@ -1,6 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { dock } from '@/components/lab/dock.ts'
-import { changeBar, goalBar, hud, regionTabs, toolbar } from '@/components/lab/hud.ts'
+import { changeBar, hud, regionTabs, toolbar } from '@/components/lab/hud.ts'
 import { badDeploy, expiredCertificate, pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
 import {
@@ -11,6 +11,7 @@ import {
   offerPanel,
   settingsPanel,
 } from '@/components/lab/panels.ts'
+import { inboxButton, inboxPanel } from '@/components/lab/inbox.ts'
 import { glossaryPanel } from '@/components/lab/glossary.ts'
 import { researchPanel } from '@/components/lab/research.ts'
 import { teamPanel } from '@/components/lab/team.ts'
@@ -29,7 +30,6 @@ import { tradeoffCard } from '@/components/lab/tradeoff.ts'
 import { Pause } from 'lucide'
 import { icon } from '@/lib/icons'
 import { boardHost } from './board-mount.ts'
-import { nextGoal } from '@template/simulation/goals'
 import type { Message } from './message.ts'
 import { ledgerOf, type Model } from './model.ts'
 
@@ -76,7 +76,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
                 ? challengeBar(model, h)
                 : model.sandbox
                   ? objectiveBar(model, h)
-                  : goalBar(nextGoal(model.game, ledger), h),
+                  : h.empty,
               regionTabs(model, h),
               changeBar(model, h),
               model.paused
@@ -99,6 +99,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       tradeoffCard(model, h),
       postmortems(model, h),
       dock(model, h),
+      model.challenge ? h.empty : inboxButton(model, h),
       model.panel === 'research' ? researchPanel(model, h) : h.empty,
       model.panel === 'team' ? teamPanel(model, h) : h.empty,
       model.panel === 'exit' ? exitPanel(model, h) : h.empty,
@@ -107,6 +108,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       model.panel === 'playbooks' ? playbooksPanel(model, h) : h.empty,
       model.panel === 'help' ? helpPanel(h) : h.empty,
       model.panel === 'settings' ? settingsPanel(model, h) : h.empty,
+      model.panel === 'inbox' ? inboxPanel(model, h) : h.empty,
       model.panel === 'glossary' ? glossaryPanel(model, h) : h.empty,
       model.panel === 'offer' ? offerPanel(model, h) : h.empty,
       model.panel === 'era' ? eraPanel(model, h) : h.empty,

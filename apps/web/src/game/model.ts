@@ -48,6 +48,7 @@ export const Panel = Schema.Literals([
   'challenge',
   'settings',
   'glossary',
+  'inbox',
 ])
 export type Panel = typeof Panel.Type
 
@@ -145,6 +146,35 @@ export const Toast = Schema.Struct({
   tone: Tone,
 })
 export type Toast = typeof Toast.Type
+
+/** One line in a Thread: what was said, and when. */
+export const MailEntry = Schema.Struct({ time: Schema.Finite, text: Schema.String })
+
+/** A button on a Mail. The id says what it does; `update.ts` maps it to a Message. */
+export const MailAction = Schema.Struct({ id: Schema.String, label: Schema.String })
+
+/** One Thread: Mail about one thing from one Sender. It stays until the player deletes it. */
+export const Mail = Schema.Struct({
+  id: Schema.Finite,
+  key: Schema.String,
+  sender: Schema.String,
+  subject: Schema.String,
+  /** Game time of the newest entry. */
+  time: Schema.Finite,
+  entries: Schema.Array(MailEntry),
+  actions: Schema.Array(MailAction),
+  /** What the player chose, once they chose; it replaces the buttons. */
+  answer: Schema.NullOr(Schema.String),
+  read: Schema.Boolean,
+  trashed: Schema.Boolean,
+  spam: Schema.Boolean,
+  /** Game time its cause went away, or null while it holds. */
+  resolved: Schema.NullOr(Schema.Finite),
+})
+export type Mail = typeof Mail.Type
+
+export const Folder = Schema.Literals(['inbox', 'spam', 'trash'])
+export type Folder = typeof Folder.Type
 
 /** The figures a change is measured by. */
 export const Figures = Schema.Struct({
@@ -298,6 +328,15 @@ export const Model = Schema.Struct({
   /** The Glossary panel's open entry and search. */
   glossaryFocus: Schema.NullOr(Schema.String),
   glossaryQuery: Schema.String,
+  /** Advice the game has sent, oldest first, and the one the Inbox shows. */
+  inbox: Schema.Array(Mail),
+  inboxFocus: Schema.NullOr(Schema.Finite),
+  /** The last event tick the world wrote Mail for. */
+  mailBucket: Schema.Finite,
+  /** The Sandbox's mail generator: the sample the next send uses. */
+  mailSample: Schema.String,
+  /** The mail folder the Inbox panel lists. */
+  folder: Folder,
   /** Ticks left to show "Stable" after a change settles. */
   stableTicks: Schema.Finite,
   /** Board actions to undo, newest last, at most 50. */

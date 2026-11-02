@@ -28,7 +28,7 @@ import {
 } from '@template/simulation/state'
 import { ChallengeVerdict } from '@template/rpc'
 import { histogramQuery } from './challenge-query.ts'
-import { BuildGroupKey, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
+import { BuildGroupKey, Folder, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 
 /* ==========================================================================
    Every gesture in Quorum becomes one of these.
@@ -230,6 +230,17 @@ export const Message = defineMessageUnion({
   MotionToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },
+  MailOpened: { id: Schema.Finite },
+  MailTrashed: { id: Schema.Finite },
+  MailRestored: { id: Schema.Finite },
+  FolderChosen: { folder: Folder },
+  MailActed: { id: Schema.Finite, action: Schema.String },
+  MailMarkedSpam: { id: Schema.Finite },
+  /** The Sandbox's mail generator. */
+  MailSampleChosen: { id: Schema.String },
+  MailGenerated: { count: Schema.Finite },
+  MailResolved: {},
+  MailCleared: {},
 
   /** Playtest panel. */
   CheatCash: {},

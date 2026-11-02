@@ -227,6 +227,30 @@ _Avoid_: season, period
 The revenue growth and margin the Company promises for a Quarter.
 _Avoid_: forecast, target (alone)
 
+**Mail**:
+One message to the player from a person or system in the game: advice, an offer, or a report. It stays until the player deletes it, and it can carry action buttons.
+_Avoid_: notification, tip, hint, toast
+
+**Sender**:
+The party a Mail comes from: a cloud provider, a vendor, a teammate, an investor, and so on. Each has a kind, a name, an address, and a colour.
+_Avoid_: author, source, bot
+
+**Thread**:
+Mail about one thing from one Sender. A repeat joins the thread; the thread resolves when its cause is gone.
+_Avoid_: conversation, chain
+
+**CVE**:
+A vulnerability disclosed in software the Design runs. It starts an exploit clock until the player patches it.
+_Avoid_: bug, exploit, vulnerability (alone)
+
+**Spam**:
+Mail that no Sender in the game would really send: pitches, fake invoices, phishing. Acting on a trap has a cost; opening it has none.
+_Avoid_: junk, noise
+
+**Inbox**:
+The panel that lists Mail, like an email app, with an Inbox folder and a Trash folder.
+_Avoid_: notification center, feed, log
+
 **Postmortem**:
 The card after an Incident that records its cost and opens one action item: a prevention that, until researched, makes the Incident twice as likely.
 _Avoid_: report, summary, review

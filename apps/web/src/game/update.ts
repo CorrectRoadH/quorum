@@ -79,7 +79,8 @@ import {
 } from '@template/simulation/playbook'
 import { forceIncident } from '@template/simulation/director'
 import { StepEvent } from '@template/simulation/events'
-import { nextGoal } from '@template/simulation/goals'
+import { nextAdvice } from '@template/simulation/goals'
+import { EVENT_EVERY, SAMPLES, eventFact, eventMail, factOf, type Fact } from './mail.ts'
 import type { Ledger } from '@template/simulation/ledger'
 import { buildItems, eraOf, has, isFinalEra, nextEra } from '@template/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
@@ -147,6 +148,7 @@ import {
   Prefs,
   SandboxStore,
   type SandboxRun,
+  type Mail,
   type Tone,
   type Tradeoff,
   type TradeoffOption,
@@ -224,6 +226,11 @@ export const initialModel = (): Model =>
     motion: 'system',
     glossaryFocus: null,
     glossaryQuery: '',
+    inbox: [],
+    inboxFocus: null,
+    folder: 'inbox',
+    mailBucket: 0,
+    mailSample: 'random',
     undo: [],
     redo: [],
     bottleneck: null,
@@ -266,6 +273,122 @@ const stampOf = (model: Model) => {
     dy: node.dy,
     ghost: ghostReason(model.game, node, model.region) !== null,
   }))
+}
+
+/* ---------- Mail (GDD 18) ---------- */
+
+const MAIL_KEPT = 40
+const THREAD_ENTRIES = 20
+
+/** Senders whose Mail is about the Design now: a Thread resolves when its cause is gone. */
+const ADVISING = new Set(['cloud', 'monitoring', 'vendor', 'investor', 'finance', 'mentor'])
+
+const folderHolds = (mail: Mail, folder: Model['folder']): boolean =>
+  folder === 'trash' ? mail.trashed : !mail.trashed && mail.spam === (folder === 'spam')
+
+/** A fact joins its Thread, or starts one. The same news twice changes nothing. */
+const mailed = (model: Model, fact: Fact, time: number, repeats = false): Model => {
+  const existing = model.inbox.find((mail) => mail.key === fact.key && !mail.trashed)
+  if (
+    !repeats &&
+    existing &&
+    existing.resolved === null &&
+    existing.entries.at(-1)?.text === fact.text
+  )
+    return model
+  const others = model.inbox.filter((mail) => mail !== existing)
+  const thread: Mail = existing
+    ? {
+        ...existing,
+        time,
+        read: false,
+        answer: null,
+        resolved: null,
+        actions: fact.actions,
+        entries: [...existing.entries, { time, text: fact.text }].slice(-THREAD_ENTRIES),
+      }
+    : {
+        id: Math.max(0, ...model.inbox.map((mail) => mail.id)) + 1,
+        key: fact.key,
+        sender: fact.sender,
+        subject: fact.subject,
+        time,
+        entries: [{ time, text: fact.text }],
+        actions: fact.actions,
+        answer: null,
+        read: false,
+        trashed: false,
+        spam: fact.spam,
+        resolved: null,
+      }
+  return { ...model, inbox: [...others, thread].slice(-MAIL_KEPT) }
+}
+
+/** Advice about anything but `key` no longer holds. */
+const resolvedExcept = (model: Model, key: string, time: number): Model => ({
+  ...model,
+  inbox: model.inbox.map((mail) =>
+    ADVISING.has(mail.sender) && mail.key !== key && mail.resolved === null
+      ? { ...mail, resolved: time }
+      : mail,
+  ),
+})
+
+/** The Inbox on one Mail, or the newest in its folder, which counts as read. */
+const reading = (model: Model, focus: number | null = null): Model => {
+  const inFolder = model.inbox.filter((mail) => folderHolds(mail, model.folder))
+  const id = (inFolder.find((mail) => mail.id === focus) ?? inFolder.at(-1))?.id ?? null
+  return {
+    ...model,
+    inboxFocus: id,
+    inbox: model.inbox.map((mail) => (mail.id === id ? { ...mail, read: true } : mail)),
+  }
+}
+
+const withMail = (model: Model, id: number, change: Partial<Mail>): Model => ({
+  ...model,
+  inbox: model.inbox.map((mail) => (mail.id === id ? { ...mail, ...change } : mail)),
+})
+
+/** The Inbox's keys: J and K move, E deletes (or restores), S reports spam, 1 to 3 press a button. */
+const mailKey = (model: Model, key: string): Result | null => {
+  const list = model.inbox.filter((mail) => folderHolds(mail, model.folder)).reverse()
+  const at = list.findIndex((mail) => mail.id === model.inboxFocus)
+  const current = list[at]
+  const neighbour = (list[at + 1] ?? list[at - 1])?.id ?? null
+  const apply = (message: Message): Result => {
+    const result = handle(model, message)
+    return { ...result, model: reading(result.model, neighbour) }
+  }
+  switch (key) {
+    case 'j':
+      return { model: reading(model, list[Math.min(at + 1, list.length - 1)]?.id ?? null) }
+    case 'k':
+      return { model: reading(model, list[Math.max(at - 1, 0)]?.id ?? null) }
+    case 'e':
+      return current
+        ? apply(
+            current.trashed
+              ? Message.MailRestored({ id: current.id })
+              : Message.MailTrashed({ id: current.id }),
+          )
+        : null
+    case 's':
+      return current && !current.trashed ? apply(Message.MailMarkedSpam({ id: current.id })) : null
+    case '1':
+    case '2':
+    case '3': {
+      const action =
+        current?.answer === null && current.resolved === null
+          ? current.actions[Number(key) - 1]
+          : undefined
+      return current && action
+        ? route(model, Message.MailActed({ id: current.id, action: action.id }))
+        : { model } // the Inbox owns 1 to 3 while open, so they never reach the build shortcuts
+    }
+    default:
+      return null
+  }
 }
 
 /** The Model with a toast raised, and the Command that clears it later. */
@@ -718,9 +841,14 @@ const tick = (model: Model): Result => {
     logs.push(line(game.time, event._tag, eventLog(event)))
     const text = eventText(event, game)
     if (!text) continue
-    const [raised, clear] = toasted(next, text[0], text[1])
-    next = raised
-    commands.push(clear)
+    // What happened in the Design is Mail (GDD 18); a Challenge has no Inbox, so it keeps the toast.
+    if (next.challenge) {
+      const [raised, clear] = toasted(next, text[0], text[1])
+      next = raised
+      commands.push(clear)
+    } else {
+      next = mailed(next, eventFact(event, text[0], game), game.time, true)
+    }
   }
 
   // Feedback after a change.
@@ -745,10 +873,20 @@ const tick = (model: Model): Result => {
   }
 
   // The log records what the player was told and what limited the Design.
-  const goal = nextGoal(game, ledger)
-  if (goal !== next.lastGoal) {
-    logs.push(line(game.time, 'GoalChanged', { goal }))
-    next = { ...next, lastGoal: goal }
+  const advice = nextAdvice(game, ledger)
+  const told = `${advice.key}|${advice.text}`
+  if (told !== next.lastGoal) {
+    logs.push(line(game.time, 'GoalChanged', { goal: advice.text }))
+    next = { ...next, lastGoal: told }
+    if (!offCompany(next))
+      next = mailed(resolvedExcept(next, advice.key, game.time), factOf(advice, game), game.time)
+  }
+  // The world writes too: teammates, CVEs, customers, and spam.
+  const bucket = Math.floor(game.time / EVENT_EVERY)
+  if (!offCompany(next) && game.stage >= 1 && bucket > next.mailBucket) {
+    const event = eventMail(game, bucket)
+    next = { ...next, mailBucket: bucket }
+    if (event) next = mailed(next, event, game.time)
   }
   const marker = bottleneck ? `${bottleneck}:${ledger.nodes[bottleneck]?.limit ?? 'none'}` : ''
   if (marker !== next.lastBottleneck) {
@@ -1367,6 +1505,10 @@ const handle = (model: Model, message: Message): Result =>
 
     KeyPressed: ({ key }) => {
       if (model.route !== 'lab') return key === 'Escape' ? { model } : clockIn(model)
+      if (model.panel === 'inbox') {
+        const mail = mailKey(model, key)
+        if (mail) return mail
+      }
       const selected = model.selected
       switch (key) {
         case 'Escape': {
@@ -1414,6 +1556,11 @@ const handle = (model: Model, message: Message): Result =>
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'dev' ? 'none' : 'dev' }),
+          )
+        case 'i':
+          return route(
+            model,
+            Message.PanelOpened({ panel: model.panel === 'inbox' ? 'none' : 'inbox' }),
           )
         case 'm':
           return route(model, Message.MuteToggled())
@@ -2170,9 +2317,10 @@ const handle = (model: Model, message: Message): Result =>
             'Playbook imported.',
           ),
 
-    PanelOpened: ({ panel }) => ({
-      model: { ...model, panel, placing: null, researchFocus: null },
-    }),
+    PanelOpened: ({ panel }) => {
+      const opened: Model = { ...model, panel, placing: null, researchFocus: null }
+      return { model: panel === 'inbox' ? reading({ ...opened, folder: 'inbox' }) : opened }
+    },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () =>
       model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
@@ -2193,6 +2341,57 @@ const handle = (model: Model, message: Message): Result =>
       return {
         model: next,
         commands: founder === model.founder ? [] : [WriteFounder({ founder })],
+      }
+    },
+    MailOpened: ({ id }) => ({ model: reading(model, id) }),
+    MailTrashed: ({ id }) => ({ model: reading(withMail(model, id, { trashed: true })) }),
+    MailRestored: ({ id }) => ({ model: reading(withMail(model, id, { trashed: false })) }),
+    MailMarkedSpam: ({ id }) => {
+      const mail = model.inbox.find((entry) => entry.id === id)
+      return { model: reading(withMail(model, id, { spam: !mail?.spam })) }
+    },
+    MailSampleChosen: ({ id }) => ({ model: { ...model, mailSample: id } }),
+    MailGenerated: ({ count }) => {
+      const sample = SAMPLES.find((entry) => entry.id === model.mailSample) ?? SAMPLES[0]
+      if (!sample) return { model }
+      let next = model
+      for (let sent = 0; sent < count; sent += 1) {
+        const n = Math.max(0, ...next.inbox.map((mail) => mail.id)) + 1
+        next = mailed(next, sample.make(next.game, n), next.game.time)
+      }
+      return { model: reading(next, null) }
+    },
+    MailResolved: () => ({ model: resolvedExcept(model, '', model.game.time) }),
+    MailCleared: () => ({ model: { ...model, inbox: [], inboxFocus: null } }),
+    FolderChosen: ({ folder }) => ({ model: reading({ ...model, folder }) }),
+    MailActed: ({ id, action }) => {
+      const mail = model.inbox.find((entry) => entry.id === id)
+      if (!mail) return { model }
+      const [kind, target] = action.split(':')
+      const answered = (answer: string): Model => withMail(model, id, { answer })
+      switch (kind) {
+        case 'raise':
+          return route(answered('You raised the round.'), Message.RoundRaised())
+        case 'decline':
+          return mail.sender.startsWith('mate:')
+            ? { model: answered('You declined. They will bring it up again.') }
+            : route(answered('You declined the round.'), Message.RoundDeclined())
+        case 'hire':
+          return route(answered('You approved the hire.'), Message.HireChosen())
+        case 'team':
+          return route(answered('You opened Team.'), Message.PanelOpened({ panel: 'team' }))
+        case 'later':
+          return { model: answered('Later. They will ask again.') }
+        case 'show':
+          return { model: { ...model, selected: target ?? null } }
+        case 'trap':
+          return withToast(
+            answered('You clicked it. It was a trap: the address was not the real sender.'),
+            'That was phishing. Check the sender address first.',
+            'danger',
+          )
+        default:
+          return { model }
       }
     },
     GlossarySearched: ({ query }) => ({ model: { ...model, glossaryQuery: query } }),

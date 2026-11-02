@@ -1,6 +1,6 @@
 # 17. Scope and roadmap
 
-[Index](./README.md) · Previous: [Balancing](./16-balancing.md)
+[Index](./README.md) · Previous: [Balancing](./16-balancing.md) · Next: [Mail](./18-mail.md)
 
 ## What exists today
 
