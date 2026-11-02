@@ -190,7 +190,6 @@ const palette = () => ({
   canvas: token('--canvas', '#f1f4f9'),
   grid: token('--canvas-dot', '#c9d3e3'),
   card: token('--card', '#ffffff'),
-  head: token('--surface-nested', '#f7f7f8'),
   well: token('--well', '#eeeef0'),
   border: token('--input', '#d5ddea'),
   edge: token('--edge-solid', '#9aa8bf'),
@@ -626,11 +625,66 @@ const walk = (
 
 const MONO = '"Geist Mono", ui-monospace, monospace'
 const SANS = '"Geist", ui-sans-serif, system-ui, sans-serif'
-/** The group badge in a card's header: its centre x and outer radius. */
-const BADGE_X = 19
-const BADGE_R = 10
+/** The medallion in a card's header: its centre and the badge's outer radius. It breaks
+ *  out of the card's top-left corner. */
+const BADGE_X = 20
+const BADGE_Y = 13
+const BADGE_R = 16
+/** Where the title starts, clear of the medallion. */
+const TITLE_X = 48
 
-const label = (size: number, family: string, weight: '400' | '500' | '600' = '500') =>
+/** The plate behind a badge, in the build group's shape; a chip's plate is a square. */
+const plateShape = (g: Graphics, group: BuildGroup, x: number, y: number, r: number): Graphics =>
+  GROUP_SHAPES[group] === 'chip'
+    ? g.roundRect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8, r * 0.3)
+    : badgeShape(g, group, x, y, r)
+
+/** The header's medallion: a card-coloured plate in the group's shape, with the badge on it. */
+const medallion = (g: Graphics, group: BuildGroup, tone: number, colors: Palette): void => {
+  const plate = BADGE_R + 5.5
+  plateShape(g, group, BADGE_X, BADGE_Y + 1.5, plate + 0.5).fill({ color: colors.ink, alpha: 0.08 })
+  plateShape(g, group, BADGE_X, BADGE_Y, plate).fill(colors.card)
+  plateShape(g, group, BADGE_X, BADGE_Y, plate).stroke({
+    color: mix(colors.border, tone, 0.5),
+    width: 1.5,
+  })
+  badgeShape(g, group, BADGE_X, BADGE_Y, BADGE_R).fill(
+    gradient(mix(tone, 0xffffff, 0.2), mix(tone, 0x000000, 0.1)),
+  )
+}
+
+/** The header band: a wash of the group's colour, fading to the right, over a hairline. */
+const headerBand = (g: Graphics, group: BuildGroup, hue: number, colors: Palette): void => {
+  silhouette(g, group, 0, 0, CARD_W, HEAD, 0, true).fill(
+    gradientX(mix(colors.card, hue, 0.22), mix(colors.card, hue, 0.04)),
+  )
+  g.moveTo(0, HEAD)
+    .lineTo(CARD_W, HEAD)
+    .stroke({ color: mix(colors.border, hue, 0.35), width: 1, alpha: 0.8 })
+}
+
+/** Width of `total` size pips. */
+const pipsWidth = (total: number): number => total * (total > 5 ? 5.5 : 7) - 2
+
+/** A Node's size as slanted pips: `filled` of `total` lit, drawn from (x, y). */
+const pips = (
+  g: Graphics,
+  x: number,
+  y: number,
+  filled: number,
+  total: number,
+  on: number,
+  off: number,
+): void => {
+  const w = total > 5 ? 3.5 : 5
+  const step = w + 2
+  for (let index = 0; index < total; index += 1) {
+    const at = x + index * step
+    g.poly([at + 2, y, at + w + 2, y, at + w, y + 9, at, y + 9]).fill(index < filled ? on : off)
+  }
+}
+
+const label = (size: number, family: string, weight: '400' | '500' | '600' | '700' = '500') =>
   new Text({
     text: '',
     style: { fontFamily: family, fontSize: size, fontWeight: weight, fill: 0x16233d },
@@ -991,25 +1045,31 @@ const membersOf = (game: Game, node: GameNode): ReadonlyArray<GameNode> =>
     game.links.some((link) => link.from === entry.id && link.to === node.id),
   )
 
-/** The header's right label: the size, the copies, and the zone once zones are researched. */
-const levelOf = (game: Game, node: GameNode, region: Region | null = null): string => {
+/** A Node's size as pips: the current size of all sizes, or null for a Component without sizes. */
+const sizePips = (node: GameNode): Readonly<{ filled: number; total: number }> | null => {
   const def = COMPONENTS[node.type]
-  const size = def.sized ? (SIZES[node.size]?.name ?? '') : def.steps > 1 ? `S${node.size}` : ''
-  const copies = `${node.replicas > 1 ? ` ×${node.replicas}` : ''}${node.pending > 0 ? ` +${node.pending}` : ''}`
+  if (def.sized) return { filled: node.size + 1, total: SIZES.length }
+  return def.steps > 1 ? { filled: node.size, total: def.steps } : null
+}
+
+/** The header's right label, before the size pips: the copies, and the zone once zones are researched. */
+const levelOf = (game: Game, node: GameNode, region: Region | null = null): string => {
+  const copies =
+    `${node.replicas > 1 ? `×${node.replicas}` : ''}${node.pending > 0 ? ` +${node.pending}` : ''}`.trim()
   // A standby sits in the next zone over.
   const standby = ZONES[(ZONES.indexOf(node.zone) + 1) % ZONES.length] ?? ''
   const zone =
     has(game, 'multi-az') && zoned(node)
-      ? `${node.zone.toUpperCase()}${node.standby ? `+${standby.toUpperCase()}` : ''} · `
+      ? `${node.zone.toUpperCase()}${node.standby ? `+${standby.toUpperCase()}` : ''}`
       : ''
   // A Node from another region shows where it is and the round trip to reach it.
   const remote =
     region !== null && node.region !== region && !isGlobal(node) && !node.spread
-      ? `${REGION_INFO[node.region].short} ${rttOf(region, node.region)} ms · `
+      ? `${REGION_INFO[node.region].short} ${rttOf(region, node.region)} ms`
       : node.spread && (node.type === 'wide' || node.type === 'dsql')
-        ? 'Spread · '
+        ? 'Spread'
         : ''
-  return `${remote}${zone}${size}${copies}`
+  return [remote, zone, copies].filter(Boolean).join(' · ')
 }
 
 const footerOf = (game: Game, node: GameNode): Footer | null => {
@@ -1055,11 +1115,13 @@ class NodeView {
   /** The selection ring, outside the card's edge. */
   private readonly ring = new Graphics()
   private readonly frame = new Graphics()
+  /** The medallion and status mark, over the card's edge. */
+  private readonly medal = new Graphics()
   private readonly bars = new Graphics()
   private readonly ports = new Graphics()
   private readonly mark = glyph(12)
-  private readonly title = label(12.5, SANS, '600')
-  private readonly level = label(10, MONO)
+  private readonly title = label(15, SANS, '700')
+  private readonly level = label(10.5, MONO)
   private readonly glyphs: Array<Sprite> = []
   private readonly names: Array<Text> = []
   private readonly values: Array<Text> = []
@@ -1109,6 +1171,7 @@ class NodeView {
       this.frame,
       this.bars,
       this.ports,
+      this.medal,
       this.mark,
       this.title,
       this.level,
@@ -1117,10 +1180,10 @@ class NodeView {
     )
     const glyphSize = badgeGlyph(this.group, BADGE_R)
     this.mark.setSize(glyphSize)
-    this.mark.position.set(BADGE_X - glyphSize / 2, HEAD / 2 - glyphSize / 2)
-    this.title.position.set(38, 7)
-    this.level.anchor.set(1, 0)
-    this.level.position.set(CARD_W - 12, 9)
+    this.mark.position.set(BADGE_X - glyphSize / 2, BADGE_Y - glyphSize / 2)
+    this.title.anchor.set(0, 0.5)
+    this.title.position.set(TITLE_X, HEAD / 2)
+    this.level.anchor.set(1, 0.5)
     for (let index = 0; index < layout.rows; index += 1) {
       const mark = glyph(13)
       const name = label(11, SANS, '500')
@@ -1272,23 +1335,10 @@ class NodeView {
     })
     silhouette(this.frame, group, 0, 1, CARD_W, height).fill({ color: colors.ink, alpha: 0.05 })
     silhouette(this.frame, group, 0, 0, CARD_W, height).fill(colors.card)
-    // The header band takes a wash of the group's colour, fading to the right.
-    silhouette(this.frame, group, 0, 0, CARD_W, HEAD, 0, true).fill(
-      gradientX(mix(colors.head, hue, 0.16), mix(colors.head, hue, 0.04)),
-    )
-    this.frame
-      .moveTo(0, HEAD)
-      .lineTo(CARD_W, HEAD)
-      .stroke({ color: mix(colors.border, hue, 0.35), width: 1, alpha: 0.8 })
-    // The badge: the group's shape, lit from the top, with a darker rim.
+    headerBand(this.frame, group, hue, colors)
     const badgeTone = node.down === -1 ? colors.muted : hue
-    badgeShape(this.frame, group, BADGE_X, HEAD / 2 + 0.5, BADGE_R).fill({
-      color: mix(badgeTone, 0x000000, 0.35),
-      alpha: 0.35,
-    })
-    badgeShape(this.frame, group, BADGE_X, HEAD / 2, BADGE_R).fill(
-      gradient(mix(badgeTone, 0xffffff, 0.18), mix(badgeTone, 0x000000, 0.08)),
-    )
+    this.medal.clear()
+    medallion(this.medal, group, badgeTone, colors)
     for (let index = 1; index < layout.rows; index += 1) {
       this.frame
         .moveTo(10, rowTop(index))
@@ -1388,24 +1438,43 @@ class NodeView {
             ? `${def.name} · cold`
             : def.name
     this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
+    this.bars.clear()
+    // Right to left: the size pips, then the zone and copies, then the title takes the rest.
+    let right = CARD_W - 12
+    const size = sizePips(node)
+    if (size) {
+      const width = pipsWidth(size.total)
+      pips(
+        this.bars,
+        right - width,
+        HEAD / 2 - 4.5,
+        size.filled,
+        size.total,
+        badgeTone,
+        colors.well,
+      )
+      right -= width + 7
+    }
     this.level.text = levelOf(game, node, region)
     this.level.style.fill = colors.muted
+    this.level.position.set(right, HEAD / 2)
+    if (this.level.text) right -= this.level.width + 8
     // A long title gives way to the level: it is cut with an ellipsis before the two touch.
-    const room = this.level.x - this.level.width - 18 - this.title.x
-    while (this.title.width > room && this.title.text.length > 2)
+    while (this.title.width > right - 4 - this.title.x && this.title.text.length > 2)
       this.title.text = `${this.title.text.slice(0, -2).trimEnd()}…`
 
-    this.bars.clear()
-    // Status is a shape as well as a colour: a dot, a triangle, a square, a cross.
+    // Status is a shape as well as a colour: a dot, a triangle, a square, a cross. It sits
+    // on the medallion's corner, on a disc of the card's colour.
     if (status !== colors.border) {
-      const sx = this.title.x + this.title.width + 9
-      const sy = HEAD / 2
-      if (own.status === 'ok') this.bars.circle(sx, sy, 3).fill(status)
+      const sx = BADGE_X + 15
+      const sy = BADGE_Y + 15
+      this.medal.circle(sx, sy, 6).fill(colors.card)
+      if (own.status === 'ok') this.medal.circle(sx, sy, 3.5).fill(status)
       else if (own.status === 'warn')
-        this.bars.poly([sx, sy - 4, sx + 4.2, sy + 3.2, sx - 4.2, sy + 3.2]).fill(status)
-      else if (own.status === 'danger') this.bars.rect(sx - 3.3, sy - 3.3, 6.6, 6.6).fill(status)
+        this.medal.poly([sx, sy - 4, sx + 4.2, sy + 3.2, sx - 4.2, sy + 3.2]).fill(status)
+      else if (own.status === 'danger') this.medal.rect(sx - 3.3, sy - 3.3, 6.6, 6.6).fill(status)
       else
-        this.bars
+        this.medal
           .moveTo(sx - 3.5, sy - 3.5)
           .lineTo(sx + 3.5, sy + 3.5)
           .moveTo(sx + 3.5, sy - 3.5)
@@ -2195,17 +2264,18 @@ class BoardController {
     const hue = colors.groups[group]
     const frame = new Graphics()
     silhouette(frame, group, 0, 0, CARD_W, height).fill(colors.card)
-    silhouette(frame, group, 0, 0, CARD_W, HEAD, 0, true).fill(mix(colors.head, hue, 0.14))
+    headerBand(frame, group, hue, colors)
     silhouette(frame, group, 0, 0, CARD_W, height).stroke({ color: hue, width: 2 })
-    badgeShape(frame, group, BADGE_X, HEAD / 2, BADGE_R).fill(hue)
-    const name = label(12.5, SANS, '600')
+    medallion(frame, group, hue, colors)
+    const name = label(15, SANS, '700')
     name.text = COMPONENTS[type].name
     name.style.fill = colors.ink
-    name.position.set(38, 7)
+    name.anchor.set(0, 0.5)
+    name.position.set(TITLE_X, HEAD / 2)
     const size = badgeGlyph(group, BADGE_R)
     const mark = glyph(size)
     paint(mark, COMPONENT_ICONS[type], 0xffffff)
-    mark.position.set(BADGE_X - size / 2, HEAD / 2 - size / 2)
+    mark.position.set(BADGE_X - size / 2, BADGE_Y - size / 2)
     this.ghost.addChild(frame, name, mark)
   }
 

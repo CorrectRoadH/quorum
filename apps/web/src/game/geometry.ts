@@ -7,7 +7,7 @@ import type { GameNode } from '@quorum/simulation/state'
 export type Placed = Pick<GameNode, 'type' | 'x' | 'y'>
 
 export const CARD_W = 216
-export const HEAD = 30
+export const HEAD = 36
 export const ROW = 24
 export const FOOT = 44
 export const PORT_R = 6

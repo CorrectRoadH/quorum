@@ -367,7 +367,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1, 2].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 140 + index * 140, {
+            node(`server${index + 1}`, 'server', 600, 40 + index * 240, {
               runtime: 'php_fpm',
               workers: 40,
             }),
@@ -446,7 +446,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'php_fpm',
               workers: 24,
@@ -499,7 +499,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'php_fpm',
               workers: 24,
@@ -550,7 +550,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 2,
               runtime: 'php_fpm',
               workers: 16,
@@ -596,7 +596,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'php_fpm',
               workers: 24,
@@ -644,7 +644,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 2,
               runtime: 'go',
             }),
@@ -714,7 +714,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 2,
               runtime: 'go',
             }),
@@ -762,7 +762,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 1,
               family: 'compute',
               runtime: 'tomcat',
@@ -805,7 +805,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'go',
             }),
@@ -853,7 +853,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'go',
             }),
@@ -891,7 +891,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'go',
             }),
@@ -923,7 +923,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 3,
               runtime: 'go',
             }),
@@ -959,7 +959,7 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [
           node('lb', 'lb', 360, 280, { size: 5 }),
           ...[0, 1].map((index) =>
-            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+            node(`server${index + 1}`, 'server', 600, 180 + index * 240, {
               size: 7,
               runtime: 'go',
               replicas: 2,
