@@ -285,7 +285,10 @@ const letter = (mail: Mail, h: HtmlBuilder<Message>): Html => {
                         [clock(entry.time)],
                       )
                     : h.empty,
-                  h.p([], [entry.text]),
+                  h.div(
+                    [h.Class('flex flex-col gap-3 whitespace-pre-line')],
+                    entry.text.split('\n\n').map((paragraph) => h.p([], [paragraph])),
+                  ),
                 ],
               ),
             ),

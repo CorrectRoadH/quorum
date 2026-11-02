@@ -81,6 +81,7 @@ import { forceIncident } from '@quorum/simulation/director'
 import { StepEvent } from '@quorum/simulation/events'
 import { nextAdvice } from '@quorum/simulation/goals'
 import { EVENT_EVERY, SAMPLES, eventFact, eventMail, factOf, type Fact } from './mail.ts'
+import type { EventMail } from './copy/index.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { buildItems, eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
@@ -694,61 +695,129 @@ const parseSave = (json: string | null): Option.Option<Game> => {
 /** What the player hears about a Step event, if anything. */
 type Note = readonly [string, Tone] | null
 
-const eventText = (event: StepEvent, game: Game): Note =>
+/** A Step event's toast, and the Mail behind it. */
+type EventNote = readonly [string, Tone, EventMail] | null
+
+const eventText = (event: StepEvent, game: Game): EventNote =>
   StepEvent.$match(event, {
-    IncidentStarted: ({ incident }): Note =>
+    IncidentStarted: ({ incident }): EventNote =>
       incident.kind === 'bad-deploy'
         ? null
         : incident.kind === 'instance' && incident.nodeId
-          ? [`${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`, 'danger']
+          ? [
+              `${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`,
+              'danger',
+              { topic: 'incident-instance', vars: { node: nodeName(game, incident.nodeId) } },
+            ]
           : incident.kind === 'slow-query'
-            ? ['A new query has no index. Every read scans the table.', 'danger']
+            ? [
+                'A new query has no index. Every read scans the table.',
+                'danger',
+                { topic: 'incident-slow-query', vars: {} },
+              ]
             : incident.kind === 'poison'
-              ? ['A task keeps failing. Workers retry it instead of the queue.', 'danger']
+              ? [
+                  'A task keeps failing. Workers retry it instead of the queue.',
+                  'danger',
+                  { topic: 'incident-poison', vars: {} },
+                ]
               : incident.kind === 'ddos'
-                ? ['A flood of junk traffic hits the edge.', 'danger']
+                ? [
+                    'A flood of junk traffic hits the edge.',
+                    'danger',
+                    { topic: 'incident-ddos', vars: {} },
+                  ]
                 : incident.kind === 'stampede'
-                  ? ['The Cache restarted empty. Every miss goes to the database.', 'danger']
+                  ? [
+                      'The Cache restarted empty. Every miss goes to the database.',
+                      'danger',
+                      { topic: 'incident-stampede', vars: {} },
+                    ]
                   : incident.kind === 'zone' && incident.zone
-                    ? [`Zone ${incident.zone.toUpperCase()} is down.`, 'danger']
+                    ? [
+                        `Zone ${incident.zone.toUpperCase()} is down.`,
+                        'danger',
+                        { topic: 'incident-zone', vars: { zone: incident.zone.toUpperCase() } },
+                      ]
                     : incident.kind === 'psp-outage'
-                      ? ['The Payment Provider is down. Checkouts fail.', 'danger']
+                      ? [
+                          'The Payment Provider is down. Checkouts fail.',
+                          'danger',
+                          { topic: 'incident-psp', vars: {} },
+                        ]
                       : null,
-    IncidentResolved: ({ postmortem }): Note => [
+    IncidentResolved: ({ postmortem }): EventNote =>
       postmortem.action
-        ? `${INCIDENTS[postmortem.kind].name} is over. Action item: ${RESEARCH[postmortem.action].name}. Until then it is twice as likely.`
-        : `${INCIDENTS[postmortem.kind].name} is over.`,
-      'primary',
+        ? [
+            `${INCIDENTS[postmortem.kind].name} is over. Action item: ${RESEARCH[postmortem.action].name}. Until then it is twice as likely.`,
+            'primary',
+            {
+              topic: 'resolved-action',
+              vars: {
+                incident: INCIDENTS[postmortem.kind].name,
+                action: RESEARCH[postmortem.action].name,
+              },
+            },
+          ]
+        : [
+            `${INCIDENTS[postmortem.kind].name} is over.`,
+            'primary',
+            { topic: 'resolved', vars: { incident: INCIDENTS[postmortem.kind].name } },
+          ],
+    DrawerFull: (): EventNote => [
+      'The Payments drawer is full. Revenue is spilling.',
+      'warn',
+      { topic: 'drawer', vars: {} },
     ],
-    DrawerFull: (): Note => ['The Payments drawer is full. Revenue is spilling.', 'warn'],
-    OutOfMemory: ({ nodeId }): Note => [
+    OutOfMemory: ({ nodeId }): EventNote => [
       `${nodeName(game, nodeId)} ran out of memory and restarted.`,
       'danger',
+      { topic: 'oom', vars: { node: nodeName(game, nodeId) } },
     ],
-    CreditsExhausted: ({ nodeId }): Note => [
+    CreditsExhausted: ({ nodeId }): EventNote => [
       `${nodeName(game, nodeId)} is out of CPU credits: throttled to 20%.`,
       'warn',
+      { topic: 'credits', vars: { node: nodeName(game, nodeId) } },
     ],
-    AlertFired: ({ rule }): Note => [
+    AlertFired: ({ rule }): EventNote => [
       `Page: ${alertText(rule, game.alertRules[rule]).toLowerCase()} for ${ALERT_RULES[rule].seconds} s.`,
       'danger',
+      {
+        topic: 'alert',
+        vars: {
+          alert: alertText(rule, game.alertRules[rule]),
+          seconds: String(ALERT_RULES[rule].seconds),
+        },
+      },
     ],
-    AlertIgnored: ({ rule }): Note => [
+    AlertIgnored: ({ rule }): EventNote => [
       `Five false alarms today: the team ignores “${alertText(rule, game.alertRules[rule])}”. Change its threshold.`,
       'warn',
+      { topic: 'alert-ignored', vars: { alert: alertText(rule, game.alertRules[rule]) } },
     ],
-    Hired: (): Note => ['An engineer joined the team.', 'ok'],
-    WorkFinished: ({ item }): Note =>
-      item.kind === 'task' ? [`${Work.itemName(item)} is done.`, 'ok'] : null,
-    Deployed: ({ features, bad }): Note => {
+    Hired: (): EventNote => ['An engineer joined the team.', 'ok', { topic: 'hired', vars: {} }],
+    WorkFinished: ({ item }): EventNote =>
+      item.kind === 'task'
+        ? [
+            `${Work.itemName(item)} is done.`,
+            'ok',
+            { topic: 'finished', vars: { item: Work.itemName(item) } },
+          ]
+        : null,
+    Deployed: ({ features, bad }): EventNote => {
       const names = features.map((id) => FEATURES[id].name).join(', ')
       return bad
-        ? [`Deployed ${names} with a bug. App Servers are crashing.`, 'danger']
-        : [`Deployed ${names}.`, 'primary']
+        ? [
+            `Deployed ${names} with a bug. App Servers are crashing.`,
+            'danger',
+            { topic: 'deployed-bad', vars: { features: names } },
+          ]
+        : [`Deployed ${names}.`, 'primary', { topic: 'deployed', vars: { features: names } }]
     },
-    MigrationShifted: ({ step }): Note => [
+    MigrationShifted: ({ step }): EventNote => [
       `${percent(MIGRATION_STEPS[step - 1] ?? 0)} of App Servers moved to the new Stack.`,
       'primary',
+      { topic: 'migration', vars: { share: percent(MIGRATION_STEPS[step - 1] ?? 0) } },
     ],
   })
 
@@ -848,7 +917,7 @@ const tick = (model: Model): Result => {
       next = raised
       commands.push(clear)
     } else {
-      next = mailed(next, eventFact(event, text[0], game), game.time, true)
+      next = mailed(next, eventFact(event, text[2], game), game.time, true)
     }
   }
 

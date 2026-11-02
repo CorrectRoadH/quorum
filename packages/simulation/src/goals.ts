@@ -28,22 +28,69 @@ export interface AdviceAction {
   readonly label: string
 }
 
-/** A fact worth telling the player. `key` names the thing it is about, so a repeat joins its Thread. */
+type Node = { readonly node: string }
+type Nothing = Record<never, never>
+
+/** What each kind of advice is about, and the values the web app's letters may quote. */
+export type AdviceVars = {
+  readonly credits: Node
+  readonly memory: Node
+  /** Out of RAM because Postgres shares the box. */
+  readonly 'memory-shared': Node
+  readonly workers: Node
+  /** Workers busy on a runtime with a pool size the player can raise. */
+  readonly 'workers-pool': Node & { readonly runtime: string }
+  readonly connections: Nothing
+  readonly network: Node
+  readonly disk: Node
+  readonly cpu: Node
+  readonly throughput: Node
+  /** A Node limits the Design, without a named reason. */
+  readonly limit: Node
+  readonly drawer: Nothing
+  readonly collect: Nothing
+  readonly failed: Node
+  readonly restarting: Node
+  /** A query has no index, and the player can add one. */
+  readonly 'slow-query-fix': Nothing
+  /** A query has no index, and Query analysis is not researched yet. */
+  readonly 'slow-query': Nothing
+  /** Writes fail: they need the primary Database. */
+  readonly 'failing-writes': { readonly kind: string }
+  readonly failing: { readonly kind: string }
+  readonly stranded: Node
+  readonly draining: Node
+  readonly negative: Nothing
+  readonly round: { readonly round: string }
+  readonly research: Nothing
+  readonly guidance: Nothing
+  readonly ipo: { readonly users: string }
+  readonly grow: { readonly round: string; readonly users: string }
+}
+
+export type AdviceTopic = keyof AdviceVars
+
+/** A fact worth telling the player. `key` names the thing it is about, so a repeat joins its Thread.
+ *  `text` is the plain fact; the web app writes the letter from `topic` and `vars`. */
 export interface Advice {
   readonly key: string
   readonly from: AdviceFrom
   readonly subject: string
   readonly text: string
+  readonly topic: AdviceTopic
+  readonly vars: Readonly<Record<string, string>>
   readonly actions: ReadonlyArray<AdviceAction>
 }
 
-const advice = (
+const advice = <T extends AdviceTopic>(
   key: string,
   from: AdviceFrom,
   subject: string,
   text: string,
+  topic: T,
+  vars: AdviceVars[T],
   actions: ReadonlyArray<AdviceAction> = [],
-): Advice => ({ key, from, subject, text, actions })
+): Advice => ({ key, from, subject, text, topic, vars, actions })
 
 const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
   const name = COMPONENTS[node.type].name
@@ -55,6 +102,8 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         'cloud',
         `${name}: CPU credits exhausted`,
         `${name} ran out of CPU credits and is throttled to 20%. Resize it, or switch it off Burstable.`,
+        'credits',
+        { node: name },
       )
     case 'memory':
       return advice(
@@ -64,22 +113,35 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         node.localDb
           ? `${name} is out of RAM and swapping: Postgres shares the box. Place a Database and link to it.`
           : `${name} is out of RAM and swapping. Resize it, pick the Memory family, or shrink the pool.`,
+        node.localDb ? 'memory-shared' : 'memory',
+        { node: name },
       )
     case 'workers':
-      return advice(
-        key('monitoring'),
-        'monitoring',
-        `${name}: all workers busy`,
-        RUNTIMES[node.runtime].pool
-          ? `Every ${RUNTIMES[node.runtime].name} worker on ${name} is busy, mostly waiting. Raise the pool, or speed up the database.`
-          : `Every worker on ${name} is busy, mostly waiting on the database.`,
-      )
+      return RUNTIMES[node.runtime].pool
+        ? advice(
+            key('monitoring'),
+            'monitoring',
+            `${name}: all workers busy`,
+            `Every ${RUNTIMES[node.runtime].name} worker on ${name} is busy, mostly waiting. Raise the pool, or speed up the database.`,
+            'workers-pool',
+            { node: name, runtime: RUNTIMES[node.runtime].name },
+          )
+        : advice(
+            key('monitoring'),
+            'monitoring',
+            `${name}: all workers busy`,
+            `Every worker on ${name} is busy, mostly waiting on the database.`,
+            'workers',
+            { node: name },
+          )
     case 'connections':
       return advice(
         key('monitoring'),
         'monitoring',
         'Postgres is refusing connections',
         'Postgres is refusing connections: too many app processes hold pools. Shrink pools or add a Connection Pooler.',
+        'connections',
+        {},
       )
     case 'network':
       return advice(
@@ -87,6 +149,8 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         'cloud',
         `${name}: network at line rate`,
         `${name} is sending as many bytes as its network card moves. Resize it, or add a copy behind a Load Balancer.`,
+        'network',
+        { node: name },
       )
     case 'disk':
       return advice(
@@ -94,6 +158,8 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         'cloud',
         `${name}: working set left RAM`,
         `The ${name} working set no longer fits in RAM, so reads hit disk. Resize it or pick the Memory family.`,
+        'disk',
+        { node: name },
       )
     case 'cpu':
       return advice(
@@ -101,6 +167,8 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         'cloud',
         `${name}: CPU at 100%`,
         `${name} is out of CPU. Resize it, or add a copy behind a Load Balancer.`,
+        'cpu',
+        { node: name },
       )
     case 'throughput':
       return advice(
@@ -108,6 +176,8 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         'monitoring',
         `${name}: past its throughput`,
         `${name} is past its throughput.`,
+        'throughput',
+        { node: name },
       )
     case 'none':
       return advice(
@@ -115,6 +185,8 @@ const limitAdvice = (game: Game, node: GameNode, limit: Limit): Advice => {
         'monitoring',
         `${name} limits the design`,
         `${name} limits the design.`,
+        'limit',
+        { node: name },
       )
   }
 }
@@ -138,6 +210,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'vendor',
       'Your payout drawer is full',
       'The Payments drawer is full and revenue is spilling. Click Payments to collect.',
+      'drawer',
+      {},
     )
   if (!stripe && game.pending > 5 && game.cash < 100)
     return advice(
@@ -145,6 +219,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'vendor',
       'Revenue waiting to be collected',
       'Click Payments to collect your revenue.',
+      'collect',
+      {},
     )
   const failed = game.nodes.find((node) => node.down === -1)
   if (failed)
@@ -153,6 +229,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'monitoring',
       `${COMPONENTS[failed.type].name} failed`,
       `${COMPONENTS[failed.type].name} failed. Select it and click Replace, or wait for the provider.`,
+      'failed',
+      { node: COMPONENTS[failed.type].name },
       [SHOW(failed.id)],
     )
   const restarting = game.nodes.find((node) => node.down > 0)
@@ -162,17 +240,28 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'monitoring',
       `${COMPONENTS[restarting.type].name} is restarting`,
       `${COMPONENTS[restarting.type].name} is restarting. Requests fail until it is up.`,
+      'restarting',
+      { node: COMPONENTS[restarting.type].name },
       [SHOW(restarting.id)],
     )
   if (game.incident?.kind === 'slow-query')
-    return advice(
-      'monitoring:slow-query',
-      'monitoring',
-      'A query has no index',
-      has(game, 'query-analysis')
-        ? 'A query has no index and the Database scans whole tables. Select it and click Add index.'
-        : 'A query has no index and the Database scans whole tables. Research Query analysis, or put a Cache in front.',
-    )
+    return has(game, 'query-analysis')
+      ? advice(
+          'monitoring:slow-query',
+          'monitoring',
+          'A query has no index',
+          'A query has no index and the Database scans whole tables. Select it and click Add index.',
+          'slow-query-fix',
+          {},
+        )
+      : advice(
+          'monitoring:slow-query',
+          'monitoring',
+          'A query has no index',
+          'A query has no index and the Database scans whole tables. Research Query analysis, or put a Cache in front.',
+          'slow-query',
+          {},
+        )
   const failing = ledger.failing[0]
   if (failing)
     return advice(
@@ -180,6 +269,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'monitoring',
       `${KINDS[failing].label} requests are failing`,
       `${KINDS[failing].label} requests fail. ${strandedHint(failing)}`,
+      failing === 'write' ? 'failing-writes' : 'failing',
+      { kind: KINDS[failing].label },
     )
   const stranded = game.nodes.find((node) => (ledger.nodes[node.id]?.stranded ?? 0) > 0.01)
   if (stranded)
@@ -188,6 +279,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'monitoring',
       `${COMPONENTS[stranded.type].name}: requests with nowhere to go`,
       `${COMPONENTS[stranded.type].name} has requests with nowhere to go. Link it to something that takes them.`,
+      'stranded',
+      { node: COMPONENTS[stranded.type].name },
       [SHOW(stranded.id)],
     )
   const draining = game.nodes.find((node) => {
@@ -200,6 +293,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'cloud',
       `${COMPONENTS[draining.type].name}: CPU credits nearly gone`,
       `${COMPONENTS[draining.type].name} runs out of CPU credits soon and drops to 20% CPU. Switch it to General or resize it.`,
+      'draining',
+      { node: COMPONENTS[draining.type].name },
       [SHOW(draining.id)],
     )
   const bottleneck = game.nodes.find((node) => node.id === ledger.bottleneck)
@@ -214,6 +309,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'finance',
       'Your balance is negative',
       'Cash is negative. Sell Nodes you do not need, or grow revenue.',
+      'negative',
+      {},
     )
   const next = nextEra(game)
   if (next && canRaise(game))
@@ -222,6 +319,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'investor',
       `${next.name} term sheet`,
       `Investors are calling. Take or decline the ${next.name} round.`,
+      'round',
+      { round: next.name },
       [
         { id: 'raise', label: 'Raise' },
         { id: 'decline', label: 'Decline' },
@@ -236,6 +335,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'mentor',
       'You are sitting on Insight',
       'Open Research and spend your Insight.',
+      'research',
+      {},
     )
   if (!next)
     return advice(
@@ -243,6 +344,8 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'finance',
       'Guidance for this quarter',
       'Meet the guidance you set for this quarter.',
+      'guidance',
+      {},
     )
   if (next.name === 'Public')
     return advice(
@@ -250,11 +353,15 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'mentor',
       'Going public',
       `Grow to ${eraOf(game).raiseAt.toLocaleString('en-US')} users and clear the IPO checklist to go public.`,
+      'ipo',
+      { users: eraOf(game).raiseAt.toLocaleString('en-US') },
     )
   return advice(
     `mentor:grow:${game.stage}`,
     'mentor',
     `On the way to ${next.name}`,
     `Grow to ${eraOf(game).raiseAt.toLocaleString('en-US')} users to raise the ${next.name} round.`,
+    'grow',
+    { round: next.name, users: eraOf(game).raiseAt.toLocaleString('en-US') },
   )
 }
