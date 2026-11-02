@@ -1,6 +1,7 @@
 import * as Effect from 'effect/Effect'
 import { Schema } from 'effect'
 import { Command } from 'foldkit'
+import { load, pushUrl, replaceUrl } from 'foldkit/navigation'
 import { fitBoard, setBoard } from './board.ts'
 import { solveFlow } from '@quorum/simulation/solve'
 import { regionView } from '@quorum/simulation/regions'
@@ -62,6 +63,26 @@ export const SyncBoard = Command.define('SyncBoard', {
         paused,
       }),
     ).pipe(Effect.as(Message.Synced())),
+})
+
+/** Adds a history entry for the route a Message opened. */
+export const PushUrl = Command.define('PushUrl', {
+  args: { url: Schema.String },
+  messages: [Message.Navigated],
+  execute: ({ url }) => pushUrl(url).pipe(Effect.as(Message.Navigated())),
+})
+
+/** Corrects the URL in place when it names a screen that cannot open. */
+export const ReplaceUrl = Command.define('ReplaceUrl', {
+  args: { url: Schema.String },
+  messages: [Message.Navigated],
+  execute: ({ url }) => replaceUrl(url).pipe(Effect.as(Message.Navigated())),
+})
+
+export const LoadUrl = Command.define('LoadUrl', {
+  args: { href: Schema.String },
+  messages: [Message.Navigated],
+  execute: ({ href }) => load(href).pipe(Effect.as(Message.Navigated())),
 })
 
 export const FitBoard = Command.define('FitBoard', {

@@ -4,6 +4,7 @@ import { labScreen } from './screens.ts'
 import { titleScreen } from './title.ts'
 import type { Message } from './message.ts'
 import type { Model } from './model.ts'
+import { onBoard } from './route.ts'
 
 /* ==========================================================================
    The root view. Quorum is one window: the active screen fills it, and the
@@ -16,8 +17,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
     [h.Class('h-dvh w-full overflow-hidden bg-background text-foreground select-none')],
     [
       h.div(
-        [h.Key(model.route), h.Class('h-full')],
-        [model.route === 'lab' ? labScreen(model, h) : titleScreen(model, h)],
+        [h.Key(onBoard(model.route) ? 'board' : 'title'), h.Class('h-full')],
+        [onBoard(model.route) ? labScreen(model, h) : titleScreen(model, h)],
       ),
       toast(model.toast, h),
     ],

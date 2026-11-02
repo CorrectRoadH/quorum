@@ -9,6 +9,7 @@ import { ChallengeResult, RunTotals } from '@quorum/simulation/challenges'
 import { Replay } from '@quorum/simulation/replay'
 import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
+import { AppRoute, MENU_PAGES } from './route.ts'
 import {
   ComponentId,
   FamilyId,
@@ -27,9 +28,7 @@ import {
    from the Game with `ledgerOf`.
    ========================================================================== */
 
-export const Route = Schema.Literals(['title', 'lab'])
 export const Gate = Schema.Literals(['shut', 'clocking', 'open'])
-export type Route = typeof Route.Type
 
 export const Panel = Schema.Literals([
   'none',
@@ -57,15 +56,7 @@ export const BuildGroupKey = Schema.Literals(
 )
 
 /** The title menu's page. */
-export const Menu = Schema.Literals([
-  'main',
-  'sandbox',
-  'found',
-  'legacy',
-  'history',
-  'challenges',
-  'achievements',
-])
+export const Menu = Schema.Literals(['main', ...MENU_PAGES])
 export type Menu = typeof Menu.Type
 
 export const SandboxId = Schema.Literals(SANDBOX_IDS)
@@ -268,8 +259,8 @@ export const Undo = Schema.Struct({
 export type Undo = typeof Undo.Type
 
 export const Model = Schema.Struct({
-  route: Route,
-  menu: Menu,
+  /** The screen, parsed from the URL. */
+  route: AppRoute,
   /** The clock-in splash before the title: shut until the first click or key press, which lets the title play sound. */
   gate: Gate,
   /** The Company, or the Sandbox while one is open. */

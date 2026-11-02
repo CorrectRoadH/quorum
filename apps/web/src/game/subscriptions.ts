@@ -5,6 +5,7 @@ import { Schema } from 'effect'
 import { Subscription } from 'foldkit'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
+import { onBoard } from './route.ts'
 import { TICK_MS } from './update.ts'
 
 /* ==========================================================================
@@ -52,7 +53,7 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
   tick: entry(
     { running: Schema.Boolean },
     {
-      modelToDependencies: (model: Model) => ({ running: model.route === 'lab' && !model.paused }),
+      modelToDependencies: (model: Model) => ({ running: onBoard(model.route) && !model.paused }),
       dependenciesToStream: ({ running }: { running: boolean }) =>
         running ? Stream.tick(TICK_MS).pipe(Stream.map(() => Message.Ticked())) : Stream.empty,
     },
@@ -61,7 +62,7 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
   keys: entry(
     { lab: Schema.Boolean },
     {
-      modelToDependencies: (model: Model) => ({ lab: model.route === 'lab' }),
+      modelToDependencies: (model: Model) => ({ lab: onBoard(model.route) }),
       dependenciesToStream: ({ lab }: { lab: boolean }) => (lab ? keys : Stream.empty),
     },
   ),

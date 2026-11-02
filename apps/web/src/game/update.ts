@@ -1,5 +1,7 @@
 import { Option, Result, Schema } from 'effect'
 import type { Runtime, Update } from 'foldkit'
+import { UrlRequest } from 'foldkit/navigation'
+import { toString as urlToString, type Url } from 'foldkit/url'
 import * as Actions from '@quorum/simulation/actions'
 import {
   ACHIEVEMENTS,
@@ -125,7 +127,10 @@ import {
   LoadPrefs,
   LoadSandboxStore,
   LoadSave,
+  LoadUrl,
   PlaySound,
+  PushUrl,
+  ReplaceUrl,
   RevealTitle,
   SyncBoard,
   ToggleFullscreen,
@@ -163,7 +168,9 @@ import {
   type TradeoffOption,
   offCompany,
   type ChallengeRun,
+  type Menu,
 } from './model.ts'
+import { AppRoute, menuFor, onBoard, routeOfMenu, urlOf, urlToAppRoute } from './route.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
 import { nearestNode, type Direction } from './viewport.ts'
@@ -196,8 +203,7 @@ export const speedsOf = (game: Game): ReadonlyArray<number> => [
 
 export const initialModel = (): Model =>
   Model.make({
-    route: 'title',
-    menu: 'main',
+    route: AppRoute.Title(),
     gate: 'open',
     game: newGame(),
     saved: false,
@@ -249,10 +255,21 @@ export const initialModel = (): Model =>
     lastBottleneck: '',
   })
 
-export const init: Runtime.ApplicationInit<Model, Message, void, ApiRpc> = () => ({
-  model: { ...initialModel(), gate: 'shut' },
-  commands: [LoadSave({}), LoadSandboxStore({}), LoadPrefs({}), LoadFounder({})],
-})
+/** A fresh load opens on the title screen behind the clock-in splash, so a
+ *  board URL opens the menu that lists that board instead. */
+export const init: Runtime.RoutingApplicationInit<Model, Message, void, ApiRpc> = (url) => {
+  const route = menuFor(urlToAppRoute(url))
+  return {
+    model: { ...initialModel(), route, gate: 'shut' },
+    commands: [
+      LoadSave({}),
+      LoadSandboxStore({}),
+      LoadPrefs({}),
+      LoadFounder({}),
+      ...(url.pathname === urlOf(route) ? [] : [ReplaceUrl({ url: urlOf(route) })]),
+    ],
+  }
+}
 
 /* ---------- helpers ---------- */
 
@@ -632,7 +649,7 @@ const milestones = (
   ledger: Ledger,
 ): Result => {
   const after = result.model
-  if (after.route !== 'lab' || offCompany(after)) return result
+  if (!onBoard(after.route) || offCompany(after)) return result
   const commands: Array<AnyCommand> = [...(result.commands ?? [])]
   const stats = countStats(after.founder.stats, events)
   const earned = detectAchievements(
@@ -1012,7 +1029,7 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
-    route: 'lab',
+    route: AppRoute.Company(),
     game,
     saved: true,
     passed: model.passed,
@@ -1049,7 +1066,7 @@ const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
-    route: 'lab',
+    route: AppRoute.Sandbox({ sandbox: run.id ?? 'free' }),
     game,
     sandbox: run,
     company: model.sandbox ? model.company : model.game,
@@ -1151,11 +1168,10 @@ const found = (model: Model): Result => {
 }
 
 /** Leaves an exited Company for the title screen: nothing to continue, nothing to save. */
-const leaveExited = (model: Model, menu: Model['menu']): Result => ({
+const leaveExited = (model: Model, menu: Menu): Result => ({
   model: {
     ...model,
-    route: 'title',
-    menu,
+    route: routeOfMenu(menu),
     panel: 'none',
     exited: null,
     saved: false,
@@ -1195,7 +1211,7 @@ const enterChallenge = (model: Model, id: string): Result => {
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
-    route: 'lab',
+    route: AppRoute.Challenge({ challenge: id }),
     game,
     challenge: {
       id,
@@ -1345,8 +1361,7 @@ const logRunAction = (model: Model, action: ReplayAction): Result | null => {
 const leaveChallenge = (model: Model): Result => ({
   model: {
     ...model,
-    route: 'title',
-    menu: 'challenges',
+    route: AppRoute.Menu({ menu: 'challenges' }),
     panel: 'none',
     placing: null,
     selected: null,
@@ -1357,6 +1372,79 @@ const leaveChallenge = (model: Model): Result => ({
     bottleneckAt: -1,
   },
 })
+
+/* ---------- routes ---------- */
+
+const continued = (model: Model): Result => {
+  const next: Model = {
+    ...model,
+    route: AppRoute.Company(),
+    panel: model.away ? 'away' : 'none',
+    paused: false,
+  }
+  return {
+    model: next,
+    commands: [sync(next), AppendLog({ entries: [line(model.game.time, 'SessionResumed', {})] })],
+  }
+}
+
+/** Closes the board for the title screen. A Sandbox or Challenge gives the Company back. */
+const leaveBoard = (model: Model): Result => {
+  if (model.exited) return leaveExited(model, 'found')
+  if (model.challenge) return leaveChallenge(model)
+  if (!model.sandbox)
+    return {
+      model: { ...model, route: AppRoute.Title(), panel: 'none', placing: null },
+      commands: [WriteSave({ game: model.game })],
+    }
+  const freeBoard = model.sandbox.id === null ? model.game : model.freeBoard
+  const next: Model = {
+    ...model,
+    route: AppRoute.Menu({ menu: 'sandbox' }),
+    panel: 'none',
+    placing: null,
+    selected: null,
+    game: model.company ?? newGame(),
+    sandbox: null,
+    company: null,
+    bottleneck: null,
+    bottleneckAt: -1,
+    freeBoard,
+  }
+  return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
+}
+
+/** Opens a route's screen. A board that cannot open (no Company to continue,
+ *  an unknown Challenge) leaves the Model as it is. */
+const open = (model: Model, route: AppRoute): Result =>
+  AppRoute.match<Result>(route, {
+    Title: () => ({ model: { ...model, route } }),
+    Menu: () => ({ model: { ...model, route } }),
+    Company: () => (model.saved ? continued(model) : { model }),
+    Sandbox: ({ sandbox }) =>
+      sandbox === 'free'
+        ? enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START })
+        : enterSandbox(model, GUIDED[sandbox].start(), { id: sandbox, progress: START }),
+    Challenge: ({ challenge }) => enterChallenge(model, challenge),
+  })
+
+/** Follows a URL from back, forward, or a link: closes the open board, opens
+ *  the route's screen, and corrects the URL when that screen cannot open. */
+const visit = (model: Model, url: Url): Result => {
+  const route = urlToAppRoute(url)
+  if (urlOf(route) === urlOf(model.route)) return { model }
+  const left = onBoard(model.route) ? leaveBoard(model) : { model }
+  const opened = open(left.model, route)
+  const landed = urlOf(opened.model.route)
+  return {
+    model: opened.model,
+    commands: [
+      ...(left.commands ?? []),
+      ...(opened.commands ?? []),
+      ...(landed === urlOf(route) ? [] : [ReplaceUrl({ url: landed })]),
+    ],
+  }
+}
 
 /* ---------- update ---------- */
 
@@ -1405,21 +1493,7 @@ const handle = (model: Model, message: Message): Result =>
 
     Saved: () => ({ model: model.saved ? model : { ...model, saved: true } }),
 
-    Continued: () => {
-      const next: Model = {
-        ...model,
-        route: 'lab',
-        panel: model.away ? 'away' : 'none',
-        paused: false,
-      }
-      return {
-        model: next,
-        commands: [
-          sync(next),
-          AppendLog({ entries: [line(model.game.time, 'SessionResumed', {})] }),
-        ],
-      }
-    },
+    Continued: () => continued(model),
 
     NewCompanyStarted: () => found(model),
     CompanyFounded: () => found(model),
@@ -1431,35 +1505,18 @@ const handle = (model: Model, message: Message): Result =>
       ),
     AwayClosed: () => ({ model: { ...model, panel: 'none', away: null } }),
 
-    TitleOpened: () => {
-      if (model.exited) return leaveExited(model, 'found')
-      if (model.challenge) return leaveChallenge(model)
-      if (!model.sandbox)
-        return {
-          model: { ...model, route: 'title', menu: 'main', panel: 'none', placing: null },
-          commands: [WriteSave({ game: model.game })],
-        }
-      const freeBoard = model.sandbox.id === null ? model.game : model.freeBoard
-      const next: Model = {
-        ...model,
-        route: 'title',
-        menu: 'sandbox',
-        panel: 'none',
-        placing: null,
-        selected: null,
-        game: model.company ?? newGame(),
-        sandbox: null,
-        company: null,
-        bottleneck: null,
-        bottleneckAt: -1,
-        freeBoard,
-      }
-      return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
-    },
+    TitleOpened: () => leaveBoard(model),
     ClockedIn: () => clockIn(model),
     TitleRevealed: () => ({ model: { ...model, gate: 'open' } }),
     MenuChosen: ({ menu }) =>
-      model.exited ? leaveExited(model, menu) : { model: { ...model, menu } },
+      model.exited ? leaveExited(model, menu) : { model: { ...model, route: routeOfMenu(menu) } },
+    ClickedLink: ({ request }) =>
+      UrlRequest.match<Result>(request, {
+        Internal: ({ url }) => ({ model, commands: [PushUrl({ url: urlToString(url) })] }),
+        External: ({ href }) => ({ model, commands: [LoadUrl({ href })] }),
+      }),
+    ChangedUrl: ({ url }) => visit(model, url),
+    Navigated: () => ({ model }),
 
     PrefsLoaded: ({ json }) =>
       Option.match(parsePrefs(json), {
@@ -1585,7 +1642,7 @@ const handle = (model: Model, message: Message): Result =>
     BoardFitted: () => ({ model, commands: [FitBoard({})] }),
 
     KeyPressed: ({ key }) => {
-      if (model.route !== 'lab') return key === 'Escape' ? { model } : clockIn(model)
+      if (!onBoard(model.route)) return key === 'Escape' ? { model } : clockIn(model)
       if (model.panel === 'inbox') {
         const mail = mailKey(model, key)
         if (mail) return mail
@@ -2549,7 +2606,7 @@ const handle = (model: Model, message: Message): Result =>
 
 /* ---------- the playtest log ---------- */
 
-const QUIET = new Set(['Ticked', 'Synced', 'ToastCleared', 'Saved', 'SaveLoaded'])
+const QUIET = new Set(['Ticked', 'Synced', 'Navigated', 'ToastCleared', 'Saved', 'SaveLoaded'])
 
 const fieldsOf = (message: Message): Record<string, unknown> =>
   Object.fromEntries(Object.entries(message).filter(([key]) => key !== '_tag'))
@@ -2579,11 +2636,19 @@ const logged = (model: Model, message: Message, result: Result): Result => {
   return { ...result, commands: [...(result.commands ?? []), AppendLog({ entries: logs })] }
 }
 
+/** The URL follows the route: a Message that opens another screen adds a
+ *  history entry for it. ChangedUrl already came from the URL. */
+const withUrl = (model: Model, message: Message, result: Result): Result => {
+  const url = urlOf(result.model.route)
+  if (message._tag === 'ChangedUrl' || url === urlOf(model.route)) return result
+  return { ...result, commands: [...(result.commands ?? []), PushUrl({ url })] }
+}
+
 /** Messages that move a Company to another Era. */
 const ROUNDS = new Set(['RoundRaised', 'RoundDeclined', 'CheatRound'])
 
 export const update = (model: Model, message: Message): Result => {
-  const result = route(model, message)
+  const result = withUrl(model, message, route(model, message))
   const moved = ROUNDS.has(message._tag) && result.model.game.stage !== model.game.stage
   return logged(
     model,

@@ -10,6 +10,10 @@ const application = Runtime.makeApplication({
   update,
   view,
   subscriptions,
+  routing: {
+    onUrlRequest: (request) => Message.ClickedLink({ request }),
+    onUrlChange: (url) => Message.ChangedUrl({ url }),
+  },
   resources: ApiRpc.layer,
   container: document.getElementById('root'),
   devTools: { Message },

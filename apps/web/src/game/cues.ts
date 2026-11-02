@@ -2,6 +2,7 @@ import { canRaise } from '@quorum/simulation/actions'
 import { senderOf } from './mail.ts'
 import type { Message } from './message.ts'
 import type { Model, Tone } from './model.ts'
+import { onBoard } from './route.ts'
 import type { Sound } from './sound.ts'
 
 /* ==========================================================================
@@ -134,7 +135,7 @@ const tickCue = (before: Model, after: Model): Cue | null => {
 /** What the player hears after `message` took the Model from `before` to `after`. */
 export const cueOf = (before: Model, message: Message, after: Model): Cue | null => {
   // The title screen plays its own menu sounds.
-  if (before.route !== 'lab') return null
+  if (!onBoard(before.route)) return null
   const raised = after.toast && after.toast.id !== before.toast?.id ? after.toast : null
   if (raised && (raised.tone === 'warn' || raised.tone === 'danger'))
     return { sound: TONE_SOUND[raised.tone], pitch: 1, spatial: message._tag !== 'Ticked' }

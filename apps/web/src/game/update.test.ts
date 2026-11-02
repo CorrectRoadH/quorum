@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'vitest'
+import { Option } from 'effect'
+import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'
+import { AppRoute } from './route.ts'
 
 /* The clock: 100 ms Steps under a 250 ms UI tick, and the Bottleneck search once per sim second. */
 
@@ -12,7 +15,9 @@ const tick = (model: Model, times = 1): Model => {
   return current
 }
 
-const inLab = (): Model => ({ ...initialModel(), route: 'lab', game: newGame() })
+const at = (path: string) => Option.getOrThrow(fromString(`https://quorum.test${path}`))
+
+const inLab = (): Model => ({ ...initialModel(), route: AppRoute.Company(), game: newGame() })
 
 describe('the clock', () => {
   test('four ticks at 1× run ten 0.1 s Steps: one sim second', () => {
@@ -41,7 +46,7 @@ describe('Tradeoff cards', () => {
   const option = { kind: 'runtime', id: 'node_cluster' } as const
   const ready = (): Model => ({
     ...initialModel(),
-    route: 'lab',
+    route: AppRoute.Company(),
     selected: 'server',
     game: {
       ...preseedGame(),
@@ -120,10 +125,9 @@ describe('Exit and offline return', () => {
     expect(exited.founder.history).toHaveLength(1)
     expect(exited.founder.legacy).toBe(exited.founder.history[0]?.legacy)
     const title = send(exited, Message.TitleOpened())
-    expect(title.route).toBe('title')
-    expect(title.menu).toBe('found')
+    expect(title.route).toEqual(AppRoute.Menu({ menu: 'found' }))
     const next = send(title, Message.CompanyFounded())
-    expect(next.route).toBe('lab')
+    expect(next.route).toEqual(AppRoute.Company())
     expect(next.game.stage).toBe(0)
     expect(next.founder.history).toHaveLength(1)
   })
@@ -226,7 +230,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
     const game = preseedGame()
     return {
       ...initialModel(),
-      route: 'lab',
+      route: AppRoute.Company(),
       game: { ...game, nextIncidentAt: game.time },
       ...change,
     }
@@ -237,7 +241,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
       .map((command) => command.args['sound'])
 
   test('a fresh load waits for one clock-in before the title, and a return skips it', () => {
-    const shut = init().model
+    const shut = init(at('/')).model
     expect(shut.gate).toBe('shut')
     expect(update(shut, Message.KeyPressed({ key: 'Escape' })).model.gate).toBe('shut')
     const clocking = update(shut, Message.KeyPressed({ key: 'a' }))
@@ -298,5 +302,47 @@ describe('M9: sound, achievements, glossary, keys', () => {
     const moved = update(start, Message.KeyPressed({ key: 'ArrowRight' })).model
     expect(moved.selected).not.toBe('users')
     expect(moved.selected).not.toBeNull()
+  })
+})
+
+describe('URL routing', () => {
+  type Named = Readonly<{ name: string; args: Record<string, unknown> }>
+  const pushed = (commands: ReadonlyArray<unknown> | undefined) =>
+    ((commands ?? []) as ReadonlyArray<Named>)
+      .filter((command) => command.name === 'PushUrl' || command.name === 'ReplaceUrl')
+      .map((command) => `${command.name} ${String(command.args['url'])}`)
+
+  test('a board URL on a fresh load opens the menu that lists it', () => {
+    const challenge = init(at('/challenges/hello-world'))
+    expect(challenge.model.route).toEqual(AppRoute.Menu({ menu: 'challenges' }))
+    expect(pushed(challenge.commands)).toEqual(['ReplaceUrl /challenges'])
+    expect(pushed(init(at('/history')).commands)).toEqual([])
+    expect(init(at('/no/such/page')).model.route).toEqual(AppRoute.Title())
+  })
+
+  test('opening a Sandbox adds its URL; back closes it and gives the Company back', () => {
+    const company = inLab()
+    const opened = update(company, Message.FreeSandboxStarted())
+    expect(opened.model.route).toEqual(AppRoute.Sandbox({ sandbox: 'free' }))
+    expect(pushed(opened.commands)).toEqual(['PushUrl /sandbox/free'])
+
+    const back = update(opened.model, Message.ChangedUrl({ url: at('/') }))
+    expect(back.model.route).toEqual(AppRoute.Title())
+    expect(back.model.sandbox).toBeNull()
+    expect(back.model.game).toBe(company.game)
+    expect(pushed(back.commands)).toEqual([])
+
+    const forward = update(back.model, Message.ChangedUrl({ url: at('/sandbox/second-server') }))
+    expect(forward.model.sandbox?.id).toBe('second-server')
+    expect(pushed(forward.commands)).toEqual([])
+  })
+
+  test('a URL for a board that cannot open goes back to the screen in place', () => {
+    const title = initialModel()
+    const company = update(title, Message.ChangedUrl({ url: at('/company') }))
+    expect(company.model.route).toEqual(AppRoute.Title())
+    expect(pushed(company.commands)).toEqual(['ReplaceUrl /'])
+    const unknown = update(title, Message.ChangedUrl({ url: at('/challenges/no-such-drill') }))
+    expect(pushed(unknown.commands)).toEqual(['ReplaceUrl /'])
   })
 })

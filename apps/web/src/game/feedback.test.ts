@@ -6,6 +6,7 @@ import { STEADY_TICKS, advanceChange, beginChange, settleProgress } from './feed
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { initialModel, update } from './update.ts'
+import { AppRoute } from './route.ts'
 
 /* Undo puts the Design back and reverses exactly the Cash the action moved; redo puts it forward. */
 
@@ -14,7 +15,7 @@ const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
 
 const inLab = (): Model => ({
   ...initialModel(),
-  route: 'lab',
+  route: AppRoute.Company(),
   game: { ...newGame(), cash: 5_000 },
 })
 

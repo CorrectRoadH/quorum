@@ -1,5 +1,7 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
+import { UrlRequest } from 'foldkit/navigation'
+import { Url } from 'foldkit/url'
 import { EXIT_IDS, PERK_IDS, TASK_IDS } from '@quorum/simulation/catalog'
 import {
   CacheEngine,
@@ -51,6 +53,10 @@ export const Message = defineMessageUnion({
   ClockedIn: {},
   TitleRevealed: {},
   MenuChosen: { menu: Menu },
+  /** URL routing: a link click, a new URL from any source, and a finished navigation. */
+  ClickedLink: { request: UrlRequest },
+  ChangedUrl: { url: Url },
+  Navigated: {},
 
   /** Guided and free Sandboxes, and the Sandbox store read once at boot. */
   SandboxStoreLoaded: { json: Schema.NullOr(Schema.String) },

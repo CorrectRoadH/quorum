@@ -23,6 +23,7 @@ import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from '@quorum/simulation/
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
+import { menuOf } from './route.ts'
 import { play } from './sound.ts'
 
 /* ==========================================================================
@@ -568,6 +569,7 @@ const achievementsMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<
 
 const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
+  const page = menuOf(model.route)
   return h.nav(
     [
       h.AriaLabel('Main menu'),
@@ -583,17 +585,17 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
         maxHeight: y(MENU_BOTTOM - MENU.top),
       }),
     ],
-    model.menu === 'sandbox'
+    page === 'sandbox'
       ? sandboxMenu(model, h)
-      : model.menu === 'found'
+      : page === 'found'
         ? foundMenu(model, h)
-        : model.menu === 'legacy'
+        : page === 'legacy'
           ? legacyMenu(model, h)
-          : model.menu === 'history'
+          : page === 'history'
             ? historyMenu(model, h)
-            : model.menu === 'challenges'
+            : page === 'challenges'
               ? challengesMenu(model, h)
-              : model.menu === 'achievements'
+              : page === 'achievements'
                 ? achievementsMenu(model, h)
                 : [
                     ...(model.saved
