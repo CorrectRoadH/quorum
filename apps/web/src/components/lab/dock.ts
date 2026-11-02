@@ -78,6 +78,7 @@ const armed = (type: ComponentId, h: HtmlBuilder<Message>): Html =>
     [
       h.Key('armed'),
       h.DataAttribute('exit', 'gesture'),
+      h.DataAttribute('exit-anchor', 'bottom'),
       h.Class('swap flex items-center gap-2 pr-1 pb-1.5 pl-2 text-[12.5px] whitespace-nowrap'),
     ],
     [
@@ -104,20 +105,23 @@ const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
     [
       h.Key(`list-${group}`),
       h.DataAttribute('exit', 'gesture'),
+      h.DataAttribute('exit-anchor', 'bottom'),
       h.Class('swap flex w-[420px] max-w-full flex-col gap-0.5 pb-1 compact:w-auto'),
     ],
     buildItems(group).map((type, index) => row(model, type, index, h)),
   )
 
 /** One surface. Its top slot holds the open group's parts or the part in hand,
- *  and the dock morphs between them instead of snapping (src/game/motion.ts). */
+ *  and the dock morphs between them instead of snapping (src/game/motion.ts).
+ *  The dock is pinned at its bottom edge, so its content packs to the bottom:
+ *  mid-morph, the tabs stay put and the top edge moves. */
 export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   const open = model.buildGroup
   return h.div(
     [
       h.DataAttribute('morph', 'gesture'),
       h.Class(
-        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0 compact:items-stretch`,
+        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center justify-end p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0 compact:items-stretch`,
       ),
     ],
     [
