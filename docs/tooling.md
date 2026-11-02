@@ -1,18 +1,19 @@
 # Tooling
 
-| Tool                       | Owns                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| pnpm                       | Workspace installation and package linking                                    |
-| Turborepo                  | Cached build, typecheck, and test task graph                                  |
-| Vite+ (`vp`)               | Root formatting/lint configuration and unified checks                         |
-| Oxfmt                      | Formatting engine used by Vite+                                               |
-| Oxlint                     | Lint engine used by Vite+                                                     |
-| Vite                       | Web app bundler, integrated into Alchemy's website dev/deploy flow            |
-| Alchemy                    | Local Cloudflare development and deployment through the root `alchemy.run.ts` |
-| Vitest                     | Unit and integration tests                                                    |
-| Playwright                 | Browsers for the cross-engine golden check (`pnpm test:golden`)               |
-| `effect-tsgo`              | Effect-aware TypeScript compiler, patched in after install                    |
-| `@effect/language-service` | Effect diagnostics, including per-file `allowedUnstableApis`                  |
+| Tool                       | Owns                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| pnpm                       | Workspace installation and package linking                                             |
+| Turborepo                  | Cached build, typecheck, and test task graph                                           |
+| Vite+ (`vp`)               | Root formatting/lint configuration and unified checks                                  |
+| Oxfmt                      | Formatting engine used by Vite+                                                        |
+| Oxlint                     | Lint engine used by Vite+                                                              |
+| Vite                       | Web app bundler, integrated into Alchemy's website dev/deploy flow                     |
+| Alchemy                    | Local Cloudflare development and deployment through the root `alchemy.run.ts`          |
+| Vitest                     | Unit and integration tests                                                             |
+| Playwright                 | Browsers for the cross-engine golden check (`pnpm test:golden`)                        |
+| `tsrs`                     | Rust port of the TypeScript 7 compiler; type checks in `pnpm typecheck`                |
+| `effect-tsrs`              | Effect diagnostics on `tsrs`; runs in `pnpm typecheck`                                 |
+| `@effect/language-service` | Effect diagnostics config and editor support, including per-file `allowedUnstableApis` |
 
 Use `pnpm check` for the Vite+ checks. Use `pnpm typecheck`, `pnpm test`, and `pnpm build` for Turbo tasks. Do not add standalone Prettier or ESLint configurations alongside Vite+.
 
@@ -20,7 +21,7 @@ Dependencies are pinned to exact versions in workspace manifests and `pnpm-lock.
 
 ## TypeScript and unstable Effect APIs
 
-`pnpm install` runs `prepare`, which installs the Git hooks and calls `effect-tsgo patch`. The patch replaces the platform `tsc` binary with an Effect-aware build, so `pnpm typecheck` also reports Effect diagnostics. If the patch does not apply, typecheck still runs on stock TypeScript, but the Effect rules are skipped.
+`pnpm typecheck` runs `tsrs --noEmit`, then `effect-tsrs diagnostics --strict`, which reads the `@effect/language-service` plugin entry in each tsconfig. Effect warnings fail the command. Quick fixes, refactors, and completions are editor features that `effect-tsrs` does not provide.
 
 Unstable Effect APIs fail typecheck unless a tsconfig override allows them for named files. Each override lives beside the code that needs it, for example in `apps/backend/tsconfig.json`. See [Guardrails](guardrails.md) for the rule and the current exceptions.
 
