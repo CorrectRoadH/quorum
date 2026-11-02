@@ -260,6 +260,7 @@ const sync = (model: Model): AnyCommand =>
     stamp: stampOf(model),
     history: model.nodeHistory,
     region: model.region,
+    paused: model.paused,
   })
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
@@ -1499,7 +1500,10 @@ const handle = (model: Model, message: Message): Result =>
       return { model: { ...model, speed: speeds[(index + 1) % speeds.length] ?? 1 } }
     },
     SpeedChosen: ({ speed }) => ({ model: { ...model, speed } }),
-    PauseToggled: () => ({ model: { ...model, paused: !model.paused } }),
+    PauseToggled: () => {
+      const next = { ...model, paused: !model.paused }
+      return { model: next, commands: [sync(next)] }
+    },
     FullscreenToggled: () => ({ model, commands: [ToggleFullscreen({})] }),
     BoardFitted: () => ({ model, commands: [FitBoard({})] }),
 

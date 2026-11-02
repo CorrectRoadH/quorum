@@ -45,9 +45,10 @@ export const SyncBoard = Command.define('SyncBoard', {
     stamp: StampArg,
     history: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
     region: Region,
+    paused: Schema.Boolean,
   },
   messages: [Message.Synced],
-  execute: ({ game, bottleneck, selected, selection, placing, stamp, history, region }) =>
+  execute: ({ game, bottleneck, selected, selection, placing, stamp, history, region, paused }) =>
     Effect.sync(() =>
       setBoard('board', {
         game: regionView(game, region),
@@ -58,6 +59,7 @@ export const SyncBoard = Command.define('SyncBoard', {
         stamp,
         history,
         region,
+        paused,
       }),
     ).pipe(Effect.as(Message.Synced())),
 })

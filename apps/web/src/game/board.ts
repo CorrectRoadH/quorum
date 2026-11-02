@@ -136,6 +136,8 @@ export type BoardState = Readonly<{
   history: Readonly<Record<string, ReadonlyArray<number>>>
   /** The region tab on show; its Nodes, and the Nodes they reach elsewhere, are drawn. */
   region: Region
+  /** The company is paused: belts hold still. */
+  paused: boolean
 }>
 
 /** Latest state per board, written by update and read on mount. */
@@ -2211,7 +2213,7 @@ class BoardController {
     const state = this.state
     if (!state) return
     const colors = palette()
-    this.phase += seconds
+    if (!state.paused) this.phase += seconds
     for (const view of this.views.values()) view.tick(seconds)
     this.leaving = this.leaving.filter((view) => {
       if (view.tick(seconds)) return true
