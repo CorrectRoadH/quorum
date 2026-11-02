@@ -1,4 +1,4 @@
-import { canRaise } from '@template/simulation/actions'
+import { canRaise } from '@quorum/simulation/actions'
 import { senderOf } from './mail.ts'
 import type { Message } from './message.ts'
 import type { Model, Tone } from './model.ts'

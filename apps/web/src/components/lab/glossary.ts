@@ -1,6 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Check, Search } from 'lucide'
-import { GLOSSARY, type GlossaryEntry } from '@template/simulation/catalog'
+import { GLOSSARY, type GlossaryEntry } from '@quorum/simulation/catalog'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'

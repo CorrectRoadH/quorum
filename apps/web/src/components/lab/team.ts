@@ -29,9 +29,9 @@ import {
   TASK_IDS,
   type FeatureId,
   type TaskId,
-} from '@template/simulation/catalog'
-import { has } from '@template/simulation/lookups'
-import type { Engineer, Game, Team, WorkItem } from '@template/simulation/state'
+} from '@quorum/simulation/catalog'
+import { has } from '@quorum/simulation/lookups'
+import type { Engineer, Game, Team, WorkItem } from '@quorum/simulation/state'
 import {
   badDeployChance,
   devHoursRate,
@@ -44,9 +44,9 @@ import {
   serviceOf,
   signingOf,
   teamOutputs,
-} from '@template/simulation/team'
-import { featureRefusal, itemName, MAX_TEAMS, taskRefusal } from '@template/simulation/work'
-import { describeRefusal } from '@template/simulation/actions'
+} from '@quorum/simulation/team'
+import { featureRefusal, itemName, MAX_TEAMS, taskRefusal } from '@quorum/simulation/work'
+import { describeRefusal } from '@quorum/simulation/actions'
 import { money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { ledgerOf, type Model } from '@/game/model.ts'

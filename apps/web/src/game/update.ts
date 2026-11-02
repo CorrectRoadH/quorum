@@ -1,6 +1,6 @@
 import { Option, Result, Schema } from 'effect'
 import type { Runtime, Update } from 'foldkit'
-import * as Actions from '@template/simulation/actions'
+import * as Actions from '@quorum/simulation/actions'
 import {
   ACHIEVEMENTS,
   ALERT_RULES,
@@ -27,8 +27,8 @@ import {
   SIZES,
   STEP_SECONDS,
   TASKS,
-} from '@template/simulation/catalog'
-import { newGame, preseedGame } from '@template/simulation/company'
+} from '@quorum/simulation/catalog'
+import { newGame, preseedGame } from '@quorum/simulation/company'
 import {
   NO_TOTALS,
   advanceRun,
@@ -37,12 +37,12 @@ import {
   resultOf,
   stepsOf,
   type Challenge,
-} from '@template/simulation/challenges'
-import { designOf, encodeReplay, type ReplayAction } from '@template/simulation/replay'
-import { SIM_VERSION } from '@template/simulation/version'
+} from '@quorum/simulation/challenges'
+import { designOf, encodeReplay, type ReplayAction } from '@quorum/simulation/replay'
+import { SIM_VERSION } from '@quorum/simulation/version'
 import type { ApiRpc } from '@/platform/rpc.ts'
 import { histogramQuery } from './challenge-query.ts'
-import { ipoExit, takeExit } from '@template/simulation/exit'
+import { ipoExit, takeExit } from '@quorum/simulation/exit'
 import {
   Founder,
   buyPerk,
@@ -59,30 +59,30 @@ import {
   discoverTerm,
   earnAchievements,
   recordEra,
-} from '@template/simulation/founder'
+} from '@quorum/simulation/founder'
 import {
   challengeAchievements,
   countStats,
   detectAchievements,
   everyVenture,
-} from '@template/simulation/achievements'
-import type { AchievementId } from '@template/simulation/catalog'
-import { discoverTerms } from '@template/simulation/discovery'
-import { foundCompany, perkLevel } from '@template/simulation/founding'
-import { OFFLINE_MIN, simulateAway } from '@template/simulation/offline'
+} from '@quorum/simulation/achievements'
+import type { AchievementId } from '@quorum/simulation/catalog'
+import { discoverTerms } from '@quorum/simulation/discovery'
+import { foundCompany, perkLevel } from '@quorum/simulation/founding'
+import { OFFLINE_MIN, simulateAway } from '@quorum/simulation/offline'
 import {
   capture,
   decodePlaybook,
   encodePlaybook,
   ghostReason,
   placePlaybook,
-} from '@template/simulation/playbook'
-import { forceIncident } from '@template/simulation/director'
-import { StepEvent } from '@template/simulation/events'
-import { nextAdvice } from '@template/simulation/goals'
+} from '@quorum/simulation/playbook'
+import { forceIncident } from '@quorum/simulation/director'
+import { StepEvent } from '@quorum/simulation/events'
+import { nextAdvice } from '@quorum/simulation/goals'
 import { EVENT_EVERY, SAMPLES, eventFact, eventMail, factOf, type Fact } from './mail.ts'
-import type { Ledger } from '@template/simulation/ledger'
-import { buildItems, eraOf, has, isFinalEra, nextEra } from '@template/simulation/lookups'
+import type { Ledger } from '@quorum/simulation/ledger'
+import { buildItems, eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
 import {
   advanceSandbox,
@@ -91,15 +91,15 @@ import {
   passedAll,
   sandboxOf,
   START,
-} from '@template/simulation/sandbox'
-import { previewOf } from '@template/simulation/preview'
-import { bottleneckOf, solveFlow } from '@template/simulation/solve'
-import { Game } from '@template/simulation/state'
-import { IPO_BURN_SECONDS, PRE_IPO_STAGE } from '@template/simulation/ipo'
-import { firstQuarter } from '@template/simulation/quarters'
-import { step } from '@template/simulation/step'
-import { serviceOf } from '@template/simulation/team'
-import * as Work from '@template/simulation/work'
+} from '@quorum/simulation/sandbox'
+import { previewOf } from '@quorum/simulation/preview'
+import { bottleneckOf, solveFlow } from '@quorum/simulation/solve'
+import { Game } from '@quorum/simulation/state'
+import { IPO_BURN_SECONDS, PRE_IPO_STAGE } from '@quorum/simulation/ipo'
+import { firstQuarter } from '@quorum/simulation/quarters'
+import { step } from '@quorum/simulation/step'
+import { serviceOf } from '@quorum/simulation/team'
+import * as Work from '@quorum/simulation/work'
 import {
   AskPlaybook,
   ApplySettings,
@@ -158,7 +158,7 @@ import {
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
 import { nearestNode, type Direction } from './viewport.ts'
-import { regionView } from '@template/simulation/regions'
+import { regionView } from '@quorum/simulation/regions'
 
 /* ==========================================================================
    Quorum — init and update. The Simulation owns every rule; update routes

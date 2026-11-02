@@ -1,7 +1,7 @@
-import type { ComponentId } from '@template/simulation/catalog'
-import { link, node } from '@template/simulation/company'
-import { freeSandbox } from '@template/simulation/sandbox'
-import type { Game } from '@template/simulation/state'
+import type { ComponentId } from '@quorum/simulation/catalog'
+import { link, node } from '@quorum/simulation/company'
+import { freeSandbox } from '@quorum/simulation/sandbox'
+import type { Game } from '@quorum/simulation/state'
 import { CARD_W, boxOf, freeSpot, heightOf } from './geometry.ts'
 import type { RoutedLink, RoutedNode } from './routing.ts'
 

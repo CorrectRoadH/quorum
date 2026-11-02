@@ -1,6 +1,6 @@
 # The Simulation is a workspace package
 
-The Simulation lives in `packages/simulation` (`@template/simulation`), not inside the website.
+The Simulation lives in `packages/simulation` (`@quorum/simulation`), not inside the website.
 The browser plays it, and from M8 the API Worker replays Challenge submissions with it to compute
 the authoritative score ([ADR 0002](./0002-endless-incremental-game-in-the-browser.md),
 [Challenges](../gdd/14-challenges.md#rules)). Two runtimes execute the same code, so it is a real
@@ -11,7 +11,7 @@ server verification. CONTEXT.md defines the word, so the package is named for it
 Considered options:
 
 - Keep it in `apps/web/src/game/engine` and let the backend import it by relative path or through
-  `@template/web`. Rejected: an app-to-app dependency breaks the dependency direction in
+  `@quorum/web`. Rejected: an app-to-app dependency breaks the dependency direction in
   [Architecture](../architecture.md), and it pulls the website's Vite and DOM configuration into
   the Worker.
 - Put it in `packages/rpc`. Rejected: that package is the wire contract only.
@@ -19,7 +19,7 @@ Considered options:
 
 ## Consequences
 
-- `apps/web` and, from M8, `apps/backend` depend on `@template/simulation`. `packages/rpc` does not:
+- `apps/web` and, from M8, `apps/backend` depend on `@quorum/simulation`. `packages/rpc` does not:
   a Challenge submission crosses the wire as an encoded string that the backend decodes with the
   Simulation's schemas.
 - The Simulation imports only `effect` and its own files. Its tsconfig has no DOM library, and

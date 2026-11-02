@@ -13,11 +13,11 @@ import {
   Wallet,
   X,
 } from 'lucide'
-import { ALERT_RULES, ALERT_THRESHOLDS, INCIDENTS, RESEARCH } from '@template/simulation/catalog'
-import type { AlertRule } from '@template/simulation/events'
-import { has } from '@template/simulation/lookups'
-import { ignored } from '@template/simulation/step'
-import type { Game, Postmortem } from '@template/simulation/state'
+import { ALERT_RULES, ALERT_THRESHOLDS, INCIDENTS, RESEARCH } from '@quorum/simulation/catalog'
+import type { AlertRule } from '@quorum/simulation/events'
+import { has } from '@quorum/simulation/lookups'
+import { ignored } from '@quorum/simulation/step'
+import type { Game, Postmortem } from '@quorum/simulation/state'
 import { alertText, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'

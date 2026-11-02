@@ -1,5 +1,5 @@
-import type { ComponentId } from '@template/simulation/catalog'
-import type { GameNode } from '@template/simulation/state'
+import type { ComponentId } from '@quorum/simulation/catalog'
+import type { GameNode } from '@quorum/simulation/state'
 
 /* Card and port geometry, shared by the board, placement and link routing. */
 

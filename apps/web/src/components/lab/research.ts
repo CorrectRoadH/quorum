@@ -66,9 +66,9 @@ import {
   type ResearchDef,
   type ResearchId,
   type ResearchTrack,
-} from '@template/simulation/catalog'
-import { has, researchReady } from '@template/simulation/lookups'
-import type { Game } from '@template/simulation/state'
+} from '@quorum/simulation/catalog'
+import { has, researchReady } from '@quorum/simulation/lookups'
+import type { Game } from '@quorum/simulation/state'
 import { compact } from '@/game/format.ts'
 import { COMPONENT_ICONS, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'

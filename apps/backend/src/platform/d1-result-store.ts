@@ -1,5 +1,5 @@
 import { Effect } from 'effect'
-import type { ChallengeScores } from '@template/rpc'
+import type { ChallengeScores } from '@quorum/rpc'
 import {
   StoreError,
   type Axis,

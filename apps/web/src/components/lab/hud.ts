@@ -27,23 +27,23 @@ import {
   UsersRound,
   Wallet,
 } from 'lucide'
-import { OPEN_REGION_PRICE, REGIONS, REGION_INFO, researchList } from '@template/simulation/catalog'
-import { openRegions, regional } from '@template/simulation/regions'
-import { canRaise } from '@template/simulation/actions'
-import type { Ledger } from '@template/simulation/ledger'
-import { eraOf, has, nextEra, researchReady } from '@template/simulation/lookups'
-import { PRE_IPO_STAGE, checklistOf } from '@template/simulation/ipo'
+import { OPEN_REGION_PRICE, REGIONS, REGION_INFO, researchList } from '@quorum/simulation/catalog'
+import { openRegions, regional } from '@quorum/simulation/regions'
+import { canRaise } from '@quorum/simulation/actions'
+import type { Ledger } from '@quorum/simulation/ledger'
+import { eraOf, has, nextEra, researchReady } from '@quorum/simulation/lookups'
+import { PRE_IPO_STAGE, checklistOf } from '@quorum/simulation/ipo'
 import {
   GUIDANCE_GROWTH,
   GUIDANCE_MARGIN,
   guidanceOpen,
   quarterGrowth,
-} from '@template/simulation/quarters'
-import { budgetOf, budgeted } from '@template/simulation/slo'
-import { marginOf, valuationOf } from '@template/simulation/valuation'
-import { clockOf } from '@template/simulation/solve'
-import { devHoursRate } from '@template/simulation/team'
-import { itemName } from '@template/simulation/work'
+} from '@quorum/simulation/quarters'
+import { budgetOf, budgeted } from '@quorum/simulation/slo'
+import { marginOf, valuationOf } from '@quorum/simulation/valuation'
+import { clockOf } from '@quorum/simulation/solve'
+import { devHoursRate } from '@quorum/simulation/team'
+import { itemName } from '@quorum/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'

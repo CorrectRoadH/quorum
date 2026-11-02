@@ -1,7 +1,7 @@
 import * as Effect from 'effect/Effect'
 import { Schema } from 'effect'
 import { Query } from 'foldkit/experimental'
-import { ApiError, ChallengeHistograms } from '@template/rpc'
+import { ApiError, ChallengeHistograms } from '@quorum/rpc'
 import { ApiRpc } from '@/platform/rpc.ts'
 
 /** Transport failures take the declared error's shape, so views handle one error type. */

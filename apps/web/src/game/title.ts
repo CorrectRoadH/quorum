@@ -14,12 +14,12 @@ import {
   VENTURES,
   VENTURE_IDS,
   EXITS,
-} from '@template/simulation/catalog'
-import { foundingOf, levelOf, perkPrice } from '@template/simulation/founder'
-import { legacyMultiplier, startEra } from '@template/simulation/founding'
-import { eraOf } from '@template/simulation/lookups'
-import { CHALLENGES, challengeOpen, dailyDrill } from '@template/simulation/challenges'
-import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from '@template/simulation/sandbox'
+} from '@quorum/simulation/catalog'
+import { foundingOf, levelOf, perkPrice } from '@quorum/simulation/founder'
+import { legacyMultiplier, startEra } from '@quorum/simulation/founding'
+import { eraOf } from '@quorum/simulation/lookups'
+import { CHALLENGES, challengeOpen, dailyDrill } from '@quorum/simulation/challenges'
+import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from '@quorum/simulation/sandbox'
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'

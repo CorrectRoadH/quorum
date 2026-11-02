@@ -3,7 +3,7 @@ import worker from './worker.ts'
 
 test('the website Worker forwards API requests through the service binding', async () => {
   const forwarded: Array<Request> = []
-  const request = new Request('https://template.test/api/rpc', {
+  const request = new Request('https://quorum.test/api/rpc', {
     method: 'POST',
     body: '{"method":"ping"}',
   })

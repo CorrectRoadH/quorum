@@ -1,6 +1,6 @@
-import type { Advice, AdviceAction, AdviceFrom } from '@template/simulation/goals'
-import type { Game } from '@template/simulation/state'
-import { COMPONENTS } from '@template/simulation/catalog'
+import type { Advice, AdviceAction, AdviceFrom } from '@quorum/simulation/goals'
+import type { Game } from '@quorum/simulation/state'
+import { COMPONENTS } from '@quorum/simulation/catalog'
 
 /* ==========================================================================
    Mail content (GDD 18): the Senders, and the events that are not facts about

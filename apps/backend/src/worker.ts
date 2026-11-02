@@ -1,7 +1,7 @@
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as Layer from 'effect/Layer'
 import { RpcSerialization, RpcServer } from 'effect/rpc'
-import { Api, RPC_PATH } from '@template/rpc'
+import { Api, RPC_PATH } from '@quorum/rpc'
 import { ChallengeHandlers } from './contexts/challenges/handlers.ts'
 import { ResultStore } from './contexts/challenges/store.ts'
 import { SystemHandlers } from './contexts/system/handlers.ts'

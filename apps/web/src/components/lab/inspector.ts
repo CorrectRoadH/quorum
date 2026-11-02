@@ -33,9 +33,9 @@ import {
   type RequestKind,
   BACKUPS,
   REGION_INFO,
-} from '@template/simulation/catalog'
-import { isGlobal, openRegions, regional } from '@template/simulation/regions'
-import type { Ledger } from '@template/simulation/ledger'
+} from '@quorum/simulation/catalog'
+import { isGlobal, openRegions, regional } from '@quorum/simulation/regions'
+import type { Ledger } from '@quorum/simulation/ledger'
 import {
   burnOf,
   drawerSize,
@@ -50,8 +50,8 @@ import {
   sizeLabel as sizeLabelOf,
   vcpuOf,
   zoned,
-} from '@template/simulation/lookups'
-import { LINK_TIMEOUTS } from '@template/simulation/actions'
+} from '@quorum/simulation/lookups'
+import { LINK_TIMEOUTS } from '@quorum/simulation/actions'
 import type {
   CacheEngine,
   Game,
@@ -59,7 +59,7 @@ import type {
   GameNode,
   LbPolicy,
   PmMode,
-} from '@template/simulation/state'
+} from '@quorum/simulation/state'
 import { compact, duration, money, ms, priceLabel, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'

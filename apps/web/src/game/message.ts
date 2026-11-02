@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
-import { EXIT_IDS, PERK_IDS, TASK_IDS } from '@template/simulation/catalog'
+import { EXIT_IDS, PERK_IDS, TASK_IDS } from '@quorum/simulation/catalog'
 import {
   CacheEngine,
   Collector,
@@ -25,8 +25,8 @@ import {
   Backup,
   Fanout,
   Region,
-} from '@template/simulation/state'
-import { ChallengeVerdict } from '@template/rpc'
+} from '@quorum/simulation/state'
+import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
 import { BuildGroupKey, Folder, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
 

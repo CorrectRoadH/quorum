@@ -51,7 +51,7 @@ import {
   siSpringboot,
   siSymfony,
 } from 'simple-icons'
-import type { BuildGroup, ComponentId, FrameworkId, LanguageId } from '@template/simulation/catalog'
+import type { BuildGroup, ComponentId, FrameworkId, LanguageId } from '@quorum/simulation/catalog'
 
 /** One glyph per Component, shared by the board, the dock and the inspector. */
 export const COMPONENT_ICONS: Record<ComponentId, IconNode> = {

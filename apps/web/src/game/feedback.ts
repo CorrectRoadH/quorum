@@ -1,6 +1,6 @@
-import type { Ledger } from '@template/simulation/ledger'
-import type { Game } from '@template/simulation/state'
-import { priceOf, refundOf } from '@template/simulation/lookups'
+import type { Ledger } from '@quorum/simulation/ledger'
+import type { Game } from '@quorum/simulation/state'
+import { priceOf, refundOf } from '@quorum/simulation/lookups'
 import type { Change, Delta, Figures, Model, Undo } from './model.ts'
 
 /* ==========================================================================
@@ -16,8 +16,8 @@ export const SETTLE_LIMIT = 30
 export const STABLE_TICKS = 8
 const DELTA_SECONDS = 10
 
-export { figuresOf } from '@template/simulation/preview'
-import { figuresOf } from '@template/simulation/preview'
+export { figuresOf } from '@quorum/simulation/preview'
+import { figuresOf } from '@quorum/simulation/preview'
 
 /** Starts or extends a change. Several quick changes settle as one. */
 export const beginChange = (model: Model, label: string, before: Figures): Model => ({

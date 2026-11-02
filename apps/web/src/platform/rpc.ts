@@ -1,7 +1,7 @@
 import { Context, Layer } from 'effect'
 import { RpcClient, RpcClientError, RpcSerialization } from 'effect/rpc'
 import { Http } from 'foldkit'
-import { Api, RPC_PATH } from '@template/rpc'
+import { Api, RPC_PATH } from '@quorum/rpc'
 
 /** The API Worker's RPC client, same origin. Copied from `examples/reference/src/platform/rpc.ts`. */
 export class ApiRpc extends Context.Service<

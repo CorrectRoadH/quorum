@@ -1,13 +1,13 @@
 import { Effect, Schema } from 'effect'
-import { BUILD_GROUPS, type BuildGroup } from '@template/simulation/catalog'
-import { Progress, SANDBOX_IDS } from '@template/simulation/sandbox'
-import type { Ledger } from '@template/simulation/ledger'
-import { solveFlow } from '@template/simulation/solve'
-import { HistoryRow } from '@template/simulation/exit'
-import { Founder } from '@template/simulation/founder'
-import { ChallengeResult, RunTotals } from '@template/simulation/challenges'
-import { Replay } from '@template/simulation/replay'
-import { ChallengeVerdict } from '@template/rpc'
+import { BUILD_GROUPS, type BuildGroup } from '@quorum/simulation/catalog'
+import { Progress, SANDBOX_IDS } from '@quorum/simulation/sandbox'
+import type { Ledger } from '@quorum/simulation/ledger'
+import { solveFlow } from '@quorum/simulation/solve'
+import { HistoryRow } from '@quorum/simulation/exit'
+import { Founder } from '@quorum/simulation/founder'
+import { ChallengeResult, RunTotals } from '@quorum/simulation/challenges'
+import { Replay } from '@quorum/simulation/replay'
+import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
 import {
   ComponentId,
@@ -19,7 +19,7 @@ import {
   ResearchId,
   RuntimeId,
   Region,
-} from '@template/simulation/state'
+} from '@quorum/simulation/state'
 
 /* ==========================================================================
    Quorum — what the UI holds. The Game is the saved company; everything else

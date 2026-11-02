@@ -2,7 +2,7 @@ import * as Alchemy from 'alchemy'
 import * as Cloudflare from '@alchemy.run/cloudflare'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import { API_PREFIX } from '@template/rpc'
+import { API_PREFIX } from '@quorum/rpc'
 
 const compatibility = { date: '2026-10-08' }
 

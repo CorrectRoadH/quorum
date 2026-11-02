@@ -2,7 +2,7 @@
    The Simulation: the pure model of a Company. The browser plays it and the
    API Worker replays it, so it imports only `effect` and its own files
    (docs/adr/0004-simulation-package.md). Each module is also importable on
-   its own, as `@template/simulation/<module>`.
+   its own, as `@quorum/simulation/<module>`.
    ========================================================================== */
 
 export * from './actions.ts'
@@ -27,7 +27,7 @@ export * from './rules.ts'
 export * from './sandbox.ts'
 export * from './solve.ts'
 // The id schemas (`ComponentId` and the others) share their names with the
-// catalog's id types; import them from `@template/simulation/state`.
+// catalog's id types; import them from `@quorum/simulation/state`.
 export {
   AlertRules,
   Alarms,

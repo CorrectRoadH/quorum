@@ -20,7 +20,7 @@ import {
 import { button } from '@/components/ui/button'
 import { clock } from '@/game/format.ts'
 import { KIND_LABEL, SAMPLES, senderOf, type Sender, type SenderKind } from '@/game/mail.ts'
-import type { BuildGroup } from '@template/simulation/catalog'
+import type { BuildGroup } from '@quorum/simulation/catalog'
 import { Kbd } from '@/components/ui/kbd'
 import { nativeSelect, nativeSelectOption } from '@/components/ui/native-select'
 import { Message } from '@/game/message.ts'

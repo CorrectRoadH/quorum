@@ -5,7 +5,7 @@ import { Result } from 'effect'
 import { FetchHttpClient } from 'effect/http'
 import { RpcClient, RpcSerialization } from 'effect/rpc'
 import { beforeEach, expect, test } from 'vitest'
-import { Api, RPC_PATH } from '@template/rpc'
+import { Api, RPC_PATH } from '@quorum/rpc'
 import {
   SIM_VERSION,
   challengeById,
@@ -15,7 +15,7 @@ import {
   setFamily,
   type Challenge,
   type Game,
-} from '@template/simulation'
+} from '@quorum/simulation'
 import { sqliteRunner } from './platform/sqlite-runner.ts'
 import worker, { type Env } from './worker.ts'
 

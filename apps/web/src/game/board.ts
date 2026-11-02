@@ -58,8 +58,8 @@ import {
   MSGP_PRICE,
   REGION_INFO,
   rttOf,
-} from '@template/simulation/catalog'
-import type { Ledger } from '@template/simulation/ledger'
+} from '@quorum/simulation/catalog'
+import type { Ledger } from '@quorum/simulation/ledger'
 import {
   burnOf,
   drawerSize,
@@ -70,9 +70,9 @@ import {
   sizeLabel,
   zoned,
   zoneMs,
-} from '@template/simulation/lookups'
-import { isGlobal } from '@template/simulation/regions'
-import type { Game, GameNode, Region } from '@template/simulation/state'
+} from '@quorum/simulation/lookups'
+import { isGlobal } from '@quorum/simulation/regions'
+import type { Game, GameNode, Region } from '@quorum/simulation/state'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
 import {

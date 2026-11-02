@@ -1,5 +1,5 @@
-import { eraOf } from '@template/simulation/lookups'
-import type { Game } from '@template/simulation/state'
+import { eraOf } from '@quorum/simulation/lookups'
+import type { Game } from '@quorum/simulation/state'
 
 /* Playtest cheats grow with the Era, so a skipped-to Era can still buy its research and Nodes. */
 

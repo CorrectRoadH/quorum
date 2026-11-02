@@ -1,5 +1,5 @@
 {
-  "name": "@template/backend",
+  "name": "@quorum/backend",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,8 +7,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@template/rpc": "workspace:*",
-    "@template/simulation": "workspace:*",
+    "@quorum/rpc": "workspace:*",
+    "@quorum/simulation": "workspace:*",
     "effect": "4.0.0"
   }
 }

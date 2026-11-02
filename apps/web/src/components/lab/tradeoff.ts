@@ -7,9 +7,9 @@ import {
   RUNTIMES,
   type Axes,
   type Axis,
-} from '@template/simulation/catalog'
-import { has } from '@template/simulation/lookups'
-import type { GameNode } from '@template/simulation/state'
+} from '@quorum/simulation/catalog'
+import { has } from '@quorum/simulation/lookups'
+import type { GameNode } from '@quorum/simulation/state'
 import { describeDelta } from '@/game/feedback.ts'
 import { money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'

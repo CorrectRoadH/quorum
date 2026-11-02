@@ -11,7 +11,7 @@ import {
   Wallet,
   Waypoints,
 } from 'lucide'
-import type { ChallengeHistograms, Histogram } from '@template/rpc'
+import type { ChallengeHistograms, Histogram } from '@quorum/rpc'
 import {
   bucketOf,
   challengeById,
@@ -19,9 +19,9 @@ import {
   stepsOf,
   type Challenge,
   type ScoreAxis,
-} from '@template/simulation/challenges'
-import type { Ledger } from '@template/simulation/ledger'
-import { SIM_VERSION } from '@template/simulation/version'
+} from '@quorum/simulation/challenges'
+import type { Ledger } from '@quorum/simulation/ledger'
+import { SIM_VERSION } from '@quorum/simulation/version'
 import { histogramQuery } from '@/game/challenge-query.ts'
 import { clock, money, ms } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'

@@ -1,5 +1,5 @@
 {
-  "name": "@template/simulation",
+  "name": "@quorum/simulation",
   "private": true,
   "type": "module",
   "exports": {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { newGame, preseedGame } from '@template/simulation/company'
+import { newGame, preseedGame } from '@quorum/simulation/company'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'

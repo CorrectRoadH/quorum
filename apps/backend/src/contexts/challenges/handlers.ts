@@ -1,5 +1,5 @@
 import { Clock, Effect, Result } from 'effect'
-import { ApiError, ChallengeRpc, type ChallengeScores } from '@template/rpc'
+import { ApiError, ChallengeRpc, type ChallengeScores } from '@quorum/rpc'
 import {
   type ScoreAxis,
   MAX_REPLAY_CHARS,
@@ -7,7 +7,7 @@ import {
   challengeById,
   decodeReplay,
   runChallenge,
-} from '@template/simulation'
+} from '@quorum/simulation'
 import { ResultStore, type Board } from './store.ts'
 
 /* Challenge verification (14 "Rules"): the server re-runs every submitted replay and keeps its own score. */
