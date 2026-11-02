@@ -1,0 +1,310 @@
+<!doctype html>
+<!--
+  The README hero (docs/images/hero.png), the social card (og.html) at banner
+  width: the wordmark, the menu node, and the bench it is wired into.
+
+  To render it, run the dev server, open /art/hero.html at a 1600 x 640 viewport
+  at 2x, wait for the bench to assemble, and save a screenshot:
+
+    agent-browser set viewport 1600 640 2
+    agent-browser open http://localhost:<port>/art/hero.html
+    agent-browser wait 4000
+    agent-browser screenshot docs/images/hero.png
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Quorum README hero</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      :root {
+        --signal: oklch(0.8 0.12 225);
+        --ink: #eaebec;
+        --muted: #8b9099;
+        --line: #7a818c;
+      }
+      body {
+        width: 1600px;
+        height: 640px;
+        overflow: hidden;
+        position: relative;
+        background: #0c0c0d;
+        color: var(--ink);
+        font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .grid {
+        --iso-line: oklch(1 0 0 / 0.05);
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 45% 60% at 68% 52%, oklch(0.8 0.12 225 / 0.09), transparent 70%),
+          repeating-linear-gradient(30deg, var(--iso-line) 0 1px, transparent 1px 32px),
+          repeating-linear-gradient(150deg, var(--iso-line) 0 1px, transparent 1px 32px);
+        mask-image: radial-gradient(ellipse 70% 75% at 64% 52%, black 15%, transparent 85%);
+      }
+      .frame {
+        position: absolute;
+        inset: 20px;
+        border: 1px solid oklch(1 0 0 / 0.06);
+      }
+      .corner {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        margin: -1px;
+        border-color: oklch(1 0 0 / 0.3);
+        border-style: solid;
+        border-width: 0;
+      }
+      .tl {
+        top: 0;
+        left: 0;
+        border-top-width: 1px;
+        border-left-width: 1px;
+      }
+      .tr {
+        top: 0;
+        right: 0;
+        border-top-width: 1px;
+        border-right-width: 1px;
+      }
+      .bl {
+        bottom: 0;
+        left: 0;
+        border-bottom-width: 1px;
+        border-left-width: 1px;
+      }
+      .br {
+        bottom: 0;
+        right: 0;
+        border-bottom-width: 1px;
+        border-right-width: 1px;
+      }
+      .ruler {
+        position: absolute;
+        top: 0;
+        left: 80px;
+        right: 80px;
+        height: 8px;
+        --tick: oklch(1 0 0 / 0.12);
+        background:
+          repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 80px) top / 100%
+            8px no-repeat,
+          repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 10px) top / 100%
+            4px no-repeat;
+      }
+      .layer {
+        position: absolute;
+        inset: 0;
+        overflow: visible;
+      }
+      .floor {
+        fill: oklch(0 0 0 / 0.75);
+        filter: blur(20px);
+      }
+      #bench {
+        position: absolute;
+      }
+      #bench svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .wordmark {
+        position: absolute;
+        left: 100px;
+        top: 150px;
+        width: 400px;
+        overflow: visible;
+      }
+      .wordmark path {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 22;
+      }
+      .wordmark circle {
+        fill: var(--signal);
+      }
+      h1 {
+        position: absolute;
+        left: 100px;
+        top: 326px;
+        width: 440px;
+        font-size: 36px;
+        font-weight: 500;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        color: var(--muted);
+      }
+      h1 b {
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .menu {
+        position: absolute;
+        left: 94px;
+        width: 360px;
+        padding: 7px;
+        border-radius: 14px;
+        background: #18191c;
+        box-shadow:
+          inset 0 1px 0 oklch(1 0 0 / 0.06),
+          0 0 0 1px oklch(1 0 0 / 0.07),
+          0 24px 48px -16px oklch(0 0 0 / 0.8);
+      }
+      .button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 50px;
+        padding: 0 18px;
+        border-radius: 9px;
+        background: linear-gradient(#fbfbfb, #dfe0e2);
+        color: #1d1e21;
+        box-shadow:
+          inset 0 1px 0 oklch(1 0 0 / 0.6),
+          0 1px 2px oklch(0 0 0 / 0.3);
+        font-family: 'Geist Mono', ui-monospace, monospace;
+        font-size: 17px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+      .button svg {
+        width: 20px;
+        height: 20px;
+        stroke: #55595f;
+      }
+      .cable-edge,
+      .cable {
+        fill: none;
+      }
+      .cable-edge {
+        stroke: var(--line);
+        stroke-width: 5.6;
+      }
+      .cable {
+        stroke: #2b2e33;
+        stroke-width: 3.6;
+      }
+      .port {
+        fill: #18191c;
+        stroke: var(--line);
+        stroke-width: 1.2;
+      }
+      .lit {
+        fill: var(--signal);
+      }
+      .glow {
+        fill: var(--signal);
+        opacity: 0.25;
+        filter: blur(3px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid"></div>
+    <div class="frame">
+      <span class="ruler"></span>
+      <span class="corner tl"></span><span class="corner tr"></span> <span class="corner bl"></span
+      ><span class="corner br"></span>
+    </div>
+
+    <svg class="layer" viewBox="0 0 1600 640"><polygon id="floor" class="floor" /></svg>
+    <div id="bench"></div>
+
+    <svg class="wordmark" viewBox="0 0 720 194" role="img" aria-label="Quorum">
+      <path d="M89 11V150M50 11a39 39 0 1 0 0.01 0" />
+      <path transform="translate(120 0)" d="M11 0V50a39 39 0 0 0 78 0M89 0V100" />
+      <path transform="translate(240 0)" d="M50 11a39 39 0 1 0 0.01 0" />
+      <path transform="translate(360 0)" d="M11 0V100M11 50a39 39 0 0 1 39-39H60" />
+      <path transform="translate(440 0)" d="M11 0V50a39 39 0 0 0 78 0M89 0V100" />
+      <path
+        transform="translate(560 0)"
+        d="M11 0V100M11 45a34.5 34.5 0 0 1 69 0V100M80 45a34.5 34.5 0 0 1 69 0V100"
+      />
+      <circle cx="89" cy="180" r="14" />
+    </svg>
+
+    <h1><b>Grow a startup</b><br />one bottleneck at a time.</h1>
+
+    <div class="menu" id="menu">
+      <div class="button">
+        quorum.elianiva.com
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </div>
+    </div>
+
+    <svg class="layer" viewBox="0 0 1600 640" id="wires"></svg>
+
+    <script type="module">
+      // Bench placement, in page pixels. The SVG is 640 x 360.
+      const BENCH = { left: 600, top: 60, width: 960 }
+      const S = BENCH.width / 640
+      const at = (bx, by) => [BENCH.left + bx * S, BENCH.top + by * S]
+
+      // From apps/web/art/figures/hero.mjs, as in src/game/title.ts.
+      const LEAD_PLATE = at(74.07, 102.86)
+      const LEAD_EDGE = at(48.44, 115.68)
+      const LEAD_END = at(48.44, 140.69)
+      // The title screen's floor polygon, in bench units.
+      const FLOOR = [
+        [170.3, 53.1],
+        [622, 277.7],
+        [470.6, 355.4],
+        [18.3, 130.9],
+      ]
+
+      const MENU_TOP = 452
+      const MENU_HEIGHT = 64
+      const menu = document.getElementById('menu')
+      menu.style.top = `${MENU_TOP}px`
+      const PORT = [94 + 360, MENU_TOP + MENU_HEIGHT / 2]
+
+      const bench = document.getElementById('bench')
+      Object.assign(bench.style, {
+        left: `${BENCH.left}px`,
+        top: `${BENCH.top}px`,
+        width: `${BENCH.width}px`,
+      })
+      bench.innerHTML = await fetch('/art/hero.svg').then((r) => r.text())
+
+      document
+        .getElementById('floor')
+        .setAttribute('points', FLOOR.map(([x, y]) => at(x, y).join(',')).join(' '))
+
+      const route =
+        `M${PORT[0]} ${PORT[1]} C${PORT[0] + 60} ${PORT[1]} ${LEAD_END[0]} ${PORT[1] + 10} ` +
+        `${LEAD_END[0]} ${LEAD_END[1]} L${LEAD_EDGE[0]} ${LEAD_EDGE[1]} L${LEAD_PLATE[0]} ${LEAD_PLATE[1]}`
+      const cable = `M${PORT[0]} ${PORT[1]} C${PORT[0] + 60} ${PORT[1]} ${LEAD_END[0]} ${PORT[1] + 10} ${LEAD_END[0]} ${LEAD_END[1]}`
+
+      const wires = document.getElementById('wires')
+      wires.innerHTML = `
+        <path class="cable-edge" d="${cable}" />
+        <path class="cable" d="${cable}" />
+        <path id="route" d="${route}" fill="none" />
+        <circle class="port" cx="${PORT[0]}" cy="${PORT[1]}" r="8" />
+        <circle class="lit" cx="${PORT[0]}" cy="${PORT[1]}" r="3" />`
+
+      // Two requests in flight on the menu cable.
+      const path = document.getElementById('route')
+      const length = path.getTotalLength()
+      for (const t of [0.28, 0.72]) {
+        const p = path.getPointAtLength(length * t)
+        wires.insertAdjacentHTML(
+          'beforeend',
+          `<circle class="glow" cx="${p.x}" cy="${p.y}" r="7" /><circle class="lit" cx="${p.x}" cy="${p.y}" r="3.2" />`,
+        )
+      }
+    </script>
+  </body>
+</html>
