@@ -48,6 +48,7 @@ import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/g
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { offCompany, type Model } from '@/game/model.ts'
+import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -76,13 +77,18 @@ const stat = (
   tone: Tone,
   h: HtmlBuilder<Message>,
   title = name,
+  className = '',
 ): Html =>
   h.div(
     [
       h.Key(name),
       h.Title(title),
       h.Class(
-        `flex h-8 items-center gap-2.5 px-2.5 compact:shrink-0 compact:gap-1.5 compact:px-3 ${CHIP_ORDER[name] ?? ''}`,
+        cn(
+          'flex h-8 items-center gap-2.5 px-2.5 compact:shrink-0 compact:gap-1.5 compact:px-3',
+          CHIP_ORDER[name],
+          className,
+        ),
       ),
     ],
     [
@@ -218,7 +224,7 @@ const building = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =
       h.OnClick(Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' })),
       h.Class(
         cn(
-          'flex flex-col gap-1.5 rounded-xl px-2.5 py-2 text-left hover:bg-foreground/5 compact:hidden',
+          'enter-pop flex flex-col gap-1.5 rounded-xl px-2.5 py-2 text-left hover:bg-foreground/5 compact:hidden',
         ),
       ),
     ],
@@ -295,14 +301,18 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
             trend >= 0 ? 'ok' : 'danger',
             h,
           ),
-          stat(
-            'Insight',
-            Gem,
-            compact(game.insight),
-            `+${ledger.insight.toFixed(1)}/s`,
-            'plain',
-            h,
-          ),
+          shown(model, 'research')
+            ? stat(
+                'Insight',
+                Gem,
+                compact(game.insight),
+                `+${ledger.insight.toFixed(1)}/s`,
+                'plain',
+                h,
+                'Insight',
+                'enter-pop',
+              )
+            : h.empty,
           stat(
             'Apdex',
             Smile,
@@ -312,15 +322,18 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
             h,
             `Apdex over the last hour: users grow above ${target.toFixed(2)} and leave below it`,
           ),
-          stat(
-            'Errors',
-            TriangleAlert,
-            `${errors.toFixed(errors >= 10 ? 0 : 1)}%`,
-            '',
-            errors < 1 ? 'ok' : errors < 5 ? 'warn' : 'danger',
-            h,
-            `Errors: ${errorTitle}`,
-          ),
+          shown(model, 'errors')
+            ? stat(
+                'Errors',
+                TriangleAlert,
+                `${errors.toFixed(errors >= 10 ? 0 : 1)}%`,
+                '',
+                errors < 1 ? 'ok' : errors < 5 ? 'warn' : 'danger',
+                h,
+                `Errors: ${errorTitle}`,
+                cn('enter-pop rounded-lg', glowing(model, 'errors') && 'cue-glow'),
+              )
+            : h.empty,
           budgeted(game) ? slo(game, h) : h.empty,
           stat(
             percentiles ? 'p99' : 'Latency',
@@ -334,7 +347,7 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
       ),
       game.stage === PRE_IPO_STAGE && !offCompany(model) ? checklist(model, ledger, h) : h.empty,
       game.quarter && !offCompany(model) ? quarterly(model, ledger, h) : h.empty,
-      building(model, ledger, h),
+      shown(model, 'team') ? building(model, ledger, h) : h.empty,
     ],
   )
 }
@@ -485,6 +498,7 @@ const toolButton = (
   active: boolean,
   h: HtmlBuilder<Message>,
   extra: Html = h.empty,
+  cue = false,
 ): Html =>
   h.button(
     [
@@ -494,7 +508,7 @@ const toolButton = (
       h.AriaLabel(label),
       h.AriaPressed(active ? 'true' : 'false'),
       h.OnClick(message),
-      h.Class(cn(tool(active), 'compact:size-9')),
+      h.Class(cn(tool(active), 'enter-pop compact:size-9', cue && 'cue-glow')),
     ],
     [icon(h, glyph, 'size-[18px]'), extra],
   )
@@ -506,6 +520,7 @@ const historyButton = (
   message: Message,
   ready: boolean,
   h: HtmlBuilder<Message>,
+  cue = false,
 ): Html =>
   h.button(
     [
@@ -515,7 +530,13 @@ const historyButton = (
       h.AriaLabel(label),
       h.Disabled(!ready),
       h.OnClick(message),
-      h.Class(cn(tool(false), 'compact:size-9 disabled:opacity-35 disabled:pointer-events-none')),
+      h.Class(
+        cn(
+          tool(false),
+          'enter-pop compact:size-9 disabled:opacity-35 disabled:pointer-events-none',
+          cue && 'cue-glow',
+        ),
+      ),
     ],
     [icon(h, glyph, 'size-[18px]')],
   )
@@ -535,7 +556,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
     ],
     [
-      offCompany(model)
+      offCompany(model) || !shown(model, 'research')
         ? h.empty
         : h.button(
             [
@@ -550,6 +571,8 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.Class(
                 cn(
                   tool(model.panel === 'research'),
+                  'enter-pop',
+                  glowing(model, 'research') && 'cue-glow',
                   'flex w-auto gap-2 px-3 text-[13px] font-medium compact:size-9 compact:px-0 max-2xl:w-9 max-2xl:px-0 max-2xl:justify-center',
                 ),
               ),
@@ -574,7 +597,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 : h.empty,
             ],
           ),
-      offCompany(model)
+      offCompany(model) || !shown(model, 'team')
         ? h.empty
         : h.button(
             [
@@ -587,6 +610,8 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.Class(
                 cn(
                   tool(model.panel === 'team'),
+                  'enter-pop',
+                  glowing(model, 'team') && 'cue-glow',
                   'flex w-auto gap-2 px-3 text-[13px] font-medium compact:size-9 compact:px-0 max-2xl:w-9 max-2xl:px-0 max-2xl:justify-center',
                 ),
               ),
@@ -606,7 +631,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 : h.empty,
             ],
           ),
-      offCompany(model)
+      !playbooksShown(model)
         ? h.empty
         : toolButton(
             'Playbooks (P)',
@@ -622,13 +647,19 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
         model.panel === 'help',
         h,
       ),
-      toolButton(
-        'Glossary (G)',
-        BookOpen,
-        model.panel === 'glossary' ? Message.PanelClosed() : Message.GlossaryOpened({ id: null }),
-        model.panel === 'glossary',
-        h,
-      ),
+      shown(model, 'glossary')
+        ? toolButton(
+            'Glossary (G)',
+            BookOpen,
+            model.panel === 'glossary'
+              ? Message.PanelClosed()
+              : Message.GlossaryOpened({ id: null }),
+            model.panel === 'glossary',
+            h,
+            h.empty,
+            glowing(model, 'glossary'),
+          )
+        : h.empty,
       toolButton(
         'Settings',
         Settings,
@@ -636,9 +667,20 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
         model.panel === 'settings',
         h,
       ),
-      divider(h),
-      historyButton('Undo (Z)', Undo2, Message.UndoChosen(), undoAvailable(model), h),
-      historyButton('Redo (Shift+Z)', Redo2, Message.RedoChosen(), redoAvailable(model), h),
+      ...(shown(model, 'undo')
+        ? [
+            divider(h),
+            historyButton(
+              'Undo (Z)',
+              Undo2,
+              Message.UndoChosen(),
+              undoAvailable(model),
+              h,
+              glowing(model, 'undo'),
+            ),
+            historyButton('Redo (Shift+Z)', Redo2, Message.RedoChosen(), redoAvailable(model), h),
+          ]
+        : []),
       divider(h),
       toolButton(
         model.paused ? 'Resume (Space)' : 'Pause (Space)',

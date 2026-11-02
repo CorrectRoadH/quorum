@@ -7,11 +7,12 @@ import {
   type BuildGroup,
   type ComponentId,
 } from '@quorum/simulation/catalog'
-import { buildItems, isUnlocked, priceOf } from '@quorum/simulation/lookups'
+import { isUnlocked, priceOf } from '@quorum/simulation/lookups'
 import { money } from '@/game/format.ts'
 import { COMPONENT_ICONS, GROUP_ICONS } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
+import { dockGroups, dockItems } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { Kbd } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
@@ -23,12 +24,8 @@ import { FIGURE, GROUP_TEXT, PANEL, groupBadge, tool } from './bits.ts'
    on the board places it.
    ========================================================================== */
 
-const TAB_OFFSET: Record<BuildGroup, string> = {
-  edge: 'translate-x-0',
-  compute: 'translate-x-11',
-  data: 'translate-x-22',
-  ops: 'translate-x-33',
-}
+/** The highlight's offset under the open tab, by the tab's place in the dock. */
+const TAB_OFFSET = ['translate-x-0', 'translate-x-11', 'translate-x-22', 'translate-x-33']
 
 const row = (model: Model, type: ComponentId, index: number, h: HtmlBuilder<Message>): Html => {
   const def = COMPONENTS[type]
@@ -108,7 +105,7 @@ const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
       h.DataAttribute('exit-anchor', 'bottom'),
       h.Class('swap flex w-[420px] max-w-full flex-col gap-0.5 pb-1 compact:w-auto'),
     ],
-    buildItems(group).map((type, index) => row(model, type, index, h)),
+    dockItems(model.game, group).map((type, index) => row(model, type, index, h)),
   )
 
 /** One surface. Its top slot holds the open group's parts or the part in hand,
@@ -117,6 +114,7 @@ const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
  *  mid-morph, the tabs stay put and the top edge moves. */
 export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   const open = model.buildGroup
+  const groups = BUILD_GROUPS.filter((group) => dockGroups(model.game).includes(group.key))
   return h.div(
     [
       h.DataAttribute('morph', 'gesture'),
@@ -143,14 +141,14 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
                       h.Class(
                         cn(
                           'animate-in fade-in pointer-events-none absolute top-0 left-0 size-10 rounded-xl bg-well shadow-well transition-[translate] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none',
-                          TAB_OFFSET[open],
+                          TAB_OFFSET[groups.findIndex((group) => group.key === open)],
                         ),
                       ),
                     ],
                     [],
                   )
                 : h.empty,
-              ...BUILD_GROUPS.map((group, index) =>
+              ...groups.map((group, index) =>
                 h.button(
                   [
                     h.Key(group.key),

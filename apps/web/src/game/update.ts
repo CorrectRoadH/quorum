@@ -6,7 +6,6 @@ import * as Actions from '@quorum/simulation/actions'
 import {
   ACHIEVEMENTS,
   ALERT_RULES,
-  BUILD_GROUPS,
   DILATION_SPEEDS,
   EXITS,
   PERKS,
@@ -44,6 +43,17 @@ import { designOf, encodeReplay, type ReplayAction } from '@quorum/simulation/re
 import { SIM_VERSION } from '@quorum/simulation/version'
 import type { ApiRpc } from '@/platform/rpc.ts'
 import { histogramQuery } from './challenge-query.ts'
+import {
+  advanceReveals,
+  cueNode,
+  dockGroups,
+  dockItems,
+  noticed,
+  playbooksShown,
+  revealAtStart,
+  revealsOfSave,
+  shown,
+} from './reveal.ts'
 import { ipoExit, takeExit } from '@quorum/simulation/exit'
 import {
   Founder,
@@ -93,7 +103,7 @@ import {
 } from './mail.ts'
 import type { EventMail } from './copy/index.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
-import { buildItems, eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
+import { eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
 import {
   advanceSandbox,
@@ -237,6 +247,9 @@ export const initialModel = (): Model =>
     stableTicks: 0,
     tradeoff: null,
     seenTradeoffs: [],
+    revealed: [],
+    pending: [],
+    cue: null,
     muted: false,
     motion: 'system',
     glossaryFocus: null,
@@ -287,7 +300,12 @@ const sync = (model: Model): AnyCommand =>
     history: model.nodeHistory,
     region: model.region,
     paused: model.paused,
+    cue: cueNode(model),
   })
+
+/** The Company save: the Game, and what this Company has shown so far. */
+const saveOf = (model: Model): AnyCommand =>
+  WriteSave({ game: model.game, revealed: model.revealed, pending: model.pending })
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
 const stampOf = (model: Model) => {
@@ -909,6 +927,7 @@ const tick = (model: Model): Result => {
     bottleneck,
     bottleneckAt: search ? second : model.bottleneckAt,
   }
+  next = advanceReveals(next, ledger)
   const commands: Array<AnyCommand> = [sync(next)]
   const logs: Array<LogEntry> = []
 
@@ -994,7 +1013,7 @@ const tick = (model: Model): Result => {
   }
   if (game.time - model.savedAt >= SAVE_EVERY) {
     next = { ...next, savedAt: game.time }
-    if (!offCompany(next)) commands.push(WriteSave({ game }))
+    if (!offCompany(next)) commands.push(saveOf(next))
     else if (next.sandbox?.id === null) {
       next = { ...next, freeBoard: game }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
@@ -1016,15 +1035,8 @@ const ARROWS: Record<string, Direction> = {
   ArrowRight: 'right',
 }
 
-const BUILD_KEYS: Record<string, (typeof BUILD_GROUPS)[number]['key']> = {
-  '1': 'edge',
-  '2': 'compute',
-  '3': 'data',
-  '4': 'ops',
-}
-
 const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
-  const next: Model = {
+  const fresh: Model = {
     ...initialModel(),
     founder: model.founder,
     histograms: model.histograms,
@@ -1038,11 +1050,12 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
     savedAt: game.time,
     sampledAt: game.time,
   }
+  const next = revealAtStart(fresh, ledgerOf(fresh))
   return {
     model: next,
     commands: [
       sync(next),
-      WriteSave({ game }),
+      saveOf(next),
       FitBoard({}),
       AppendLog({
         entries: [
@@ -1160,7 +1173,7 @@ const changeFounder = (
 const found = (model: Model): Result => {
   const founder = founded(model.founder)
   const game = foundCompany(model.game.seed + 7919, foundingOf(model.founder), model.founder.keep)
-  const started = startCompany({ ...model, founder }, game, game.stage >= 1 ? 'era' : 'help')
+  const started = startCompany({ ...model, founder }, game, game.stage >= 1 ? 'era' : 'none')
   return {
     ...started,
     commands: [...(started.commands ?? []), WriteFounder({ founder })],
@@ -1395,7 +1408,7 @@ const leaveBoard = (model: Model): Result => {
   if (!model.sandbox)
     return {
       model: { ...model, route: AppRoute.Title(), panel: 'none', placing: null },
-      commands: [WriteSave({ game: model.game })],
+      commands: [saveOf(model)],
     }
   const freeBoard = model.sandbox.id === null ? model.game : model.freeBoard
   const next: Model = {
@@ -1451,7 +1464,8 @@ const visit = (model: Model, url: Url): Result => {
 /** Handles a Message and adds its sound cue. Messages that route to another
  *  Message (keys, taps on Payments) sound once, as the Message they became. */
 const route = (model: Model, message: Message): Result => {
-  const result = handle(model, message)
+  const handled = handle(model, message)
+  const result = { ...handled, model: noticed(handled.model, message) }
   if (result.model.muted || result.commands?.some((command) => command.name === 'PlaySound'))
     return result
   const cue = cueOf(model, message, result.model)
@@ -1471,6 +1485,7 @@ const handle = (model: Model, message: Message): Result =>
           return {
             model: {
               ...model,
+              ...revealsOfSave(JSON.parse(json ?? 'null')),
               game,
               saved: true,
               savedAt: game.time,
@@ -1667,19 +1682,19 @@ const handle = (model: Model, message: Message): Result =>
           return { model: next, commands: [sync(next)] }
         }
         case 'r':
-          if (offCompany(model)) return { model }
+          if (offCompany(model) || !shown(model, 'research')) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
           )
         case 't':
-          if (offCompany(model)) return { model }
+          if (offCompany(model) || !shown(model, 'team')) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
           )
         case 'p':
-          if (offCompany(model)) return { model }
+          if (!playbooksShown(model)) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'playbooks' ? 'none' : 'playbooks' }),
@@ -1703,6 +1718,7 @@ const handle = (model: Model, message: Message): Result =>
         case 'm':
           return route(model, Message.MuteToggled())
         case 'g':
+          if (!shown(model, 'glossary')) return { model }
           return model.panel === 'glossary'
             ? { model: { ...model, panel: 'none' } }
             : route(model, Message.GlossaryOpened({ id: null }))
@@ -1742,9 +1758,11 @@ const handle = (model: Model, message: Message): Result =>
           return selected ? route(model, Message.NodeSold({ nodeId: selected })) : { model }
         default: {
           // With a group open, a digit picks that part.
-          const picked = (model.buildGroup ? buildItems(model.buildGroup) : [])[Number(key) - 1]
+          const picked = (model.buildGroup ? dockItems(model.game, model.buildGroup) : [])[
+            Number(key) - 1
+          ]
           if (picked) return route(model, Message.PlacingChosen({ type: picked }))
-          const group = BUILD_KEYS[key]
+          const group = /^[1-9]$/.test(key) ? dockGroups(model.game)[Number(key) - 1] : undefined
           return group ? route(model, Message.BuildGroupChosen({ group })) : { model }
         }
       }

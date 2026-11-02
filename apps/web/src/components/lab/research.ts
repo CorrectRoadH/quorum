@@ -95,6 +95,8 @@ const SLOTS = 2
 const COLUMN_W = SLOTS * NODE_W + (SLOTS - 1) * GAP_X + PAD * 2
 const LABEL_W = 132
 const HEADER_H = 30
+/** The column that stands for the Eras after the next one. */
+const LATER_W = 120
 
 type Placed = Readonly<{ entry: ResearchDef; x: number; y: number }>
 type Lane = Readonly<{ track: ResearchTrack; label: string; y: number; h: number }>
@@ -111,13 +113,18 @@ const slotX = (column: number, slot: number): number =>
  * an item whose prerequisite is in a lane above takes the same slot, so the
  * line drops straight down; the rest fill the free slots.
  */
-const layout = (() => {
+const layoutFor = (columns: number) => {
+  const eras = ERA_COLUMNS.slice(0, columns)
   const placed = new Map<ResearchId, Placed>()
   const lanes: Array<Lane> = []
   let top = HEADER_H
-  for (const track of RESEARCH_TRACKS) {
+  // A track with nothing in the visible Eras has no lane yet.
+  const tracks = RESEARCH_TRACKS.filter((track) =>
+    researchList.some((entry) => entry.track === track.key && eras.includes(entry.era)),
+  )
+  for (const track of tracks) {
     // Slot assignments per column: grid[column][line][slot].
-    const grid = ERA_COLUMNS.map((era, column) => {
+    const grid = eras.map((era, column) => {
       const cell = researchList.filter((entry) => entry.track === track.key && entry.era === era)
       const inCell = new Set(cell.map((entry) => entry.id))
       const rows: Array<Array<ResearchDef | null>> = []
@@ -175,8 +182,19 @@ const layout = (() => {
     lanes.push({ track: track.key, label: track.label, y: top, h })
     top += h
   }
-  return { placed, lanes, width: LABEL_W + ERA_COLUMNS.length * COLUMN_W, height: top }
-})()
+  const later = researchList.filter((entry) => entry.era > (eras.at(-1) ?? 0)).length
+  const width = LABEL_W + eras.length * COLUMN_W + (later > 0 ? LATER_W : 0)
+  return { eras, later, placed, lanes, width, height: top }
+}
+
+/** The tree shows the current and the next Era; later Eras collapse to a count (15). */
+const layouts = new Map<number, ReturnType<typeof layoutFor>>()
+const layoutOf = (game: Game): ReturnType<typeof layoutFor> => {
+  const columns = ERA_COLUMNS.filter((era) => era <= game.stage + 1).length
+  const cached = layouts.get(columns) ?? layoutFor(columns)
+  layouts.set(columns, cached)
+  return cached
+}
 
 /** Items that list `id` as a prerequisite. */
 const followUps = (id: ResearchId): ReadonlyArray<ResearchDef> =>
@@ -510,8 +528,9 @@ const connector = (from: Placed, to: Placed): string => {
   return `M${ax} ${ay} C${ax} ${ay + bend} ${bx} ${by - bend} ${bx} ${by}`
 }
 
-const lines = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html =>
-  h.svg(
+const lines = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html => {
+  const layout = layoutOf(model.game)
+  return h.svg(
     [
       h.AriaHidden(true),
       h.Xmlns('http://www.w3.org/2000/svg'),
@@ -552,9 +571,11 @@ const lines = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html 
       }),
     ),
   )
+}
 
 const tree = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html => {
   const game = model.game
+  const layout = layoutOf(game)
   return h.div(
     [
       h.Class('relative shrink-0'),
@@ -562,7 +583,7 @@ const tree = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html =
     ],
     [
       // Era columns, with the ones not reached yet washed out.
-      ...ERA_COLUMNS.map((era, column) =>
+      ...layout.eras.map((era, column) =>
         h.div(
           [
             h.Key(`era-${era}`),
@@ -595,6 +616,28 @@ const tree = (model: Model, focus: ResearchDef, h: HtmlBuilder<Message>): Html =
           ],
         ),
       ),
+      layout.later > 0
+        ? h.div(
+            [
+              h.Key('era-later'),
+              h.Title(`${layout.later} items in later Eras`),
+              h.Class('absolute top-0 bottom-0 border-l border-hairline bg-foreground/[0.025]'),
+              h.Style({
+                left: `${LABEL_W + layout.eras.length * COLUMN_W}px`,
+                width: `${LATER_W}px`,
+              }),
+            ],
+            [
+              h.span(
+                [
+                  h.Class(cn(EYEBROW, 'absolute top-1.5 flex items-center gap-1.5')),
+                  h.Style({ left: `${PAD}px` }),
+                ],
+                [icon(h, Lock, 'size-3'), `+${layout.later}`],
+              ),
+            ],
+          )
+        : h.empty,
       // Track lanes: a label with progress, and a hairline between lanes.
       ...layout.lanes.map((lane, index) => {
         const entries = researchList.filter((entry) => entry.track === lane.track)

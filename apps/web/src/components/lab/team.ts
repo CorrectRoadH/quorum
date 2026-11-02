@@ -50,6 +50,7 @@ import { describeRefusal } from '@quorum/simulation/actions'
 import { money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { ledgerOf, type Model } from '@/game/model.ts'
+import { glowing, shown } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { badge } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
@@ -269,22 +270,23 @@ const people = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.div(
     [h.Class(`flex min-h-0 flex-col gap-3 p-4 ${SCROLL}`)],
     [
-      button(
-        {
-          onClick: Message.HireChosen(),
-          isDisabled: !open || game.cash < price,
-          size: 'lg',
-          className: 'w-full',
-        },
-        open
-          ? [
+      // Hiring is not shown before its Era (15 "Progressive disclosure").
+      open
+        ? button(
+            {
+              onClick: Message.HireChosen(),
+              isDisabled: game.cash < price,
+              size: 'lg',
+              className: 'w-full',
+            },
+            [
               icon(h, UserPlus, 'size-4'),
               `Hire ${LANGUAGES[language].name} engineer`,
               h.span([h.Class(cn(FIGURE, 'opacity-75'))], [money(price)]),
-            ]
-          : [icon(h, Lock, 'size-3.5'), `Hiring opens in ${ERAS[1]?.name ?? ''}`],
-        h,
-      ),
+            ],
+            h,
+          )
+        : h.empty,
       ...game.teams.map((team, index) => teamCard(model, team, index, h)),
       open && game.teams.length < MAX_TEAMS
         ? button(
@@ -544,6 +546,7 @@ const work = (model: Model, h: HtmlBuilder<Message>): Html => {
     return !def.internal && (def.research === null || has(game, def.research))
   })
   const review = has(game, 'code-review')
+  const engineering = tasks.length > 0 && shown(model, 'engineering')
   return h.div(
     [h.Class(`flex min-h-0 flex-col gap-3 p-4 ${SCROLL}`)],
     [
@@ -552,7 +555,15 @@ const work = (model: Model, h: HtmlBuilder<Message>): Html => {
       heading(
         'Backlog',
         h.div(
-          [h.Class('flex items-center gap-1.5')],
+          [
+            h.Class(
+              cn(
+                'enter-pop flex items-center gap-1.5 rounded-xl pl-1.5',
+                glowing(model, 'autopilot') && 'cue-glow',
+                !shown(model, 'autopilot') && 'hidden',
+              ),
+            ),
+          ],
           [
             icon(h, Bot, 'size-3.5 text-muted-foreground'),
             h.span([h.Class('text-[11.5px] text-muted-foreground')], ['Autopilot']),
@@ -594,10 +605,18 @@ const work = (model: Model, h: HtmlBuilder<Message>): Html => {
           )
         }),
       ),
-      tasks.length > 0 ? heading('Engineering', h.empty, h) : h.empty,
-      tasks.length > 0
+      engineering ? heading('Engineering', h.empty, h) : h.empty,
+      engineering
         ? h.div(
-            [h.Class(cn(NESTED, 'flex flex-col divide-y divide-hairline'))],
+            [
+              h.Class(
+                cn(
+                  NESTED,
+                  'enter-pop flex flex-col divide-y divide-hairline',
+                  glowing(model, 'engineering') && 'cue-glow',
+                ),
+              ),
+            ],
             tasks.map((id) =>
               catalogRow(
                 id,

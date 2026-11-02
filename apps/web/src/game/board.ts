@@ -138,6 +138,8 @@ export type BoardState = Readonly<{
   region: Region
   /** The company is paused: belts hold still. */
   paused: boolean
+  /** The Node whose footer button glows: a disclosure cue (15 "Progressive disclosure"). */
+  cue: string | null
 }>
 
 /** Latest state per board, written by update and read on mount. */
@@ -2470,6 +2472,16 @@ class BoardController {
       this.bottleneckTag.visible = true
     } else {
       this.bottleneckTag.visible = false
+    }
+
+    // A disclosure cue: a ring around the one footer button to press next.
+    const cue = state.cue ? byId.get(state.cue) : undefined
+    if (cue) {
+      const rect = footerRect(cue.type)
+      const pulse = still ? 0.9 : 0.35 + 0.55 * Math.abs(Math.sin(this.phase * 2.4))
+      this.overlay
+        .roundRect(cue.x + rect.x - 3, cue.y + rect.y - 3, rect.w + 6, rect.h + 6, 10)
+        .stroke({ color: colors.ok, width: 2.5, alpha: pulse })
     }
 
     // Cut links fade where they were, in the colour that warned before the cut.

@@ -223,6 +223,24 @@ export const Tradeoff = Schema.Struct({
 })
 export type Tradeoff = typeof Tradeoff.Type
 
+/** An element a first Company shows only once it is useful (15 "Progressive disclosure"). */
+export const Reveal = Schema.Literals([
+  'undo',
+  'collect',
+  'resize',
+  'research',
+  'errors',
+  'team',
+  'engineering',
+  'autopilot',
+  'glossary',
+])
+export type Reveal = typeof Reveal.Type
+
+/** The element that just appeared: it glows until the player uses it or its UI ticks run out. */
+export const RevealCue = Schema.Struct({ key: Reveal, left: Schema.Finite })
+export type RevealCue = typeof RevealCue.Type
+
 /** Motion: follow the system setting, or reduce it whatever the system says. */
 export const Motion = Schema.Literals(['system', 'reduce'])
 export type Motion = typeof Motion.Type
@@ -314,6 +332,10 @@ export const Model = Schema.Struct({
   tradeoff: Schema.NullOr(Tradeoff),
   /** Option sets the player confirmed once: their cards collapse to one line. */
   seenTradeoffs: Schema.Array(TradeoffKind),
+  /** Elements this Company shows, triggers that wait their turn, and the one that glows. */
+  revealed: Schema.Array(Reveal),
+  pending: Schema.Array(Reveal),
+  cue: Schema.NullOr(RevealCue),
   muted: Schema.Boolean,
   motion: Motion,
   /** The Glossary panel's open entry and search. */

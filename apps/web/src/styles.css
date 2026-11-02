@@ -603,6 +603,28 @@
   }
 }
 
+/* A control that just appeared (GDD 15 "Progressive disclosure"): a ring that breathes until the
+   player uses it. With reduced motion the ring holds still. */
+.cue-glow {
+  box-shadow: 0 0 0 2px var(--ok);
+  animation: cue-breathe 1.3s ease-in-out infinite alternate;
+}
+@keyframes cue-breathe {
+  from {
+    box-shadow: 0 0 0 2px oklch(from var(--ok) l c h / 0.35);
+  }
+  to {
+    box-shadow:
+      0 0 0 2px var(--ok),
+      0 0 0 6px oklch(from var(--ok) l c h / 0.15);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cue-glow {
+    animation: none;
+  }
+}
+
 /* A funding offer is rare: one light sweep says it is new. */
 .shine {
   position: relative;

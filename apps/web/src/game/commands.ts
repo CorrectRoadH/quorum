@@ -8,7 +8,7 @@ import { regionView } from '@quorum/simulation/regions'
 import { ComponentId, Game, Region } from '@quorum/simulation/state'
 import { Message } from './message.ts'
 import { Founder } from '@quorum/simulation/founder'
-import { Motion, Prefs, SandboxStore } from './model.ts'
+import { Motion, Prefs, Reveal, SandboxStore } from './model.ts'
 import { play, setMuted, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 import { ChallengeSubmission } from '@quorum/rpc'
@@ -47,9 +47,22 @@ export const SyncBoard = Command.define('SyncBoard', {
     history: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
     region: Region,
     paused: Schema.Boolean,
+    /** The Node whose footer button glows: a disclosure cue. */
+    cue: Schema.NullOr(Schema.String),
   },
   messages: [Message.Synced],
-  execute: ({ game, bottleneck, selected, selection, placing, stamp, history, region, paused }) =>
+  execute: ({
+    game,
+    bottleneck,
+    selected,
+    selection,
+    placing,
+    stamp,
+    history,
+    region,
+    paused,
+    cue,
+  }) =>
     Effect.sync(() =>
       setBoard('board', {
         game: regionView(game, region),
@@ -61,6 +74,7 @@ export const SyncBoard = Command.define('SyncBoard', {
         history,
         region,
         paused,
+        cue,
       }),
     ).pipe(Effect.as(Message.Synced())),
 })
@@ -105,13 +119,16 @@ export const LoadSave = Command.define('LoadSave', {
 })
 
 export const WriteSave = Command.define('WriteSave', {
-  args: { game: Game },
+  args: { game: Game, revealed: Schema.Array(Reveal), pending: Schema.Array(Reveal) },
   messages: [Message.Saved],
-  execute: ({ game }) =>
+  execute: ({ game, revealed, pending }) =>
     Effect.sync(() => {
       try {
         // The wall clock goes in at the last moment: it is the only one, for offline progress.
-        window.localStorage.setItem(SAVE_KEY, JSON.stringify({ ...game, wall: Date.now() }))
+        window.localStorage.setItem(
+          SAVE_KEY,
+          JSON.stringify({ ...game, wall: Date.now(), disclosure: { revealed, pending } }),
+        )
       } catch {
         // A full or blocked storage loses the save, not the game.
       }

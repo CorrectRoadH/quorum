@@ -346,3 +346,57 @@ describe('URL routing', () => {
     expect(pushed(unknown.commands)).toEqual(['ReplaceUrl /'])
   })
 })
+
+describe('progressive disclosure', () => {
+  const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
+    messages.reduce((current, message) => update(current, message).model, model)
+  const founded = (): Model => send(initialModel(), Message.CompanyFounded())
+
+  test('a first Company opens on the board, with Research shut until Insight can buy an item', () => {
+    const start = founded()
+    expect(start.panel).toBe('none')
+    expect(start.revealed).not.toContain('research')
+    expect(send(start, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
+    // The cheapest Garage item costs 15 ◆: 14 is not enough, 15 is.
+    const short = tick({ ...start, game: { ...start.game, insight: 14 } })
+    expect(short.revealed).not.toContain('research')
+    const enough = tick({ ...start, game: { ...start.game, insight: 15 } })
+    expect(enough.revealed).toContain('research')
+    expect(enough.cue?.key).toBe('research')
+    const opened = send(enough, Message.KeyPressed({ key: 'r' }))
+    expect(opened.panel).toBe('research')
+    expect(opened.cue).toBeNull()
+  })
+
+  test('two triggers at once show one element; the second waits until the first is used', () => {
+    const start = founded()
+    const both = tick(
+      send(
+        { ...start, game: { ...start.game, insight: 100, cash: 10_000 } },
+        Message.ResizeChosen({ nodeId: 'server', direction: 1 }),
+      ),
+    )
+    expect(both.revealed).toContain('undo')
+    expect(both.revealed).not.toContain('research')
+    expect(both.pending).toContain('research')
+    const used = tick(send(both, Message.UndoChosen()))
+    expect(used.revealed).toContain('research')
+    expect(used.cue?.key).toBe('research')
+  })
+
+  test('a save from before disclosure shows everything; a save with it keeps its set', () => {
+    const game = preseedGame()
+    const old = send(initialModel(), Message.SaveLoaded({ json: JSON.stringify(game), now: 0 }))
+    expect(old.revealed).toContain('team')
+    expect(old.revealed).toContain('glossary')
+    const kept = send(
+      initialModel(),
+      Message.SaveLoaded({
+        json: JSON.stringify({ ...game, disclosure: { revealed: ['undo'], pending: ['team'] } }),
+        now: 0,
+      }),
+    )
+    expect(kept.revealed).toEqual(['undo'])
+    expect(kept.pending).toEqual(['team'])
+  })
+})
