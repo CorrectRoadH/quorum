@@ -18,6 +18,14 @@ export const INCIDENT_IDS = [
   'certificate',
   'psp-outage',
   'zone',
+  'disk-full',
+  'repl-lag',
+  'gc-storm',
+  'retry-storm',
+  'double-charge',
+  'report-db',
+  'gpu-shortage',
+  'regex',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -26,7 +34,7 @@ export type IncidentDef = Readonly<{
   name: string
   /** The first Era the director can pick it in. */
   era: number
-  severity: 2 | 3
+  severity: 1 | 2 | 3
   /** The severity it steps up to when it stays unmitigated (11 "Escalation"). */
   escalatesTo: 1 | 2
   /** Sim seconds before it ends on its own. */
@@ -205,7 +213,113 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     prevention: 'Copies in a second zone with spare capacity, and a Database standby.',
     actions: ['multi-az'],
   },
+  'disk-full': {
+    id: 'disk-full',
+    name: 'Disk full',
+    era: 2,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'Logs and WAL filled the Database disk. Every write failed.',
+    prevention: 'Alerts on disk catch it early. Expand the volume to end it.',
+    actions: ['alerting'],
+  },
+  'repl-lag': {
+    id: 'repl-lag',
+    name: 'Replication lag',
+    era: 3,
+    severity: 3,
+    escalatesTo: 2,
+    duration: 60,
+    cause:
+      'A burst of writes left the replicas seconds behind. Reads after a write came back stale.',
+    prevention: 'Read-your-writes routing sends those reads to the primary.',
+    actions: ['ryw-routing'],
+  },
+  'gc-storm': {
+    id: 'gc-storm',
+    name: 'GC pause storm',
+    era: 3,
+    severity: 3,
+    escalatesTo: 2,
+    duration: 60,
+    cause: 'The heap passed 90%. The collector paused one request in ten.',
+    prevention: 'More memory, ZGC, or GOGC tuning. Restart to end it.',
+    actions: ['zgc', 'gogc-tuning'],
+  },
+  'retry-storm': {
+    id: 'retry-storm',
+    name: 'Retry storm',
+    era: 3,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 300,
+    cause:
+      'The Database slowed for 20 s. Callers retried at once, and the retries kept it overloaded.',
+    prevention: 'Backoff with jitter, circuit breakers, and load shedding.',
+    actions: ['backoff-jitter', 'circuit-breakers', 'load-shedding'],
+  },
+  'double-charge': {
+    id: 'double-charge',
+    name: 'Double charge',
+    era: 3,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause:
+      'The Payment Provider slowed. Charges timed out and were retried, and some charged twice.',
+    prevention: 'Idempotency keys. Stop retries on the charge Link to end it.',
+    actions: ['idempotency-keys'],
+  },
+  'report-db': {
+    id: 'report-db',
+    name: 'Report kills the database',
+    era: 4,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 90,
+    cause: 'A quarter-end report scanned every table on the primary. Every kind slowed.',
+    prevention: 'A Data Warehouse takes the scans off the primary.',
+    actions: ['data-warehouse'],
+  },
+  'gpu-shortage': {
+    id: 'gpu-shortage',
+    name: 'GPU shortage',
+    era: 4,
+    severity: 3,
+    escalatesTo: 2,
+    duration: 120,
+    cause: 'The provider reclaimed a GPU Node. No H100 capacity this month.',
+    prevention: 'The LLM API takes prompts when GPUs run short.',
+    actions: ['hosted-models'],
+  },
+  regex: {
+    id: 'regex',
+    name: 'Regex backtracking',
+    era: 4,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 60,
+    cause: 'A new WAF rule backtracked on long inputs. Every WAF ran at 100% CPU.',
+    prevention: 'Roll rules out to a canary first. Disable the rule to end it.',
+    actions: [],
+  },
 }
+
+/** A quarter-end report scans this many times what a report usually does. */
+export const REPORT_SURGE = 10
+/** A retry storm's trigger: the Database runs at this share of its capacity for this many seconds. */
+export const STORM_SLOWDOWN = 0.3
+export const STORM_TRIGGER = 20
+/** During a GC pause storm the heap fills by this share of RAM, and this many times as many requests pause. */
+export const GC_STORM_HEAP = 0.2
+export const GC_STORM = 5
+/** During a replication lag incident, replicas lag this many times as far. */
+export const LAG_SURGE = 10
+/** A slow Payment Provider during a Double charge adds this many ms to each charge, on average. */
+export const SLOW_CHARGE_MS = 1_500
+/** A backtracking WAF rule leaves this share of the WAF's capacity. */
+export const REGEX_CAPACITY = 0.1
 
 /** A bot surge lifts bots to half of all traffic; a DDoS adds 50 times it; stuffing 19 times the logins. */
 export const BOT_SURGE = 0.8
@@ -242,6 +356,13 @@ export const ALERT_THRESHOLDS = {
 } as const
 /** False alarms in one calendar day before the player ignores a rule (12 "Alerting"). */
 export const ALERT_FATIGUE = 5
+
+/**
+ * Once the error budget counts, incidents run on the calendar (11 "Duration"): an
+ * unmitigated incident lasts at most this many sim seconds for its starting severity.
+ * Earlier Eras and Sandboxes keep the longer playtest durations above.
+ */
+export const CALENDAR_DURATION: Readonly<Record<1 | 2 | 3, number>> = { 1: 60, 2: 20, 3: 5 }
 
 /** The error budget counts from Series A (11 "SLOs and error budgets"). */
 export const SLO_FROM_STAGE = 3

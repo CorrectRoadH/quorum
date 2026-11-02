@@ -7,6 +7,13 @@ import {
   CDN_HIT,
   CDN_TTLS,
   PSP_CAPACITY,
+  GPU_FIRST_TOKEN_MS,
+  GPU_TYPES,
+  LLM_FIRST_TOKEN_MS,
+  LLM_RATE,
+  REGEX_CAPACITY,
+  SLOW_CHARGE_MS,
+  TOKENS_PER_PROMPT,
   TIERED_MEDIA_HIT,
   COALESCED,
   COMPONENTS,
@@ -31,6 +38,7 @@ import {
 } from './catalog.ts'
 import {
   FLAT_CAPACITY,
+  asyncCallsOf,
   callsOf,
   databaseModel,
   flatModel,
@@ -117,6 +125,9 @@ export type Serve = Readonly<{
   route: (kind: Kind, rate: number) => void
   setHits: (hit: number, stale: number) => void
 }>
+
+/** With Read-your-writes routing, this share of stale reads still reaches a lagging replica. */
+export const RYW_STALE = 0.2
 
 /** Share of the tasks a Worker gets that come from each kind: the kinds that can go async, by demand. */
 export const taskMixOf = (game: Game): Partial<Record<RequestKind, number>> => {
@@ -226,7 +237,11 @@ export const wafOf = (node: GameNode) => {
   const level =
     PARANOIA[Math.max(0, Math.min(PARANOIA.length - 1, node.paranoia - 1))] ?? PARANOIA[1]
   return node.underAttack
-    ? { block: UNDER_ATTACK.block, falsePositive: UNDER_ATTACK.falsePositive, cpu: PARANOIA[3].cpu }
+    ? {
+        block: UNDER_ATTACK.block,
+        falsePositive: UNDER_ATTACK.falsePositive,
+        cpu: UNDER_ATTACK.cpu,
+      }
     : level
 }
 
@@ -302,7 +317,9 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       // The response crosses the user's downlink: bytes over bandwidth.
       const own = {
         ...served,
-        fixed: served.fixed + transferMs(node, requestKind) * payloadFactor(game, requestKind),
+        fixed:
+          served.fixed +
+          transferMs(node, requestKind, answer.offloads) * payloadFactor(game, requestKind),
       }
       // A bad deploy, or a migration's bugs, make the code itself fail some requests.
       const crashes =
@@ -314,16 +331,23 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       if (answer.runsLocalDb) return failSome(through(own), crashes, 'crash')
       const calls = callsOf(game, node, requestKind, answer.delegates, answer.offloads)
       const hop = hopMs(game)
+      // Read-your-writes routing sends a checkout's read, and most reads after a write, to the primary.
+      const ryw = node.ryw && has(game, 'ryw-routing')
+      const fresh = (backend: Kind, outcome: Outcome): Outcome =>
+        ryw && backend === 'q-read' && outcome.stale > 0
+          ? { ...outcome, stale: requestKind === 'buy' ? 0 : outcome.stale * RYW_STALE }
+          : outcome
       // A call to a Queue returns once the task is enqueued: what happens after is async.
+      // A stale read fails an API read, and a checkout that reads its own write.
       return failSome(
         through(
           own,
           BACKEND_KINDS.flatMap((backend, index) =>
             index < 3 || (calls[backend] ?? 0) > 0
-              ? [[answer.downstream(backend, hop), calls[backend] ?? 0] as const]
+              ? [[fresh(backend, answer.downstream(backend, hop)), calls[backend] ?? 0] as const]
               : [],
           ),
-          requestKind === 'read',
+          requestKind === 'read' || requestKind === 'buy',
         ),
         crashes,
         'crash',
@@ -344,6 +368,13 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     model: (solver, node, arriving) =>
       databaseModel({ game: solver.game, node, arriving, boost: solver.boost(node) }),
     outcome: (answer, node, kind) => {
+      // A full disk: Postgres cannot extend a file, so every write fails.
+      if (
+        answer.game.incident?.kind === 'disk-full' &&
+        answer.game.incident.nodeId === node.id &&
+        (kind === 'q-write' || kind === 'q-tx' || kind === 'blob-put')
+      )
+        return failed('refused')
       const pool = answer.pass.connections.get(node.id)
       const refused = pool && pool.used > pool.max ? 1 - pool.max / pool.used : 0
       const reply: Outcome = {
@@ -472,7 +503,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
         game: solver.game,
         node,
         arriving: work,
-        callLatency: {},
+        callLatency: solver.callLatency(node),
         delegated: false,
         local: false,
         inflight: solver.inflight(node),
@@ -483,8 +514,21 @@ export const RULES: Record<ComponentId, ComponentRule> = {
         pod: inCluster(solver.game, node),
       })
     },
+    // It sends the async part's calls: an export's 50 reads.
+    serve: (serve, _, rates, share) => {
+      const tasks = (rates.task ?? 0) * share
+      if (tasks <= 0) return
+      const mix = taskMixOf(serve.solver.game)
+      for (const kind of Object.keys(mix) as Array<RequestKind>) {
+        const calls = asyncCallsOf(serve.solver.game, kind)
+        for (const backend of BACKEND_KINDS)
+          serve.route(backend, tasks * (mix[kind] ?? 0) * (calls[backend] ?? 0))
+      }
+    },
     outcome: (answer, _, kind) => through(answer.ownHop(kind)),
-    ...terminal,
+    // A Worker holds a pool to each database it reads, like an App Server.
+    connections: (_, node, model) => (model?.processes ?? 0) * RUNTIMES[node.runtime].connections,
+    probe: noProbe,
   },
   cdn: {
     model: unlimited(8, 0),
@@ -511,7 +555,8 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   waf: {
     model: (solver, node, arriving) =>
       flatModel(
-        flatCapacity(node) / wafOf(node).cpu,
+        (flatCapacity(node) / wafOf(node).cpu) *
+          (solver.game.incident?.kind === 'regex' ? REGEX_CAPACITY : 1),
         arriving,
         { fixed: 2 + (node.underAttack ? UNDER_ATTACK.latency : 0), variable: 0.1 },
         solver.boost(node),
@@ -535,7 +580,15 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   // A Managed Component: 400 ms per charge, and its own outages.
   psp: {
     model: (solver, node, arriving) =>
-      flatModel(PSP_CAPACITY, arriving, { fixed: 400, variable: 30 }, solver.boost(node)),
+      flatModel(
+        PSP_CAPACITY,
+        arriving,
+        {
+          fixed: 400,
+          variable: 30 + (solver.game.incident?.kind === 'double-charge' ? SLOW_CHARGE_MS : 0),
+        },
+        solver.boost(node),
+      ),
     outcome: (answer, _, kind) =>
       answer.game.incident?.kind === 'psp-outage'
         ? failed('upstream')
@@ -552,7 +605,41 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     outcome: () => failed('stranded'),
     ...terminal,
   },
+  // Columnar scans: slow, unlimited, and paid per scan.
+  warehouse: {
+    model: unlimited(1_500, 200),
+    outcome: (answer, _, kind) => through(answer.ownHop(kind)),
+    ...terminal,
+  },
+  // Prompts per second: tokens per second over the tokens in a prompt. A cold Node loads its model.
+  gpu: {
+    model: (solver, node, arriving) =>
+      flatModel(
+        gpuCapacity(node) * Math.max(0.1, node.warm),
+        arriving,
+        { fixed: GPU_FIRST_TOKEN_MS, variable: 100 },
+        solver.boost(node),
+      ),
+    outcome: (answer, _, kind) => through(answer.ownHop(kind)),
+    ...terminal,
+  },
+  // A Managed Component with a rate limit: past it, prompts fail as `throttled` at once.
+  llm: {
+    model: (solver, node, arriving) =>
+      flatModel(
+        LLM_RATE * flatScale(node),
+        arriving,
+        { fixed: LLM_FIRST_TOKEN_MS, variable: 0 },
+        solver.boost(node),
+      ),
+    outcome: (answer, _, kind) => through({ ...answer.ownHop(kind), cause: 'throttled' }),
+    ...terminal,
+  },
 }
+
+/** Prompts per second a GPU Node serves at full warmth. */
+export const gpuCapacity = (node: GameNode): number =>
+  (GPU_TYPES[node.gpu].tokens * flatScale(node)) / TOKENS_PER_PROMPT
 
 /** Whether a Node takes a kind on an inbound Link. */
 export const accepts = (node: GameNode, kind: Kind): boolean =>

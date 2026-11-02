@@ -49,6 +49,8 @@ import {
   LB_POLICIES,
   KINDS,
   RUNTIMES,
+  GPU_TYPES,
+  SCAN_PRICE,
   SIZES,
   ZONES,
   type BuildGroup,
@@ -152,6 +154,12 @@ const layoutOf = (type: ComponentId): Layout => {
       return { rows: 3, inRow: 0, outRow: null, footer: false }
     case 'cluster':
       return { rows: 2, inRow: 0, outRow: null, footer: false }
+    case 'warehouse':
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
+    case 'gpu':
+      return { rows: 4, inRow: 0, outRow: null, footer: true }
+    case 'llm':
+      return { rows: 3, inRow: 0, outRow: null, footer: true }
   }
 }
 
@@ -994,6 +1002,25 @@ const rowsOf = (
         },
       ]
     }
+    case 'warehouse':
+      return [
+        { ...inbound, name: 'Scans' },
+        latency,
+        {
+          glyph: 'cost',
+          name: 'Cost',
+          value: `${money((own.inbound - own.dropped) * SCAN_PRICE * eraOf(game).costIndex)}/s`,
+        },
+      ]
+    case 'gpu':
+      return [
+        { ...inbound, name: 'Prompts' },
+        capacity,
+        { glyph: 'stack', name: 'GPU', value: GPU_TYPES[node.gpu].name },
+        { glyph: 'cost', name: 'Cost', value: `${money(burnOf(game, node))}/s` },
+      ]
+    case 'llm':
+      return [{ ...inbound, name: 'Prompts' }, capacity, latency]
   }
 }
 

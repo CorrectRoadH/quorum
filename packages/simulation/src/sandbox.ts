@@ -46,6 +46,10 @@ export const SANDBOX_IDS = [
   'bots',
   'zone-outage',
   'cold-start',
+  'stale-checkout',
+  'gc-pauses',
+  'retry-storm',
+  'analytics-primary',
 ] as const
 export type SandboxId = (typeof SANDBOX_IDS)[number]
 
@@ -84,6 +88,18 @@ const fast =
   (p99: number) =>
   (_: Game, ledger: Ledger): boolean =>
     ledger.errorShare < 0.01 && ledger.p99 <= p99
+
+/** Every checkout sees its own write, and Apdex holds. */
+const checkingOut =
+  (apdex: number, burn = Number.POSITIVE_INFINITY) =>
+  (_: Game, ledger: Ledger): boolean =>
+    (ledger.kinds.buy?.success ?? 1) >= 0.995 && ledger.apdex >= apdex && ledger.burn <= burn + 1e-9
+
+/** API reads come back fast at the p99, with errors under 1% and Burn within the cap. */
+const steadyReads =
+  (p99: number, burn = Number.POSITIVE_INFINITY) =>
+  (_: Game, ledger: Ledger): boolean =>
+    ledger.errorShare < 0.01 && (ledger.kinds.read?.p99 ?? 0) <= p99 && ledger.burn <= burn + 1e-9
 
 /* ---------- starting Designs ---------- */
 
@@ -140,6 +156,50 @@ const SERIES_A_RESEARCH: ReadonlyArray<ResearchId> = [
   'object-storage',
   'checkout',
   'multi-az',
+]
+
+const STALE_USERS = 8_000
+const GC_USERS = 4_000
+const GC_P99 = 110
+const GC_BURN = 21.5
+const STORM_USERS = 10_000
+const STORM_BURN = 49
+const ANALYTICS_USERS = 8_000
+const ANALYTICS_BURN = 58
+
+/** What a Series B Design needs besides App Servers and its Database: files, checkouts, AI, and exports. */
+const seriesBData = (warehouse: boolean): ReadonlyArray<GameNode> => [
+  node('storage', 'storage', 880, 420),
+  node('psp', 'psp', 880, 560),
+  node('llm', 'llm', 880, 700),
+  node('queue', 'queue', 360, 40),
+  node('worker', 'worker', 880, 60, { size: 3, runtime: 'go' }),
+  ...(warehouse ? [node('warehouse', 'warehouse', 1120, 420)] : []),
+]
+const seriesBLinks = (
+  servers: ReadonlyArray<string>,
+  warehouse: boolean,
+): ReadonlyArray<readonly [string, string]> => [
+  ['users', 'lb'],
+  ['queue', 'worker'],
+  ['worker', 'database'],
+  ...servers.flatMap((server): ReadonlyArray<readonly [string, string]> => [
+    ['lb', server],
+    [server, 'database'],
+    [server, 'storage'],
+    [server, 'psp'],
+    [server, 'llm'],
+    [server, 'queue'],
+    ...(warehouse ? [[server, 'warehouse'] as const] : []),
+  ]),
+]
+const SERIES_B_RESEARCH: ReadonlyArray<ResearchId> = [
+  ...SERIES_A_RESEARCH,
+  'lang-go',
+  'background-jobs',
+  'queues',
+  'hosted-models',
+  'data-warehouse',
 ]
 
 export const GUIDED: Record<SandboxId, GuidedSandbox> = {
@@ -584,6 +644,183 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       },
     ],
   },
+  'stale-checkout': {
+    id: 'stale-checkout',
+    name: 'Stale Checkout',
+    stage: 3,
+    start: () =>
+      board(
+        3,
+        STALE_USERS,
+        [...SERIES_A_RESEARCH, 'lang-go', 'replication', 'ryw-routing'],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 2,
+              runtime: 'go',
+            }),
+          ),
+          ...seriesAData(3),
+          node('replica', 'replica', 1120, 220, { size: 3 }),
+        ],
+        [
+          ['users', 'lb'],
+          ...seriesALinks(['server1', 'server2']),
+          ['server1', 'replica'],
+          ['server2', 'replica'],
+        ],
+      ),
+    objectives: [
+      {
+        goal: 'Keep Apdex above 0.9 for 90 seconds.',
+        hold: 90,
+        met: (_, ledger) => ledger.apdex >= 0.9,
+      },
+      {
+        goal: 'Writes will pile up. Keep every checkout correct for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'repl-lag', survive: false },
+        met: checkingOut(0.85),
+      },
+      {
+        goal: 'Demand is up 50%, and the writes come back. Keep every checkout correct through it.',
+        users: STALE_USERS * 1.5,
+        hold: 120,
+        incident: { kind: 'repl-lag', survive: true },
+        met: checkingOut(0.85),
+      },
+    ],
+  },
+  'gc-pauses': {
+    id: 'gc-pauses',
+    name: 'GC Pauses',
+    stage: 4,
+    start: () =>
+      board(
+        4,
+        GC_USERS,
+        [...SERIES_B_RESEARCH, 'lang-java', 'zgc'],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 1,
+              family: 'compute',
+              runtime: 'tomcat',
+            }),
+          ),
+          node('database', 'database', 880, 220, { size: 4 }),
+          ...seriesBData(true),
+        ],
+        seriesBLinks(['server1', 'server2'], true),
+      ),
+    objectives: [
+      {
+        goal: `Keep API reads under ${GC_P99} ms at the p99 for 90 seconds.`,
+        hold: 90,
+        met: steadyReads(GC_P99),
+      },
+      {
+        goal: `The heap will fill. Keep API reads under ${GC_P99} ms at the p99 for 2 minutes.`,
+        hold: 120,
+        incident: { kind: 'gc-storm', survive: true },
+        met: steadyReads(GC_P99),
+      },
+      {
+        goal: `It fills again. Keep reads under ${GC_P99} ms at the p99 with Burn at $${GC_BURN.toFixed(2)}/s or less.`,
+        hold: 120,
+        incident: { kind: 'gc-storm', survive: true },
+        met: steadyReads(GC_P99, GC_BURN),
+      },
+    ],
+  },
+  'retry-storm': {
+    id: 'retry-storm',
+    name: 'Retry Storm',
+    stage: 4,
+    start: () => {
+      const game = board(
+        4,
+        STORM_USERS,
+        [...SERIES_B_RESEARCH, 'timeouts', 'backoff-jitter', 'circuit-breakers', 'load-shedding'],
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 3,
+              runtime: 'go',
+            }),
+          ),
+          node('database', 'database', 880, 220, { size: 4 }),
+          ...seriesBData(true),
+        ],
+        seriesBLinks(['server1', 'server2'], true),
+      )
+      // Every call to the Database gives up after a second and retries at once.
+      return {
+        ...game,
+        links: game.links.map((entry) =>
+          entry.to === 'database' && entry.from.startsWith('server')
+            ? { ...entry, timeout: 1, retries: 'naive' as const }
+            : entry,
+        ),
+      }
+    },
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: 'The Database will slow down for 20 s. Get errors back under 1% and hold for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'retry-storm', survive: false },
+        met: serving(0.85),
+      },
+      {
+        goal: `It slows again. Get errors under 1% and hold with Burn at $${STORM_BURN.toFixed(2)}/s or less.`,
+        hold: 120,
+        incident: { kind: 'retry-storm', survive: false },
+        met: within(0.85, STORM_BURN),
+      },
+    ],
+  },
+  'analytics-primary': {
+    id: 'analytics-primary',
+    name: 'Analytics on Primary',
+    stage: 4,
+    start: () =>
+      board(
+        4,
+        ANALYTICS_USERS,
+        SERIES_B_RESEARCH,
+        [
+          node('lb', 'lb', 360, 280),
+          ...[0, 1].map((index) =>
+            node(`server${index + 1}`, 'server', 600, 180 + index * 200, {
+              size: 3,
+              runtime: 'go',
+            }),
+          ),
+          node('database', 'database', 880, 220, { size: 4 }),
+          ...seriesBData(false),
+        ],
+        seriesBLinks(['server1', 'server2'], false),
+      ),
+    objectives: [
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      {
+        goal: 'Quarter end: a report will scan every table. Keep Apdex above 0.85 for 2 minutes.',
+        hold: 120,
+        incident: { kind: 'report-db', survive: true },
+        met: serving(0.85),
+      },
+      {
+        goal: `Demand is up 50%. Keep Apdex above 0.9 with Burn at $${ANALYTICS_BURN.toFixed(2)}/s or less.`,
+        users: ANALYTICS_USERS * 1.5,
+        hold: 120,
+        met: within(0.9, ANALYTICS_BURN),
+      },
+    ],
+  },
 }
 
 export const TRACKS: ReadonlyArray<
@@ -592,7 +829,8 @@ export const TRACKS: ReadonlyArray<
   { stage: 0, sandboxes: ['out-of-credits', 'shared-box', 'second-server'] },
   { stage: 1, sandboxes: ['connection-limit', 'event-loop-stall', 'read-mostly'] },
   { stage: 2, sandboxes: ['stampede', 'slow-uploads', 'bots'] },
-  { stage: 3, sandboxes: ['zone-outage', 'cold-start'] },
+  { stage: 3, sandboxes: ['zone-outage', 'cold-start', 'stale-checkout'] },
+  { stage: 4, sandboxes: ['gc-pauses', 'retry-storm', 'analytics-primary'] },
 ]
 
 /** A guided Sandbox opens when the one before it in its track has passed. */

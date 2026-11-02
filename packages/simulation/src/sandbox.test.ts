@@ -371,6 +371,101 @@ describe('the Series A track', () => {
   }, 60_000)
 })
 
+describe('the Series A track, continued', () => {
+  const onBoth =
+    (apply: (game: Game, id: string) => Game): Plan =>
+    (game, passed) =>
+      passed > 0 ? game : apply(apply(game, 'server1'), 'server2')
+
+  test('Stale Checkout: read-your-writes routing, not more replicas', () => {
+    passesInTime(
+      play(
+        'stale-checkout',
+        onBoth((game, id) => ok(Actions.setRyw(game, id, true))),
+        LONG,
+      ),
+      3,
+    )
+    expect(play('stale-checkout', idle, LONG).objective).toBe(1)
+    // A second replica lags as far behind as the first.
+    const replicas: Plan = (game, passed) => {
+      if (passed > 0) return game
+      const placed = ok(Actions.place(game, 'replica', 1120, 400))
+      const id = lastId(placed)
+      return ok(Actions.connect(ok(Actions.connect(placed, 'server1', id)), 'server2', id))
+    }
+    expect(play('stale-checkout', replicas, LONG).objective).toBe(1)
+  }, 60_000)
+})
+
+describe('the Series B track', () => {
+  const onBoth =
+    (apply: (game: Game, id: string) => Game): Plan =>
+    (game, passed) =>
+      passed > 0 ? game : apply(apply(game, 'server1'), 'server2')
+
+  test('GC Pauses: more memory or ZGC keeps the p99 down; Parallel GC makes it worse', () => {
+    passesInTime(
+      play(
+        'gc-pauses',
+        onBoth((game, id) => ok(Actions.setFamily(game, id, 'memory'))),
+        LONG,
+      ),
+      3,
+    )
+    passesInTime(
+      play(
+        'gc-pauses',
+        onBoth((game, id) => ok(Actions.setCollector(game, id, 'zgc'))),
+        LONG,
+      ),
+      3,
+    )
+    expect(play('gc-pauses', idle, LONG).objective).toBe(1)
+    expect(
+      play(
+        'gc-pauses',
+        onBoth((game, id) => ok(Actions.setCollector(game, id, 'parallel'))),
+        LONG,
+      ).objective,
+    ).toBe(1)
+  }, 60_000)
+
+  test('Retry Storm: backoff or breakers end it; a bigger Database costs too much', () => {
+    const policy = (change: Parameters<typeof Actions.setLinkPolicy>[3]) =>
+      onBoth((game, id) => ok(Actions.setLinkPolicy(game, id, 'database', change)))
+    passesInTime(play('retry-storm', policy({ retries: 'backoff' }), LONG), 3)
+    passesInTime(play('retry-storm', policy({ breaker: true }), LONG), 3)
+    // Naive retries keep the Database overloaded after the trigger ends.
+    expect(play('retry-storm', idle, LONG).objective).toBe(1)
+    const bigger: Plan = (game, passed) =>
+      passed > 0 ? game : ok(Actions.resize(ok(Actions.resize(game, 'database', 1)), 'database', 1))
+    expect(play('retry-storm', bigger, LONG).objective).toBe(2)
+  }, 120_000)
+
+  test('Analytics on Primary: a Warehouse, not a bigger primary', () => {
+    const warehouse: Plan = (game, passed) => {
+      if (passed > 0) return game
+      const placed = ok(Actions.place(game, 'warehouse', 1120, 420))
+      const id = lastId(placed)
+      return ok(Actions.connect(ok(Actions.connect(placed, 'server1', id)), 'server2', id))
+    }
+    passesInTime(play('analytics-primary', warehouse, LONG), 3)
+    expect(play('analytics-primary', idle, LONG).objective).toBe(1)
+    const bigger: Plan = (game, passed) =>
+      passed > 0
+        ? game
+        : ok(
+            Actions.resize(
+              ok(Actions.resize(ok(Actions.resize(game, 'database', 1)), 'database', 1)),
+              'database',
+              1,
+            ),
+          )
+    expect(play('analytics-primary', bigger, LONG).objective).toBe(2)
+  }, 60_000)
+})
+
 describe('the free Sandbox', () => {
   test('holds demand flat, spends nothing, and starts no incidents', () => {
     let game = freeSandbox()

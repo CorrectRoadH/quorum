@@ -1,4 +1,9 @@
 import {
+  COLLECTORS,
+  GC_STORM,
+  GC_STORM_HEAP,
+  GOGC,
+  KINDS,
   APACHE_MAX_WORKERS,
   APACHE_SPARE,
   NOISY_MS,
@@ -18,6 +23,9 @@ import {
   REQUEST_KINDS,
   ROWS_PER_USER,
   UNINDEXED_MS_PER_ROW,
+  REPORT_SURGE,
+  STORM_SLOWDOWN,
+  STORM_TRIGGER,
   RT_HOLD_SECONDS,
   RUNTIMES,
   USER_UP_MBPS,
@@ -26,6 +34,7 @@ import {
   type RequestKind,
 } from './catalog.ts'
 import { combineTail } from './distribution.ts'
+import type { Kind } from './catalog.ts'
 import { payloadFactor, queryFactor } from './features.ts'
 import { asLogin, has, networkOf, payloadOf, profileOf, ramOf, vcpuOf } from './lookups.ts'
 import { fixed } from './team.ts'
@@ -84,6 +93,8 @@ export type NodeModel = Readonly<{
   capacity: number
   /** Latency this Node adds, per arriving kind. */
   service: Readonly<Record<string, Service>>
+  /** Share of each kind processed, when it differs by kind (load shedding). */
+  shares?: Readonly<Partial<Record<Kind, number>>>
   /** Event-loop stalls: the share of requests hit and the stall length. */
   tailP: number
   tailMs: number
@@ -149,9 +160,19 @@ export const callsOf = (
     ...profile.calls,
     'q-read': (profile.calls['q-read'] ?? 0) * (orm ? ORM_READS : 1),
   }
+  // The async part's calls: a Worker makes them once the kind goes through a Queue.
   if (offloaded && profile.offload > 0) calls.task = 1
+  else
+    for (const [backend, count] of Object.entries(profile.asyncCalls) as Array<
+      [BackendKind, number]
+    >)
+      calls[backend] = (calls[backend] ?? 0) + count
   return calls
 }
+
+/** The calls a Worker makes for one task of a kind: the async part's. */
+export const asyncCallsOf = (game: Game, kind: RequestKind): Calls =>
+  profileOf(game, kind).asyncCalls
 
 export type ServerContext = Readonly<{
   game: Game
@@ -188,8 +209,38 @@ export const speedOf = (game: Game, node: GameNode): number => {
   const runtime = RUNTIMES[node.runtime]
   const opcache =
     runtime.language === 'php' && has(game, 'opcache') ? 1 + (OPCACHE_SPEED - 1) * node.warm : 1
-  return runtime.speed * opcache * (runtime.warmFrom + (1 - runtime.warmFrom) * node.warm)
+  const collector = runtime.language === 'java' ? COLLECTORS[node.collector].speed : 1
+  return (
+    runtime.speed * collector * opcache * (runtime.warmFrom + (1 - runtime.warmFrom) * node.warm)
+  )
 }
+
+/** GOGC's row for a Go App Server; the default for every other runtime. */
+const gogcOf = (node: GameNode) =>
+  GOGC.find((entry) => entry.gogc === node.gogc) ?? (GOGC[1] as (typeof GOGC)[number])
+
+/**
+ * A runtime's garbage collector as this Node runs it: Java's collector sets the pause and the
+ * heap; Go's GOGC trades memory for collection CPU. Null for runtimes without a global GC.
+ */
+export const collectorOf = (
+  node: GameNode,
+): Readonly<{ pauseMs: number; cpu: number; memory: number }> | null => {
+  const runtime = RUNTIMES[node.runtime]
+  if (!runtime.gc) return null
+  if (runtime.language === 'java') {
+    const collector = COLLECTORS[node.collector]
+    return { pauseMs: collector.pauseMs, cpu: runtime.gc.cpu, memory: collector.memory }
+  }
+  if (runtime.language === 'go') {
+    const gogc = gogcOf(node)
+    return { pauseMs: runtime.gc.pauseMs, cpu: runtime.gc.cpu * gogc.cpu, memory: gogc.memory }
+  }
+  return { ...runtime.gc, memory: 1 }
+}
+
+/** A saturated App Server with Priority load shedding keeps its load at this share. */
+export const SHED_AT = 0.9
 
 /** Core-milliseconds one request of a kind costs this server. */
 const cpuOf = (context: ServerContext, kind: RequestKind, calls: Calls): number => {
@@ -220,7 +271,57 @@ const cpuOf = (context: ServerContext, kind: RequestKind, calls: Calls): number 
   return cpu * (1 + context.sampling)
 }
 
-export const serverModel = (context: ServerContext): NodeModel => {
+/**
+ * Priority load shedding: a saturated App Server drops whole kinds, lowest value
+ * first, and part of the next, until it runs at SHED_AT. Bots go first.
+ */
+const shedding = (context: ServerContext, full: NodeModel): NodeModel => {
+  const kinds = REQUEST_KINDS.filter((kind) => (context.arriving[kind] ?? 0) > 0).toSorted(
+    (a, b) => KINDS[a].value - KINDS[b].value,
+  )
+  const keep = (dropped: number, fraction: number): Partial<Record<RequestKind, number>> => {
+    const kept: Partial<Record<RequestKind, number>> = {}
+    for (const [index, kind] of kinds.entries())
+      kept[kind] =
+        index < dropped
+          ? 0
+          : index === dropped
+            ? (context.arriving[kind] ?? 0) * fraction
+            : (context.arriving[kind] ?? 0)
+    return kept
+  }
+  const run = (kept: Partial<Record<RequestKind, number>>) =>
+    serverModel({ ...context, arriving: kept }, false)
+  // The first kind whose loss brings the load under the line.
+  let dropped = 0
+  while (dropped < kinds.length && run(keep(dropped + 1, 1)).utilization > SHED_AT) dropped += 1
+  let low = 0
+  let high = 1
+  for (let index = 0; index < 16; index += 1) {
+    const middle = (low + high) / 2
+    if (run(keep(dropped, middle)).utilization > SHED_AT) high = middle
+    else low = middle
+  }
+  const kept = keep(dropped, low)
+  const model = run(kept)
+  const shares: Partial<Record<Kind, number>> = {}
+  let total = 0
+  let left = 0
+  for (const kind of kinds) {
+    const rate = context.arriving[kind] ?? 0
+    shares[kind] = rate > 0 ? (kept[kind] ?? 0) / rate : 1
+    total += rate
+    left += kept[kind] ?? 0
+  }
+  return {
+    ...model,
+    share: total > 0 ? left / total : 1,
+    shares,
+    capacity: full.capacity,
+  }
+}
+
+export const serverModel = (context: ServerContext, shed = true): NodeModel => {
   const { game, node, arriving } = context
   const runtime = RUNTIMES[node.runtime]
   const framework = FRAMEWORKS[node.framework]
@@ -264,7 +365,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
       : 0
   const ramUsed =
     OS_RAM * copies +
-    (resident * (runtime.memory + framework.memory)) / 1024 +
+    (resident * (runtime.memory * (collectorOf(node)?.memory ?? 1) + framework.memory)) / 1024 +
     (context.local ? LOCAL_DB_RAM + game.users * LOCAL_DB_RAM_PER_USER : 0) +
     node.leak +
     connectionRam
@@ -272,8 +373,14 @@ export const serverModel = (context: ServerContext): NodeModel => {
   const efficiency = swapping ? Math.max(0.15, 1 - (2.5 * (ramUsed - ram)) / ram) : 1
   // Above 70% heap a collector pauses some requests; Go's spends CPU instead (06 "Runtime behaviors").
   const heap = ram > 0 ? ramUsed / ram : 0
-  const pressure = runtime.gc && heap > GC_HEAP ? Math.min(1, (heap - GC_HEAP) / (1 - GC_HEAP)) : 0
-  const collecting = pressure > 0 && runtime.gc ? 1 + runtime.gc.cpu * pressure : 1
+  const gc = collectorOf(node)
+  // A GC pause storm: a burst of allocation fills the heap further, and the collector pauses
+  // many times as often (11 "GC pause storm").
+  const storm =
+    gc !== null && game.incident?.kind === 'gc-storm' && game.incident.nodeId === node.id
+  const live = storm ? Math.min(1, heap + GC_STORM_HEAP) : heap
+  const pressure = gc && live > GC_HEAP ? Math.min(1, (live - GC_HEAP) / (1 - GC_HEAP)) : 0
+  const collecting = pressure > 0 && gc ? 1 + gc.cpu * pressure : 1
 
   const usable = runtime.parallel
     ? vcpu
@@ -288,7 +395,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
     REQUEST_KINDS.map((kind) => [
       kind,
       context.worker
-        ? {}
+        ? asyncCallsOf(game, kind)
         : callsOf(game, node, kind, context.delegated, context.offloaded ?? false),
     ]),
   ) as Record<RequestKind, Calls>
@@ -329,7 +436,10 @@ export const serverModel = (context: ServerContext): NodeModel => {
     ? 0
     : kinds.reduce(
         (sum, kind) =>
-          sum + (arriving[kind] ?? 0) * payloadOf(node, kind) * payloadFactor(context.game, kind),
+          sum +
+          (arriving[kind] ?? 0) *
+            payloadOf(node, kind, context.offloaded ?? false) *
+            payloadFactor(context.game, kind),
         0,
       )
   const networkUtilization = bytes / (networkOf(node) * context.boost)
@@ -373,10 +483,10 @@ export const serverModel = (context: ServerContext): NodeModel => {
       : pm.spawnShare
   const stallMs =
     loopBlock > 0 ? loopBlock * Math.min(1, 2 * Math.min(1, cpuUtilization)) : pm.spawnMs
-  const gcP = pressure > 0 ? pressure * GC_TAIL_SHARE : 0
+  const gcP = pressure > 0 ? pressure * GC_TAIL_SHARE * (storm ? GC_STORM : 1) : 0
   const collected =
-    gcP > 0 && runtime.gc
-      ? combineTail(stallP, stallMs, gcP, runtime.gc.pauseMs)
+    gcP > 0 && gc
+      ? combineTail(stallP, stallMs, gcP, gc.pauseMs)
       : { tailP: stallP, tailMs: stallMs }
   const { tailP, tailMs } = context.pod
     ? combineTail(collected.tailP, collected.tailMs, NOISY_SHARE, NOISY_MS)
@@ -390,7 +500,7 @@ export const serverModel = (context: ServerContext): NodeModel => {
   )
 
   const used = Math.min(cpuWork * share, cores * 1000) / 1000
-  return {
+  const model: NodeModel = {
     utilization,
     limit,
     share,
@@ -416,6 +526,9 @@ export const serverModel = (context: ServerContext): NodeModel => {
     throttled,
     swapping,
   }
+  return shed && utilization > SHED_AT && node.shed && has(game, 'load-shedding') && !context.worker
+    ? shedding(context, model)
+    : model
 }
 
 /* ---------- Database and Read Replica ---------- */
@@ -423,11 +536,23 @@ export const serverModel = (context: ServerContext): NodeModel => {
 /** Extra latency on a read query that misses the buffer cache. */
 const DISK_READ_MS = 8
 
+/**
+ * Share of the buffer cache report scans evict: twice their share of the box's CPU, at most
+ * all of it. Proposed: the GDD says only that scans evict the cache.
+ */
+const scanEviction = (scanWork: number, cores: number): number =>
+  cores > 0 ? Math.min(1, (2 * scanWork) / (cores * 1000)) : 1
+
 export type DatabaseContext = Readonly<{
   game: Game
   node: GameNode
   arriving: Readonly<
-    Partial<Record<'q-read' | 'q-write' | 'q-search' | 'blob-put' | 'q-tx' | 'blob-get', number>>
+    Partial<
+      Record<
+        'q-read' | 'q-write' | 'q-search' | 'blob-put' | 'q-tx' | 'blob-get' | 'q-scan',
+        number
+      >
+    >
   >
   boost: number
 }>
@@ -439,14 +564,30 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
   const workingSet = LOCAL_DB_RAM + game.users * LOCAL_DB_RAM_PER_USER
   const disk = workingSet > ram - OS_RAM
   const throttled = node.family === 'burstable' && node.credits < 1
-  const cores = throttled ? BURST_BASELINE * vcpu : vcpu
+  // A retry storm's trigger: the Database runs slow for its first seconds.
+  const incident = game.incident
+  const slowed =
+    incident?.kind === 'retry-storm' &&
+    incident.nodeId === node.id &&
+    game.time - incident.startedAt < STORM_TRIGGER
+  const cores = (throttled ? BURST_BASELINE * vcpu : vcpu) * (slowed ? STORM_SLOWDOWN : 1)
   const perRequest = Math.min(1, cores)
   const warmth = 0.5 + 0.5 * node.warm
   // A Slow query incident: every read scans the table until someone adds the index.
   const scan =
     game.incident?.kind === 'slow-query' ? game.users * ROWS_PER_USER * UNINDEXED_MS_PER_ROW : 0
-  const readCpu = ((QUERY_CPU['q-read'] + scan) * (disk ? 1.5 : 1)) / warmth
-  const writeCpu = QUERY_CPU['q-write'] / warmth
+  // Report scans fill the buffer cache with cold pages: a share of reads go to disk, and writes
+  // wait on the scans' locks (07 "Data Warehouse"). A quarter-end report scans ten times as much.
+  const scans = arriving['q-scan'] ?? 0
+  const scanCpu =
+    (QUERY_CPU['q-scan'] * (game.incident?.kind === 'report-db' ? REPORT_SURGE : 1)) / warmth
+  const evicted = scans > 0 ? scanEviction(scans * scanCpu, cores) : 0
+  const readCpu =
+    evicted > 0
+      ? ((QUERY_CPU['q-read'] + scan) * (disk ? 1.5 : 1 + 0.5 * evicted)) / warmth
+      : ((QUERY_CPU['q-read'] + scan) * (disk ? 1.5 : 1)) / warmth
+  const writeCpu =
+    ((QUERY_CPU['q-write'] * queryFactor(game, 'q-write')) / warmth) * (1 + 0.5 * evicted)
   // Postgres full-text search and files stored as rows: both work, both badly at volume.
   const searchCpu = (QUERY_CPU['q-search'] * queryFactor(game, 'q-search')) / warmth
   const putCpu = QUERY_CPU['blob-put'] / warmth
@@ -465,22 +606,34 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
     rate += txs + gets
     work += txs * txCpu + gets * getCpu
   }
+  // Report scans arrive with Series B.
+  if (scans > 0) {
+    rate += scans
+    work += scans * scanCpu
+  }
   const utilization = cores > 0 ? work / (cores * 1000) : rate > 0 ? 99 : 0
-  const wait = rate > 0 ? waitFor(work / rate / perRequest, utilization, cores) : 0
+  // Queries in a backlog wait their turn: depth over the rate it drains.
+  const capacity = rate > 0 ? rate / Math.max(utilization, 1e-9) : 0
+  const backlog = node.depth > 0 && capacity > 0 ? (node.depth / capacity) * 1000 : 0
+  const wait = rate > 0 ? waitFor(work / rate / perRequest, utilization, cores) + backlog : backlog
   const share = utilization > 1 ? 1 / utilization : 1
   const used = Math.min(work * share, cores * 1000) / 1000
   return {
     utilization,
     limit: utilization <= 0 ? 'none' : throttled ? 'credits' : disk ? 'disk' : 'cpu',
     share,
-    capacity: rate > 0 ? rate / Math.max(utilization, 1e-9) : 0,
+    capacity,
     service: {
-      'q-read': { fixed: 2.5 + (disk ? DISK_READ_MS : 0), variable: readCpu / perRequest + wait },
+      'q-read': {
+        fixed: 2.5 + (disk ? DISK_READ_MS : evicted > 0 ? DISK_READ_MS * evicted : 0),
+        variable: readCpu / perRequest + wait,
+      },
       'q-write': { fixed: 2.5, variable: writeCpu / perRequest + wait },
       'q-search': { fixed: 2.5, variable: searchCpu / perRequest + wait },
       'blob-put': { fixed: 2.5, variable: putCpu / perRequest + wait },
       'q-tx': { fixed: 2.5, variable: txCpu / perRequest + wait },
       'blob-get': { fixed: 2.5 + DISK_READ_MS, variable: getCpu / perRequest + wait },
+      'q-scan': { fixed: 2.5 + DISK_READ_MS, variable: scanCpu / perRequest + wait },
     },
     tailP: 0,
     tailMs: 0,

@@ -69,6 +69,11 @@ export const node = (
   target: 0.6,
   minCopies: 1,
   maxCopies: 8,
+  gpu: 't4',
+  collector: 'g1',
+  gogc: 100,
+  shed: false,
+  ryw: false,
   ...extra,
 })
 
@@ -79,6 +84,9 @@ export const link = (from: string, to: string): GameLink => ({
   timeout: LINK_TIMEOUT,
   retries: 'none',
   kinds: null,
+  breaker: false,
+  open: 0,
+  failure: 0,
 })
 
 export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({

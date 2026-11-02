@@ -10,6 +10,7 @@ import {
   FEATURES,
   FRAMEWORKS,
   INCIDENTS,
+  COLLECTORS,
   MIGRATION_STEPS,
   POLICIES,
   KINDS,
@@ -1073,17 +1074,24 @@ const handle = (model: Model, message: Message): Result =>
         { undoable: true },
       ),
 
-    LinkPolicyChosen: ({ from, to, timeout, retries }) =>
+    LinkPolicyChosen: ({ from, to, timeout, retries, breaker }) =>
       act(
         model,
-        timeout === undefined
-          ? retries === 'naive'
-            ? 'Retries on'
-            : 'Retries off'
-          : `Timeout ${timeout} s`,
+        breaker !== undefined
+          ? breaker
+            ? 'Circuit breaker on'
+            : 'Circuit breaker off'
+          : timeout === undefined
+            ? retries === 'naive'
+              ? 'Retries on'
+              : retries === 'backoff'
+                ? 'Retries with backoff'
+                : 'Retries off'
+            : `Timeout ${timeout} s`,
         Actions.setLinkPolicy(model.game, from, to, {
           ...(timeout === undefined ? {} : { timeout }),
           ...(retries === undefined ? {} : { retries }),
+          ...(breaker === undefined ? {} : { breaker }),
         }),
         { undoable: true },
       ),
@@ -1191,6 +1199,44 @@ const handle = (model: Model, message: Message): Result =>
         }),
         { undoable: true },
       ),
+
+    GpuChosen: ({ nodeId, gpu }) =>
+      act(model, `GPU ${gpu.toUpperCase()}`, Actions.setGpuType(model.game, nodeId, gpu), {
+        undoable: true,
+      }),
+
+    CollectorChosen: ({ nodeId, collector }) =>
+      act(
+        model,
+        `Collector ${COLLECTORS[collector].label}`,
+        Actions.setCollector(model.game, nodeId, collector),
+        { undoable: true },
+      ),
+
+    GogcChosen: ({ nodeId, gogc }) =>
+      act(model, `GOGC ${gogc}`, Actions.setGogc(model.game, nodeId, gogc), { undoable: true }),
+
+    ShedChosen: ({ nodeId, shed }) =>
+      act(
+        model,
+        shed ? 'Load shedding on' : 'Load shedding off',
+        Actions.setShed(model.game, nodeId, shed),
+        { undoable: true },
+      ),
+
+    RywChosen: ({ nodeId, ryw }) =>
+      act(
+        model,
+        ryw ? 'Read-your-writes on' : 'Read-your-writes off',
+        Actions.setRyw(model.game, nodeId, ryw),
+        { undoable: true },
+      ),
+
+    RuleDisabled: () => act(model, 'Disabled the WAF rule', Actions.disableRule(model.game)),
+
+    ReportCancelled: () => act(model, 'Cancelled the report', Actions.cancelReport(model.game)),
+
+    VolumeExpanded: () => act(model, 'Expanded the volume', Actions.expandVolume(model.game)),
 
     CertificateRenewed: () =>
       act(model, 'Renewed the certificate', Actions.renewCertificate(model.game)),

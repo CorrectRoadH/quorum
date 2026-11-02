@@ -223,6 +223,14 @@ const OPTION_SETS: ReadonlyArray<OptionSet> = [
 const KNOWN_GAPS: Readonly<Record<string, ReadonlyArray<string>>> = {
   runtimes: ['go never beats kestrel', 'beam never beats go', 'beam never beats kestrel'],
   'go frameworks': ['none never beats gin'],
+  // GDD 06: Axum 1.0× CPU and 1.15× velocity, Actix 0.95× and 1.10×. Each beats the other by
+  // 5%, under the 10% bar; bare Tokio gives up velocity for no CPU, as bare Go does to Gin.
+  'rust frameworks': [
+    'none never beats axum',
+    'none never beats actix',
+    'axum never beats actix',
+    'actix never beats axum',
+  ],
 }
 
 /** `a` beats `b` by at least 10% on this score. Lower is better for p99 and errors. */

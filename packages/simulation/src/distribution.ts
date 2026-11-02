@@ -21,6 +21,8 @@ export const ERROR_CAUSES = [
   'crash',
   'blocked',
   'upstream',
+  'throttled',
+  'duplicate',
 ] as const
 export type ErrorCause = (typeof ERROR_CAUSES)[number]
 export type Failures = Readonly<Record<ErrorCause, number>>
@@ -271,6 +273,30 @@ export const retried = (call: Outcome, ms: number): Outcome => {
     ...call,
     success: 1 - still,
     fixed: call.fixed + (attemptsFor(failure) - 1) * wasted,
+    fail: scaleFailures(call.fail, still / failure),
+  }
+}
+
+/** Retries with backoff stay within this share of extra calls (a retry budget). Proposed. */
+export const RETRY_BUDGET = 0.1
+/** Milliseconds a backed-off retry waits, on average, before it goes. Proposed. */
+export const BACKOFF_MS = 200
+
+/**
+ * A call that retries with backoff and jitter, inside a retry budget: only
+ * `budget` extra calls per call, so when many fail, most are not retried.
+ */
+export const backedOff = (call: Outcome, ms: number, budget: number): Outcome => {
+  const failure = 1 - call.success
+  if (failure <= 1e-12) return call
+  const extra = attemptsFor(failure) - 1
+  const allowed = Math.min(1, budget / extra)
+  const still = failure * (1 - allowed * (1 - failure * failure * failure))
+  const wasted = (call.fail.timeout * ms + (failure - call.fail.timeout) * call.fixed) / failure
+  return {
+    ...call,
+    success: 1 - still,
+    fixed: call.fixed + allowed * extra * (wasted + BACKOFF_MS),
     fail: scaleFailures(call.fail, still / failure),
   }
 }

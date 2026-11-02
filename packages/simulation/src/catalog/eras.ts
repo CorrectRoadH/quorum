@@ -40,6 +40,23 @@ export type EraDef = Readonly<{
   arrivals: string
 }>
 
+/** Series B's mix (10 "Request mix by Era"). The Series C placeholder keeps it. */
+const SERIES_B_MIX: Partial<Record<RequestKind, number>> = {
+  page: 0.18,
+  read: 0.22,
+  write: 0.09,
+  login: 0.03,
+  search: 0.07,
+  upload: 0.03,
+  bot: 0.07,
+  media: 0.1,
+  rt: 0.08,
+  buy: 0.03,
+  job: 0.02,
+  report: 0.03,
+  ai: 0.05,
+}
+
 export const ERAS: ReadonlyArray<EraDef> = [
   {
     name: 'Garage',
@@ -134,27 +151,33 @@ export const ERAS: ReadonlyArray<EraDef> = [
     incidentInterval: 480,
     maxSeverity: 1,
     market: 1_400_000,
-    raiseAt: Number.POSITIVE_INFINITY,
-    grant: 0,
-    dilution: 0,
+    raiseAt: 1_000_000,
+    grant: 18_000_000,
+    dilution: 0.15,
     growth: 0.0007,
     apdexTarget: 0.91,
     costIndex: 4,
     salaryIndex: 4,
-    mix: {
-      page: 0.22,
-      read: 0.25,
-      write: 0.1,
-      login: 0.03,
-      search: 0.08,
-      upload: 0.03,
-      bot: 0.08,
-      media: 0.1,
-      rt: 0.08,
-      buy: 0.03,
-    },
+    mix: SERIES_B_MIX,
+    question: 'What happens when analytics and AI share a database built for checkouts?',
+    arrivals: 'Exports, reports and AI prompts. Warehouses, GPUs, retries and breakers.',
+  },
+  {
+    name: 'Series C',
+    slo: 0.9995,
+    incidentInterval: 480,
+    maxSeverity: 1,
+    market: 14_000_000,
+    raiseAt: Number.POSITIVE_INFINITY,
+    grant: 0,
+    dilution: 0,
+    growth: 0.0005,
+    apdexTarget: 0.92,
+    costIndex: 4,
+    salaryIndex: 4,
+    mix: SERIES_B_MIX,
     question: 'The slice ends here.',
-    arrivals: 'Series B content is not built yet. Keep playing to stress your design.',
+    arrivals: 'Series C content is not built yet. Keep playing to stress your design.',
   },
 ]
 

@@ -24,6 +24,9 @@ export const COMPONENT_IDS = [
   'psp',
   'autoscaler',
   'cluster',
+  'warehouse',
+  'gpu',
+  'llm',
 ] as const
 export type ComponentId = (typeof COMPONENT_IDS)[number]
 
@@ -185,6 +188,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
       'blob-get',
       'q-tx',
       'charge',
+      'q-scan',
+      'infer',
     ],
     stack: true,
     limiting: true,
@@ -200,8 +205,8 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 90,
     sized: true,
     latency: 2,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
-    fallback: ['q-search', 'blob-put', 'blob-get'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
+    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan'],
     maxOut: 0,
     limiting: true,
     coldStart: true,
@@ -247,11 +252,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 80,
     burn: 0.03,
     latency: 0.3,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
-    fallback: ['q-search', 'blob-put', 'blob-get'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
+    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan'],
     unlock: 'pooling',
     steps: 4,
-    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
     limiting: true,
   }),
   cache: def({
@@ -265,11 +270,11 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     cost: 150,
     burn: 0.06,
     latency: 0.5,
-    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
-    fallback: ['q-search', 'blob-put', 'blob-get'],
+    accepts: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
+    fallback: ['q-search', 'blob-put', 'blob-get', 'q-scan'],
     unlock: 'caching',
     steps: 8,
-    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get'],
+    sends: ['q-read', 'q-write', 'q-search', 'blob-put', 'q-tx', 'blob-get', 'q-scan'],
     limiting: true,
     coldStart: true,
   }),
@@ -354,12 +359,13 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     name: 'Worker',
     product: 'Sidekiq',
     group: 'compute',
-    blurb: 'Runs your code on tasks from a Queue. Users never wait for it.',
+    blurb:
+      'Runs your code on tasks from a Queue. Users never wait for it. Link it to the data an export reads.',
     cost: 60,
     sized: true,
     latency: 0,
     accepts: ['task'],
-    maxOut: 0,
+    sends: ['q-read', 'q-write'],
     unlock: 'background-jobs',
     stack: true,
     limiting: true,
@@ -440,6 +446,51 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     control: true,
     unlock: 'containers',
   }),
+  warehouse: def({
+    id: 'warehouse',
+    code: 'olap',
+    name: 'Data Warehouse',
+    product: 'BigQuery',
+    group: 'data',
+    blurb: 'Answers report scans in columns. 1.5 s each, no limit, paid per scan.',
+    cost: 800,
+    burn: 0.05,
+    latency: 1_500,
+    accepts: ['q-scan'],
+    maxOut: 0,
+    unlock: 'data-warehouse',
+  }),
+  gpu: def({
+    id: 'gpu',
+    code: 'gpu',
+    name: 'GPU Node',
+    product: 'vLLM on NVIDIA',
+    group: 'compute',
+    blurb: 'Serves AI prompts in tokens per second. Each size step doubles the GPUs.',
+    cost: 900,
+    latency: 300,
+    accepts: ['infer'],
+    maxOut: 0,
+    unlock: 'model-serving',
+    steps: 8,
+    limiting: true,
+    coldStart: true,
+  }),
+  llm: def({
+    id: 'llm',
+    code: 'llm',
+    name: 'LLM API',
+    product: 'A hosted model',
+    group: 'data',
+    blurb: 'Serves AI prompts with no GPUs. Paid per token, and rate limited.',
+    cost: 0,
+    latency: 600,
+    accepts: ['infer'],
+    maxOut: 0,
+    unlock: 'hosted-models',
+    steps: 4,
+    limiting: true,
+  }),
 }
 
 /** How a Load Balancer splits traffic, and the research each policy needs. */
@@ -494,8 +545,8 @@ export const PARANOIA = [
   { level: 3, block: 0.92, falsePositive: 0.02, cpu: 2.5 },
   { level: 4, block: 0.98, falsePositive: 0.06, cpu: 4 },
 ] as const
-/** "Under attack" mode challenges every request: it blocks nearly all junk and some real users, and adds latency. */
-export const UNDER_ATTACK = { block: 0.99, falsePositive: 0.01, latency: 40 } as const
+/** "Under attack" mode challenges every request: it blocks nearly all junk and some real users, and adds latency. A challenge costs paranoia 1's CPU. */
+export const UNDER_ATTACK = { block: 0.99, falsePositive: 0.01, latency: 40, cpu: 1 } as const
 
 /** Messages per second one RabbitMQ node takes (05 "Queue"). */
 export const QUEUE_RATE = 20_000
@@ -561,6 +612,32 @@ export const POD_BURN = 0.85
 /** Noisy neighbours: this share of a member's requests wait this long. Proposed. */
 export const NOISY_SHARE = 0.01
 export const NOISY_MS = 10
+
+/** Data Warehouse price per scan (09 "Pricing models": per scan, BigQuery style). Proposed. */
+export const SCAN_PRICE = 0.02
+
+/** Tokens in one AI prompt and its answer. Proposed: the GDD gives none. */
+export const TOKENS_PER_PROMPT = 400
+/**
+ * GPU types (05 "GPU Node"): dollars per second per GPU and tokens per second. T4 is cheap and
+ * slow; H100 is the cheapest per token, and scarce. The A100 price and every token rate are proposed.
+ */
+export const GPU_TYPES = {
+  t4: { name: 'T4', burn: 1.2, tokens: 600 },
+  a100: { name: 'A100', burn: 4, tokens: 2_500 },
+  h100: { name: 'H100', burn: 9, tokens: 6_000 },
+} as const
+/** Milliseconds to the first token on a GPU Node, and on the LLM API (05 "LLM API": 600 ms). */
+export const GPU_FIRST_TOKEN_MS = 300
+export const LLM_FIRST_TOKEN_MS = 600
+/** LLM API price per 1,000 tokens, × cost index. Above a busy GPU's cost per token, below an idle one's. Proposed. */
+export const LLM_PRICE = 1.875
+/** Prompts per second the LLM API takes at its first usage tier; each tier doubles it. Proposed. */
+export const LLM_RATE = 100
+
+/** A circuit breaker opens when this share of a Link's calls fail, and stays open this many seconds. */
+export const BREAKER_THRESHOLD = 0.5
+export const BREAKER_OPEN = 5
 
 /** Auth Provider price, in dollars per second per user. */
 export const AUTH_PRICE_PER_USER = 0.00006

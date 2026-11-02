@@ -30,6 +30,11 @@ import {
   Timer,
   TriangleAlert,
   Workflow,
+  Fingerprint,
+  PowerOff,
+  Recycle,
+  Repeat,
+  ShieldMinus,
 } from 'lucide'
 import { siStripe } from 'simple-icons'
 import {
@@ -261,6 +266,18 @@ const LOOKS: Record<ResearchId, Look> = {
   containers: { component: 'cluster' },
   'slo-dashboards': { group: 'ops', glyph: Target, hue: 140 },
   'error-budgets': { group: 'ops', glyph: Gauge, hue: 95 },
+  'backoff-jitter': { group: 'edge', glyph: Repeat, hue: 75 },
+  'circuit-breakers': { group: 'edge', glyph: PowerOff, hue: 10 },
+  'load-shedding': { group: 'compute', glyph: ShieldMinus, hue: 40 },
+  'idempotency-keys': { group: 'data', glyph: Fingerprint, hue: 150 },
+  'ryw-routing': { group: 'data', glyph: Repeat, hue: 260 },
+  'gogc-tuning': { group: 'compute', glyph: Recycle, hue: 195 },
+  zgc: { group: 'compute', glyph: Recycle, hue: 30 },
+  'fw-axum': { group: 'compute', logo: 'axum' },
+  'fw-actix': { group: 'compute', logo: 'actix' },
+  'data-warehouse': { component: 'warehouse' },
+  'hosted-models': { component: 'llm' },
+  'model-serving': { component: 'gpu' },
 }
 
 /** The item's own colour: its group's, its brand's, or its hue. */

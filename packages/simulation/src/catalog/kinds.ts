@@ -12,6 +12,9 @@ export const REQUEST_KINDS = [
   'media',
   'rt',
   'buy',
+  'job',
+  'report',
+  'ai',
 ] as const
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
@@ -26,6 +29,8 @@ export const BACKEND_KINDS = [
   'blob-get',
   'q-tx',
   'charge',
+  'q-scan',
+  'infer',
 ] as const
 export type BackendKind = (typeof BACKEND_KINDS)[number]
 
@@ -53,6 +58,9 @@ export const KINDS: Record<Kind, KindInfo> = {
   media: { label: 'Video', value: 2, color: 0xe0564f },
   rt: { label: 'Realtime', value: 0.05, color: 0x3fb6c9 },
   buy: { label: 'Checkout', value: 25, color: 0x2e9d57 },
+  job: { label: 'Export', value: 3.2, color: 0x9a7b4f },
+  report: { label: 'Report', value: 4, color: 0x5b6abf },
+  ai: { label: 'AI prompt', value: 8, color: 0xb04fc7 },
   'q-read': { label: 'Read query', value: 0, color: 0x4f7fe0 },
   'q-write': { label: 'Write query', value: 0, color: 0x7152b5 },
   auth: { label: 'Auth call', value: 0, color: 0xd0438b },
@@ -62,6 +70,8 @@ export const KINDS: Record<Kind, KindInfo> = {
   'blob-get': { label: 'Object get', value: 0, color: 0xe0564f },
   'q-tx': { label: 'Transaction', value: 0, color: 0x2e9d57 },
   charge: { label: 'Charge', value: 0, color: 0x2e9d57 },
+  'q-scan': { label: 'Scan', value: 0, color: 0x5b6abf },
+  infer: { label: 'Inference', value: 0, color: 0xb04fc7 },
 }
 
 export type RequestProfile = Readonly<{
@@ -73,10 +83,17 @@ export type RequestProfile = Readonly<{
   apdex: number
   /** Synchronous backend calls per request, by backend kind. */
   calls: Readonly<Partial<Record<Exclude<BackendKind, 'auth' | 'task'>, number>>>
+  /**
+   * Backend calls the async part makes: a Worker sends them once the kind goes
+   * through a Queue; without one, the App Server makes them inline.
+   */
+  asyncCalls: Readonly<Partial<Record<'q-read' | 'q-write', number>>>
   /** An ORM turns this kind's reads into N+1 queries. */
   orm: boolean
   /** KB the response sends over the network. */
   payloadKB: number
+  /** KB the response sends when the work went to a Worker: an acknowledgement. */
+  asyncKB: number
   /** Streamed: the user waits only for the first segment, not the whole response. */
   stream: boolean
   /** Gzip shrinks the response. */
@@ -95,8 +112,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 400,
     calls: { 'q-read': 2, 'q-write': 0 },
+    asyncCalls: {},
     orm: true,
     payloadKB: 80,
+    asyncKB: 80,
     stream: false,
     compressible: true,
     inKB: 0,
@@ -108,8 +127,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 200,
     calls: { 'q-read': 1, 'q-write': 0 },
+    asyncCalls: {},
     orm: true,
     payloadKB: 4,
+    asyncKB: 4,
     stream: false,
     compressible: true,
     inKB: 0,
@@ -121,8 +142,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 300,
     calls: { 'q-read': 0, 'q-write': 1 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 2,
+    asyncKB: 2,
     stream: false,
     compressible: false,
     inKB: 0,
@@ -134,8 +157,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: true,
     apdex: 800,
     calls: { 'q-read': 1, 'q-write': 0 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 1,
+    asyncKB: 1,
     stream: false,
     compressible: false,
     inKB: 0,
@@ -147,8 +172,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 300,
     calls: { 'q-search': 1 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 8,
+    asyncKB: 8,
     stream: false,
     compressible: true,
     inKB: 0,
@@ -161,8 +188,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: true,
     apdex: 1_500,
     calls: { 'blob-put': 1, 'q-write': 1 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 2,
+    asyncKB: 2,
     stream: false,
     compressible: false,
     inKB: 2_000,
@@ -174,8 +203,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 400,
     calls: { 'q-read': 1 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 4,
+    asyncKB: 4,
     stream: false,
     compressible: true,
     inKB: 0,
@@ -188,8 +219,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 1_000,
     calls: { 'blob-get': 1 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 5_000,
+    asyncKB: 5_000,
     stream: true,
     compressible: false,
     inKB: 0,
@@ -202,8 +235,10 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     native: false,
     apdex: 100,
     calls: {},
+    asyncCalls: {},
     orm: false,
     payloadKB: 1,
+    asyncKB: 1,
     stream: false,
     compressible: false,
     inKB: 0,
@@ -214,10 +249,62 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     cpu: 5,
     native: false,
     apdex: 2_000,
-    calls: { 'q-tx': 1, charge: 1 },
+    // It reads the cart back before it charges: on a lagging replica, the cart can be stale.
+    calls: { 'q-read': 1, 'q-tx': 1, charge: 1 },
+    asyncCalls: {},
     orm: false,
     payloadKB: 2,
+    asyncKB: 2,
     stream: false,
+    compressible: false,
+    inKB: 0,
+    offload: 0,
+    scored: true,
+  },
+  // A data export: seconds of CPU, 50 reads and a 10 MB file. Through a Queue the user gets an
+  // acknowledgement and a Worker does the rest; inline, the request holds a slot for all of it.
+  job: {
+    cpu: 400,
+    native: false,
+    apdex: 1_000,
+    calls: {},
+    asyncCalls: { 'q-read': 50 },
+    orm: false,
+    payloadKB: 10_000,
+    asyncKB: 2,
+    stream: false,
+    compressible: false,
+    inKB: 0,
+    offload: 0.95,
+    scored: true,
+  },
+  // A dashboard: one scan of a whole table, on a Warehouse or, badly, on the primary.
+  report: {
+    cpu: 20,
+    native: false,
+    apdex: 3_000,
+    calls: { 'q-scan': 1 },
+    asyncCalls: {},
+    orm: false,
+    payloadKB: 50,
+    asyncKB: 50,
+    stream: false,
+    compressible: true,
+    inKB: 0,
+    offload: 0,
+    scored: true,
+  },
+  // A prompt: the GPU or the LLM API does the work; tokens stream back as they come.
+  ai: {
+    cpu: 5,
+    native: false,
+    apdex: 4_000,
+    calls: { infer: 1 },
+    asyncCalls: {},
+    orm: false,
+    payloadKB: 4,
+    asyncKB: 4,
+    stream: true,
     compressible: false,
     inKB: 0,
     offload: 0,
@@ -233,6 +320,7 @@ export const QUERY_CPU: Readonly<{
   'blob-put': number
   'q-tx': number
   'blob-get': number
+  'q-scan': number
 }> = {
   'q-read': 8,
   'q-write': 25,
@@ -244,6 +332,9 @@ export const QUERY_CPU: Readonly<{
   'q-tx': 40,
   // A file read back out of a row. Proposed.
   'blob-get': 30,
+  // A report's scan of a whole table on the primary: a hundred ms, and it evicts the buffer
+  // cache, so every other read on that Database slows too (07 "Data Warehouse"). Proposed.
+  'q-scan': 100,
 }
 
 /** KB of a streamed response the user waits for before it starts playing. Proposed. */

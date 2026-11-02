@@ -8,6 +8,10 @@ import {
   EGRESS_ORIGIN,
   PSP_FIXED,
   PSP_RATE,
+  LAG_SURGE,
+  LLM_PRICE,
+  SCAN_PRICE,
+  TOKENS_PER_PROMPT,
   STUFFING_MAGNITUDE,
   COMPONENTS,
   DIURNAL_AMPLITUDE,
@@ -33,7 +37,10 @@ import { FLAT_CAPACITY, NO_RESOURCES, type Calls } from './capacity.ts'
 import {
   ERROR_CAUSES,
   NO_FAILURES,
+  RETRY_BUDGET,
   attemptsFor,
+  backedOff,
+  failSome,
   heldFor,
   retried,
   timedOut,
@@ -239,17 +246,43 @@ const graphOf = (game: Game): Graph => {
   }
 }
 
-/** A Link's timeout in ms and whether it retries. Every Link waits 30 s and never retries until Timeouts and retries. */
-const policyOf = (
-  game: Game,
-  graph: Graph,
-  from: string,
-  to: string,
-): Readonly<{ timeout: number; naive: boolean }> => {
-  const link = graph.links.get(`${from}>${to}`)
-  if (!link || !has(game, 'timeouts')) return { timeout: LINK_TIMEOUT * 1000, naive: false }
-  return { timeout: link.timeout * 1000, naive: link.retries === 'naive' }
+type Policy = Readonly<{
+  timeout: number
+  /** It retries failed calls: at once and up to three times, or with backoff inside a budget. */
+  retry: 'none' | 'naive' | 'backoff'
+  /** Its circuit breaker is open: it sends nothing and fails fast. */
+  open: boolean
+}>
+
+const NO_POLICY: Policy = { timeout: LINK_TIMEOUT * 1000, retry: 'none', open: false }
+
+/**
+ * A Link's timeout in ms, its retries, and its breaker. Every Link waits 30 s and
+ * never retries until Timeouts and retries; backoff and breakers need their research.
+ */
+export const policyOf = (game: Game, link: GameLink | undefined): Policy => {
+  if (!link || !has(game, 'timeouts')) return NO_POLICY
+  const retry =
+    link.retries === 'backoff' ? (has(game, 'backoff-jitter') ? 'backoff' : 'naive') : link.retries
+  return {
+    timeout: link.timeout * 1000,
+    retry,
+    open: link.breaker && link.open > 0 && has(game, 'circuit-breakers'),
+  }
 }
+
+const linkPolicy = (game: Game, graph: Graph, from: string, to: string): Policy =>
+  policyOf(game, graph.links.get(`${from}>${to}`))
+
+/** Calls per call a retrying Link sends when a share `failure` fails. */
+const amplification = (policy: Policy, failure: number): number =>
+  policy.open
+    ? 0
+    : policy.retry === 'naive'
+      ? attemptsFor(failure)
+      : policy.retry === 'backoff'
+        ? 1 + Math.min(RETRY_BUDGET, attemptsFor(failure) - 1)
+        : 1
 
 const delegates = (graph: Graph, node: GameNode): boolean =>
   (graph.routes.get(node.id) ?? []).some((child) => accepts(child, 'auth'))
@@ -348,10 +381,11 @@ const forward = (inputs: Inputs): Pass => {
     }
     for (const [child, weight] of targets) {
       const key = `${node.id}>${child.id}`
-      // Naive retries resend what failed, up to three times: the callee sees more.
-      const amplified = policyOf(game, graph, node.id, child.id).naive
-        ? attemptsFor(inputs.failures.get(`${key}:${kind}`) ?? 0)
-        : 1
+      // Retries resend what failed: the callee sees more. An open breaker sends nothing.
+      const amplified = amplification(
+        linkPolicy(game, graph, node.id, child.id),
+        inputs.failures.get(`${key}:${kind}`) ?? 0,
+      )
       const sent = rate * weight * amplified
       const into = arriving.get(child.id) ?? {}
       into[kind] = (into[kind] ?? 0) + sent
@@ -368,7 +402,13 @@ const forward = (inputs: Inputs): Pass => {
     const rule = RULES[node.type]
     const model = rule.model(solver, node, rates)
     models.set(node.id, model)
-    const share = isDown(node) ? 0 : model.share
+    const shares = model.shares
+    const share = isDown(node) ? 0 : shares ? 1 : model.share
+    // Load shedding keeps a different share of each kind.
+    const kept: Rates = shares && !isDown(node) ? {} : rates
+    if (shares && !isDown(node))
+      for (const kind of Object.keys(rates) as Array<Kind>)
+        kept[kind] = (rates[kind] ?? 0) * (shares[kind] ?? model.share)
     rule.serve(
       {
         solver,
@@ -379,7 +419,7 @@ const forward = (inputs: Inputs): Pass => {
         },
       },
       node,
-      rates,
+      kept,
       share,
     )
   }
@@ -410,6 +450,9 @@ const forward = (inputs: Inputs): Pass => {
     writes += arriving.get(node.id)?.['q-write'] ?? 0
   }
 
+  // A burst of writes during a Replication lag incident leaves replicas far behind.
+  const surge = game.incident?.kind === 'repl-lag'
+  const lag = REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes
   return {
     arriving,
     models,
@@ -418,8 +461,8 @@ const forward = (inputs: Inputs): Pass => {
     stranded,
     links,
     connections,
-    lag: REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes,
-    staleShare: Math.min(0.15, (REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes) / 1000),
+    lag: surge ? lag * LAG_SURGE : lag,
+    staleShare: surge ? Math.min(0.5, (lag * LAG_SURGE) / 1000) : Math.min(0.15, lag / 1000),
   }
 }
 
@@ -509,7 +552,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     const model = pass.models.get(node.id)
     const service = model?.service[kind] ?? { fixed: COMPONENTS[node.type].latency, variable: 0 }
     return hop({
-      share: model?.share ?? 1,
+      share: model?.shares?.[kind] ?? model?.share ?? 1,
       fixed: service.fixed,
       variable: service.variable,
       tailP: model?.tailP ?? 0,
@@ -520,13 +563,31 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
 
   /** One attempt on a Link: the callee's outcome cut at the Link's timeout. */
   const attempt = (node: GameNode, child: GameNode, kind: Kind): Outcome =>
-    timedOut(outcome(child, kind), policyOf(game, graph, node.id, child.id).timeout)
+    timedOut(outcome(child, kind), linkPolicy(game, graph, node.id, child.id).timeout)
 
-  /** A call on a Link: one attempt, and the retries if the Link retries. */
+  /**
+   * A call on a Link: one attempt, and the retries if the Link retries. An open
+   * breaker fails fast. A retried charge that timed out may already have charged:
+   * without idempotency keys, those fail as `duplicate`.
+   */
   const call = (node: GameNode, child: GameNode, kind: Kind): Outcome => {
-    const policy = policyOf(game, graph, node.id, child.id)
+    const policy = linkPolicy(game, graph, node.id, child.id)
+    if (policy.open) return failed('refused')
     const once = attempt(node, child, kind)
-    return policy.naive ? retried(once, policy.timeout) : once
+    if (policy.retry === 'none') return once
+    const again =
+      policy.retry === 'naive'
+        ? retried(once, policy.timeout)
+        : backedOff(once, policy.timeout, RETRY_BUDGET)
+    // A charge that succeeded on a retry after a timeout charged twice: the first one went through.
+    const timedOutShare = once.success < 1 ? once.fail.timeout / (1 - once.success) : 0
+    const duplicates =
+      again.success > 0
+        ? (Math.max(0, again.success - once.success) / again.success) * timedOutShare
+        : 0
+    return kind === 'charge' && !has(game, 'idempotency-keys') && duplicates > 0
+      ? failSome(again, duplicates, 'duplicate')
+      : again
   }
 
   /** Share of attempts that fail on a Link, which drives naive retries. */
@@ -552,8 +613,10 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   /** Milliseconds a caller holds its slot for one call: E[min(X, T)] per attempt, times the attempts. */
   const held = (node: GameNode, kind: Kind, extraHop = 0): number =>
     splitOf(inputs, node, kind).reduce((total, [child, weight]) => {
-      const policy = policyOf(game, graph, node.id, child.id)
-      const attempts = policy.naive ? attemptsFor(failureOn(node, child, kind)) : 1
+      const policy = linkPolicy(game, graph, node.id, child.id)
+      if (policy.open) return total
+      const attempts =
+        policy.retry === 'none' ? 1 : amplification(policy, failureOn(node, child, kind))
       const each = heldFor(outcome(child, kind), policy.timeout) + extraHop + zoneMs(node, child)
       return total + weight * attempts * Math.min(policy.timeout, each)
     }, 0)
@@ -631,7 +694,12 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
   let callLatency = new Map<string, Calls>()
   let inflight = new Map<string, number>()
   let weights = new Map<string, number>()
+  // Retrying Links start from the failure share they saw last Step: retries carry a storm forward.
   let failures = new Map<string, number>()
+  for (const link of game.links)
+    if (link.failure > 0 && linkPolicy(game, graph, link.from, link.to).retry !== 'none')
+      for (const kind of COMPONENTS[graph.byId.get(link.to)?.type ?? 'users'].accepts)
+        failures.set(`${link.from}>${link.to}:${kind}`, link.failure)
   const nominal = new Map<string, number>()
   const sick = new Set<string>()
   const seed: Inputs = {
@@ -695,7 +763,8 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       const [from, to] = key.split('>')
       const source = graph.byId.get(from ?? '')
       const target = graph.byId.get(to ?? '')
-      if (!source || !target || !policyOf(game, graph, source.id, target.id).naive) continue
+      if (!source || !target || linkPolicy(game, graph, source.id, target.id).retry === 'none')
+        continue
       for (const kind of Object.keys(carried) as Array<Kind>) {
         const fresh = outcomes.failureOn(source, target, kind)
         const previous = failures.get(`${key}:${kind}`)
@@ -865,6 +934,7 @@ const ledgerOf = (
         rate: source ? (source.inbound - source.dropped) * 0.15 : 0,
         kind: 'page',
         failing: false,
+        failure: 0,
       }
     }
     const carried = pass.links.get(`${link.from}>${link.to}`) ?? {}
@@ -874,12 +944,14 @@ const ledgerOf = (
       ['page', -1],
     )
     const target = nodes[link.to]
+    const rate = entries.reduce((total, [, rate]) => total + rate, 0)
     return {
       ...link,
-      rate: entries.reduce((total, [, rate]) => total + rate, 0),
+      rate,
       kind: top[0],
       failing:
         !!target && (target.status === 'down' || target.refused > 0 || target.dropped > 0.01),
+      failure: linkFailure(game, graph, outcomes, link, entries, rate),
     }
   })
 
@@ -936,6 +1008,16 @@ const ledgerOf = (
         (KINDS.buy.value * valueFactor(game, 'buy') * PSP_RATE + PSP_FIXED * eraOf(game).costIndex)
       : 0
 
+  // A Data Warehouse bills each scan; the LLM API bills each token (09 "Pricing models").
+  let usage = 0
+  for (const node of game.nodes) {
+    const done = (nodes[node.id]?.inbound ?? 0) - (nodes[node.id]?.dropped ?? 0)
+    if (done <= 0 || isDown(node)) continue
+    if (node.type === 'warehouse') usage += done * SCAN_PRICE
+    if (node.type === 'llm') usage += ((done * TOKENS_PER_PROMPT) / 1_000) * LLM_PRICE
+  }
+  const thirdParty = usage > 0 ? fees + usage * eraOf(game).costIndex : fees
+
   const subscriptions = subscriptionsOf(game)
   const salaries = payrollOf(game)
   const errorTotal = ERROR_CAUSES.reduce((total, cause) => total + errors[cause], 0)
@@ -956,20 +1038,43 @@ const ledgerOf = (
     subscriptions,
     insight,
     burn:
-      fees > 0
+      thirdParty > 0
         ? game.nodes.reduce((total, node) => total + burnOf(game, node), 0) +
           salaries +
           egress +
-          fees
+          thirdParty
         : game.nodes.reduce((total, node) => total + burnOf(game, node), 0) + salaries + egress,
     salaries,
     egress,
-    fees,
+    fees: thirdParty,
     market: marketOf(game),
     velocity,
     failing,
     bottleneck: null,
   }
+}
+
+/**
+ * Share of calls that fail on a Link that retries or has a breaker, by what it
+ * carries. Zero for every other Link: nothing reads it.
+ */
+const linkFailure = (
+  game: Game,
+  graph: Graph,
+  outcomes: ReturnType<typeof outcomesOf>,
+  link: GameLink,
+  entries: ReadonlyArray<readonly [Kind, number]>,
+  rate: number,
+): number => {
+  const policy = linkPolicy(game, graph, link.from, link.to)
+  const watched = policy.retry !== 'none' || (link.breaker && has(game, 'circuit-breakers'))
+  const source = graph.byId.get(link.from)
+  const target = graph.byId.get(link.to)
+  if (!watched || policy.open || rate <= 0 || !source || !target) return 0
+  return entries.reduce(
+    (total, [kind, carried]) => total + (carried / rate) * outcomes.failureOn(source, target, kind),
+    0,
+  )
 }
 
 /* ---------- the bottleneck ---------- */

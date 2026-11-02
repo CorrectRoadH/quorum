@@ -1,4 +1,5 @@
 import { ERROR_BUDGET_FACTORS, SLO_FROM_STAGE, SLO_WINDOW_HOURS } from './catalog.ts'
+import { ERROR_CAUSES } from './distribution.ts'
 import type { Ledger } from './ledger.ts'
 import { eraOf, has } from './lookups.ts'
 import { calendarMinute } from './solve.ts'
@@ -7,8 +8,17 @@ import type { BudgetHour, Game } from './state.ts'
 /* ==========================================================================
    The SLO and its error budget (11 "SLOs and error budgets"). The window is
    the last calendar week, kept as hourly counts of the requests users sent
-   and the ones that failed. Bots do not count: the Ledger leaves them out.
+   and the ones that failed. Bots do not count: the Ledger leaves them out. A
+   real user the WAF blocked got a 403, a client error, so it does not spend
+   the budget either: the budget counts what the service failed to answer.
    ========================================================================== */
+
+/** Requests per second that spend the error budget: every failure but a WAF block. */
+export const budgetFailures = (ledger: Ledger): number => {
+  let failed = 0
+  for (const cause of ERROR_CAUSES) if (cause !== 'blocked') failed += ledger.errors[cause]
+  return failed
+}
 
 export type Budget = Readonly<{
   slo: number
@@ -67,7 +77,7 @@ export const recordBudget = (
   if (!budgeted(game) || ledger.demand <= 0) return game.budget
   const hour = Math.floor(calendarMinute(game.time) / 60)
   const requests = ledger.demand * seconds
-  const failed = ledger.errorShare * ledger.demand * seconds
+  const failed = budgetFailures(ledger) * seconds
   const last = game.budget.at(-1)
   const kept = game.budget.filter((entry) => entry.hour > hour - SLO_WINDOW_HOURS)
   if (last && last.hour === hour)

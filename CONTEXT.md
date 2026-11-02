@@ -85,6 +85,22 @@ _Avoid_: replica (that is the read replica Component), instance, pod (in UI copy
 A second, idle box for a data Node in another zone. It takes over within seconds when the Node's zone fails, and doubles the Node's Burn.
 _Avoid_: failover node, secondary, hot spare
 
+**Circuit breaker**:
+A switch on a Link that stops its calls for a few seconds once half of them fail, so retries cannot keep a struggling Node overloaded.
+_Avoid_: fuse, kill switch
+
+**Load shedding**:
+An App Server near saturation drops the lowest-value request kinds first, so checkouts survive an overload.
+_Avoid_: throttling, rate limiting
+
+**Data Warehouse**:
+A Component that answers report scans in columns, paid per scan, so reports stop evicting the primary Database's buffer cache.
+_Avoid_: OLAP, analytics DB
+
+**GPU Node**:
+A Component that serves AI prompts in tokens per second; cheaper per prompt than the LLM API only while it stays busy.
+_Avoid_: inference server, GPU box
+
 **Service**:
 A codebase with its own deploy pipeline, owned by one Team. Every App Server and Worker belongs to one.
 _Avoid_: app, microservice, group
@@ -170,6 +186,10 @@ _Avoid_: uptime goal, target
 **Error budget**:
 The failures that the SLO allows. Spending it changes team velocity.
 _Avoid_: downtime allowance
+
+**Retry storm**:
+A metastable failure: a brief slowdown plus retries keeps a Node overloaded after the trigger ends.
+_Avoid_: thundering herd, cascade
 
 **Postmortem**:
 The card after an Incident that records its cost and opens one action item: a prevention that, until researched, makes the Incident twice as likely.

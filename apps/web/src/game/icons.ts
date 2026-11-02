@@ -14,6 +14,9 @@ import {
   type IconNode,
   KeyRound,
   Landmark,
+  Microchip,
+  Sparkles,
+  Warehouse,
   ListOrdered,
   Scaling,
   Search,
@@ -40,6 +43,8 @@ import {
   siRuby,
   siRubyonrails,
   siRust,
+  siActix,
+  siTokio,
   siSpringboot,
   siSymfony,
 } from 'simple-icons'
@@ -67,6 +72,9 @@ export const COMPONENT_ICONS: Record<ComponentId, IconNode> = {
   psp: Landmark,
   autoscaler: Scaling,
   cluster: Boxes,
+  warehouse: Warehouse,
+  gpu: Microchip,
+  llm: Sparkles,
 }
 
 export const GROUP_ICONS: Record<BuildGroup, IconNode> = {
@@ -121,4 +129,6 @@ export const STACK_LOGOS: Record<StackLogoId, Readonly<{ path: string; color: st
   'spring-boot': { path: siSpringboot.path, color: `#${siSpringboot.hex}` },
   aspnet: { path: siDotnet.path, color: `#${siDotnet.hex}` },
   phoenix: { path: siPhoenixframework.path, color: `#${siPhoenixframework.hex}` },
+  axum: { path: siTokio.path, color: null },
+  actix: { path: siActix.path, color: null },
 }

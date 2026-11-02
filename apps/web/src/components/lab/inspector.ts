@@ -5,7 +5,10 @@ import {
   CACHE_TTLS,
   CDN_TTLS,
   CHECK_INTERVALS,
+  COLLECTORS,
   COMPONENTS,
+  GOGC,
+  GPU_TYPES,
   CREDIT_CAP,
   DNS_TTLS,
   FAMILIES,
@@ -337,6 +340,29 @@ const warnings = (
         h,
       ),
     )
+  const fix = (text: string, label: string, message: Message) =>
+    list.push(
+      callout(
+        text,
+        'danger',
+        button(
+          { onClick: message, variant: 'outline', size: 'sm', className: 'self-start text-danger' },
+          [label],
+          h,
+        ),
+        h,
+      ),
+    )
+  if (node.type === 'waf' && game.incident?.kind === 'regex')
+    fix('A rule backtracks. CPU at 100%.', 'Disable rule', Message.RuleDisabled())
+  if (node.type === 'database' && game.incident?.kind === 'report-db')
+    fix('A report is scanning every table.', 'Cancel report', Message.ReportCancelled())
+  if (
+    node.type === 'database' &&
+    game.incident?.kind === 'disk-full' &&
+    game.incident.nodeId === node.id
+  )
+    fix('The disk is full. Writes fail.', 'Expand volume', Message.VolumeExpanded())
   if (node.type === 'waf' && game.incident?.kind === 'ddos' && !node.underAttack)
     list.push(
       callout(
@@ -902,6 +928,9 @@ const KIND_SHORT: Record<RequestKind, string> = {
   media: 'Media',
   rt: 'Realtime',
   buy: 'Buy',
+  job: 'Export',
+  report: 'Report',
+  ai: 'AI',
 }
 
 const dnsTtl = (node: GameNode, h: HtmlBuilder<Message>): Html =>
@@ -1062,6 +1091,96 @@ const autoscaler = (node: GameNode, h: HtmlBuilder<Message>): Html =>
     h,
   )
 
+const gpu = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'GPU',
+    [
+      picker(
+        'gpu',
+        (Object.keys(GPU_TYPES) as ReadonlyArray<keyof typeof GPU_TYPES>).map(
+          (id) => [id, GPU_TYPES[id].name] as const,
+        ),
+        node.gpu,
+        (choice) => Message.GpuChosen({ nodeId: node.id, gpu: choice }),
+        h,
+      ),
+    ],
+    h,
+  )
+
+/** A Java App Server's collector, or a Go App Server's GOGC. */
+const collector = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const language = RUNTIMES[node.runtime].language
+  if (language === 'java')
+    return [
+      section(
+        'Collector',
+        [
+          picker(
+            'collector',
+            (Object.keys(COLLECTORS) as ReadonlyArray<keyof typeof COLLECTORS>).map(
+              (id) => [id, COLLECTORS[id].label] as const,
+            ),
+            node.collector,
+            (choice) => Message.CollectorChosen({ nodeId: node.id, collector: choice }),
+            h,
+            (choice) => choice !== 'zgc' || has(game, 'zgc'),
+          ),
+        ],
+        h,
+      ),
+    ]
+  if (language === 'go' && has(game, 'gogc-tuning'))
+    return [
+      section(
+        'GOGC',
+        [
+          picker(
+            'gogc',
+            GOGC.map((entry) => [entry.gogc, `${entry.gogc}`] as const),
+            node.gogc,
+            (gogc) => Message.GogcChosen({ nodeId: node.id, gogc }),
+            h,
+          ),
+        ],
+        h,
+      ),
+    ]
+  return []
+}
+
+/** Load shedding and read-your-writes routing on an App Server. */
+const routing = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const rows: Array<Html> = []
+  if (has(game, 'load-shedding'))
+    rows.push(
+      picker(
+        'shed',
+        [
+          [false, 'Drop evenly'],
+          [true, 'Shed low value'],
+        ],
+        node.shed,
+        (shed) => Message.ShedChosen({ nodeId: node.id, shed }),
+        h,
+      ),
+    )
+  if (has(game, 'ryw-routing'))
+    rows.push(
+      picker(
+        'ryw',
+        [
+          [false, 'Reads anywhere'],
+          [true, 'Read your writes'],
+        ],
+        node.ryw,
+        (ryw) => Message.RywChosen({ nodeId: node.id, ryw }),
+        h,
+      ),
+    )
+  return rows.length > 0 ? [section('Overload', rows, h)] : []
+}
+
 const waf = (node: GameNode, h: HtmlBuilder<Message>): Html =>
   section(
     'Paranoia',
@@ -1144,11 +1263,27 @@ const calls = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               [
                 ['none', 'No retries'],
                 ['naive', 'Retry 3×'],
+                ['backoff', 'Backoff'],
               ],
               link.retries,
               (retries) => Message.LinkPolicyChosen({ from: node.id, to: link.to, retries }),
               h,
+              (retries) => retries !== 'backoff' || has(game, 'backoff-jitter'),
             ),
+            ...(has(game, 'circuit-breakers')
+              ? [
+                  picker(
+                    `breaker-${link.to}`,
+                    [
+                      [false, 'No breaker'],
+                      [true, link.open > 0 ? 'Breaker open' : 'Breaker'],
+                    ],
+                    link.breaker,
+                    (breaker) => Message.LinkPolicyChosen({ from: node.id, to: link.to, breaker }),
+                    h,
+                  ),
+                ]
+              : []),
           ],
         ),
       ),
@@ -1295,6 +1430,9 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...(node.type === 'users' ? traffic(game, ledger, h) : []),
           ...(def.sized ? [instance(game, node, h)] : []),
           ...(node.type === 'server' || node.type === 'worker' ? stack(game, node, h) : []),
+          ...(node.type === 'server' ? collector(game, node, h) : []),
+          ...(node.type === 'server' ? routing(game, node, h) : []),
+          ...(node.type === 'gpu' ? [gpu(node, h)] : []),
           ...(node.type === 'analytics' ? [sampler(game, node, h)] : []),
           ...(node.type === 'lb' ? loadBalancer(game, node, h) : []),
           ...(node.type === 'cache' ? [cache(game, node, h)] : []),

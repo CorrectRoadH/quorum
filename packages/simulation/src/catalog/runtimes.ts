@@ -416,6 +416,8 @@ export const FRAMEWORK_IDS = [
   'spring-boot',
   'aspnet',
   'phoenix',
+  'axum',
+  'actix',
 ] as const
 export type FrameworkId = (typeof FRAMEWORK_IDS)[number]
 
@@ -610,7 +612,51 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkDef> = {
     startup: 0,
     blurb: 'LiveView pages earn 30% more. 1.1× CPU.',
   },
+  axum: {
+    id: 'axum',
+    axes: { throughput: 4, tail: 4, memory: 5, velocity: 3, resilience: 4, operability: 4 },
+    glossary: [],
+    name: 'Axum',
+    language: 'rust',
+    overhead: 1,
+    velocity: 1.15,
+    memory: 2,
+    orm: false,
+    value: {},
+    startup: 0,
+    blurb: 'Built on Tokio and Tower. No extra CPU.',
+  },
+  actix: {
+    id: 'actix',
+    axes: { throughput: 5, tail: 4, memory: 5, velocity: 2, resilience: 3, operability: 4 },
+    glossary: [],
+    name: 'Actix Web',
+    language: 'rust',
+    overhead: 0.95,
+    velocity: 1.1,
+    memory: 2,
+    orm: false,
+    value: {},
+    startup: 0,
+    blurb: 'Among the fastest in benchmarks. 0.95× CPU.',
+  },
 }
+
+/**
+ * Java collectors (06 "Runtime behaviors"): the pause, throughput and memory of each.
+ * G1 is the default; ZGC needs its research.
+ */
+export const COLLECTORS = {
+  g1: { label: 'G1', pauseMs: 30, speed: 1, memory: 1 },
+  parallel: { label: 'Parallel', pauseMs: 150, speed: 1.05, memory: 0.95 },
+  zgc: { label: 'ZGC', pauseMs: 1, speed: 0.9, memory: 1.15 },
+} as const
+/** GOGC settings (10 `gogc-tuning`): memory per process, and how much more often the GC runs. */
+export const GOGC = [
+  { gogc: 50, memory: 0.7, cpu: 2 },
+  { gogc: 100, memory: 1, cpu: 1 },
+  { gogc: 200, memory: 1.5, cpu: 0.5 },
+] as const
 
 /** N+1 queries multiply ORM reads. */
 export const ORM_READS = 3

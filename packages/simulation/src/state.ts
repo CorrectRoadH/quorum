@@ -51,6 +51,14 @@ export type PoolerMode = typeof PoolerMode.Type
 export const Zone = Schema.Literals(ZONES)
 export type Zone = typeof Zone.Type
 
+/** A GPU Node's GPU type (05 "GPU Node"). */
+export const GpuType = Schema.Literals(['t4', 'a100', 'h100'])
+export type GpuType = typeof GpuType.Type
+
+/** A Java App Server's garbage collector. */
+export const Collector = Schema.Literals(['g1', 'parallel', 'zgc'])
+export type Collector = typeof Collector.Type
+
 /** What an Autoscaler reads: CPU, or the Node's whole load, slots and memory included. */
 export const ScaleSignal = Schema.Literals(['cpu', 'load'])
 export type ScaleSignal = typeof ScaleSignal.Type
@@ -130,10 +138,19 @@ export const GameNode = Schema.Struct({
   target: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0.6))),
   minCopies: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))),
   maxCopies: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(8))),
+  /** A GPU Node's GPU type. */
+  gpu: GpuType.pipe(Schema.withDecodingDefaultKey(Effect.succeed('t4' as const))),
+  /** A Java App Server's collector, and a Go App Server's GOGC. */
+  collector: Collector.pipe(Schema.withDecodingDefaultKey(Effect.succeed('g1' as const))),
+  gogc: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(100))),
+  /** A saturated App Server drops the lowest-value kinds first (Priority load shedding). */
+  shed: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** An App Server sends reads that follow a write to the primary (Read-your-writes routing). */
+  ryw: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 })
 export type GameNode = typeof GameNode.Type
 
-export const Retries = Schema.Literals(['none', 'naive'])
+export const Retries = Schema.Literals(['none', 'naive', 'backoff'])
 export type Retries = typeof Retries.Type
 
 /** A directed network call, with its timeout, retry policy, and the kinds it carries. */
@@ -147,6 +164,15 @@ export const GameLink = Schema.Struct({
   kinds: Schema.NullOr(Schema.Array(RequestKindId)).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
   ),
+  /** A circuit breaker on the Link (Circuit breakers). */
+  breaker: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Seconds the breaker stays open: the Link fails fast and sends nothing. */
+  open: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /**
+   * Share of calls that failed on the Link last Step, for Links that retry or break. Retries
+   * carry it into the next Step, which is what keeps a retry storm going.
+   */
+  failure: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
 })
 export type GameLink = typeof GameLink.Type
 

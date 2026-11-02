@@ -55,23 +55,24 @@ describe('the Balanced bot at the design pace', { timeout: 60_000 }, () => {
  * soon as it can; uploads wait on Profile photos, which its autopilot has not
  * built by Series A, and so do media, rt and buy. In Series A it researches
  * Multiple zones first, then spreads its App Servers across two zones and gives
- * every data Node a standby. Series B is a placeholder, so the run stops on the
- * clock. Margins at the design's cost indexes are recorded, not asserted.
+ * every data Node a standby, and raises Series B (112–121 min on seeds 1–5).
+ * Series C is a placeholder, so the run stops on the clock. Margins at the design's cost indexes are recorded, not asserted.
  */
-describe('the Balanced bot through Seed into Series A', { timeout: 180_000 }, () => {
+describe('the Balanced bot through Seed and Series A into Series B', { timeout: 360_000 }, () => {
   for (const seed of SEEDS)
-    test(`seed ${seed}: plays Seed, raises Series A, and spreads across zones`, async ({
+    test(`seed ${seed}: plays Seed, raises Series A, spreads across zones, raises Series B`, async ({
       annotate,
     }) => {
-      const run = runBot(seed, 110 * 60, DESIGN_TUNING, 'balanced', 4)
+      const run = runBot(seed, 130 * 60, DESIGN_TUNING, 'balanced', 5)
       const { milestones } = run
-      expect(run.game.stage).toBe(3)
+      expect(run.game.stage).toBe(4)
+      expect(milestones['series-b'] ?? Infinity).toBeLessThan(130 * 60)
       expect(milestones['search-engine'] ?? Infinity).toBeLessThan(milestones['series-a'] ?? 0)
       expect(milestones.waf ?? Infinity).toBeLessThan(milestones['series-a'] ?? 0)
       const seedEra = run.margins.find((entry) => entry.stage === 2)
       expect(seedEra?.live ?? -1).toBeGreaterThan(0)
       expect(milestones['second-zone'] ?? Infinity).toBeGreaterThan(milestones['series-a'] ?? 0)
-      expect(milestones.standby ?? Infinity).toBeLessThan(110 * 60)
+      expect(milestones.standby ?? Infinity).toBeLessThan(milestones['series-b'] ?? 0)
       expect(run.game.apdex).toBeGreaterThan(0.9)
       const budget = budgetOf(run.game)
       await annotate(
@@ -80,7 +81,8 @@ describe('the Balanced bot through Seed into Series A', { timeout: 180_000 }, ()
           `second server ${minutes(milestones['second-server'])}; margin at Series A entry ` +
           `${((seedEra?.live ?? 0) * 100).toFixed(0)}% live, ` +
           `${((seedEra?.design ?? 0) * 100).toFixed(0)}% at cost index 120; second zone ` +
-          `${minutes(milestones['second-zone'])}, standby ${minutes(milestones.standby)}; at 110 min ` +
+          `${minutes(milestones['second-zone'])}, standby ${minutes(milestones.standby)}; ` +
+          `Series B at ${minutes(milestones['series-b'])}; at 130 min ` +
           `${Math.round(run.game.users)} users, availability ${(budget.availability * 100).toFixed(2)}% ` +
           `against ${(budget.slo * 100).toFixed(1)}%`,
       )

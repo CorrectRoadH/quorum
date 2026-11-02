@@ -15,6 +15,7 @@ import {
   RUNTIMES,
   SAMPLE_RATES,
   SAMPLE_STORAGE,
+  GPU_TYPES,
   GZIP_RATIO,
   HANDSHAKE_MS,
   HOP_MS,
@@ -96,12 +97,15 @@ export const sampleIndex = (node: GameNode): number => {
 export const vcpuOf = (node: GameNode): number => SIZES[node.size]?.vcpu ?? 1
 
 /** KB a response of this kind sends from this Node: gzip shrinks the compressible kinds. */
-export const payloadOf = (node: GameNode, kind: RequestKind): number =>
-  PROFILES[kind].payloadKB * (node.compress && PROFILES[kind].compressible ? GZIP_RATIO : 1)
+export const payloadOf = (node: GameNode, kind: RequestKind, offloaded = false): number =>
+  (offloaded && PROFILES[kind].offload > 0 ? PROFILES[kind].asyncKB : PROFILES[kind].payloadKB) *
+  (node.compress && PROFILES[kind].compressible ? GZIP_RATIO : 1)
 
 /** Milliseconds the response takes to reach the user over their downlink, after the request came up. */
-export const transferMs = (node: GameNode, kind: RequestKind): number =>
-  ((PROFILES[kind].stream ? Math.min(STREAM_KB, payloadOf(node, kind)) : payloadOf(node, kind)) *
+export const transferMs = (node: GameNode, kind: RequestKind, offloaded = false): number =>
+  ((PROFILES[kind].stream
+    ? Math.min(STREAM_KB, payloadOf(node, kind, offloaded))
+    : payloadOf(node, kind, offloaded)) *
     8) /
     USER_MBPS +
   (PROFILES[kind].inKB * 8) / USER_UP_MBPS
@@ -126,6 +130,7 @@ export const zoned = (node: GameNode): boolean =>
   !COMPONENTS[node.type].fixed &&
   // A provider's, and the regional Load Balancer's and WAF's, span every zone.
   node.type !== 'psp' &&
+  node.type !== 'llm' &&
   node.type !== 'lb' &&
   node.type !== 'waf'
 
@@ -208,6 +213,7 @@ export const burnOf = (game: Game, node: GameNode): number => {
     return def.burn * (SAMPLE_STORAGE[sampleIndex(node)] ?? 1) * flatScale(node) * index
   if (node.type === 'auth') return game.users * AUTH_PRICE_PER_USER
   if (node.type === 'storage') return (def.burn + game.stored * STORAGE_PRICE) * index
+  if (node.type === 'gpu') return GPU_TYPES[node.gpu].burn * flatScale(node) * index
   return def.burn * flatScale(node) * index * (node.standby ? 2 : 1)
 }
 

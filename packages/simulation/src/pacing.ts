@@ -1,7 +1,10 @@
 import { Result } from 'effect'
 import {
   canRaise,
+  cancelReport,
   collect,
+  disableRule,
+  expandVolume,
   connect,
   decline,
   deleteMessage,
@@ -83,6 +86,9 @@ export type Milestone =
   | 'autoscaler'
   | 'cdn'
   | 'payment-provider'
+  | 'series-b'
+  | 'warehouse'
+  | 'ai-serving'
 
 /** Margin when an Era ends: `live` at the build's prices, `design` at the design's cost index. */
 export type MarginRecord = Readonly<{
@@ -134,6 +140,10 @@ const PRIORITY: ReadonlyArray<ResearchId> = [
   'autoscaling',
   'tiered-caching',
   'containers',
+  // Series B: the cheap way to serve AI first, then the Warehouse for reports.
+  'hosted-models',
+  'data-warehouse',
+  'error-budgets',
 ]
 
 /** Polyglot researches the languages right after the basics. */
@@ -363,6 +373,40 @@ const seriesABuild = (game: Game, ledger: Ledger): Game => {
   return next
 }
 
+/**
+ * The Series B playbook: every Worker reads where the App Servers read, so
+ * exports have their data; the LLM API once AI prompts arrive; a Data Warehouse
+ * once reports do.
+ */
+const seriesBBuild = (game: Game, ledger: Ledger): Game => {
+  let next = game
+  const missing = (type: ComponentId) => !next.nodes.some((node) => node.type === type)
+  const anchor = servers(next)[0]
+  if (!anchor) return next
+  const reads = next.links.find((link) => {
+    const to = byId(next, link.to)
+    return link.from === anchor.id && to && COMPONENTS[to.type].accepts.includes('q-read')
+  })
+  if (reads)
+    for (const worker of next.nodes.filter((node) => node.type === 'worker'))
+      if (!next.links.some((link) => link.from === worker.id))
+        next = tried(next, connect(next, worker.id, reads.to))
+  if (
+    has(next, 'hosted-models') &&
+    missing('llm') &&
+    missing('gpu') &&
+    (ledger.kinds.ai?.rate ?? 0) > 0
+  ) {
+    const llm = placed(next, ledger, 'llm', anchor.x + 320, anchor.y + 620)
+    if (llm) next = linkServers(llm[0], llm[1])
+  }
+  if (has(next, 'data-warehouse') && missing('warehouse') && (ledger.kinds.report?.rate ?? 0) > 0) {
+    const warehouse = placed(next, ledger, 'warehouse', anchor.x + 600, anchor.y + 340)
+    if (warehouse) next = linkServers(warehouse[0], warehouse[1])
+  }
+  return next
+}
+
 /** What the Balanced player does about the Node that limits the Design. */
 const relieve = (game: Game, ledger: Ledger, node: GameNode, strategy: Strategy): Game => {
   const limit = ledger.nodes[node.id]?.limit ?? 'none'
@@ -421,6 +465,11 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
     next = tried(next, addIndex(next, incident.nodeId))
   if (incident?.kind === 'poison') next = tried(next, deleteMessage(next))
   if (incident?.kind === 'certificate') next = tried(next, renewCertificate(next))
+  if (incident?.kind === 'regex') next = tried(next, disableRule(next))
+  if (incident?.kind === 'report-db') next = tried(next, cancelReport(next))
+  if (incident?.kind === 'disk-full') next = tried(next, expandVolume(next))
+  if (incident?.kind === 'gc-storm' && incident.nodeId)
+    next = tried(next, restart(next, incident.nodeId))
   // Under attack mode only while the DDoS lasts: it blocks real users too.
   for (const waf of next.nodes.filter((node) => node.type === 'waf'))
     if (waf.underAttack !== (incident?.kind === 'ddos'))
@@ -480,6 +529,7 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
 
   if (strategy !== 'greedy' && next.stage >= 2) next = seedBuild(next, solveFlow(next))
   if (strategy !== 'greedy' && next.stage >= 3) next = seriesABuild(next, solveFlow(next))
+  if (strategy !== 'greedy' && next.stage >= 4) next = seriesBBuild(next, solveFlow(next))
 
   const flow = solveFlow(next)
   const target =
@@ -523,6 +573,10 @@ const reached = (before: Game, after: Game): ReadonlyArray<Milestone> => {
   if (after.nodes.some((node) => node.type === 'autoscaler')) found.push('autoscaler')
   if (after.nodes.some((node) => node.type === 'cdn')) found.push('cdn')
   if (after.nodes.some((node) => node.type === 'psp')) found.push('payment-provider')
+  if (after.stage >= 4) found.push('series-b')
+  if (after.nodes.some((node) => node.type === 'warehouse')) found.push('warehouse')
+  if (after.nodes.some((node) => node.type === 'llm' || node.type === 'gpu'))
+    found.push('ai-serving')
   return found
 }
 

@@ -51,6 +51,8 @@ export type LinkLedger = Readonly<{
   kind: Kind
   /** The far end fails what this link carries. */
   failing: boolean
+  /** Share of calls that fail on a Link that retries or breaks; 0 on others. */
+  failure: number
 }>
 
 export type KindLedger = Readonly<{
@@ -94,7 +96,7 @@ export type Ledger = Readonly<{
   salaries: number
   /** Dollars per second of egress, included in `burn`. */
   egress: number
-  /** Dollars per second to third parties (Payment Provider fees), included in `burn`. */
+  /** Dollars per second to third parties (Payment Provider fees, scans, tokens), included in `burn`. */
   fees: number
   /** Most users the market holds: the Era's, grown by Features. */
   market: number

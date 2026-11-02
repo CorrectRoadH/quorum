@@ -10,6 +10,7 @@ import {
   STANDBY_TYPES,
   CHECK_INTERVALS,
   CREDIT_CAP,
+  GOGC,
   DEFAULT_FPM_WORKERS,
   DNS_TTLS,
   ERAS,
@@ -27,6 +28,7 @@ import {
   type ComponentId,
   type FamilyId,
   type FrameworkId,
+  type IncidentId,
   type Kind,
   type RequestKind,
   type ResearchId,
@@ -55,7 +57,9 @@ import { zoned } from './director.ts'
 import type { AlertRule } from './events.ts'
 import type {
   CacheEngine,
+  Collector,
   Game,
+  GpuType,
   GameLink,
   GameNode,
   LbPolicy,
@@ -169,6 +173,11 @@ const blankNode = (game: Game, id: string, type: ComponentId, x: number, y: numb
     target: 0.6,
     minCopies: 1,
     maxCopies: 8,
+    gpu: 't4',
+    collector: 'g1',
+    gogc: 100,
+    shed: false,
+    ryw: false,
   }
 }
 
@@ -283,19 +292,31 @@ export const setLinkPolicy = (
   game: Game,
   from: string,
   to: string,
-  change: Readonly<{ timeout?: number; retries?: Retries }>,
+  change: Readonly<{ timeout?: number; retries?: Retries; breaker?: boolean }>,
 ): Action => {
   const index = game.links.findIndex((entry) => entry.from === from && entry.to === to)
   const current = game.links[index]
   if (!current) return no(Refusal.Missing())
   if (!has(game, 'timeouts'))
     return no(Refusal.Locked({ what: 'Call policy', research: RESEARCH.timeouts.name }))
+  if (change.retries === 'backoff' && !has(game, 'backoff-jitter'))
+    return no(Refusal.Locked({ what: 'Backoff', research: RESEARCH['backoff-jitter'].name }))
+  if (change.breaker && !has(game, 'circuit-breakers'))
+    return no(
+      Refusal.Locked({ what: 'A circuit breaker', research: RESEARCH['circuit-breakers'].name }),
+    )
   if (
     change.timeout !== undefined &&
     !(LINK_TIMEOUTS as ReadonlyArray<number>).includes(change.timeout)
   )
     return notAllowed('A timeout is 1, 5, or 30 seconds.')
-  const next = { ...current, ...change }
+  // A new retry policy or breaker starts fresh.
+  const next = {
+    ...current,
+    ...change,
+    failure: 0,
+    open: change.breaker === false ? 0 : current.open,
+  }
   return ok({ ...game, links: game.links.map((entry, at) => (at === index ? next : entry)) })
 }
 
@@ -579,6 +600,80 @@ export const setAutoscaler = (
     if (maxCopies > 0 && minCopies > maxCopies) return notAllowed('The min is above the max.')
     return ok(patch(game, id, change))
   })
+
+/** Picks a GPU Node's GPU type. H100s cannot be had during a GPU shortage. */
+export const setGpuType = (game: Game, id: string, gpu: GpuType): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'gpu') return notAllowed('Only a GPU Node has a GPU type.')
+    if (node.gpu === gpu) return ok(game)
+    if (gpu === 'h100' && game.incident?.kind === 'gpu-shortage')
+      return notAllowed('No H100 capacity this month.')
+    return ok(patch(game, id, { gpu, ...restarted(node) }))
+  })
+
+/** Picks a Java App Server's collector. ZGC needs its research. */
+export const setCollector = (game: Game, id: string, collector: Collector): Action =>
+  withNode(game, id, (node) => {
+    if (RUNTIMES[node.runtime].language !== 'java')
+      return notAllowed('Only Java runs a choice of collector.')
+    if (collector === 'zgc' && !has(game, 'zgc'))
+      return no(Refusal.Locked({ what: 'ZGC', research: RESEARCH.zgc.name }))
+    if (node.collector === collector) return ok(game)
+    return ok(patch(game, id, { collector, ...restarted(node) }))
+  })
+
+/** Sets a Go App Server's GOGC: 50, 100 or 200. Needs Go GC tuning. */
+export const setGogc = (game: Game, id: string, gogc: number): Action =>
+  withNode(game, id, (node) => {
+    if (RUNTIMES[node.runtime].language !== 'go') return notAllowed('Only Go has GOGC.')
+    if (!has(game, 'gogc-tuning'))
+      return no(Refusal.Locked({ what: 'GOGC', research: RESEARCH['gogc-tuning'].name }))
+    if (!GOGC.some((entry) => entry.gogc === gogc)) return notAllowed('GOGC is 50, 100 or 200.')
+    return ok(node.gogc === gogc ? game : patch(game, id, { gogc }))
+  })
+
+/** Turns an App Server's load shedding on or off. Needs Priority load shedding. */
+export const setShed = (game: Game, id: string, shed: boolean): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'server') return notAllowed('Only App Servers shed load.')
+    if (shed && !has(game, 'load-shedding'))
+      return no(Refusal.Locked({ what: 'Load shedding', research: RESEARCH['load-shedding'].name }))
+    return ok(node.shed === shed ? game : patch(game, id, { shed }))
+  })
+
+/** Turns an App Server's read-your-writes routing on or off. */
+export const setRyw = (game: Game, id: string, ryw: boolean): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'server') return notAllowed('Only App Servers route reads.')
+    if (ryw && !has(game, 'ryw-routing'))
+      return no(
+        Refusal.Locked({ what: 'Read-your-writes', research: RESEARCH['ryw-routing'].name }),
+      )
+    return ok(node.ryw === ryw ? game : patch(game, id, { ryw }))
+  })
+
+/** Ends an incident that one action ends. */
+const endIncident = (game: Game, kind: IncidentId, refusal: string): Action =>
+  game.incident?.kind === kind
+    ? ok({ ...game, incident: { ...game.incident, remaining: 0 } })
+    : notAllowed(refusal)
+
+/** Disables the WAF rule that backtracks. */
+export const disableRule = (game: Game): Action =>
+  endIncident(game, 'regex', 'No WAF rule is backtracking.')
+
+/** Cancels the report that is scanning the primary. */
+export const cancelReport = (game: Game): Action =>
+  endIncident(game, 'report-db', 'No report is scanning the Database.')
+
+/** Expands a full Database volume: writes come back. Costs what a replacement would. */
+export const expandVolume = (game: Game): Action => {
+  const target = game.nodes.find((node) => node.id === game.incident?.nodeId)
+  if (game.incident?.kind !== 'disk-full' || !target) return notAllowed('No disk is full.')
+  return spend(game, replacePrice(game, target), 'A bigger volume', (paid) =>
+    paid.incident ? { ...paid, incident: { ...paid.incident, remaining: 0 } } : paid,
+  )
+}
 
 /** Renews an expired certificate: the site comes back. */
 export const renewCertificate = (game: Game): Action =>

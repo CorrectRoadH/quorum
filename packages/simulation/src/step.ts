@@ -1,6 +1,8 @@
 import {
   ALERT_FATIGUE,
   ALERT_RULES,
+  BREAKER_OPEN,
+  BREAKER_THRESHOLD,
   APDEX_WINDOW,
   CHURN,
   CREDIT_CAP,
@@ -36,7 +38,7 @@ import {
 } from './lookups.ts'
 import { recordBudget } from './slo.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
-import type { Alarms, FalseAlarms, Game, GameNode, Sample } from './state.ts'
+import type { Alarms, FalseAlarms, Game, GameLink, GameNode, Sample } from './state.ts'
 import { advanceTeam } from './work.ts'
 
 /* ==========================================================================
@@ -194,6 +196,15 @@ const advanceNode = (
   }
   if (node.type === 'server' || node.type === 'worker') next = scale(game, next, ledger, seconds)
   if (node.type === 'queue') next = { ...next, depth: depthAfter(game, ledger, node, seconds) }
+  // A Database in a retry storm queues what it cannot take, and drains once it can.
+  if (
+    node.type === 'database' &&
+    (node.depth > 0 || (game.incident?.kind === 'retry-storm' && game.incident.nodeId === node.id))
+  ) {
+    const own = ledger.nodes[node.id]
+    const drain = own && own.inbound > 0 ? own.capacity : Number.POSITIVE_INFINITY
+    next = { ...next, depth: Math.max(0, node.depth + ((own?.inbound ?? 0) - drain) * seconds) }
+  }
   const credits = ledger.nodes[node.id]?.resources.credits
   if (node.family === 'burstable' && credits) {
     const balance = Math.max(
@@ -220,6 +231,24 @@ const advanceNode = (
     next = { ...next, ...restarted(node, 'oom'), leak: 0, downAt: time }
   }
   return next
+}
+
+/**
+ * Links that retry carry their failure share into the next Step. A breaker opens
+ * when half the calls fail, stays open, then closes to try again.
+ */
+const advanceLinks = (game: Game, ledger: Ledger, seconds: number): ReadonlyArray<GameLink> => {
+  const links = game.links.map((link, index) => {
+    if (link.open > 0) {
+      const open = Math.max(0, link.open - seconds)
+      return { ...link, open, failure: open > 0 ? link.failure : 0 }
+    }
+    const measured = ledger.links[index]?.failure ?? 0
+    if (link.breaker && has(game, 'circuit-breakers') && measured > BREAKER_THRESHOLD)
+      return { ...link, open: BREAKER_OPEN, failure: 0 }
+    return measured === link.failure ? link : { ...link, failure: measured }
+  })
+  return links.every((link, index) => link === game.links[index]) ? game.links : links
 }
 
 /** Whether the player has stopped listening to a rule: too many false alarms today. */
@@ -331,6 +360,7 @@ export const step = (game: Game, seconds: number, tuning: Tuning = LIVE_TUNING):
   let next: Game = {
     ...game,
     nodes,
+    links: advanceLinks(game, ledger, seconds),
     cash,
     pending,
     spilled,

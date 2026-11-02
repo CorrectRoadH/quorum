@@ -23,7 +23,11 @@ const GOLDEN_STEPS = 10_000
 // and Autoscaler settings, the incident's zone, and the error budget. The
 // Pre-seed replay's values are unchanged; the encoded Game carries the new
 // fields, so its hash moves.
-const GOLDEN_HASH = '9a1dfca3'
+// SIM_VERSION 5 (M5 Series B): the save gains each Node's GPU type, collector,
+// GOGC, load shedding and read-your-writes, and each Link's breaker, open time
+// and failure share. The Pre-seed replay's values are unchanged; the encoded
+// Game carries the new fields, so its hash moves.
+const GOLDEN_HASH = 'bf00cf54'
 
 describe('determinism', () => {
   test(`the golden Company hashes to ${GOLDEN_HASH} after ${GOLDEN_STEPS} Steps (SIM_VERSION ${SIM_VERSION})`, () => {

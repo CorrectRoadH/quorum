@@ -3,7 +3,9 @@ import { defineMessageUnion } from 'foldkit/message'
 import { TASK_IDS } from '@template/simulation/catalog'
 import {
   CacheEngine,
+  Collector,
   ComponentId,
+  GpuType,
   FamilyId,
   FeatureId,
   FrameworkId,
@@ -89,6 +91,7 @@ export const Message = defineMessageUnion({
     to: Schema.String,
     timeout: Schema.optional(Schema.Finite),
     retries: Schema.optional(Retries),
+    breaker: Schema.optional(Schema.Boolean),
   },
   LinkKindsChosen: {
     from: Schema.String,
@@ -116,6 +119,14 @@ export const Message = defineMessageUnion({
     minCopies: Schema.optional(Schema.Finite),
     maxCopies: Schema.optional(Schema.Finite),
   },
+  GpuChosen: { nodeId: Schema.String, gpu: GpuType },
+  CollectorChosen: { nodeId: Schema.String, collector: Collector },
+  GogcChosen: { nodeId: Schema.String, gogc: Schema.Finite },
+  ShedChosen: { nodeId: Schema.String, shed: Schema.Boolean },
+  RywChosen: { nodeId: Schema.String, ryw: Schema.Boolean },
+  RuleDisabled: {},
+  ReportCancelled: {},
+  VolumeExpanded: {},
   CertificateRenewed: {},
   MessageDeleted: {},
   NodeSold: { nodeId: Schema.String },
