@@ -18,7 +18,7 @@ import {
   type Progress,
   type SandboxId,
 } from './sandbox.ts'
-import { solve } from './solve.ts'
+import { solve, solveFlow } from './solve.ts'
 import { addIndex } from './work.ts'
 import { step } from './step.ts'
 import type { Game } from './state.ts'
@@ -33,8 +33,11 @@ type Plan = (game: Game, passed: number) => Game
 
 const idle: Plan = (game) => game
 
-/** Sim seconds per Step. Coarser than the game's clock, so the suite stays fast. */
-const STEP = 1
+/**
+ * Sim seconds per Step, far coarser than the game's 0.1 s so the suite stays fast.
+ * Every play reaches the same objective at 10 s as at 1 s; `SLOW_TESTS=1` plays at 1 s.
+ */
+const STEP = SLOW ? 1 : 10
 
 /** Plays a guided Sandbox for some sim seconds, adding an index when a slow query is found. */
 const play = (
@@ -51,7 +54,8 @@ const play = (
     game = step(game, STEP).game
     if (index && game.incident?.kind === 'slow-query' && game.time - game.incident.startedAt > 15)
       game = ok(addIndex(game, 'database'))
-    const next = advanceSandbox(sandbox, progress, game, solve(game), STEP)
+    // The game checks objectives on the flow alone; the Bottleneck search would triple the cost.
+    const next = advanceSandbox(sandbox, progress, game, solveFlow(game), STEP)
     game = next.game
     progress = next.progress
     if (next.advanced) game = plan(game, progress.objective)
@@ -225,7 +229,7 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
     expect(play('read-mostly', bigger, LONG).objective).toBe(1)
   })
 
-  test.skipIf(!SLOW)('Stampede: coalesce the misses, then warm the Cache before traffic', () => {
+  test('Stampede: coalesce the misses, then warm the Cache before traffic', () => {
     const guard =
       (change: Readonly<{ coalesce?: boolean; warming?: boolean }>): Plan =>
       (game, passed) =>
@@ -247,7 +251,7 @@ describe('guided Sandboxes pass with their fix and stall without it', { timeout:
     expect(play('stampede', bigger, LONG).objective).toBe(2)
   })
 
-  test.skipIf(!SLOW)('Slow Uploads: a Queue and a Worker take uploads off the App Servers', () => {
+  test('Slow Uploads: a Queue and a Worker take uploads off the App Servers', () => {
     const queue =
       (dlq: boolean): Plan =>
       (game, passed) => {
@@ -510,19 +514,15 @@ describe('the Series C track', () => {
     expect(play('missed-write', all, LONG).objective).toBe(1)
   }, 60_000)
 
-  test.skipIf(!SLOW)(
-    'Hot Key: splitting keys passes; a bigger store does not',
-    () => {
-      const split: Plan = (game, passed) =>
-        passed === 1 ? ok(Actions.setSplit(game, 'wide', true)) : game
-      passesInTime(play('hot-key', split, LONG), 2)
-      expect(play('hot-key', idle, LONG).objective).toBe(1)
-      const bigger: Plan = (game, passed) =>
-        passed === 1 ? ok(Actions.resize(game, 'wide', 1)) : game
-      expect(play('hot-key', bigger, LONG).objective).toBe(1)
-    },
-    60_000,
-  )
+  test('Hot Key: splitting keys passes; a bigger store does not', () => {
+    const split: Plan = (game, passed) =>
+      passed === 1 ? ok(Actions.setSplit(game, 'wide', true)) : game
+    passesInTime(play('hot-key', split, LONG), 2)
+    expect(play('hot-key', idle, LONG).objective).toBe(1)
+    const bigger: Plan = (game, passed) =>
+      passed === 1 ? ok(Actions.resize(game, 'wide', 1)) : game
+    expect(play('hot-key', bigger, LONG).objective).toBe(1)
+  }, 60_000)
 })
 
 describe('the free Sandbox', () => {

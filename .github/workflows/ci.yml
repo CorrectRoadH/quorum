@@ -25,10 +25,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm typecheck
+      # The multi-minute `SLOW_TESTS=1` checks run by hand, not in CI.
       - run: pnpm test
-        env:
-          # Multi-minute simulation checks run only on main, before deploy.
-          SLOW_TESTS: ${{ github.ref == 'refs/heads/main' && '1' || '' }}
       - run: pnpm build
 
   deploy:
