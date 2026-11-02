@@ -177,3 +177,7 @@ render it again. The other images in `docs/images` are screenshots of the runnin
 - [Adding a feature](docs/extending.md) — the path from contract to handler to UI.
 - The reference example is intentionally separate from the game. Copy patterns from it; do not
   move its demo behavior into the default app.
+
+## License
+
+Quorum is licensed under the [GNU General Public License v3.0 or later](LICENSE).
