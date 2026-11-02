@@ -513,7 +513,7 @@ the Series C to Public mechanics on built Designs.
 | Time dilation      | Adds 20× and 40× to the 1×, 3×, 10× speeds                                                                                                                                  | Multiplies the top speed                               | Extra speeds read better than a scaled top speed.                                                       |
 | Head start         | Level 1 only: start at Pre-seed                                                                                                                                             | Levels to later Eras                                   | Later levels skip content the bots have not paced.                                                      |
 | Playbook slots     | 1 slot with no perk, then 2, 5, 10, 25                                                                                                                                      | Slots come from the perk                               | One free slot so every player meets Playbooks.                                                          |
-| Unlocks            | The first Exit unlocks Bootstrapped indie and every Mutator                                                                                                                 | Achievements                                           | Achievements are M9.                                                                                    |
+| Unlocks            | Default Alive opens Bootstrapped indie; six achievements open their Mutators; the first Exit opens Legacy monolith, One region, and Tight budget                            | Achievements                                           | GDD 13 ties no achievement to those three. Records from M7 keep what their first Exit opened            |
 | Ventures           | B2B SaaS (default, keeps today's evening curve), Consumer social, Fintech, Streaming, Game backend, AI startup, E-commerce, Bootstrapped                                    | 12 Ventures                                            | Developer platform, Healthcare, Ad tech, and Government contract are deferred: their kinds are missing. |
 | Mutators           | Nine of 13's ten; Chaos Monkey weights instance incidents ×4 from Seed; HN front page weights traffic spikes ×3; Legacy monolith starts at 40 kloc, 0.4 debt, migrations ×3 | Nine Mutators                                          | Shared tenancy is skipped: CPU steal has no model yet.                                                  |
 | Autopilot perk     | Not built                                                                                                                                                                   | Policies for upgrades, research, hiring                | The M4 autopilot already covers hiring and Features.                                                    |
@@ -561,5 +561,28 @@ The longest replay, Too Many Connections (81 Nodes), takes about 2.3 s of CPU in
 the Workers Paid default of 30 s CPU per request but not the Free plan's 10 ms, so the API Worker
 needs a paid plan; no `limits.cpu_ms` change is needed for these five. Longer Challenges (Five Nines)
 will need coarser Steps.
+
+### Polish (M9, batches M9.1–M9.4)
+
+| Topic          | Current build                                                                                                                | Design ([15](./15-ui-ux.md), [14](./14-challenges.md)) | Notes                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| Settings       | Mute and Reduce motion in `quorum.prefs.v1`; `M` toggles mute                                                                | Mute, reduced motion, text at 150%                     | No text scale: PixiJS card text is fixed              |
+| Sound          | Incident, Era, and achievement sounds, skipped when muted                                                                    | Incident and Era milestone sounds                      |                                                       |
+| Status         | Node cards mark ok, warn, danger, and down with a dot, a triangle, a square, and a cross as well as colour                   | Shape or icon plus colour                              |                                                       |
+| Request kinds  | Packets are circles in the kind's colour                                                                                     | A shape per kind                                       | Not built                                             |
+| Reduced motion | Packets hold still and the Bottleneck stops pulsing; panels and toasts appear at once                                        | Static flow arrows with rate labels                    | No rate labels                                        |
+| Keyboard       | Arrows select the nearest Node, Enter moves focus into the Inspector, a focus ring marks the selected Node; `G` Glossary     | Every action has a key; T, E, I, G, C panels           | No Company, Incidents, or Cost key; `C` stays Collect |
+| Contrast       | Light `--ok` darkened to L 0.50 and `--danger` to L 0.52, so status text is at least 4.5:1 on wells                          | WCAG AA                                                | Fixed axe's one serious violation (3.64:1)            |
+| Achievements   | 23 defined; detected each tick in a Company, never in a Sandbox or Challenge; Histogram and Pareto from verified percentiles | 45                                                     | The rest need content the build lacks                 |
+| Glossary       | All 65 entries of `glossary.md`, kept in sync by a test; met entries carry a check; Tradeoff card terms open it              | Same, entries highlighted when met                     | Undiscovered entries stay readable                    |
+
+axe-core 4.11 (WCAG 2.0/2.1 A and AA plus best practices), before and after:
+
+| Screen                  | Before                                                    | After   |
+| ----------------------- | --------------------------------------------------------- | ------- |
+| Title                   | 0 violations                                              | 0       |
+| Lab, Team panel open    | 0 violations; `aria-hidden-focus` incomplete (build dock) | 0; none |
+| Lab, panel closed       | 1 violation                                               | 0       |
+| Daily drill (Challenge) | 1 serious `color-contrast` (`.text-ok`, 3.64:1)           | 0       |
 
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.

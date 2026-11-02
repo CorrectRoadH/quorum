@@ -1,7 +1,15 @@
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import { decline, place, raise, setRuntime } from './actions.ts'
-import { ERAS, PERKS, PERK_IDS, PLAYBOOK_SLOTS } from './catalog.ts'
+import {
+  ERAS,
+  EXIT_MUTATORS,
+  MUTATOR_IDS,
+  PERKS,
+  PERK_IDS,
+  PLAYBOOK_SLOTS,
+  VENTURE_IDS,
+} from './catalog.ts'
 import { newGame } from './company.ts'
 import { exitOffers, ipoExit, legacyOf, takeExit } from './exit.ts'
 import {
@@ -91,8 +99,13 @@ describe('Exits', () => {
     expect(founder.history[0]?.exit).toBe('acquisition')
     expect(founder.history[0]?.snapshot.nodes.length).toBe(game.nodes.length)
     expect(founder.legacy).toBe(result.success.legacy)
-    expect(founder.mutators.length).toBeGreaterThan(0)
-    expect(founder.ventures).toContain('bootstrapped')
+    expect(founder.mutators).toEqual(EXIT_MUTATORS)
+    expect(founder.ventures).not.toContain('bootstrapped')
+    // A record from before achievements keeps what its first Exit opened.
+    const old = { ...emptyFounder(), ventures: [...VENTURE_IDS], mutators: [...MUTATOR_IDS] }
+    const again = recordExit(old, result.success)
+    expect(again.ventures).toEqual(VENTURE_IDS)
+    expect(again.mutators).toEqual(MUTATOR_IDS)
   })
 
   test('the IPO banks its Legacy, and Step down pays only the rest', () => {

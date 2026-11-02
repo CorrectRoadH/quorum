@@ -22,7 +22,10 @@ const keys = Stream.callback<KeyMessage>((queue) =>
           const target = event.target as HTMLElement | null
           if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
           if (event.metaKey || event.ctrlKey || event.altKey) return
-          if (event.key === ' ') event.preventDefault()
+          // Arrows and Enter move over the board only when no control has focus.
+          const onBoard = !target || target === document.body || target.tagName === 'CANVAS'
+          if ((event.key.startsWith('Arrow') || event.key === 'Enter') && !onBoard) return
+          if (event.key === ' ' || event.key.startsWith('Arrow')) event.preventDefault()
           Queue.offerUnsafe(
             queue,
             Message.KeyPressed({

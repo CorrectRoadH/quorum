@@ -3,7 +3,15 @@ import { dock } from '@/components/lab/dock.ts'
 import { changeBar, goalBar, hud, regionTabs, toolbar } from '@/components/lab/hud.ts'
 import { badDeploy, expiredCertificate, pager, postmortems } from '@/components/lab/incidents.ts'
 import { inspector } from '@/components/lab/inspector.ts'
-import { devPanel, endPanel, eraPanel, helpPanel, offerPanel } from '@/components/lab/panels.ts'
+import {
+  devPanel,
+  endPanel,
+  eraPanel,
+  helpPanel,
+  offerPanel,
+  settingsPanel,
+} from '@/components/lab/panels.ts'
+import { glossaryPanel } from '@/components/lab/glossary.ts'
 import { researchPanel } from '@/components/lab/research.ts'
 import { teamPanel } from '@/components/lab/team.ts'
 import {
@@ -98,6 +106,8 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       model.panel === 'away' ? awayPanel(model, h) : h.empty,
       model.panel === 'playbooks' ? playbooksPanel(model, h) : h.empty,
       model.panel === 'help' ? helpPanel(h) : h.empty,
+      model.panel === 'settings' ? settingsPanel(model, h) : h.empty,
+      model.panel === 'glossary' ? glossaryPanel(model, h) : h.empty,
       model.panel === 'offer' ? offerPanel(model, h) : h.empty,
       model.panel === 'era' ? eraPanel(model, h) : h.empty,
       model.panel === 'end' ? endPanel(model, h) : h.empty,

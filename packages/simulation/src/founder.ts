@@ -1,9 +1,12 @@
 import { Effect, Result, Schema } from 'effect'
 import {
-  MUTATOR_IDS,
+  ACHIEVEMENTS,
+  ACHIEVEMENT_IDS,
+  EXIT_MUTATORS,
   PERKS,
   PLAYBOOK_SLOTS,
   VENTURES,
+  type AchievementId,
   type MutatorId,
   type PerkId,
   type ResearchId,
@@ -50,6 +53,15 @@ export const Founder = Schema.Struct({
   completed: withDefault(Schema.Array(Schema.String), []),
   /** A random id the browser makes once; Challenge histograms count one best per device. */
   deviceId: withDefault(Schema.String, ''),
+  /** Achievements earned in any Company or Challenge (14 "Achievements"). */
+  achievements: withDefault(Schema.Array(Schema.Literals(ACHIEVEMENT_IDS)), []),
+  /** Counts the counting achievements need, across Companies. */
+  stats: withDefault(Schema.Struct({ postmortems: Schema.Finite, terminations: Schema.Finite }), {
+    postmortems: 0,
+    terminations: 0,
+  }),
+  /** Glossary entries the player has met in play. */
+  glossary: withDefault(Schema.Array(Schema.String), []),
 })
 export type Founder = typeof Founder.Type
 
@@ -79,7 +91,7 @@ export const buyPerk = (founder: Founder, id: PerkId): Change => {
 export const unlockVenture = (founder: Founder, id: VentureId): Change => {
   const def = VENTURES[id]
   if (founder.ventures.includes(id)) return ok({ ...founder, venture: id })
-  if (def.bootstrapped) return no(`${def.name} opens with your first Exit.`)
+  if (def.bootstrapped) return no(`${def.name} opens with the Default Alive achievement.`)
   if (founder.legacy < def.cost) return no(`${def.name} needs ${def.cost} Legacy.`)
   return ok({
     ...founder,
@@ -90,7 +102,14 @@ export const unlockVenture = (founder: Founder, id: VentureId): Change => {
 }
 
 export const toggleMutator = (founder: Founder, id: MutatorId): Change => {
-  if (!founder.mutators.includes(id)) return no('Mutators open with your first Exit.')
+  if (!founder.mutators.includes(id)) {
+    const by = ACHIEVEMENT_IDS.find(
+      (achievement) => ACHIEVEMENTS[achievement].unlocks?.mutator === id,
+    )
+    return no(
+      by ? `Opens with the ${ACHIEVEMENTS[by].name} achievement.` : 'Opens with your first Exit.',
+    )
+  }
   return ok({
     ...founder,
     chosen: founder.chosen.includes(id)
@@ -114,19 +133,34 @@ export const toggleKeep = (founder: Founder, id: ResearchId): Change => {
   return ok({ ...founder, keep: [...founder.keep, id] })
 }
 
-/** An Exit: Legacy, a history row, and from the first Exit on, Bootstrapped indie and every Mutator. */
+/** An Exit: Legacy, a history row, and the Mutators no achievement opens. */
 export const recordExit = (founder: Founder, result: ExitResult): Founder => ({
   ...founder,
   legacy: founder.legacy + result.legacy,
   earned: founder.earned + result.legacy,
   history: [...founder.history, result.row],
-  ventures: founder.ventures.includes('bootstrapped')
-    ? founder.ventures
-    : [...founder.ventures, 'bootstrapped'],
-  mutators: [...MUTATOR_IDS],
+  mutators: [...founder.mutators, ...EXIT_MUTATORS.filter((id) => !founder.mutators.includes(id))],
   // Research kept from an earlier Company does not carry twice.
   keep: [],
 })
+
+/** Earns achievements, and opens the Ventures and Mutators they unlock. Already-earned ones change nothing. */
+export const earnAchievements = (founder: Founder, ids: ReadonlyArray<AchievementId>): Founder => {
+  const fresh = ids.filter((id, at) => !founder.achievements.includes(id) && ids.indexOf(id) === at)
+  if (fresh.length === 0) return founder
+  const ventures = fresh.flatMap((id) => ACHIEVEMENTS[id].unlocks?.venture ?? [])
+  const mutators = fresh.flatMap((id) => ACHIEVEMENTS[id].unlocks?.mutator ?? [])
+  return {
+    ...founder,
+    achievements: [...founder.achievements, ...fresh],
+    ventures: [...founder.ventures, ...ventures.filter((id) => !founder.ventures.includes(id))],
+    mutators: [...founder.mutators, ...mutators.filter((id) => !founder.mutators.includes(id))],
+  }
+}
+
+/** Notes a glossary entry met in play. */
+export const discoverTerm = (founder: Founder, id: string): Founder =>
+  founder.glossary.includes(id) ? founder : { ...founder, glossary: [...founder.glossary, id] }
 
 /** What the next Company is founded with. */
 export const foundingOf = (founder: Founder): Founding => ({

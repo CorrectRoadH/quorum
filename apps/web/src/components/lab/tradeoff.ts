@@ -290,12 +290,13 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
         ? h.div(
             [h.Class('flex flex-wrap gap-1.5')],
             stack.glossary.map((anchor) =>
-              h.span(
+              h.button(
                 [
                   h.Key(anchor),
-                  h.Title(`docs/gdd/glossary.md#${anchor}`),
+                  h.Type('button'),
+                  h.OnClick(Message.GlossaryOpened({ id: anchor })),
                   h.Class(
-                    'rounded-md bg-nested px-1.5 py-0.5 text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2',
+                    'rounded-md bg-nested px-1.5 py-0.5 text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground',
                   ),
                 ],
                 [TERMS[anchor] ?? anchor],

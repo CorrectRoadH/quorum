@@ -3,6 +3,7 @@ import {
   Circle,
   CircleCheck,
   BookCopy,
+  BookOpen,
   CircleHelp,
   DatabaseZap,
   Expand,
@@ -21,6 +22,7 @@ import {
   Timer,
   TriangleAlert,
   Redo2,
+  Settings,
   Undo2,
   Users,
   UsersRound,
@@ -549,13 +551,13 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.Class(
                 cn(
                   tool(model.panel === 'research'),
-                  'flex w-auto gap-2 px-3 text-[13px] font-medium compact:size-9 compact:px-0',
+                  'flex w-auto gap-2 px-3 text-[13px] font-medium compact:size-9 compact:px-0 max-2xl:w-9 max-2xl:px-0 max-2xl:justify-center',
                 ),
               ),
             ],
             [
               icon(h, FlaskConical, 'size-[18px]'),
-              h.span([h.Class('compact:hidden')], ['Research']),
+              h.span([h.Class('compact:hidden max-2xl:hidden')], ['Research']),
               affordable > 0
                 ? h.span(
                     [
@@ -621,6 +623,20 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
         model.panel === 'help',
         h,
       ),
+      toolButton(
+        'Glossary (G)',
+        BookOpen,
+        model.panel === 'glossary' ? Message.PanelClosed() : Message.GlossaryOpened({ id: null }),
+        model.panel === 'glossary',
+        h,
+      ),
+      toolButton(
+        'Settings',
+        Settings,
+        Message.PanelOpened({ panel: model.panel === 'settings' ? 'none' : 'settings' }),
+        model.panel === 'settings',
+        h,
+      ),
       divider(h),
       historyButton('Undo (Z)', Undo2, Message.UndoChosen(), undoAvailable(model), h),
       historyButton('Redo (Shift+Z)', Redo2, Message.RedoChosen(), redoAvailable(model), h),
@@ -658,7 +674,11 @@ const pill = `flex max-w-[480px] compact:max-w-none items-center gap-2.5 rounded
 /** The pill stays and its text swaps, so a new goal morphs in rather than snapping. */
 export const goalBar = (text: string, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Key('goal'), h.DataAttribute('morph', 'notice'), h.Class(`${pill} short:hidden max-2xl:max-w-[380px]`)],
+    [
+      h.Key('goal'),
+      h.DataAttribute('morph', 'notice'),
+      h.Class(`${pill} short:hidden max-2xl:max-w-[380px]`),
+    ],
     [
       icon(h, Lightbulb, 'size-3.5 shrink-0 text-warn'),
       h.span([h.Key(text), h.DataAttribute('exit', 'notice'), h.Class('swap')], [text]),

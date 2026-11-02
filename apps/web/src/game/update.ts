@@ -2,6 +2,7 @@ import { Option, Result, Schema } from 'effect'
 import type { Runtime, Update } from 'foldkit'
 import * as Actions from '@template/simulation/actions'
 import {
+  ACHIEVEMENTS,
   ALERT_RULES,
   BUILD_GROUPS,
   DILATION_SPEEDS,
@@ -55,8 +56,18 @@ import {
   toggleMutator,
   unlockVenture,
   completeChallenge,
+  discoverTerm,
+  earnAchievements,
   recordEra,
 } from '@template/simulation/founder'
+import {
+  challengeAchievements,
+  countStats,
+  detectAchievements,
+  everyVenture,
+} from '@template/simulation/achievements'
+import type { AchievementId } from '@template/simulation/catalog'
+import { discoverTerms } from '@template/simulation/discovery'
 import { foundCompany, perkLevel } from '@template/simulation/founding'
 import { OFFLINE_MIN, simulateAway } from '@template/simulation/offline'
 import {
@@ -90,7 +101,9 @@ import { serviceOf } from '@template/simulation/team'
 import * as Work from '@template/simulation/work'
 import {
   AskPlaybook,
+  ApplySettings,
   ClearSave,
+  FocusInspector,
   CopyText,
   LoadFounder,
   WriteFounder,
@@ -139,6 +152,8 @@ import {
 } from './model.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
+import { nearestNode, type Direction } from './viewport.ts'
+import { regionView } from '@template/simulation/regions'
 
 /* ==========================================================================
    Quorum — init and update. The Simulation owns every rule; update routes
@@ -201,6 +216,10 @@ export const initialModel = (): Model =>
     stableTicks: 0,
     tradeoff: null,
     seenTradeoffs: [],
+    muted: false,
+    motion: 'system',
+    glossaryFocus: null,
+    glossaryQuery: '',
     undo: [],
     redo: [],
     bottleneck: null,
@@ -404,7 +423,7 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
     model: next,
     commands: [
       ...(applied.commands ?? []),
-      WritePrefs({ prefs: { seenTradeoffs: seen } }),
+      WritePrefs({ prefs: prefsOf(next) }),
       AppendLog({
         entries: [
           line(model.game.time, 'TradeoffPreviewed', {
@@ -415,6 +434,83 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
       }),
     ],
   }
+}
+
+const prefsOf = (model: Model): Prefs => ({
+  seenTradeoffs: model.seenTradeoffs,
+  muted: model.muted,
+  motion: model.motion,
+})
+
+/** Saves and applies a settings change. */
+const settled = (next: Model): Result => ({
+  model: next,
+  commands: [
+    WritePrefs({ prefs: prefsOf(next) }),
+    ApplySettings({ muted: next.muted, motion: next.motion }),
+  ],
+})
+
+/** Earns achievements: the Founder record, a toast each, and a chime unless muted. */
+const achieve = (
+  model: Model,
+  ids: ReadonlyArray<AchievementId>,
+): readonly [Model, ReadonlyArray<AnyCommand>] => {
+  const fresh = ids.filter((id) => !model.founder.achievements.includes(id))
+  if (fresh.length === 0) return [model, []]
+  let next: Model = { ...model, founder: earnAchievements(model.founder, fresh) }
+  const commands: Array<AnyCommand> = [WriteFounder({ founder: next.founder })]
+  for (const id of fresh) {
+    const [raised, clear] = toasted(next, `Achievement: ${ACHIEVEMENTS[id].name}.`, 'primary')
+    next = raised
+    commands.push(clear)
+  }
+  if (!next.muted) commands.push(PlaySound({ sound: 'achievement', pitch: 1, spatial: false }))
+  commands.push(
+    AppendLog({ entries: fresh.map((id) => line(next.game.time, 'AchievementEarned', { id })) }),
+  )
+  return [next, commands]
+}
+
+/**
+ * What a Company's moment earns beyond the Game: achievements, glossary
+ * entries, and the incident and Era sounds. Never in a Sandbox or Challenge.
+ */
+const milestones = (
+  before: Model,
+  result: Result,
+  events: ReadonlyArray<StepEvent>,
+  ledger: Ledger,
+): Result => {
+  const after = result.model
+  if (after.route !== 'lab' || offCompany(after)) return result
+  const commands: Array<AnyCommand> = [...(result.commands ?? [])]
+  const stats = countStats(after.founder.stats, events)
+  const earned = detectAchievements(
+    { before: before.game, after: after.game, ledger, events, stats },
+    after.founder.achievements,
+  )
+  const terms = discoverTerms(after.game, events).filter(
+    (id) => !after.founder.glossary.includes(id),
+  )
+  let next = after
+  if (stats !== after.founder.stats && events.some((event) => event._tag === 'IncidentResolved'))
+    next = { ...next, founder: { ...next.founder, stats } }
+  if (terms.length > 0) next = { ...next, founder: terms.reduce(discoverTerm, next.founder) }
+  const [achieved, earnedCommands] = achieve(next, earned)
+  next = achieved
+  commands.push(...earnedCommands)
+  if (next.founder !== after.founder && earnedCommands.length === 0)
+    commands.push(WriteFounder({ founder: next.founder }))
+  if (!next.muted) {
+    if (after.game.stage > before.game.stage)
+      commands.push(PlaySound({ sound: 'era', pitch: 1, spatial: false }))
+    else if (events.some((event) => event._tag === 'IncidentStarted'))
+      commands.push(PlaySound({ sound: 'incident', pitch: 1, spatial: false }))
+  }
+  return next === after && commands.length === (result.commands ?? []).length
+    ? result
+    : { model: next, commands }
 }
 
 const decodePrefs = Schema.decodeUnknownOption(Prefs)
@@ -661,7 +757,14 @@ const tick = (model: Model): Result => {
     commands.push(WriteFounder({ founder: next.founder }))
   }
   if (logs.length > 0) commands.push(AppendLog({ entries: logs }))
-  return { model: next, commands }
+  return milestones(model, { model: next, commands }, events, ledger)
+}
+
+const ARROWS: Record<string, Direction> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
 }
 
 const BUILD_KEYS: Record<string, (typeof BUILD_GROUPS)[number]['key']> = {
@@ -1029,7 +1132,8 @@ const leaveChallenge = (model: Model): Result => ({
  *  Message (keys, taps on Payments) sound once, as the Message they became. */
 const route = (model: Model, message: Message): Result => {
   const result = handle(model, message)
-  if (result.commands?.some((command) => command.name === 'PlaySound')) return result
+  if (result.model.muted || result.commands?.some((command) => command.name === 'PlaySound'))
+    return result
   const cue = cueOf(model, message, result.model)
   return cue ? { ...result, commands: [...(result.commands ?? []), PlaySound(cue)] } : result
 }
@@ -1126,7 +1230,15 @@ const handle = (model: Model, message: Message): Result =>
     PrefsLoaded: ({ json }) =>
       Option.match(parsePrefs(json), {
         onNone: () => ({ model }),
-        onSome: (prefs) => ({ model: { ...model, seenTradeoffs: prefs.seenTradeoffs } }),
+        onSome: (prefs) => ({
+          model: {
+            ...model,
+            seenTradeoffs: prefs.seenTradeoffs,
+            muted: prefs.muted,
+            motion: prefs.motion,
+          },
+          commands: [ApplySettings({ muted: prefs.muted, motion: prefs.motion })],
+        }),
       }),
 
     OptionPreviewed: ({ nodeId, option }) =>
@@ -1184,11 +1296,15 @@ const handle = (model: Model, message: Message): Result =>
     ChallengeVerified: ({ verdict }) => {
       const run = model.challenge
       if (!run) return { model }
-      const next: Model = {
-        ...model,
-        challenge: { ...run, verdict, verification: 'verified', note: null },
-      }
-      return histograms.revalidate(next, { challengeId: run.id, simVersion: SIM_VERSION })
+      const percentiles = verdict.percentiles
+      const [next, earned] = achieve(
+        { ...model, challenge: { ...run, verdict, verification: 'verified', note: null } },
+        percentiles
+          ? challengeAchievements([percentiles.cost, percentiles.tail, percentiles.complexity])
+          : [],
+      )
+      const fetched = histograms.revalidate(next, { challengeId: run.id, simVersion: SIM_VERSION })
+      return { ...fetched, commands: [...(fetched.commands ?? []), ...earned] }
     },
     ChallengeUnverified: ({ message, offline }) => {
       const run = model.challenge
@@ -1280,6 +1396,26 @@ const handle = (model: Model, message: Message): Result =>
             model,
             Message.PanelOpened({ panel: model.panel === 'dev' ? 'none' : 'dev' }),
           )
+        case 'm':
+          return route(model, Message.MuteToggled())
+        case 'g':
+          return model.panel === 'glossary'
+            ? { model: { ...model, panel: 'none' } }
+            : route(model, Message.GlossaryOpened({ id: null }))
+        case 'ArrowUp':
+        case 'ArrowDown':
+        case 'ArrowLeft':
+        case 'ArrowRight': {
+          if (model.panel !== 'none') return { model }
+          const direction = ARROWS[key] ?? 'right'
+          const id = nearestNode(regionView(model.game, model.region).nodes, selected, direction)
+          return id && id !== selected
+            ? route(model, Message.NodeTapped({ nodeId: id }))
+            : { model }
+        }
+        case 'Enter':
+          if (model.panel !== 'none') return { model }
+          return selected ? { model, commands: [FocusInspector({})] } : { model }
         case ' ':
           return route(model, Message.PauseToggled())
         case 's':
@@ -1906,9 +2042,16 @@ const handle = (model: Model, message: Message): Result =>
       Result.match(takeExit(model.game, solveFlow(model.game), exit), {
         onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
         onSuccess: (result) => {
-          const founder = recordExit(model.founder, result)
+          const exited = recordExit(model.founder, result)
+          const [earned, earnedCommands] = achieve(
+            { ...model, founder: exited },
+            everyVenture(exited.history.map((row) => row.founding.venture))
+              ? ['serial-founder']
+              : [],
+          )
+          const founder = earned.founder
           const next: Model = {
-            ...model,
+            ...earned,
             founder,
             panel: 'exited',
             paused: true,
@@ -1921,6 +2064,7 @@ const handle = (model: Model, message: Message): Result =>
           return {
             model: next,
             commands: [
+              ...earnedCommands,
               WriteFounder({ founder }),
               ClearSave({}),
               AppendLog({
@@ -1998,6 +2142,26 @@ const handle = (model: Model, message: Message): Result =>
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () =>
       model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
+
+    MuteToggled: () => settled({ ...model, muted: !model.muted }),
+    MotionToggled: () =>
+      settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
+    GlossaryOpened: ({ id }) => {
+      const founder = id ? discoverTerm(model.founder, id) : model.founder
+      const next: Model = {
+        ...model,
+        panel: 'glossary',
+        placing: null,
+        glossaryFocus: id,
+        glossaryQuery: '',
+        founder,
+      }
+      return {
+        model: next,
+        commands: founder === model.founder ? [] : [WriteFounder({ founder })],
+      }
+    },
+    GlossarySearched: ({ query }) => ({ model: { ...model, glossaryQuery: query } }),
 
     CheatCash: () => {
       const next: Model = {
@@ -2099,7 +2263,17 @@ const logged = (model: Model, message: Message, result: Result): Result => {
   return { ...result, commands: [...(result.commands ?? []), AppendLog({ entries: logs })] }
 }
 
-export const update = (model: Model, message: Message): Result =>
-  logged(model, message, route(model, message))
+/** Messages that move a Company to another Era. */
+const ROUNDS = new Set(['RoundRaised', 'RoundDeclined', 'CheatRound'])
+
+export const update = (model: Model, message: Message): Result => {
+  const result = route(model, message)
+  const moved = ROUNDS.has(message._tag) && result.model.game.stage !== model.game.stage
+  return logged(
+    model,
+    message,
+    moved ? milestones(model, result, [], ledgerOf(result.model)) : result,
+  )
+}
 
 export const percentilesVisible = (model: Model): boolean => has(model.game, 'percentiles')

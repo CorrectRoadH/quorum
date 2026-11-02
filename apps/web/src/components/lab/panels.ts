@@ -12,6 +12,7 @@ import { speedsOf } from '@/game/update.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
+import { switch_ } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { EYEBROW, FIGURE, FLOAT, NESTED, SCROLL, WELL } from './bits.ts'
 
@@ -129,6 +130,10 @@ const KEYS: ReadonlyArray<readonly [string, string]> = [
   ['Del', 'Sell selected'],
   ['C', 'Collect'],
   ['S', 'Speed'],
+  ['G', 'Glossary'],
+  ['M', 'Mute'],
+  ['Arrows', 'Select Node'],
+  ['Enter', 'Inspector'],
   ['Space', 'Pause'],
   ['`', 'Playtest panel'],
   ['Esc', 'Cancel'],
@@ -190,6 +195,41 @@ export const helpPanel = (h: HtmlBuilder<Message>): Html =>
       footer([primaryButton('Start building', Message.PanelClosed(), h)], h),
     ],
     'max-w-[980px]',
+    h,
+  )
+
+/* ---------- settings ---------- */
+
+export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
+  shell(
+    'Settings',
+    [],
+    [
+      h.div(
+        [h.Class('flex flex-col gap-4 px-5 pt-1 pb-5')],
+        [
+          switch_(
+            {
+              id: 'setting-muted',
+              label: 'Mute sound (M)',
+              isChecked: model.muted,
+              onToggle: () => Message.MuteToggled(),
+            },
+            h,
+          ),
+          switch_(
+            {
+              id: 'setting-motion',
+              label: 'Reduce motion',
+              isChecked: model.motion === 'reduce',
+              onToggle: () => Message.MotionToggled(),
+            },
+            h,
+          ),
+        ],
+      ),
+    ],
+    'max-w-[360px]',
     h,
   )
 

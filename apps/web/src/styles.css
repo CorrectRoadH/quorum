@@ -52,9 +52,9 @@
   --primary-strong: oklch(0.3 0 0);
   --primary-soft: oklch(0.3 0 0 / 0.08);
   --primary-faint: oklch(0.3 0 0 / 0.04);
-  --ok: oklch(0.56 0.13 155);
+  --ok: oklch(0.5 0.13 155);
   --warn: oklch(0.66 0.145 66);
-  --danger: oklch(0.545 0.19 27);
+  --danger: oklch(0.52 0.19 27);
   --ok-soft: oklch(0.56 0.13 155 / 0.12);
   --warn-soft: oklch(0.66 0.145 66 / 0.14);
   --danger-soft: oklch(0.545 0.19 27 / 0.12);
@@ -791,6 +791,62 @@ details.fold[open]::details-content {
   transform: translateY(8px);
   animation: stagger-in 400ms var(--ease-out) 250ms forwards;
 }
+
+/* A menu longer than its box fades at the edge with more items beyond it. */
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes menu-edges {
+  0% {
+    --fade-top: 0px;
+    --fade-bottom: 48px;
+  }
+  10% {
+    --fade-top: 48px;
+  }
+  90% {
+    --fade-bottom: 48px;
+  }
+  100% {
+    --fade-top: 48px;
+    --fade-bottom: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .title-menu {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-top),
+      #000 calc(100% - var(--fade-bottom)),
+      transparent
+    );
+    animation:
+      stagger-in 400ms var(--ease-out) 250ms forwards,
+      menu-edges linear both;
+    animation-timeline: auto, scroll(self);
+  }
+}
+/* Without scroll timelines, a shadow marks the edge that has more. */
+@supports not (animation-timeline: scroll()) {
+  .title-menu {
+    background:
+      linear-gradient(var(--card), transparent) top / 100% 32px no-repeat local,
+      linear-gradient(transparent, var(--card)) bottom / 100% 32px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, oklch(0 0 0 / 0.14), transparent) top / 100% 12px
+        no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, oklch(0 0 0 / 0.14), transparent) bottom / 100%
+        12px no-repeat scroll,
+      var(--card);
+  }
+}
 @keyframes title-draw {
   to {
     stroke-dashoffset: 0;
@@ -947,6 +1003,18 @@ details.fold[open]::details-content {
   50% {
     translate: 0 -4px;
   }
+}
+
+/* The Reduce motion setting, whatever the system says: animations and transitions end at once. */
+:root[data-motion='reduce'] :not(.title-menu),
+:root[data-motion='reduce'] ::before,
+:root[data-motion='reduce'] ::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+:root[data-motion='reduce'] .title-packets {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -420,7 +420,10 @@ const GLOW_S = 0.6
 const CUT_S = 0.18
 const RETRACT_S = 0.18
 
-const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches
+/** The system setting, or the player's Reduce motion setting (`data-motion` on the root). */
+const reducedMotion = (): boolean =>
+  document.documentElement.dataset['motion'] === 'reduce' ||
+  matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** How far toward its target a followed value moves this frame. A follow keeps its
  *  speed when the target changes mid-way, so drags and selections never restart. */
@@ -1458,6 +1461,13 @@ class NodeView {
       color: colors.ink,
       alpha: 0.08,
     })
+    // The selection is the board's focus: a ring outside the card, as on a focused control.
+    if (selected)
+      silhouette(this.frame, group, 0, 0, CARD_W, height, 4).stroke({
+        color: colors.accent,
+        width: 2.5,
+        alpha: 0.55,
+      })
 
     paint(this.mark, COMPONENT_ICONS[node.type], 0xffffff)
     this.title.text =
@@ -1477,8 +1487,22 @@ class NodeView {
       this.title.text = `${this.title.text.slice(0, -2).trimEnd()}…`
 
     this.bars.clear()
-    if (status !== colors.border)
-      this.bars.circle(this.title.x + this.title.width + 8, HEAD / 2, 3).fill(status)
+    // Status is a shape as well as a colour: a dot, a triangle, a square, a cross.
+    if (status !== colors.border) {
+      const sx = this.title.x + this.title.width + 9
+      const sy = HEAD / 2
+      if (own.status === 'ok') this.bars.circle(sx, sy, 3).fill(status)
+      else if (own.status === 'warn')
+        this.bars.poly([sx, sy - 4, sx + 4.2, sy + 3.2, sx - 4.2, sy + 3.2]).fill(status)
+      else if (own.status === 'danger') this.bars.rect(sx - 3.3, sy - 3.3, 6.6, 6.6).fill(status)
+      else
+        this.bars
+          .moveTo(sx - 3.5, sy - 3.5)
+          .lineTo(sx + 3.5, sy + 3.5)
+          .moveTo(sx + 3.5, sy - 3.5)
+          .lineTo(sx - 3.5, sy + 3.5)
+          .stroke({ color: status, width: 2.2, cap: 'round' })
+    }
     rows.forEach((row, index) => {
       const mark = this.glyphs[index]
       const name = this.names[index]
@@ -2226,6 +2250,8 @@ class BoardController {
       else this.fresh.set(key, age + seconds)
     const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 
+    // Reduced motion: packets hold still along the pipe, and the bottleneck does not pulse.
+    const still = reducedMotion()
     this.wires.clear()
     this.packets.clear()
     this.overlay.clear()
@@ -2302,10 +2328,10 @@ class BoardController {
         1,
         Math.min(9, Math.round(Math.log2(1 + flow.rate) * 1.4), Math.floor(length / 20)),
       )
-      const speed = 150 / (length + 60)
+      const speed = still ? 0 : 150 / (length + 60)
       const radius = Math.max(1.5, pipeWidth(flow.rate) / 2 - 0.5)
       for (let index = 0; index < count; index += 1) {
-        const t = (this.phase * speed + index / count) % 1
+        const t = (this.phase * speed + (index + 0.5) / count) % 1
         const at = pointOn(path, t)
         this.packets.circle(at.x, at.y, radius)
       }
@@ -2315,7 +2341,7 @@ class BoardController {
     // The bottleneck: a pulsing outline on the one Node that costs the most revenue.
     const bottleneck = state.ledger.bottleneck ? byId.get(state.ledger.bottleneck) : undefined
     if (bottleneck) {
-      const pulse = 0.45 + 0.4 * Math.abs(Math.sin(this.phase * 2.4))
+      const pulse = still ? 0.85 : 0.45 + 0.4 * Math.abs(Math.sin(this.phase * 2.4))
       const pad = 5
       silhouette(
         this.overlay,

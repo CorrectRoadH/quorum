@@ -36,7 +36,13 @@ type Box = Readonly<{
 }>
 type Size = Readonly<{ width: number; height: number }>
 
-const reduced = matchMedia('(prefers-reduced-motion: reduce)')
+const media = matchMedia('(prefers-reduced-motion: reduce)')
+/** The system setting, or the game's own Reduce motion (data-motion on the root). */
+const reduced = {
+  get matches() {
+    return media.matches || document.documentElement.dataset['motion'] === 'reduce'
+  },
+}
 const keyboardDriven = (element: HTMLElement, attribute: 'morph' | 'exit' | 'flip'): boolean =>
   element.dataset[attribute] === 'gesture' &&
   document.documentElement.dataset['input'] === 'keyboard'

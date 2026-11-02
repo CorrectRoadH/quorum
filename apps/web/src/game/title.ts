@@ -4,6 +4,8 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowLeft, ArrowRight, Check, Download, Lock } from 'lucide'
 import { icon } from '@/lib/icons'
 import {
+  ACHIEVEMENTS,
+  ACHIEVEMENT_IDS,
   ERAS,
   MUTATORS,
   MUTATOR_IDS,
@@ -520,6 +522,50 @@ const historyMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html>
         .toReversed()),
 ]
 
+const achievementsMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  back(
+    'Achievements',
+    h,
+    h.span(
+      [h.Class('font-mono text-[max(11px,calc(var(--u)*0.8))] tabular-nums text-muted-foreground')],
+      [`${model.founder.achievements.length}/${ACHIEVEMENT_IDS.length}`],
+    ),
+  ),
+  h.ul(
+    [h.Key('achievements'), h.Class('flex flex-col')],
+    ACHIEVEMENT_IDS.map((id) => {
+      const def = ACHIEVEMENTS[id]
+      const earned = model.founder.achievements.includes(id)
+      return h.li(
+        [
+          h.Key(id),
+          h.Class(
+            `flex min-h-[calc(var(--u)*2.4)] items-center justify-between gap-3 px-[calc(var(--u)*1.5)] py-[calc(var(--u)*0.35)] ${earned ? 'text-foreground' : 'text-muted-foreground'}`,
+          ),
+        ],
+        [
+          h.span(
+            [h.Class('flex min-w-0 flex-col')],
+            [
+              h.span([h.Class('text-[max(13px,calc(var(--u)*1))] font-medium')], [def.name]),
+              h.span([h.Class('text-[max(11px,calc(var(--u)*0.72))]')], [def.condition]),
+            ],
+          ),
+          earned
+            ? h.span(
+                [h.Class('flex shrink-0 items-center text-ok')],
+                [icon(h, Check, 'size-4'), h.span([h.Class('sr-only')], ['Earned'])],
+              )
+            : h.span(
+                [h.Class('flex shrink-0 items-center')],
+                [icon(h, Lock, 'size-3.5'), h.span([h.Class('sr-only')], ['Not yet'])],
+              ),
+        ],
+      )
+    }),
+  ),
+]
+
 const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   return h.nav(
@@ -547,67 +593,77 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
             ? historyMenu(model, h)
             : model.menu === 'challenges'
               ? challengesMenu(model, h)
-              : [
-                  ...(model.saved
-                    ? [
-                        item(
-                          'Continue',
-                          `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
-                          'users lb server cache database',
-                          Message.Continued(),
-                          true,
-                          h,
-                        ),
-                      ]
-                    : []),
-                  item(
-                    model.saved ? 'New company' : 'Start a company',
-                    '',
-                    'users',
-                    model.founder.history.length > 0
-                      ? Message.MenuChosen({ menu: 'found' })
-                      : Message.NewCompanyStarted(),
-                    !model.saved,
-                    h,
-                  ),
-                  ...(model.founder.history.length > 0
-                    ? [
-                        item(
-                          'Legacy shop',
-                          `${model.founder.legacy} Legacy`,
-                          'server',
-                          Message.MenuChosen({ menu: 'legacy' }),
-                          false,
-                          h,
-                        ),
-                        item(
-                          'History',
-                          '',
-                          'database',
-                          Message.MenuChosen({ menu: 'history' }),
-                          false,
-                          h,
-                        ),
-                      ]
-                    : []),
-                  item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
-                  item(
-                    'Sandbox',
-                    '',
-                    'cache database',
-                    Message.MenuChosen({ menu: 'sandbox' }),
-                    false,
-                    h,
-                  ),
-                  item(
-                    'Challenges',
-                    '',
-                    'lb server database',
-                    Message.MenuChosen({ menu: 'challenges' }),
-                    false,
-                    h,
-                  ),
-                ],
+              : model.menu === 'achievements'
+                ? achievementsMenu(model, h)
+                : [
+                    ...(model.saved
+                      ? [
+                          item(
+                            'Continue',
+                            `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+                            'users lb server cache database',
+                            Message.Continued(),
+                            true,
+                            h,
+                          ),
+                        ]
+                      : []),
+                    item(
+                      model.saved ? 'New company' : 'Start a company',
+                      '',
+                      'users',
+                      model.founder.history.length > 0
+                        ? Message.MenuChosen({ menu: 'found' })
+                        : Message.NewCompanyStarted(),
+                      !model.saved,
+                      h,
+                    ),
+                    ...(model.founder.history.length > 0
+                      ? [
+                          item(
+                            'Legacy shop',
+                            `${model.founder.legacy} Legacy`,
+                            'server',
+                            Message.MenuChosen({ menu: 'legacy' }),
+                            false,
+                            h,
+                          ),
+                          item(
+                            'History',
+                            '',
+                            'database',
+                            Message.MenuChosen({ menu: 'history' }),
+                            false,
+                            h,
+                          ),
+                        ]
+                      : []),
+                    item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
+                    item(
+                      'Sandbox',
+                      '',
+                      'cache database',
+                      Message.MenuChosen({ menu: 'sandbox' }),
+                      false,
+                      h,
+                    ),
+                    item(
+                      'Challenges',
+                      '',
+                      'lb server database',
+                      Message.MenuChosen({ menu: 'challenges' }),
+                      false,
+                      h,
+                    ),
+                    item(
+                      'Achievements',
+                      '',
+                      'server',
+                      Message.MenuChosen({ menu: 'achievements' }),
+                      false,
+                      h,
+                    ),
+                  ],
   )
 }
 

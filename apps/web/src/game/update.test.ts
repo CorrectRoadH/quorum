@@ -217,3 +217,71 @@ describe('Challenges', () => {
     expect(offline.challenge?.result?.passed).toBe(true)
   })
 })
+
+describe('M9: sound, achievements, glossary, keys', () => {
+  type Named = Readonly<{ name: string; args: Record<string, unknown> }>
+  const names = (commands: ReadonlyArray<unknown> | undefined): ReadonlyArray<Named> =>
+    (commands ?? []) as ReadonlyArray<Named>
+  const incidentDue = (change: Partial<Model> = {}): Model => {
+    const game = preseedGame()
+    return {
+      ...initialModel(),
+      route: 'lab',
+      game: { ...game, nextIncidentAt: game.time },
+      ...change,
+    }
+  }
+  const sounds = (model: Model) =>
+    names(update(model, Message.Ticked()).commands)
+      .filter((command) => command.name === 'PlaySound')
+      .map((command) => command.args['sound'])
+
+  test('an incident plays its sound, unless muted', () => {
+    expect(sounds(incidentDue())).toContain('incident')
+    expect(sounds(incidentDue({ muted: true }))).toEqual([])
+  })
+
+  test('the first served request earns Hello, World once, in the Founder record', () => {
+    const once = update(incidentDue(), Message.Ticked()).model
+    expect(once.founder.achievements).toContain('hello-world')
+    expect(once.toast?.message).toBeDefined()
+    const twice = update(once, Message.Ticked()).model
+    expect(twice.founder.achievements.filter((id) => id === 'hello-world')).toHaveLength(1)
+  })
+
+  test('a Sandbox earns no achievement and meets no glossary entry', () => {
+    const sandbox: Model = {
+      ...inLab(),
+      game: { ...newGame(), sandbox: true },
+      sandbox: { id: null, progress: { objective: 0, held: 0, scripted: false } } as never,
+    }
+    const after = update(sandbox, Message.Ticked()).model
+    expect(after.founder.achievements).toEqual([])
+    expect(after.founder.glossary).toEqual([])
+  })
+
+  test('mute and reduced motion are saved as prefs, not in the Game', () => {
+    const start = inLab()
+    const muted = update(start, Message.MuteToggled())
+    expect(muted.model.muted).toBe(true)
+    expect(muted.model.game).toBe(start.game)
+    const write = names(muted.commands).find((command) => command.name === 'WritePrefs')
+    expect(write?.args['prefs']).toMatchObject({ muted: true, motion: 'system' })
+    expect(update(start, Message.KeyPressed({ key: 'm' })).model.muted).toBe(true)
+    expect(update(start, Message.MotionToggled()).model.motion).toBe('reduce')
+  })
+
+  test('a Tradeoff term opens the Glossary on it and marks it met', () => {
+    const opened = update(inLab(), Message.GlossaryOpened({ id: 'event-loop' })).model
+    expect(opened.panel).toBe('glossary')
+    expect(opened.glossaryFocus).toBe('event-loop')
+    expect(opened.founder.glossary).toContain('event-loop')
+  })
+
+  test('arrow keys move the selection between Nodes', () => {
+    const start: Model = { ...inLab(), selected: 'users' }
+    const moved = update(start, Message.KeyPressed({ key: 'ArrowRight' })).model
+    expect(moved.selected).not.toBe('users')
+    expect(moved.selected).not.toBeNull()
+  })
+})

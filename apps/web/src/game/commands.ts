@@ -7,8 +7,8 @@ import { regionView } from '@template/simulation/regions'
 import { ComponentId, Game, Region } from '@template/simulation/state'
 import { Message } from './message.ts'
 import { Founder } from '@template/simulation/founder'
-import { Prefs, SandboxStore } from './model.ts'
-import { play, SOUND_NAMES } from './sound.ts'
+import { Motion, Prefs, SandboxStore } from './model.ts'
+import { play, setMuted, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 import { ChallengeSubmission } from '@template/rpc'
 import { ApiRpc } from '@/platform/rpc.ts'
@@ -146,6 +146,34 @@ export const WritePrefs = Command.define('WritePrefs', {
       } catch {
         // Blocked storage only means the cards stay full size.
       }
+      return Message.Synced()
+    }),
+})
+
+/** Applies the settings: mute for every sound, and reduced motion as `data-motion` on the root. */
+export const ApplySettings = Command.define('ApplySettings', {
+  args: { muted: Schema.Boolean, motion: Motion },
+  messages: [Message.Synced],
+  execute: ({ muted, motion }) =>
+    Effect.sync(() => {
+      setMuted(muted)
+      if (motion === 'reduce') document.documentElement.dataset.motion = 'reduce'
+      else delete document.documentElement.dataset.motion
+      return Message.Synced()
+    }),
+})
+
+/** Moves keyboard focus into the Inspector, onto its first control. */
+export const FocusInspector = Command.define('FocusInspector', {
+  args: {},
+  messages: [Message.Synced],
+  execute: () =>
+    Effect.sync(() => {
+      document
+        .querySelector<HTMLElement>(
+          '[data-inspector] :is(button, [href], input, select, [tabindex]):not([disabled])',
+        )
+        ?.focus()
       return Message.Synced()
     }),
 })

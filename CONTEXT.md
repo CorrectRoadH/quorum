@@ -310,12 +310,20 @@ The permanent currency earned at Exit and spent in the Legacy shop.
 _Avoid_: prestige points, souls, tokens
 
 **Founder**:
-The player across Companies: the record of Legacy, Legacy shop perks, Playbooks, unlocked Ventures and Mutators, and the company history. It survives every Exit.
+The player across Companies: the record of Legacy, Legacy shop perks, Playbooks, unlocked Ventures and Mutators, Achievements, Glossary entries met, and the company history. It survives every Exit.
 _Avoid_: profile, account, player save, meta
 
 **Perk**:
 A permanent upgrade bought in the Legacy shop, with levels.
 _Avoid_: upgrade, talent, bonus
+
+**Achievement**:
+A badge the Founder earns for knowledge, an unusual build, or a real engineering moment, never for hours played. Some unlock a Venture or a Mutator.
+_Avoid_: trophy, badge (in UI copy), quest
+
+**Glossary**:
+The in-game list of engineering terms, transcribed from the design glossary. Entries the Founder has met in play are marked.
+_Avoid_: encyclopedia, codex, wiki
 
 ### Outside the Company
 

@@ -150,6 +150,14 @@ const SOUNDS = {
     [0, [0.3, 0, 196, 0, 0.06, 0.05, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 900]],
     [120, [0.32, 0, 147, 0, 0.09, 0.09, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 900]],
   ],
+
+  /* ---- moments ---- */
+  /** An incident starts: two falling square beeps. */
+  incident: [[0, [0.35, 0, 520, 0.01, 0.08, 0.12, 2, 1, -2, 0, 0, 0, 0.12]]],
+  /** A new Era: a rising major arpeggio. */
+  era: [[0, [0.35, 0, 523, 0.01, 0.1, 0.3, 0, 1, 0, 0, 262, 0.08, 0.08]]],
+  /** An achievement: a bright chime. */
+  achievement: [[0, [0.3, 0, 880, 0.01, 0.06, 0.25, 0, 1, 0, 0, 440, 0.06]]],
 } satisfies Record<string, ReadonlyArray<Note>>
 
 export type Sound = keyof typeof SOUNDS
@@ -196,8 +204,15 @@ if (typeof window !== 'undefined') {
 
 /** Plays a sound, `pitch` times its usual frequency. With `spatial`, it pans
  *  a little toward where the pointer last went down. */
+let muted = false
+
+/** The player's mute setting; every sound checks it. */
+export const setMuted = (value: boolean): void => {
+  muted = value
+}
+
 export const play = (sound: Sound, pitch = 1, spatial = false): void => {
-  if (!navigator.userActivation.hasBeenActive) return
+  if (muted || !navigator.userActivation.hasBeenActive) return
   const now = performance.now()
   if (now - (lastPlayed.get(sound) ?? -Infinity) < GAP) return
   lastPlayed.set(sound, now)

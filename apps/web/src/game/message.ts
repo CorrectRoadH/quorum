@@ -220,6 +220,12 @@ export const Message = defineMessageUnion({
   PanelOpened: { panel: Panel },
   PanelClosed: {},
 
+  /** Settings and the Glossary (15). */
+  MuteToggled: {},
+  MotionToggled: {},
+  GlossaryOpened: { id: Schema.NullOr(Schema.String) },
+  GlossarySearched: { query: Schema.String },
+
   /** Playtest panel. */
   CheatCash: {},
   CheatInsight: {},

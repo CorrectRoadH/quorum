@@ -5,9 +5,11 @@
    the UI only displays it. Balance numbers live here and nowhere else.
    ========================================================================== */
 
+export * from './catalog/achievements.ts'
 export * from './catalog/components.ts'
 export * from './catalog/economy.ts'
 export * from './catalog/eras.ts'
+export * from './catalog/glossary.ts'
 export * from './catalog/incidents.ts'
 export * from './catalog/instances.ts'
 export * from './catalog/kinds.ts'

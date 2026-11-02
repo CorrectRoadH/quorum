@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import { BUILD_GROUPS, type BuildGroup } from '@template/simulation/catalog'
 import { Progress, SANDBOX_IDS } from '@template/simulation/sandbox'
 import type { Ledger } from '@template/simulation/ledger'
@@ -45,6 +45,8 @@ export const Panel = Schema.Literals([
   'dev',
   'passed',
   'challenge',
+  'settings',
+  'glossary',
 ])
 export type Panel = typeof Panel.Type
 
@@ -53,7 +55,15 @@ export const BuildGroupKey = Schema.Literals(
 )
 
 /** The title menu's page. */
-export const Menu = Schema.Literals(['main', 'sandbox', 'found', 'legacy', 'history', 'challenges'])
+export const Menu = Schema.Literals([
+  'main',
+  'sandbox',
+  'found',
+  'legacy',
+  'history',
+  'challenges',
+  'achievements',
+])
 export type Menu = typeof Menu.Type
 
 export const SandboxId = Schema.Literals(SANDBOX_IDS)
@@ -191,8 +201,16 @@ export const Tradeoff = Schema.Struct({
 })
 export type Tradeoff = typeof Tradeoff.Type
 
-/** What the player's browser remembers apart from saves: the option sets already confirmed once. */
-export const Prefs = Schema.Struct({ seenTradeoffs: Schema.Array(TradeoffKind) })
+/** Motion: follow the system setting, or reduce it whatever the system says. */
+export const Motion = Schema.Literals(['system', 'reduce'])
+export type Motion = typeof Motion.Type
+
+/** What the player's browser remembers apart from saves: settings, and the option sets confirmed once. */
+export const Prefs = Schema.Struct({
+  seenTradeoffs: Schema.Array(TradeoffKind).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  muted: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  motion: Motion.pipe(Schema.withDecodingDefaultKey(Effect.succeed('system' as const))),
+})
 export type Prefs = typeof Prefs.Type
 
 /** The result of a change, once it settled. */
@@ -272,6 +290,11 @@ export const Model = Schema.Struct({
   tradeoff: Schema.NullOr(Tradeoff),
   /** Option sets the player confirmed once: their cards collapse to one line. */
   seenTradeoffs: Schema.Array(TradeoffKind),
+  muted: Schema.Boolean,
+  motion: Motion,
+  /** The Glossary panel's open entry and search. */
+  glossaryFocus: Schema.NullOr(Schema.String),
+  glossaryQuery: Schema.String,
   /** Ticks left to show "Stable" after a change settles. */
   stableTicks: Schema.Finite,
   /** Board actions to undo, newest last, at most 50. */
