@@ -14,6 +14,8 @@ and [pillar 5: respect the player](./01-vision.md#pillar-5-respect-the-player).
 3. **One click to the cause.** From any red number, one click opens the Node or link that causes it.
 4. **Real units.** rps, ms, MB, $/s, users. No abstract points on the board.
 5. **Fullscreen.** The board fills the window. Panels slide over it and close with Escape.
+6. **Show only what the player can use.** A control appears when the game state makes it useful
+   ([Progressive disclosure](#progressive-disclosure)). A locked control is not shown before its Era.
 
 ## Layout
 
@@ -32,6 +34,58 @@ and [pillar 5: respect the player](./01-vision.md#pillar-5-respect-the-player).
 │ Dock: Edge · Compute · Data · Async · Platform · Managed      Research · Team · Cost  │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The layout shows every element. A new Company starts with fewer
+([Progressive disclosure](#progressive-disclosure)).
+
+## Progressive disclosure
+
+The Garage Era is the tutorial ([Progression](./10-progression.md#era-0-garage)), so its screen must
+not show the whole game. A new Company starts with the Board, the build dock, the Inbox, pause and
+speed, and four HUD rows: Cash, Users, Apdex, and Latency. Every other element appears the first
+time the game state makes it useful.
+
+### Rules
+
+1. **Once shown, always shown.** An element stays for the rest of the Company. Controls that hide
+   again are harder to learn than controls that never hid.
+2. **The reveal is the cue.** A newly shown element animates in once and glows until the player uses
+   it, for at most 30 seconds at any speed. There is no text, toast, or arrow. With reduced motion,
+   the glow holds still.
+3. **One reveal at a time.** When two triggers fire together, the second element waits until the
+   player uses the first or 30 seconds pass.
+4. **The save keeps the revealed set.** A save without the set reveals everything.
+5. **Experienced players see everything.** The Sandbox, Challenges, and every Company after the first
+   Exit show every element in the table below. The build dock and the Research screen follow their
+   own rules for every player.
+6. **How to play never opens by itself.** It stays on `H` for the player who looks for it. The
+   reveals and the mentor's Mail ([Mail](./18-mail.md)) teach the Garage.
+
+### Triggers
+
+| Element                            | Appears when                                                     |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| Undo and redo                      | The player makes the first Board action                          |
+| Collect glow on Payments           | The drawer is half full for the first time                       |
+| Resize glow on a Node card         | The Node is the bottleneck for the first time                    |
+| Insight HUD row and Research (`R`) | Insight reaches the cost of the cheapest available Research item |
+| Errors HUD row                     | The first request fails                                          |
+| Team (`T`) and the Feature HUD row | The first Feature is built                                       |
+| Hiring in the Team panel           | The Pre-seed Era starts                                          |
+| Engineering in the Team panel      | The first memory leak or the first tech debt                     |
+| Autopilot in the Team panel        | The backlog holds two items                                      |
+| Glossary (`G`)                     | The first Tradeoff card opens                                    |
+| The pager                          | Alerting is researched                                           |
+| Postmortems                        | The first incident ends                                          |
+| Playbooks (`P`)                    | The first Exit                                                   |
+| Region tabs                        | The Series C Era starts                                          |
+
+### The build dock
+
+- A group lists the Components the player can place, then at most one locked Component: the one with
+  the cheapest available Research item. Other locked Components do not show.
+- A group with nothing to place and nothing one Research item away does not show.
+- The number keys follow the visible order.
 
 ## The board
 
@@ -163,8 +217,9 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
 
 ## Research screen
 
-- Tracks as columns, Eras as rows. Locked items are visible and greyed, with their requirements, so
-  the player can plan.
+- Tracks as columns, Eras as rows. Locked items of the current and the next Era are visible and
+  greyed, with their requirements, so the player can plan one Era ahead. Later Eras collapse to a
+  count of their items.
 - Each item shows its cost, its effect in one line, and what it unlocks.
 - A queue: the player can queue items, and they are bought automatically when Insight allows.
 

@@ -157,8 +157,8 @@ The company is listed. The game becomes an endless series of quarters.
 ## Research
 
 Research costs Insight and takes effect at once. Each item belongs to a track, needs an Era, and may
-need other items. The research screen shows the tree by track, with locked items visible so that the
-player can plan ([Interface](./15-ui-ux.md#research-screen)).
+need other items. The research screen shows the tree by track, with the locked items of the next Era
+visible so that the player can plan ([Interface](./15-ui-ux.md#research-screen)).
 
 ### Cost bands
 
