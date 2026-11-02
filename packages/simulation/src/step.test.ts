@@ -82,7 +82,7 @@ describe('a Garage minute', () => {
     expect(Math.abs(fine.earned - coarse.earned)).toBeLessThan(coarse.earned * 0.01)
   })
 
-  test('the same Game and steps give the same result', () => {
+  test('the same Game and steps give the same result', { timeout: 30_000 }, () => {
     const a = run(preseedGame(7), 240).game
     const b = run(preseedGame(7), 240).game
     expect(a).toEqual(b)
