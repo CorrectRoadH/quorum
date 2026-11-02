@@ -38,9 +38,15 @@ and [pillar 5: respect the player](./01-vision.md#pillar-5-respect-the-player).
 - Flow goes left to right: Users on the left, the data tier on the right, Payments and Analytics at the
   bottom. The board does not enforce this, but new Nodes snap to the matching column.
 - Pan with drag, zoom with the wheel. At low zoom, cards collapse to a chip with a load ring.
-- Links show direction with particles. Link thickness scales with the log of throughput.
-- A link with errors turns red. A link that crosses zones is dashed. A link that crosses regions shows
-  its latency.
+- Cards never overlap. Each card keeps 24 px clear around it. A card dropped on others moves to the
+  nearest free spot, preferring its column, and an outline shows that spot while the card is held.
+- Links are belts. They run around cards in orthogonal lanes. Links into one Node merge into one
+  trunk; links out of one port keep separate lanes and leave through a splitter. Where two belts
+  cross, the vertical one goes underground: a gap with a mouth at each end.
+- Chevrons on a belt point the way it runs and move at its speed. Requests ride on it as items. A
+  busier belt runs faster; an idle belt is grey and still.
+- A link with errors turns red. A belt that crosses zones has orange rails: its calls pay the
+  cross-zone latency and Egress. A link that crosses regions shows its latency.
 - From Series C, each region is a tab with its own board.
 - Node groups: the player can box a set of Nodes as a Service. The box shows the Service's name, team,
   and Stack.

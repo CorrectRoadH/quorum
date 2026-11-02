@@ -1,5 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
+  Cable,
   Check,
   ChevronRight,
   Copy,
@@ -284,6 +285,17 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
             ),
           ),
         ],
+      ),
+      button(
+        {
+          onClick: Message.StressBoardLoaded(),
+          variant: 'ghost',
+          size: 'sm',
+          className: 'text-muted-foreground',
+          attributes: [h.Title('Load a crowded Design to test card placement and link lanes')],
+        },
+        [icon(h, Cable, 'size-3.5'), 'Stress board'],
+        h,
       ),
       h.div(
         [h.Class('flex gap-1.5')],

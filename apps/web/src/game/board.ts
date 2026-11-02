@@ -75,6 +75,26 @@ import { isGlobal } from '@template/simulation/regions'
 import type { Game, GameNode, Region } from '@template/simulation/state'
 import { compact, money, ms, priceLabel, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
+import {
+  CARD_W,
+  FOOT,
+  HEAD,
+  PORT_R,
+  ROW,
+  boxOf,
+  freeSpot,
+  gap,
+  heightOf,
+  inPort,
+  layoutOf,
+  outPort,
+  route,
+  rowMid,
+  rowTop,
+  type Pt,
+  type Route,
+} from './geometry.ts'
+import { HOP, routeLinks, type Wire } from './routing.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
 
 /* ==========================================================================
@@ -117,84 +137,6 @@ export type BoardState = Readonly<{
   /** The region tab on show; its Nodes, and the Nodes they reach elsewhere, are drawn. */
   region: Region
 }>
-
-export const CARD_W = 216
-const HEAD = 30
-const ROW = 24
-const FOOT = 44
-const PORT_R = 6
-
-type Layout = Readonly<{
-  rows: number
-  inRow: number | null
-  outRow: number | null
-  footer: boolean
-}>
-
-/** Row count and port rows per Component. Fixed per type, so hit tests need no flow. */
-const layoutOf = (type: ComponentId): Layout => {
-  switch (type) {
-    case 'users':
-      return { rows: 3, inRow: null, outRow: 2, footer: false }
-    case 'payments':
-      return { rows: 2, inRow: null, outRow: null, footer: true }
-    case 'analytics':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
-    case 'server':
-      return { rows: 5, inRow: 0, outRow: 4, footer: true }
-    case 'database':
-      return { rows: 4, inRow: 0, outRow: null, footer: true }
-    case 'replica':
-      return { rows: 5, inRow: 0, outRow: null, footer: true }
-    case 'auth':
-      return { rows: 3, inRow: 0, outRow: null, footer: false }
-    case 'dns':
-      return { rows: 3, inRow: 0, outRow: 2, footer: false }
-    case 'lb':
-      return { rows: 4, inRow: 0, outRow: 3, footer: false }
-    case 'cache':
-    case 'pooler':
-      return { rows: 4, inRow: 0, outRow: 3, footer: false }
-    case 'search':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
-    case 'storage':
-      return { rows: 3, inRow: 0, outRow: null, footer: false }
-    case 'queue':
-      return { rows: 4, inRow: 0, outRow: 3, footer: true }
-    case 'worker':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
-    case 'cdn':
-      return { rows: 3, inRow: 0, outRow: 2, footer: false }
-    case 'waf':
-      return { rows: 4, inRow: 0, outRow: 3, footer: true }
-    case 'psp':
-      return { rows: 3, inRow: 0, outRow: null, footer: false }
-    case 'autoscaler':
-      return { rows: 3, inRow: 0, outRow: null, footer: false }
-    case 'cluster':
-      return { rows: 2, inRow: 0, outRow: null, footer: false }
-    case 'warehouse':
-      return { rows: 3, inRow: 0, outRow: null, footer: false }
-    case 'gpu':
-      return { rows: 4, inRow: 0, outRow: null, footer: true }
-    case 'llm':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
-    case 'msgp':
-      return { rows: 3, inRow: 0, outRow: null, footer: false }
-    case 'wide':
-      return { rows: 4, inRow: 0, outRow: null, footer: true }
-    case 'dsql':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
-  }
-}
-
-const rowTop = (index: number): number => HEAD + 4 + index * ROW
-const rowMid = (index: number): number => rowTop(index) + ROW / 2
-
-export const heightOf = (type: ComponentId): number => {
-  const layout = layoutOf(type)
-  return rowTop(layout.rows) + (layout.footer ? FOOT : 6)
-}
 
 /** Latest state per board, written by update and read on mount. */
 const desired = new Map<string, BoardState>()
@@ -537,17 +479,6 @@ const paintLogo = (view: Sprite, id: StackLogoId, ink: number): void => {
 
 /* ---------- geometry ---------- */
 
-type Pt = Readonly<{ x: number; y: number }>
-
-const outPort = (node: GameNode): Pt => ({
-  x: node.x + CARD_W,
-  y: node.y + rowMid(layoutOf(node.type).outRow ?? 0),
-})
-const inPort = (node: GameNode): Pt => ({
-  x: node.x,
-  y: node.y + rowMid(layoutOf(node.type).inRow ?? 0),
-})
-
 /** The footer button, in the node's own coordinates. */
 const footerRect = (type: ComponentId) => {
   const y = rowTop(layoutOf(type).rows) + 4
@@ -560,66 +491,6 @@ const inFooter = (node: GameNode, point: Pt): boolean => {
   const x = point.x - node.x
   const y = point.y - node.y
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h
-}
-
-/** How far a backward link runs out of a port before it turns. */
-const STUB = 16
-/** Corner radius of a link's bends. */
-const BEND = 6
-
-const gap = (a: Pt, b: Pt): number => Math.hypot(b.x - a.x, b.y - a.y)
-
-/** A link's path as a polyline: straight runs with soft right-angle bends. */
-type Route = ReadonlyArray<Pt>
-
-/**
- * Forward links bend once, halfway between the ports. Backward links leave
- * the port, drop to `lane` under both cards, and come back in from the left.
- */
-const route = (a: Pt, b: Pt, lane: number): Route => {
-  const x = Math.round((a.x + b.x) / 2)
-  const corners =
-    b.x - a.x > 8
-      ? [a, { x, y: a.y }, { x, y: b.y }, b]
-      : [
-          a,
-          { x: a.x + STUB, y: a.y },
-          { x: a.x + STUB, y: lane },
-          { x: b.x - STUB, y: lane },
-          { x: b.x - STUB, y: b.y },
-          b,
-        ]
-  const points = corners.filter((point, index) => {
-    const previous = corners[index - 1]
-    return !previous || gap(previous, point) > 0.5
-  })
-  // Round each inner corner with a short quadratic arc, sampled into the polyline.
-  const path: Array<Pt> = [a]
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const before = points[index - 1]
-    const corner = points[index]
-    const after = points[index + 1]
-    if (!before || !corner || !after) continue
-    const r = Math.min(BEND, gap(before, corner) / 2, gap(corner, after) / 2)
-    const start = {
-      x: corner.x + ((before.x - corner.x) / gap(before, corner)) * r,
-      y: corner.y + ((before.y - corner.y) / gap(before, corner)) * r,
-    }
-    const end = {
-      x: corner.x + ((after.x - corner.x) / gap(corner, after)) * r,
-      y: corner.y + ((after.y - corner.y) / gap(corner, after)) * r,
-    }
-    for (let step = 0; step <= 4; step += 1) {
-      const t = step / 4
-      const u = 1 - t
-      path.push({
-        x: u * u * start.x + 2 * u * t * corner.x + t * t * end.x,
-        y: u * u * start.y + 2 * u * t * corner.y + t * t * end.y,
-      })
-    }
-  }
-  path.push(b)
-  return path
 }
 
 const lengthOf = (path: Route): number =>
@@ -707,11 +578,47 @@ const traceOf = (graphics: Graphics, path: Route): Graphics => {
   return graphics
 }
 
-/** World pixels per dash, and per gap, on a link between zones. */
-const DASH = 7
+/*
+ * Links are belts. Every belt has the same body between two rails; chevrons on it
+ * point the way it runs and move at its speed, and requests ride on it as items.
+ * A busier belt runs faster. Where a belt passes under another, it dips
+ * underground: a gap with a cap at each mouth.
+ */
+const BELT = 7
+/** Width of the splitter where one port feeds several belts. */
+const SPLITTER_W = 12
+/** World pixels between chevrons, and their half-width and depth. */
+const CHEVRON_GAP = 10
+const CHEVRON_HALF = 2.2
+const CHEVRON_DEPTH = 2
+/** Belt speed in world pixels per second. */
+const beltSpeed = (rate: number): number => 22 + 16 * Math.log2(1 + rate)
 
-/** Pipe width grows with traffic, from 3 to 8 world pixels. */
-const pipeWidth = (rate: number): number => 3 + Math.min(5, Math.sqrt(rate) * 0.8)
+/** Calls `visit` every `step` pixels along a path, starting `offset` in. */
+const walk = (
+  path: Route,
+  step: number,
+  offset: number,
+  visit: (point: Pt, ux: number, uy: number) => void,
+): void => {
+  let next = ((offset % step) + step) % step
+  let travelled = 0
+  for (let index = 1; index < path.length; index += 1) {
+    const a = path[index - 1]
+    const b = path[index]
+    if (!a || !b) continue
+    const span = gap(a, b)
+    if (span === 0) continue
+    const ux = (b.x - a.x) / span
+    const uy = (b.y - a.y) / span
+    while (next <= travelled + span) {
+      const k = next - travelled
+      visit({ x: a.x + ux * k, y: a.y + uy * k }, ux, uy)
+      next += step
+    }
+    travelled += span
+  }
+}
 
 /* ---------- one node window ---------- */
 
@@ -1612,6 +1519,12 @@ class BoardController {
   /** Local positions while a node is dragged, ahead of the Model. */
   private dragged: Readonly<{ id: string; x: number; y: number }> | null = null
   private droppedAt = 0
+  /** Where the held card, new Node or Playbook lands: the nearest spot that keeps clear. */
+  private landing: Pt | null = null
+  private landingKey = ''
+  /** Routed links for the Model's positions, and the Design they were routed for. */
+  private routed = new Map<string, Wire>()
+  private routedFor = ''
   private ghostType: ComponentId | null = null
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
   private wireEnd: Pt | null = null
@@ -1714,7 +1627,7 @@ class BoardController {
       if (now.has(keyOf(link))) continue
       const from = shown.get(link.from)
       const to = shown.get(link.to)
-      if (from && to) this.cuts.push({ path: routeOf(from, to), t: 0 })
+      if (from && to) this.cuts.push({ path: this.wireOf(from, to).path, t: 0 })
     }
   }
 
@@ -1841,9 +1754,66 @@ class BoardController {
       const from = byId.get(link.from)
       const to = byId.get(link.to)
       if (!from || !to) continue
-      if (distanceTo(routeOf(from, to), point) <= reach) return link
+      if (distanceTo(this.wireOf(from, to).path, point) <= reach) return link
     }
     return null
+  }
+
+  /** Routes every link once per change to the Design, not once per frame. */
+  private routes(): Map<string, Wire> {
+    const game = this.state?.game
+    if (!game) return this.routed
+    const key = `${game.nodes.map((node) => `${node.id}:${node.type}:${node.x}:${node.y}`).join('|')}#${game.links.map((link) => `${link.from}>${link.to}`).join('|')}`
+    if (key !== this.routedFor) {
+      this.routedFor = key
+      this.routed = routeLinks(game.nodes, game.links)
+    }
+    return this.routed
+  }
+
+  /**
+   * A link's wire between Nodes where they are drawn. While either card is held
+   * or gliding, the link takes the quick route; it is routed again once both settle.
+   */
+  private wireOf(from: GameNode, to: GameNode): Wire {
+    const model = this.state?.game.nodes ?? []
+    const settled = (node: GameNode) =>
+      model.some((entry) => entry.id === node.id && entry.x === node.x && entry.y === node.y)
+    const routed =
+      settled(from) && settled(to) ? this.routes().get(`${from.id}>${to.id}`) : undefined
+    if (routed) return routed
+    const path = routeOf(from, to)
+    return { path, pieces: [path], hops: [] }
+  }
+
+  private landingOf(dragged = this.gesture?.kind === 'node' ? this.dragged : null): Pt | null {
+    const state = this.state
+    if (!state) return null
+    const pointer = { x: Math.round(this.pointer.x), y: Math.round(this.pointer.y) }
+    const key = `${this.routedFor}/${dragged?.id}:${dragged?.x}:${dragged?.y}/${state.placing}/${state.stamp ? 'stamp' : ''}/${pointer.x}:${pointer.y}`
+    if (key === this.landingKey) return this.landing
+    this.landingKey = key
+    const others = state.game.nodes.filter((node) => node.id !== dragged?.id).map(boxOf)
+    const held = state.game.nodes.find((node) => node.id === dragged?.id)
+    this.landing =
+      dragged && held
+        ? freeSpot(others, { x: dragged.x, y: dragged.y, w: CARD_W, h: heightOf(held.type) })
+        : state.stamp
+          ? freeSpot(others, {
+              x: pointer.x,
+              y: pointer.y,
+              w: Math.max(...state.stamp.map((entry) => entry.dx)) + CARD_W,
+              h: Math.max(...state.stamp.map((entry) => entry.dy + heightOf(entry.type))),
+            })
+          : state.placing
+            ? freeSpot(others, {
+                x: pointer.x - CARD_W / 2,
+                y: pointer.y - heightOf(state.placing) / 2,
+                w: CARD_W,
+                h: heightOf(state.placing),
+              })
+            : null
+    return this.landing
   }
 
   /* ---------- pointer ---------- */
@@ -2092,7 +2062,11 @@ class BoardController {
         // does not glide back toward where it was for a frame.
         if (gesture.moved && this.dragged) {
           this.droppedAt = performance.now()
-          this.events.onNodeMove(gesture.id, this.dragged.x, this.dragged.y)
+          // The card settles where the Model will put it, clear of the others.
+          const landing = this.landingOf(this.dragged) ?? this.dragged
+          this.dragged = { id: gesture.id, x: landing.x, y: landing.y }
+          this.syncCards()
+          this.events.onNodeMove(gesture.id, landing.x, landing.y)
         } else {
           this.dragged = null
           if (event.shiftKey) this.events.onNodeToggle(gesture.id)
@@ -2260,10 +2234,12 @@ class BoardController {
       const to = byId.get(link.to)
       if (!from || !to) continue
       const age = this.fresh.get(`${link.from}>${link.to}`)
-      const whole = routeOf(from, to)
+      const wire = this.wireOf(from, to)
       // A new link draws out of its port before anything flows along it.
       const drawn = age === undefined ? 1 : easeOut(Math.min(1, age / DRAW_IN_S))
-      const path = drawn < 1 ? partOf(whole, drawn) : whole
+      const path = drawn < 1 ? partOf(wire.path, drawn) : wire.path
+      // Where another lane crosses, a vertical lane has a gap: it is the one passing under.
+      const pieces = drawn < 1 ? [path] : wire.pieces
       const flow = rates.get(`${link.from}>${link.to}`)
       const tap = COMPONENTS[to.type].tap
       const hovered = this.hoverLink?.from === link.from && this.hoverLink.to === link.to
@@ -2277,26 +2253,51 @@ class BoardController {
             : flow && busy
               ? KINDS[flow.kind].color
               : colors.edge
-      traceOf(this.wires, path).stroke(
-        busy
-          ? {
-              color: mix(packet, colors.canvas, hovered ? 0.45 : 0.72),
-              width: pipeWidth(flow?.rate ?? 0),
-              cap: 'round',
-              join: 'round',
-            }
-          : { color: hovered ? colors.danger : colors.edge, width: hovered ? 3 : 1.5, alpha: 0.8 },
-      )
-      // A link between zones is dashed: each call crosses a zone boundary.
-      if (zoneMs(from, to) > 0) {
-        const length = lengthOf(path)
-        for (let at = DASH; at < length; at += DASH * 2)
-          traceOf(this.wires, [
-            pointOn(path, at / length),
-            pointOn(path, Math.min(1, (at + DASH) / length)),
-          ])
-        this.wires.stroke({ color: colors.canvas, width: pipeWidth(flow?.rate ?? 0) + 2 })
-      }
+      // The belt: rails, then the body between them.
+      const speed = busy && !still ? beltSpeed(flow?.rate ?? 0) : 0
+      // Rails between zones are orange: those calls pay cross-zone latency and Egress.
+      const rail = hovered
+        ? colors.danger
+        : zoneMs(from, to) > 0
+          ? colors.warn
+          : busy
+            ? mix(packet, colors.ink, 0.3)
+            : colors.edge
+      const body = mix(packet, colors.canvas, hovered ? 0.6 : busy ? 0.8 : 0.92)
+      for (const piece of pieces) traceOf(this.wires, piece)
+      this.wires.stroke({ color: rail, width: BELT + 3, join: 'round', alpha: busy ? 0.9 : 0.6 })
+      for (const piece of pieces) traceOf(this.wires, piece)
+      this.wires.stroke({ color: body, width: BELT, join: 'round' })
+      // Chevrons point the way the belt runs, and move with it.
+      for (const piece of pieces)
+        walk(piece, CHEVRON_GAP, this.phase * speed, (point, ux, uy) => {
+          this.wires
+            .moveTo(
+              point.x - uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
+              point.y + ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
+            )
+            .lineTo(point.x, point.y)
+            .lineTo(
+              point.x + uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
+              point.y - ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
+            )
+        })
+      this.wires.stroke({
+        color: busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
+        width: 1.2,
+        alpha: busy ? 0.9 : 0.5,
+      })
+      // The mouths where the belt dips under another one.
+      pieces.forEach((piece, index) => {
+        const ends = [
+          index > 0 ? piece[0] : undefined,
+          index < pieces.length - 1 ? piece.at(-1) : undefined,
+        ]
+        for (const end of ends)
+          if (end)
+            this.wires.moveTo(end.x - BELT / 2 - 2.5, end.y).lineTo(end.x + BELT / 2 + 2.5, end.y)
+      })
+      this.wires.stroke({ color: rail, width: 3, cap: 'round' })
       if (hovered) {
         const mid = pointOn(path, 0.5)
         this.overlay.circle(mid.x, mid.y, 9).fill(colors.danger)
@@ -2328,14 +2329,50 @@ class BoardController {
         1,
         Math.min(9, Math.round(Math.log2(1 + flow.rate) * 1.4), Math.floor(length / 20)),
       )
-      const speed = still ? 0 : 150 / (length + 60)
-      const radius = Math.max(1.5, pipeWidth(flow.rate) / 2 - 0.5)
+      // Items ride the belt at its speed, and are out of sight while it runs underground.
+      const along = speed / Math.max(1, length)
       for (let index = 0; index < count; index += 1) {
-        const t = (this.phase * speed + (index + 0.5) / count) % 1
+        const t = (this.phase * along + (index + 0.5) / count) % 1
         const at = pointOn(path, t)
-        this.packets.circle(at.x, at.y, radius)
+        if (wire.hops.some((hop) => Math.abs(hop.x - at.x) < 1 && Math.abs(hop.y - at.y) < HOP))
+          continue
+        this.packets.roundRect(at.x - 2.5, at.y - 2.5, 5, 5, 1.5)
       }
       this.packets.fill({ color: packet, alpha: tap ? 0.6 : 0.95 })
+    }
+
+    // A port that feeds several belts has a splitter over the point where they part.
+    const fans = new Map<string, { x: number; top: number; bottom: number; belts: number }>()
+    for (const link of state.game.links) {
+      const from = byId.get(link.from)
+      const to = byId.get(link.to)
+      if (!from || !to || this.fresh.has(`${link.from}>${link.to}`)) continue
+      const port = outPort(from)
+      const fan = fans.get(link.from) ?? {
+        x: port.x,
+        top: port.y,
+        bottom: port.y,
+        belts: 0,
+      }
+      fan.belts += 1
+      // The fan is the stretch out of the port before the belt runs straight up or down.
+      const path = this.wireOf(from, to).path
+      for (let index = 1; index < path.length; index += 1) {
+        const point = path[index] as Pt
+        const before = path[index - 1] as Pt
+        if (point.x > port.x + SPLITTER_W || Math.abs(point.x - before.x) < 0.01) break
+        fan.top = Math.min(fan.top, point.y)
+        fan.bottom = Math.max(fan.bottom, point.y)
+      }
+      fans.set(link.from, fan)
+    }
+    for (const fan of fans.values()) {
+      const pad = BELT / 2 + 1.5
+      if (fan.belts >= 2)
+        this.wires
+          .roundRect(fan.x, fan.top - pad, SPLITTER_W, fan.bottom - fan.top + pad * 2, 3)
+          .fill(colors.card)
+          .stroke({ color: colors.edge, width: 1.5 })
     }
 
     // The bottleneck: a pulsing outline on the one Node that costs the most revenue.
@@ -2442,9 +2479,11 @@ class BoardController {
         .fill({ color: colors.accent, alpha: 0.08 })
         .stroke({ color: colors.accent, width: 1.5, alpha: 0.8 })
     }
+    const landing = this.landingOf()
     if (state.stamp) {
-      const x = Math.round(this.pointer.x / 8) * 8
-      const y = Math.round(this.pointer.y / 8) * 8
+      // The Playbook shows where it will land, clear of the cards already there.
+      const x = landing?.x ?? Math.round(this.pointer.x / 8) * 8
+      const y = landing?.y ?? Math.round(this.pointer.y / 8) * 8
       for (const entry of state.stamp) {
         silhouette(
           this.overlay,
@@ -2458,6 +2497,31 @@ class BoardController {
           .fill({ color: entry.ghost ? colors.danger : colors.accent, alpha: 0.1 })
           .stroke({ color: entry.ghost ? colors.danger : colors.accent, width: 2, alpha: 0.85 })
       }
+    }
+
+    // A held card or new Node over others: an outline shows the free spot it will take.
+    const held =
+      gesture?.kind === 'node' && this.dragged
+        ? byId.get(this.dragged.id)
+        : state.placing && this.ghost.visible
+          ? {
+              type: state.placing,
+              x: Math.round((this.pointer.x - CARD_W / 2) / 8) * 8,
+              y: Math.round((this.pointer.y - heightOf(state.placing) / 2) / 8) * 8,
+            }
+          : undefined
+    if (held && landing && (landing.x !== held.x || landing.y !== held.y)) {
+      silhouette(
+        this.overlay,
+        COMPONENTS[held.type].group,
+        landing.x,
+        landing.y,
+        CARD_W,
+        heightOf(held.type),
+        0,
+      )
+        .fill({ color: colors.accent, alpha: 0.08 })
+        .stroke({ color: colors.accent, width: 2, alpha: 0.7 })
     }
 
     if (this.ghost.visible)

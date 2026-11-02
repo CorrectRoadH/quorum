@@ -104,6 +104,7 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
         : null
     case 'BoardFitted':
     case 'FreeSandboxReset':
+    case 'StressBoardLoaded':
     case 'CompanyCopied':
       return gesture('switch')
     default:

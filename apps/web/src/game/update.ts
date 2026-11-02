@@ -137,6 +137,8 @@ import {
   type Reversal,
 } from './feedback.ts'
 import { cueOf } from './cues.ts'
+import { stressBoard } from './stress.ts'
+import { CARD_W, boxOf, freeSpot, heightOf } from './geometry.ts'
 import { alertText, duration } from './format.ts'
 import { Message } from './message.ts'
 import {
@@ -1337,6 +1339,7 @@ const handle = (model: Model, message: Message): Result =>
     FreeSandboxStarted: () =>
       enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START }),
     FreeSandboxReset: () => replaceFree(model, freeSandbox(), 'The free Sandbox is reset.'),
+    StressBoardLoaded: () => replaceFree(model, stressBoard(), 'The stress board is loaded.'),
     CompanyCopied: () =>
       model.company && model.saved
         ? replaceFree(model, sandboxOf(model.company), 'Copied the Company Design.')
@@ -1479,8 +1482,16 @@ const handle = (model: Model, message: Message): Result =>
 
     NodePlaced: ({ x, y }) => {
       const playbook = model.stamping === null ? null : model.founder.playbooks[model.stamping]
+      // Nothing lands on a card: a drop moves to the nearest spot that keeps clear.
+      const others = regionView(model.game, model.region).nodes.map(boxOf)
       if (playbook) {
-        const placed = placePlaybook(model.game, playbook, x, y, model.region)
+        const spot = freeSpot(others, {
+          x,
+          y,
+          w: Math.max(...playbook.nodes.map((node) => node.dx)) + CARD_W,
+          h: Math.max(...playbook.nodes.map((node) => node.dy + heightOf(node.type))),
+        })
+        const placed = placePlaybook(model.game, playbook, spot.x, spot.y, model.region)
         return act(
           model,
           `Placed ${playbook.name}`,
@@ -1510,10 +1521,11 @@ const handle = (model: Model, message: Message): Result =>
       }
       const type = model.placing
       if (!type) return { model }
+      const spot = freeSpot(others, { x, y, w: CARD_W, h: heightOf(type) })
       return act(
         model,
         `Placed ${COMPONENTS[type].name}`,
-        Actions.place(model.game, type, Math.round(x / 8) * 8, Math.round(y / 8) * 8, model.region),
+        Actions.place(model.game, type, spot.x, spot.y, model.region),
         {
           undoable: true,
           patch: (_, game) => ({ placing: null, selected: game.nodes.at(-1)?.id ?? null }),
@@ -1558,7 +1570,13 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     NodeMoved: ({ nodeId, x, y }) => {
-      const next: Model = { ...model, game: Actions.move(model.game, nodeId, x, y) }
+      const node = model.game.nodes.find((entry) => entry.id === nodeId)
+      if (!node) return { model }
+      const others = regionView(model.game, model.region)
+        .nodes.filter((entry) => entry.id !== nodeId)
+        .map(boxOf)
+      const spot = freeSpot(others, { x, y, w: CARD_W, h: heightOf(node.type) })
+      const next: Model = { ...model, game: Actions.move(model.game, nodeId, spot.x, spot.y) }
       return { model: next, commands: [sync(next)] }
     },
 
