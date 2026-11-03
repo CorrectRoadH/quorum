@@ -761,3 +761,25 @@ test('a save this version cannot read is kept aside instead of dropped', () => {
     )
   }
 })
+
+test('the board redraws after any Message that changes what it shows, and fits after the redraw', () => {
+  const syncs = (result: ReturnType<typeof update>) =>
+    (result.commands ?? []).filter((command) => command.name === 'SyncBoard')
+  const placing = update(inLab(), Message.PlacingChosen({ type: 'server' })).model
+  // Opening the Glossary drops the part off the pointer, so the board must hear about it.
+  const glossary = update(placing, Message.GlossaryOpened({ id: null }))
+  expect(syncs(glossary)).toEqual([
+    expect.objectContaining({ args: expect.objectContaining({ placing: null, fit: false }) }),
+  ])
+  expect(syncs(update(glossary.model, Message.GlossarySearched({ query: 'cache' })))).toEqual([])
+
+  const entered = update(initialModel(), Message.FreeSandboxStarted())
+  const names = (entered.commands ?? []).map((command) => command.name)
+  expect(names).not.toContain('FitBoard')
+  expect(syncs(entered)).toEqual([
+    expect.objectContaining({ args: expect.objectContaining({ fit: true }) }),
+  ])
+  const fitted = update(entered.model, Message.BoardFitted())
+  expect((fitted.commands ?? []).map((command) => command.name)).toContain('FitBoard')
+  expect(syncs(fitted)).toEqual([])
+})

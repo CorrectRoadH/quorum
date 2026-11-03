@@ -54,6 +54,8 @@ export const SyncBoard = Command.define('SyncBoard', {
     paused: Schema.Boolean,
     /** The Node whose footer button glows: a disclosure cue. */
     cue: Schema.NullOr(Schema.String),
+    /** Fit the view to the new Design once it is drawn. */
+    fit: Schema.Boolean,
   },
   messages: [Message.Synced],
   execute: ({
@@ -68,8 +70,9 @@ export const SyncBoard = Command.define('SyncBoard', {
     region,
     paused,
     cue,
+    fit,
   }) =>
-    Effect.sync(() =>
+    Effect.sync(() => {
       setBoard('board', {
         locale,
         game: regionView(game, region),
@@ -82,8 +85,9 @@ export const SyncBoard = Command.define('SyncBoard', {
         region,
         paused,
         cue,
-      }),
-    ).pipe(Effect.as(Message.Synced())),
+      })
+      if (fit) fitBoard('board')
+    }).pipe(Effect.as(Message.Synced())),
 })
 
 /** Runs a Tradeoff option's ghost runs on the compute worker. A superseded or refused run sends nothing back. */
