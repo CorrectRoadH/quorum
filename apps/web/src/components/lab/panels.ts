@@ -244,6 +244,15 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             },
             h,
           ),
+          switch_(
+            {
+              id: 'setting-agent-access',
+              label: 'Agent access',
+              isChecked: model.agentAccess,
+              onToggle: () => Message.AgentAccessToggled(),
+            },
+            h,
+          ),
           secondaryButton('Copy state as JSON', Message.StateCopied(), h, Copy),
         ],
       ),

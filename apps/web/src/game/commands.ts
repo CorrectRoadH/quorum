@@ -12,6 +12,7 @@ import { Founder } from '@quorum/simulation/founder'
 import { Motion, Prefs, Reveal, SandboxStore } from './model.ts'
 import { History } from './history.ts'
 import { play, setMuted, SOUND_NAMES } from './sound.ts'
+import { setAgentAccess } from './agent-relay.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 import { ChallengeSubmission } from '@quorum/rpc'
 import { ApiRpc } from '@/platform/rpc.ts'
@@ -207,11 +208,12 @@ export const WritePrefs = Command.define('WritePrefs', {
 
 /** Applies the settings: mute for every sound, and reduced motion as `data-motion` on the root. */
 export const ApplySettings = Command.define('ApplySettings', {
-  args: { muted: Schema.Boolean, motion: Motion, locale: Locale },
+  args: { muted: Schema.Boolean, motion: Motion, locale: Locale, agentAccess: Schema.Boolean },
   messages: [Message.Synced],
-  execute: ({ muted, motion, locale }) =>
+  execute: ({ muted, motion, locale, agentAccess }) =>
     Effect.sync(() => {
       setMuted(muted)
+      setAgentAccess(agentAccess)
       document.documentElement.lang = locale
       if (motion === 'reduce') document.documentElement.dataset.motion = 'reduce'
       else delete document.documentElement.dataset.motion

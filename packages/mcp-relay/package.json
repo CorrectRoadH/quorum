@@ -1,0 +1,37 @@
+{
+  "name": "quorum-mcp-relay",
+  "version": "0.1.0",
+  "description": "Read-only MCP server that lets a coding agent read the Quorum game open in your browser.",
+  "license": "GPL-3.0-or-later",
+  "bin": {
+    "quorum-mcp-relay": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts",
+    "./tools": "./src/tools.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack src/cli.ts",
+    "typecheck": "tsrs --noEmit -p tsconfig.json && effect-tsrs diagnostics --strict --project tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ws": "8.22.1"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

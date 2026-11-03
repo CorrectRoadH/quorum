@@ -8,6 +8,7 @@ This repository is a pnpm monorepo for an Effect + Foldkit application deployed 
 - `apps/backend` is the API Worker and owns server-side behavior.
 - `packages/rpc` contains only the typed wire contract shared by the browser and API Worker.
 - `packages/simulation` is the Simulation, played by the browser and replayed by the API Worker (ADR 0004). It imports only `effect` and its own files: no UI, browser, Node, or Cloudflare modules, and only exact math.
+- `packages/mcp-relay` is the published `quorum-mcp-relay` CLI, a read-only MCP server that lets a terminal agent read the game open in the player's browser (ADR 0007). Its `tools` and `protocol` files are pure data that the web app imports; nothing in it can change the game.
 - `examples/reference` is a maintained, separately runnable example. It is not part of the default deployment.
 - Keep Alchemy resources and deployment composition in the root `alchemy.run.ts`. App-owned `src/worker.ts` files are plain Cloudflare Worker entry modules and must not import Alchemy or declare infrastructure.
 - Do not add a domain package or product domain until the product vocabulary and boundaries are agreed.
@@ -16,6 +17,7 @@ This repository is a pnpm monorepo for an Effect + Foldkit application deployed 
 
 - Keep the browser from importing `apps/backend` or platform-specific modules.
 - Keep game rules, the catalog, and the Game schema in `packages/simulation`; keep rendering, input, and storage in `apps/web`.
+- Keep the agent tool names and wire protocol in `packages/mcp-relay`; keep their implementation over the Model in `apps/web/src/game/webmcp.ts`. Agent tools only read.
 - Keep RPC schemas and errors in `packages/rpc`; keep handlers and internal models in `apps/backend`.
 - Keep unstable Effect APIs inside the tsconfig allowlist for their file. See `docs/guardrails.md` before you widen one.
 - Use Foldkit Query for retained remote data. Loading and revalidation decisions belong in Foldkit update handlers.

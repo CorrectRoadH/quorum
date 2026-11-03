@@ -39,6 +39,7 @@ To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` fro
 - `apps/backend/src/contexts` is the home for server-side bounded contexts as product vocabulary is discovered. Do not pre-invent product domains in the scaffold.
 - `packages/rpc` owns the public wire contract only: Effect RPC groups, request/response schemas, declared errors, and the API path prefix.
 - `packages/simulation` owns the Simulation: the catalog, the Game schema, the solver, the Step, actions, and the Sandboxes. The browser plays it and the API Worker will replay Challenges with it ([ADR 0004](adr/0004-simulation-package.md)). It imports only `effect` and its own files, and uses only exact math, so every runtime computes the same Game.
+- `packages/mcp-relay` is `quorum-mcp-relay`, the one package published to npm. Its CLI runs on the player's machine as an MCP server on stdio and as a WebSocket server on loopback, which the Quorum page connects to ([ADR 0007](adr/0007-agents-read-the-game-through-a-local-relay.md)). `src/tools.ts` and `src/protocol.ts` import nothing, so the web app imports them for the tool list and the wire messages.
 - `examples/reference` shows a complete Query-to-RPC path in a separate website app. Run it with `pnpm dev:reference`, which uses the root Alchemy entrypoint with the `reference` stage; it is deliberately excluded from the default stack.
 
 ## Dependency direction
@@ -47,11 +48,13 @@ To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` fro
 apps/web ─────────► packages/rpc, packages/simulation
 apps/backend ─────► packages/rpc, packages/simulation
 examples/reference ► packages/rpc
+apps/web ─────────► packages/mcp-relay (tools, protocol only)
 packages/rpc ─────► effect
 packages/simulation ► effect
+packages/mcp-relay ► ws
 ```
 
-The web app must not import backend implementation modules. The RPC package must not import either app or the Simulation. The Simulation must not import either app, `packages/rpc`, or any UI, browser, or Cloudflare module. Share the wire contract, not internal backend models.
+The web app must not import backend implementation modules. The RPC package must not import either app or the Simulation. The Simulation must not import either app, `packages/rpc`, or any UI, browser, or Cloudflare module. The relay must not import either app, `packages/rpc`, or the Simulation. Share the wire contract, not internal backend models.
 
 ## Cloudflare scope
 

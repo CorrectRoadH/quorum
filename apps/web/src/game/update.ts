@@ -1,4 +1,4 @@
-import { stateJson } from './webmcp.ts'
+import { refusal, stateJson } from './webmcp.ts'
 import { DragAndDrop, Listbox } from '@foldkit/ui'
 import { languageListbox } from '../i18n/listbox.ts'
 import { Option, Result, Schema } from 'effect'
@@ -267,6 +267,7 @@ export const initialModel = (): Model =>
     muted: false,
     autoPause: false,
     motion: 'system',
+    agentAccess: false,
     locale: 'en',
     languagePicker: Listbox.init({ id: 'interface-language' }),
     glossaryFocus: null,
@@ -687,6 +688,7 @@ const prefsOf = (model: Model): Prefs => ({
   muted: model.muted,
   autoPause: model.autoPause,
   motion: model.motion,
+  agentAccess: model.agentAccess,
   locale: model.locale,
 })
 
@@ -695,7 +697,12 @@ const settled = (next: Model): Result => ({
   model: next,
   commands: [
     WritePrefs({ prefs: prefsOf(next) }),
-    ApplySettings({ muted: next.muted, motion: next.motion, locale: next.locale }),
+    ApplySettings({
+      muted: next.muted,
+      motion: next.motion,
+      locale: next.locale,
+      agentAccess: next.agentAccess,
+    }),
   ],
 })
 
@@ -1710,10 +1717,16 @@ const handle = (model: Model, message: Message): Result =>
             muted: prefs.muted,
             autoPause: prefs.autoPause,
             motion: prefs.motion,
+            agentAccess: prefs.agentAccess,
             locale: prefs.locale,
           },
           commands: [
-            ApplySettings({ muted: prefs.muted, motion: prefs.motion, locale: prefs.locale }),
+            ApplySettings({
+              muted: prefs.muted,
+              motion: prefs.motion,
+              locale: prefs.locale,
+              agentAccess: prefs.agentAccess,
+            }),
             sync({ ...model, locale: prefs.locale }),
           ],
         }),
@@ -2867,6 +2880,7 @@ const handle = (model: Model, message: Message): Result =>
     },
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
     AutoPauseToggled: () => settled({ ...model, autoPause: !model.autoPause }),
+    AgentAccessToggled: () => settled({ ...model, agentAccess: !model.agentAccess }),
     InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
@@ -3033,10 +3047,17 @@ const handle = (model: Model, message: Message): Result =>
       return { model: next, commands: [sync(next)] }
     },
     LogExported: () => ({ model, commands: [ExportLog({})] }),
-    StateCopied: () => ({
-      model,
-      commands: [CopyText({ text: stateJson(model), done: 'Copied the game state as JSON.' })],
-    }),
+    StateCopied: () => {
+      const reason = refusal(model)
+      return reason
+        ? withToast(model, reason, 'warn')
+        : {
+            model,
+            commands: [
+              CopyText({ text: stateJson(model), done: 'Copied the game state as JSON.' }),
+            ],
+          }
+    },
     LogCleared: () => withToast(model, 'Playtest log cleared.', 'plain', [ClearLog({})]),
 
     ToastRaised: ({ message: text, tone }) => withToast(model, text, tone),

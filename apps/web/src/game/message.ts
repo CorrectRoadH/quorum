@@ -257,6 +257,7 @@ export const Message = defineMessageUnion({
   /** Settings and the Glossary (15). */
   MuteToggled: {},
   AutoPauseToggled: {},
+  AgentAccessToggled: {},
   MotionToggled: {},
   LocaleChosen: { locale: Locale },
   LanguagePickerChanged: { message: Listbox.Message },

@@ -258,6 +258,7 @@ export const Prefs = Schema.Struct({
   muted: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   autoPause: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   motion: Motion.pipe(Schema.withDecodingDefaultKey(Effect.succeed('system' as const))),
+  agentAccess: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 })
 export type Prefs = typeof Prefs.Type
 
@@ -354,6 +355,8 @@ export const Model = Schema.Struct({
   /** Pause the clock when a SEV1 or SEV2 incident starts. */
   autoPause: Schema.Boolean,
   motion: Motion,
+  /** An agent relay on this machine may read the game (packages/mcp-relay). */
+  agentAccess: Schema.Boolean,
   locale: Locale,
   languagePicker: Listbox.Model,
   /** The Glossary panel's open entry, search, and category filter. */
