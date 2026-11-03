@@ -1667,7 +1667,7 @@ const visit = (model: Model, url: Url): Result => {
 /* ---------- update ---------- */
 
 /** Handles a Message and adds its sound cue. Messages that route to another
- *  Message (keys, taps on Payments) sound once, as the Message they became. */
+ *  Message (keys, the Collect footer) sound once, as the Message they became. */
 const route = (model: Model, message: Message): Result => {
   const handled = handle(model, message)
   const result = { ...handled, model: noticed(handled.model, message) }
@@ -2127,10 +2127,6 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     NodeTapped: ({ nodeId }) => {
-      const node = model.game.nodes.find((entry) => entry.id === nodeId)
-      // Collecting is a tap on the drawer, not a request to inspect it.
-      if (node?.type === 'payments' && model.game.pending > 0)
-        return route(model, Message.Collected())
       const next: Model = {
         ...model,
         selected: nodeId,

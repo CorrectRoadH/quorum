@@ -105,7 +105,7 @@ const STEPS: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     'Collect',
-    'Revenue waits in Payments. Click it before the drawer fills. Stripe Billing collects for you.',
+    'Revenue waits in Payments. Press Collect before the drawer fills. Stripe Billing collects for you.',
   ],
   [
     'Learn',

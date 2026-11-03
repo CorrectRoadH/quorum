@@ -211,12 +211,12 @@ describe('collecting the Payments drawer', () => {
     return { ...model, game: { ...model.game, pending: 42 } }
   }
 
-  test('a tap on Payments collects without opening the Inspector', () => {
+  test('a tap on Payments opens the Inspector and leaves the drawer alone', () => {
     const start = withPending()
     const tapped = send(start, Message.NodeTapped({ nodeId: 'payments' }))
-    expect(tapped.selected).toBeNull()
-    expect(tapped.game.pending).toBe(0)
-    expect(tapped.game.cash).toBe(start.game.cash + 42)
+    expect(tapped.selected).toBe('payments')
+    expect(tapped.game.pending).toBe(42)
+    expect(tapped.game.cash).toBe(start.game.cash)
   })
 
   test('the footer Collect button collects without opening the Inspector', () => {

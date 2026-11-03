@@ -70,7 +70,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   Keys: '快捷键',
   'Drag from a Node’s blue output port to another Node. Click or tap a link to cut it. Drag empty space to pan; scroll or pinch to zoom.':
     '从节点的蓝色输出端口拖向另一个节点来连线。点击连线即可断开。拖动空白处平移，滚动或双指捏合缩放。',
-  'Revenue waits in Payments. Click it before the drawer fills. Stripe Billing collects for you.':
+  'Revenue waits in Payments. Press Collect before the drawer fills. Stripe Billing collects for you.':
     '收入暂存在支付节点中，记得在收款箱满之前点击领取。Stripe Billing 可以自动收款。',
   'Analytics samples linked Nodes. Sampled traffic becomes Insight ◆ for Research.':
     '分析节点对已连接节点采样，将流量转化为研究所需的洞察 ◆。',
