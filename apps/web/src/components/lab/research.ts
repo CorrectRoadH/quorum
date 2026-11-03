@@ -605,9 +605,74 @@ const ResearchScroll = Mount.define('ResearchScroll', {
               scrollTo(host, change.target as Element, 'smooth')
         })
         watch.observe(host, { subtree: true, attributes: true, attributeFilter: ['aria-pressed'] })
-        return watch
+        const events = new AbortController()
+        let start: { id: number; x: number; y: number; left: number; top: number } | null = null
+        let dragged = false
+        host.addEventListener(
+          'pointerdown',
+          (event) => {
+            if (event.pointerType !== 'mouse' || event.button !== 0) return
+            start = {
+              id: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              left: host.scrollLeft,
+              top: host.scrollTop,
+            }
+            dragged = false
+          },
+          { signal: events.signal },
+        )
+        host.addEventListener(
+          'pointermove',
+          (event) => {
+            if (!start || start.id !== event.pointerId) return
+            if ((event.buttons & 1) === 0) {
+              start = null
+              host.classList.remove('cursor-grabbing', 'select-none')
+              return
+            }
+            const dx = event.clientX - start.x
+            const dy = event.clientY - start.y
+            if (!dragged && Math.hypot(dx, dy) < 5) return
+            if (!dragged) {
+              dragged = true
+              host.setPointerCapture(event.pointerId)
+              host.classList.add('cursor-grabbing', 'select-none')
+            }
+            event.preventDefault()
+            host.scrollLeft = start.left - dx
+            host.scrollTop = start.top - dy
+          },
+          { signal: events.signal },
+        )
+        const end = (event: PointerEvent) => {
+          if (start?.id !== event.pointerId) return
+          start = null
+          host.classList.remove('cursor-grabbing', 'select-none')
+        }
+        host.addEventListener('pointerup', end, { signal: events.signal })
+        host.addEventListener('pointercancel', end, { signal: events.signal })
+        host.addEventListener(
+          'click',
+          (event) => {
+            if (!dragged || event.detail === 0) return
+            event.preventDefault()
+            event.stopPropagation()
+            dragged = false
+          },
+          { capture: true, signal: events.signal },
+        )
+        host.addEventListener('dragstart', (event) => event.preventDefault(), {
+          signal: events.signal,
+        })
+        return { watch, events }
       }),
-      (watch) => Effect.sync(() => watch.disconnect()),
+      ({ watch, events }) =>
+        Effect.sync(() => {
+          watch.disconnect()
+          events.abort()
+        }),
     ).pipe(Effect.as(Message.Synced())),
 })
 
@@ -746,7 +811,11 @@ export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
     ],
     [
       h.div(
-        [h.Key('scroll'), h.OnMount(ResearchScroll()), h.Class(`absolute inset-0 ${SCROLL}`)],
+        [
+          h.Key('scroll'),
+          h.OnMount(ResearchScroll()),
+          h.Class(`absolute inset-0 cursor-grab ${SCROLL}`),
+        ],
         [
           // Room above for the header, and to the right and below for the detail card.
           h.div(
