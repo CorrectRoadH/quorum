@@ -62,6 +62,7 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
     case 'LinkCut':
       return gesture('cut')
     case 'NodeSold':
+    case 'SellConfirmed':
       return gesture('remove')
     case 'ResizeChosen':
       if (message.direction < 0) return gesture('downgrade')

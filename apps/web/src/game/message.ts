@@ -100,8 +100,26 @@ export const Message = defineMessageUnion({
   LinkCut: { from: Schema.String, to: Schema.String },
   EmptyTapped: {},
   NodeToggled: { nodeId: Schema.String },
-  SelectionBoxed: { ids: Schema.Array(Schema.String) },
+  SelectionBoxed: {
+    ids: Schema.Array(Schema.String),
+    /** Plain shift-drag replaces the selection; with Ctrl it adds, with Alt it takes away. */
+    mode: Schema.Literals(['replace', 'add', 'subtract']),
+  },
   SelectionCleared: {},
+  /** Select every Node on the Board that can be sold. */
+  SelectionAll: {},
+  NodesCopied: {},
+  NodesCut: {},
+  /** The copied Nodes follow the pointer until a click places them. */
+  NodesPasted: {},
+  /** Asks to sell the selection; nothing is sold until it is confirmed. */
+  SellAsked: {},
+  SellConfirmed: {},
+  SellDismissed: {},
+  /** Places a copy of the selected Nodes just beside them. */
+  NodesDuplicated: {},
+  /** Moves the selected Nodes by a few board units. */
+  NodesNudged: { dx: Schema.Finite, dy: Schema.Finite },
   /** The button at the bottom of a Node card. */
   FooterPressed: { nodeId: Schema.String },
 

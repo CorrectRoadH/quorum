@@ -88,6 +88,7 @@ import { foundCompany, perkLevel } from '@quorum/simulation/founding'
 import { OFFLINE_MIN, simulateAway } from '@quorum/simulation/offline'
 import {
   capture,
+  SHARED,
   decodePlaybook,
   encodePlaybook,
   ghostReason,
@@ -168,7 +169,7 @@ import {
 } from './feedback.ts'
 import { BIG_PURCHASE, cueOf } from './cues.ts'
 import { stressBoard } from './stress.ts'
-import { CARD_W, boxOf, freeSpot, heightOf, tidy } from './geometry.ts'
+import { CARD_W, boxOf, crowds, freeSpot, heightOf, tidy } from './geometry.ts'
 import { alertText, duration, money } from './format.ts'
 import { Message } from './message.ts'
 import {
@@ -182,6 +183,7 @@ import {
   type Tradeoff,
   type TradeoffOption,
   offCompany,
+  stampedPlaybook,
   type ChallengeRun,
   type Menu,
 } from './model.ts'
@@ -233,6 +235,8 @@ export const initialModel = (): Model =>
     selection: [],
     placing: null,
     stamping: null,
+    confirmSell: null,
+    clipboard: null,
     founder: emptyFounder(),
     away: null,
     exited: null,
@@ -329,8 +333,7 @@ const saveOf = (model: Model): AnyCommand =>
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
 const stampOf = (model: Model) => {
-  if (model.stamping === null) return null
-  const playbook = model.founder.playbooks[model.stamping]
+  const playbook = stampedPlaybook(model)
   if (!playbook) return null
   return playbook.nodes.map((node) => ({
     type: node.type,
@@ -530,6 +533,26 @@ const reverse = (model: Model, reversal: Reversal | string, verb: string): Resul
     bottleneckAt: -1,
   }
   return withToast(next, `${verb}: ${reversal.label}.`, 'plain', [sync(next)])
+}
+
+/** The Nodes an edit applies to: the multi-selection, or the one Node open. */
+const chosenIds = (model: Model): ReadonlyArray<string> =>
+  model.selection.length > 0 ? model.selection : model.selected ? [model.selected] : []
+
+const NUDGE = 16
+
+const countNodes = (count: number): string => (count === 1 ? '1 Node' : `${count} Nodes`)
+
+/** Sells every Node it can. Fixed Nodes stay; it fails only when nothing sold. */
+const sellAll = (game: Game, ids: ReadonlyArray<string>): Actions.Action => {
+  let next = game
+  let refusal: Actions.Action = Actions.sell(game, '')
+  for (const id of ids) {
+    const sold = Actions.sell(next, id)
+    if (Result.isSuccess(sold)) next = sold.success
+    else refusal = sold
+  }
+  return next === game ? refusal : Result.succeed(next)
 }
 
 const nodeName = (game: Game, id: string): string => {
@@ -1063,6 +1086,13 @@ const tick = (model: Model): Result => {
   }
   if (logs.length > 0) commands.push(AppendLog({ entries: logs }))
   return milestones(model, { model: next, commands }, events, ledger)
+}
+
+const NUDGES: Record<string, readonly [number, number]> = {
+  'Shift+ArrowUp': [0, -NUDGE],
+  'Shift+ArrowDown': [0, NUDGE],
+  'Shift+ArrowLeft': [-NUDGE, 0],
+  'Shift+ArrowRight': [NUDGE, 0],
 }
 
 const ARROWS: Record<string, Direction> = {
@@ -1745,6 +1775,7 @@ const handle = (model: Model, message: Message): Result =>
       switch (key) {
         case 'Escape': {
           if (model.exited) return leaveExited(model, 'found')
+          if (model.confirmSell) return { model: { ...model, confirmSell: null } }
           if (model.tradeoff) return { model: { ...model, tradeoff: null } }
           if (model.insightHelp) return { model: { ...model, insightHelp: false } }
           if (model.stamping !== null || model.selection.length > 0) {
@@ -1824,6 +1855,7 @@ const handle = (model: Model, message: Message): Result =>
             : { model }
         }
         case 'Enter':
+          if (model.confirmSell) return route(model, Message.SellConfirmed())
           if (model.panel !== 'none') return { model }
           return selected ? { model, commands: [FocusInspector({})] } : { model }
         case ' ':
@@ -1843,9 +1875,27 @@ const handle = (model: Model, message: Message): Result =>
           return selected
             ? route(model, Message.ResizeChosen({ nodeId: selected, direction: 1 }))
             : { model }
+        case 'Mod+a':
+          return model.panel === 'none' ? route(model, Message.SelectionAll()) : { model }
+        case 'Mod+c':
+          return model.panel === 'none' ? route(model, Message.NodesCopied()) : { model }
+        case 'Mod+x':
+          return model.panel === 'none' ? route(model, Message.NodesCut()) : { model }
+        case 'Mod+d':
+          return model.panel === 'none' ? route(model, Message.NodesDuplicated()) : { model }
+        case 'Shift+ArrowUp':
+        case 'Shift+ArrowDown':
+        case 'Shift+ArrowLeft':
+        case 'Shift+ArrowRight': {
+          if (model.panel !== 'none') return { model }
+          const step = NUDGES[key] ?? [0, 0]
+          return route(model, Message.NodesNudged({ dx: step[0], dy: step[1] }))
+        }
+        case 'Mod+v':
+          return model.panel === 'none' ? route(model, Message.NodesPasted()) : { model }
         case 'Delete':
         case 'Backspace':
-          return selected ? route(model, Message.NodeSold({ nodeId: selected })) : { model }
+          return route(model, Message.SellAsked())
         default: {
           // With a group open, a digit picks that part.
           const picked = (model.buildGroup ? dockItems(model.game, model.buildGroup) : [])[
@@ -1874,7 +1924,7 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     NodePlaced: ({ x, y }) => {
-      const playbook = model.stamping === null ? null : model.founder.playbooks[model.stamping]
+      const playbook = stampedPlaybook(model)
       // Nothing lands on a card: a drop moves to the nearest spot that keeps clear.
       const others = regionView(model.game, model.region).nodes.map(boxOf)
       if (playbook) {
@@ -1953,10 +2003,114 @@ const handle = (model: Model, message: Message): Result =>
       const next: Model = { ...model, selection, selected: null, tradeoff: null }
       return { model: next, commands: [sync(next)] }
     },
-    SelectionBoxed: ({ ids }) => {
-      const next: Model = { ...model, selection: [...ids], selected: null, tradeoff: null }
+    SelectionBoxed: ({ ids, mode }) => {
+      const selection =
+        mode === 'add'
+          ? [...new Set([...model.selection, ...(model.selected ? [model.selected] : []), ...ids])]
+          : mode === 'subtract'
+            ? model.selection.filter((id) => !ids.includes(id))
+            : [...ids]
+      const next: Model = { ...model, selection, selected: null, tradeoff: null }
       return { model: next, commands: [sync(next)] }
     },
+    SelectionAll: () => {
+      const ids = regionView(model.game, model.region)
+        .nodes.filter((node) => !COMPONENTS[node.type].fixed && !SHARED.includes(node.type))
+        .map((node) => node.id)
+      if (ids.length === 0) return { model }
+      const next: Model = { ...model, selection: ids, selected: null, tradeoff: null }
+      return { model: next, commands: [sync(next)] }
+    },
+    NodesCopied: () => {
+      const playbook = capture(model.game, chosenIds(model), 'Nodes')
+      if (!playbook) return withToast(model, 'Select the Nodes to copy first.', 'plain')
+      const next: Model = { ...model, clipboard: playbook }
+      return withToast(next, `Copied ${countNodes(playbook.nodes.length)}.`, 'ok', [sync(next)])
+    },
+    NodesCut: () => {
+      const playbook = capture(model.game, chosenIds(model), 'Nodes')
+      if (!playbook) return withToast(model, 'Select the Nodes to cut first.', 'plain')
+      return act(
+        model,
+        `Cut ${countNodes(playbook.nodes.length)}`,
+        sellAll(
+          model.game,
+          playbook.nodes.map((node) => node.key),
+        ),
+        {
+          undoable: true,
+          patch: () => ({ clipboard: playbook, selected: null, selection: [] }),
+        },
+      )
+    },
+    NodesPasted: () => {
+      if (!model.clipboard) return withToast(model, 'Copy some Nodes first.', 'plain')
+      const next: Model = {
+        ...model,
+        stamping: 'clipboard',
+        placing: null,
+        selected: null,
+        selection: [],
+        panel: 'none',
+      }
+      return { model: next, commands: [sync(next)] }
+    },
+    NodesDuplicated: () => {
+      const playbook = capture(model.game, chosenIds(model), 'Nodes')
+      if (!playbook) return withToast(model, 'Select the Nodes to duplicate first.', 'plain')
+      const keys = playbook.nodes.map((node) => node.key)
+      const chosen = model.game.nodes.filter((node) => keys.includes(node.id))
+      const left = Math.min(...chosen.map((node) => node.x))
+      const top = Math.min(...chosen.map((node) => node.y))
+      const spot = freeSpot(regionView(model.game, model.region).nodes.map(boxOf), {
+        x: left + 48,
+        y: top + 48,
+        w: Math.max(...playbook.nodes.map((node) => node.dx)) + CARD_W,
+        h: Math.max(...playbook.nodes.map((node) => node.dy + heightOf(node.type))),
+      })
+      const placed = placePlaybook(model.game, playbook, spot.x, spot.y, model.region)
+      return act(
+        model,
+        `Duplicated ${countNodes(playbook.nodes.length)}`,
+        Result.map(placed, (result) => result.game),
+        { undoable: true },
+      )
+    },
+    NodesNudged: ({ dx, dy }) => {
+      const ids = chosenIds(model)
+      if (ids.length === 0) return { model }
+      const moving = model.game.nodes.filter((node) => ids.includes(node.id))
+      const still = regionView(model.game, model.region)
+        .nodes.filter((node) => !ids.includes(node.id))
+        .map(boxOf)
+      const moved = moving.map((node) => ({ ...boxOf(node), x: node.x + dx, y: node.y + dy }))
+      if (moved.some((box) => still.some((other) => crowds(box, other)))) return { model }
+      const game = moving.reduce(
+        (current, node) => Actions.move(current, node.id, node.x + dx, node.y + dy),
+        model.game,
+      )
+      const next: Model = { ...model, game }
+      return { model: next, commands: [sync(next)] }
+    },
+    SellAsked: () => {
+      if (model.confirmSell) return route(model, Message.SellConfirmed())
+      const ids = chosenIds(model)
+      if (ids.length === 0) return { model }
+      const sold = sellAll(model.game, ids)
+      // Nothing to sell (fixed Nodes): say why, without asking.
+      if (Result.isFailure(sold))
+        return withToast(model, Actions.describeRefusal(sold.failure), 'warn')
+      return { model: { ...model, confirmSell: ids } }
+    },
+    SellConfirmed: () => {
+      const ids = model.confirmSell ?? []
+      const cleared: Model = { ...model, confirmSell: null }
+      return act(cleared, `Sold ${countNodes(ids.length)}`, sellAll(model.game, ids), {
+        undoable: true,
+        patch: () => ({ selected: null, selection: [] }),
+      })
+    },
+    SellDismissed: () => ({ model: { ...model, confirmSell: null } }),
     SelectionCleared: () => {
       const next: Model = { ...model, selection: [] }
       return { model: next, commands: [sync(next)] }
@@ -1965,11 +2119,30 @@ const handle = (model: Model, message: Message): Result =>
     NodeMoved: ({ nodeId, x, y }) => {
       const node = model.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
+      // A card in a multi-selection takes the rest of it along.
+      const group =
+        model.selection.length > 1 && model.selection.includes(nodeId) ? model.selection : [nodeId]
+      const members = model.game.nodes.filter((entry) => group.includes(entry.id))
       const others = regionView(model.game, model.region)
-        .nodes.filter((entry) => entry.id !== nodeId)
+        .nodes.filter((entry) => !group.includes(entry.id))
         .map(boxOf)
-      const spot = freeSpot(others, { x, y, w: CARD_W, h: heightOf(node.type) })
-      const next: Model = { ...model, game: Actions.move(model.game, nodeId, spot.x, spot.y) }
+      const left = Math.min(...members.map((entry) => entry.x))
+      const top = Math.min(...members.map((entry) => entry.y))
+      const spot = freeSpot(others, {
+        x: left + x - node.x,
+        y: top + y - node.y,
+        w: Math.max(...members.map((entry) => entry.x + CARD_W)) - left,
+        h: Math.max(...members.map((entry) => entry.y + heightOf(entry.type))) - top,
+      })
+      const dx = spot.x - left
+      const dy = spot.y - top
+      const next: Model = {
+        ...model,
+        game: members.reduce(
+          (game, entry) => Actions.move(game, entry.id, entry.x + dx, entry.y + dy),
+          model.game,
+        ),
+      }
       return { model: next, commands: [sync(next)] }
     },
 

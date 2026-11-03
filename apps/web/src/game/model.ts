@@ -8,6 +8,7 @@ import type { Ledger } from '@quorum/simulation/ledger'
 import { solveFlow } from '@quorum/simulation/solve'
 import { HistoryRow } from '@quorum/simulation/exit'
 import { Founder } from '@quorum/simulation/founder'
+import { Playbook } from '@quorum/simulation/playbook'
 import { ChallengeResult, RunTotals } from '@quorum/simulation/challenges'
 import { Replay } from '@quorum/simulation/replay'
 import { ChallengeVerdict } from '@quorum/rpc'
@@ -309,8 +310,12 @@ export const Model = Schema.Struct({
   /** Nodes picked with shift for a Playbook. */
   selection: Schema.Array(Schema.String),
   placing: Schema.NullOr(ComponentId),
-  /** The Founder's Playbook being placed, by index. */
-  stamping: Schema.NullOr(Schema.Finite),
+  /** What follows the pointer: the Founder's Playbook by index, or the copied Nodes. */
+  stamping: Schema.NullOr(Schema.Union([Schema.Finite, Schema.Literal('clipboard')])),
+  /** The Nodes a sale is waiting on, until the player confirms it. */
+  confirmSell: Schema.NullOr(Schema.Array(Schema.String)),
+  /** The Nodes last copied or cut. Kept for this session only. */
+  clipboard: Schema.NullOr(Playbook),
   /** The player across Companies, kept apart from the Company save. */
   founder: Founder,
   away: Schema.NullOr(Away),
@@ -397,3 +402,11 @@ export const ledgerOf = (model: Model): Ledger => ({
 /** The board is not the Company: a Sandbox or a Challenge is open. */
 export const offCompany = (model: Model): boolean =>
   model.sandbox !== null || model.challenge !== null
+
+/** The Playbook that follows the pointer, if any. */
+export const stampedPlaybook = (model: Model): Playbook | null =>
+  model.stamping === null
+    ? null
+    : model.stamping === 'clipboard'
+      ? model.clipboard
+      : (model.founder.playbooks[model.stamping] ?? null)

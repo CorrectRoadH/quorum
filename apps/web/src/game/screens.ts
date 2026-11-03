@@ -23,6 +23,7 @@ import {
   exitedPanel,
   playbooksPanel,
   selectionBar,
+  sellBar,
   stampBar,
 } from '@/components/lab/legacy.ts'
 import { objectiveBar, passedPanel, sandboxHud } from '@/components/lab/sandbox.ts'
@@ -70,6 +71,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
               pager(model, h),
               badDeploy(model, h),
               exitPill(model, h),
+              sellBar(model, h),
               selectionBar(model, h),
               stampBar(model, h),
               expiredCertificate(model, h),

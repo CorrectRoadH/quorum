@@ -51,7 +51,7 @@ const BoardMounted = Mount.defineStream('BoardMounted', {
               onPlace: (x, y) => offer(Message.NodePlaced({ x, y })),
               onEmptyTap: () => offer(Message.EmptyTapped()),
               onNodeToggle: (nodeId) => offer(Message.NodeToggled({ nodeId })),
-              onBox: (ids) => offer(Message.SelectionBoxed({ ids: [...ids] })),
+              onBox: (ids, mode) => offer(Message.SelectionBoxed({ ids: [...ids], mode })),
             }),
           ),
           (detach) => Effect.sync(detach),

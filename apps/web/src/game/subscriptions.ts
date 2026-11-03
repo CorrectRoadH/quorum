@@ -26,7 +26,24 @@ const keys = Stream.callback<KeyMessage>((queue) =>
           const target = event.target as HTMLElement | null
           if (target?.closest('[data-language-picker], [role="listbox"]')) return
           if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
-          if (event.metaKey || event.ctrlKey || event.altKey) return
+          if (event.altKey) return
+          const mod = event.metaKey || event.ctrlKey
+          const lower = event.key.toLowerCase()
+          if (mod) {
+            // Ctrl or Cmd: edit the Nodes, or leave copy alone while text is selected.
+            const edit = ['a', 'c', 'x', 'v', 'd'].includes(lower)
+            const history = lower === 'z' || lower === 'y'
+            if (!edit && !history) return
+            if (lower !== 'v' && window.getSelection()?.toString()) return
+            event.preventDefault()
+            Queue.offerUnsafe(
+              queue,
+              Message.KeyPressed({
+                key: edit ? `Mod+${lower}` : lower === 'z' && event.shiftKey ? 'Z' : lower,
+              }),
+            )
+            return
+          }
           // Arrows and Enter move over the board only when no control has focus.
           const onBoard = !target || target === document.body || target.tagName === 'CANVAS'
           if ((event.key.startsWith('Arrow') || event.key === 'Enter') && !onBoard) return
@@ -37,7 +54,9 @@ const keys = Stream.callback<KeyMessage>((queue) =>
               // Single keys arrive lower case, except Shift+Z, which is redo.
               key:
                 event.key.length !== 1
-                  ? event.key
+                  ? event.shiftKey && event.key.startsWith('Arrow')
+                    ? `Shift+${event.key}`
+                    : event.key
                   : event.shiftKey && event.key.toLowerCase() === 'z'
                     ? 'Z'
                     : event.key.toLowerCase(),

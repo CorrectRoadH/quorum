@@ -176,7 +176,7 @@ export const boxOf = (node: Placed): Box => ({
   h: heightOf(node.type),
 })
 
-const crowds = (a: Box, b: Box): boolean =>
+export const crowds = (a: Box, b: Box): boolean =>
   a.x < b.x + b.w + CLEARANCE &&
   b.x < a.x + a.w + CLEARANCE &&
   a.y < b.y + b.h + CLEARANCE &&

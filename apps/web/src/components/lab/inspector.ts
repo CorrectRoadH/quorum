@@ -1662,7 +1662,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
             ? h.empty
             : button(
                 {
-                  onClick: Message.NodeSold({ nodeId: node.id }),
+                  onClick: Message.SellAsked(),
                   variant: 'outline',
                   size: 'icon-lg',
                   className: 'text-muted-foreground hover:text-danger',

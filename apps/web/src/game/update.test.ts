@@ -3,6 +3,8 @@ import { Option } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
 import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
+import { COMPONENTS } from '@quorum/simulation/catalog'
+import { SHARED } from '@quorum/simulation/playbook'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'
@@ -46,6 +48,107 @@ test('dropping an engineer on another team moves them', () => {
   )
   const dropped = send(moved, DragAndDrop.Message.ConfirmedKeyboardDrop())
   expect(dropped.game.engineers.find((engineer) => engineer.id === 'e1')?.team).toBe('t2')
+})
+
+describe('copy, cut, paste, and select all', () => {
+  const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
+    messages.reduce((current, message) => update(current, message).model, model)
+  const key = (value: string) => Message.KeyPressed({ key: value })
+  const start = (): Model => {
+    const model = { ...inLab(), game: { ...preseedGame(), cash: 1e6 } }
+    return send(
+      model,
+      Message.PlacingChosen({ type: 'server' }),
+      Message.NodePlaced({ x: 400, y: 300 }),
+    )
+  }
+  const movable = (model: Model) =>
+    model.game.nodes.filter((node) => !COMPONENTS[node.type].fixed && !SHARED.includes(node.type))
+
+  test('select all picks every Node that can be sold, and Delete sells them in one undo step', () => {
+    const placed = start()
+    const all = send(placed, key('Mod+a'))
+    expect(all.selection).toEqual(movable(placed).map((node) => node.id))
+    expect(all.selection.length).toBeGreaterThan(0)
+    const asked = send(all, key('Delete'))
+    expect(asked.game.nodes).toEqual(placed.game.nodes)
+    expect(asked.confirmSell).toEqual(all.selection)
+    expect(send(asked, key('Escape')).confirmSell).toBeNull()
+    const sold = send(asked, key('Enter'))
+    expect(movable(sold)).toEqual([])
+    expect(sold.game.nodes.length).toBeLessThan(placed.game.nodes.length)
+    expect(send(sold, key('z')).game.nodes).toEqual(placed.game.nodes)
+  })
+
+  test('paste places a second copy where the click lands, and it costs Cash', () => {
+    const placed = start()
+    const copied = send(placed, key('Mod+a'), key('Mod+c'))
+    expect(copied.clipboard?.nodes.length).toBe(movable(placed).length)
+    const stamping = send(copied, key('Mod+v'))
+    expect(stamping.stamping).toBe('clipboard')
+    const pasted = send(stamping, Message.NodePlaced({ x: 900, y: 700 }))
+    expect(movable(pasted).length).toBe(2 * movable(placed).length)
+    expect(pasted.stamping).toBeNull()
+    expect(pasted.game.cash).toBeLessThan(placed.game.cash)
+  })
+
+  test('cut sells the Nodes and keeps them to paste', () => {
+    const placed = start()
+    const cut = send(placed, key('Mod+a'), key('Mod+x'))
+    expect(movable(cut)).toEqual([])
+    expect(cut.clipboard?.nodes.length).toBe(movable(placed).length)
+    const back = send(cut, key('Mod+v'), Message.NodePlaced({ x: 400, y: 300 }))
+    expect(movable(back).length).toBe(movable(placed).length)
+  })
+
+  test('duplicate places a copy beside the original in one undo step', () => {
+    const placed = start()
+    const dup = send(placed, key('Mod+a'), key('Mod+d'))
+    expect(movable(dup).length).toBe(2 * movable(placed).length)
+    expect(dup.game.cash).toBeLessThan(placed.game.cash)
+    expect(send(dup, key('z')).game.nodes).toEqual(placed.game.nodes)
+  })
+
+  test('Shift+Arrow nudges the selected Nodes', () => {
+    const placed = start()
+    const before = movable(placed)[0]!
+    const moved = send(placed, key('Mod+a'), key('Shift+ArrowRight'))
+    const after = movable(moved).find((node) => node.id === before.id)!
+    expect(after.x - before.x).toBeGreaterThan(0)
+    expect(after.y).toBe(before.y)
+  })
+
+  test('add and subtract edit a box selection; copy with nothing picked changes nothing', () => {
+    const placed = start()
+    const ids = movable(placed).map((node) => node.id)
+    const added = send(placed, Message.SelectionBoxed({ ids, mode: 'add' }))
+    expect([...added.selection].sort()).toEqual([...ids].sort())
+    expect(send(added, Message.SelectionBoxed({ ids, mode: 'subtract' })).selection).toEqual([])
+    expect(send(placed, key('Escape'), key('Mod+c')).clipboard).toBeNull()
+  })
+
+  test('dragging one selected Node moves the whole selection by the same step', () => {
+    const placed = send(
+      start(),
+      Message.PlacingChosen({ type: 'database' }),
+      Message.NodePlaced({ x: 800, y: 300 }),
+    )
+    const ids = movable(placed).map((node) => node.id)
+    const [first, second] = movable(placed)
+    const picked = send(placed, Message.SelectionBoxed({ ids, mode: 'replace' }))
+    const moved = send(
+      picked,
+      Message.NodeMoved({ nodeId: first!.id, x: first!.x + 80, y: first!.y + 160 }),
+    )
+    const again = movable(moved)
+    const step = { x: again[0]!.x - first!.x, y: again[0]!.y - first!.y }
+    expect(step).not.toEqual({ x: 0, y: 0 })
+    expect({ x: again[1]!.x - second!.x, y: again[1]!.y - second!.y }).toEqual(step)
+  })
+
+  test('paste with nothing copied does not start placing', () => {
+    expect(send(start(), key('Mod+v')).stamping).toBeNull()
+  })
 })
 
 describe('the clock', () => {

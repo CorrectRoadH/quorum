@@ -1,13 +1,25 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { BookCopy, Clipboard, DoorOpen, Plus, Stamp, Trash2, Upload } from 'lucide'
+import {
+  BookCopy,
+  Clipboard,
+  Copy,
+  CopyPlus,
+  DoorOpen,
+  Plus,
+  Stamp,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide'
 import { COMPONENTS, ERAS, EXITS, RESEARCH } from '@quorum/simulation/catalog'
 import { exitOffers } from '@quorum/simulation/exit'
 import { keepSlots, playbookSlots } from '@quorum/simulation/founder'
+import { refundOf } from '@quorum/simulation/lookups'
 import { legacyMultiplier } from '@quorum/simulation/founding'
 import { valuationOf } from '@quorum/simulation/valuation'
 import { clock, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import { ledgerOf, type Model, offCompany } from '@/game/model.ts'
+import { ledgerOf, type Model, offCompany, stampedPlaybook } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -281,29 +293,76 @@ export const awayPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 /** Shown while Nodes are shift-selected: save them as a Playbook. */
 export const selectionBar = (model: Model, h: HtmlBuilder<Message>): Html =>
-  model.selection.length === 0 || offCompany(model)
+  offCompany(model)
     ? h.empty
-    : h.div(
+    : model.selection.length === 0
+      ? h.empty
+      : h.div(
+          [
+            h.Key('selection'),
+            h.Class(
+              'pointer-events-auto enter-down flex items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
+            ),
+          ],
+          [
+            h.span([h.Class(FIGURE)], [`${model.selection.length} selected`]),
+            ...(
+              [
+                [Message.NodesCopied(), Copy, 'Copy (Ctrl+C)'],
+                [Message.NodesDuplicated(), CopyPlus, 'Duplicate (Ctrl+D)'],
+                [Message.SellAsked(), Trash2, 'Sell (Del)'],
+                [Message.PlaybookSaved(), BookCopy, 'Save as Playbook'],
+                [Message.SelectionCleared(), X, 'Clear selection (Esc)'],
+              ] as const
+            ).map(([onClick, glyph, label]) =>
+              button(
+                {
+                  onClick,
+                  size: 'icon-sm',
+                  variant: 'ghost',
+                  attributes: [h.AriaLabel(label), h.Title(label)],
+                },
+                icon(h, glyph, 'size-4'),
+                h,
+              ),
+            ),
+          ],
+        )
+
+/** Asks before Nodes are sold: the sale waits for Enter or the button. */
+export const sellBar = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const ids = model.confirmSell
+  if (!ids) return h.empty
+  const refund = model.game.nodes
+    .filter((node) => ids.includes(node.id))
+    .reduce((total, node) => total + refundOf(model.game, node), 0)
+  return h.div(
+    [
+      h.Key('sell'),
+      h.Class(
+        'pointer-events-auto enter-down flex items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
+      ),
+    ],
+    [
+      h.span(
+        [],
         [
-          h.Key('selection'),
-          h.Class(
-            'pointer-events-auto enter-down flex items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
-          ),
+          `Sell ${ids.length === 1 ? '1 Node' : `${ids.length} Nodes`}${refund > 0 ? ` for ${money(refund)}` : ''}?`,
         ],
-        [
-          h.span([h.Class(FIGURE)], [`${model.selection.length} selected`]),
-          button(
-            { onClick: Message.PlaybookSaved(), size: 'sm' },
-            [icon(h, BookCopy, 'size-3.5'), 'Save Playbook'],
-            h,
-          ),
-          button({ onClick: Message.SelectionCleared(), size: 'sm', variant: 'ghost' }, 'Clear', h),
-        ],
-      )
+      ),
+      button(
+        { onClick: Message.SellConfirmed(), size: 'sm', variant: 'destructive' },
+        [icon(h, Trash2, 'size-3.5'), 'Sell'],
+        h,
+      ),
+      button({ onClick: Message.SellDismissed(), size: 'sm', variant: 'ghost' }, 'Cancel', h),
+    ],
+  )
+}
 
 /** Shown while a Playbook follows the pointer. */
 export const stampBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const playbook = model.stamping === null ? null : model.founder.playbooks[model.stamping]
+  const playbook = stampedPlaybook(model)
   return playbook
     ? h.div(
         [

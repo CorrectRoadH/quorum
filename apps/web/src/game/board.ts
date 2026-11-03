@@ -118,7 +118,7 @@ export type BoardEvents = Readonly<{
   /** Shift-click: add a Node to the selection, or take it out. */
   onNodeToggle: (nodeId: string) => void
   /** Shift-drag on empty space: select every Node the box touches. */
-  onBox: (ids: ReadonlyArray<string>) => void
+  onBox: (ids: ReadonlyArray<string>, mode: 'replace' | 'add' | 'subtract') => void
 }>
 
 /** A Playbook following the pointer: its Nodes relative to the top-left corner. */
@@ -1803,7 +1803,17 @@ type Gesture =
       moved: boolean
       cut: Readonly<{ from: string; to: string }> | null
     }
-  | { kind: 'node'; id: string; dx: number; dy: number; x: number; y: number; moved: boolean }
+  | {
+      kind: 'node'
+      id: string
+      dx: number
+      dy: number
+      x: number
+      y: number
+      moved: boolean
+      /** Grabbed by the selection frame, not by a card: a tap changes nothing. */
+      frame?: boolean
+    }
   | { kind: 'link'; from: string; at: Pt }
   | { kind: 'box'; from: Pt; at: Pt }
   | null
@@ -2056,11 +2066,42 @@ class BoardController {
   private nodes(): ReadonlyArray<GameNode> {
     const nodes = this.state?.game.nodes ?? []
     const dragged = this.dragged
-    return dragged
-      ? nodes.map((node) =>
-          node.id === dragged.id ? { ...node, x: dragged.x, y: dragged.y } : node,
-        )
-      : nodes
+    if (!dragged) return nodes
+    const lead = nodes.find((node) => node.id === dragged.id)
+    const group = this.groupOf(dragged.id)
+    const dx = lead ? dragged.x - lead.x : 0
+    const dy = lead ? dragged.y - lead.y : 0
+    return nodes.map((node) =>
+      node.id === dragged.id
+        ? { ...node, x: dragged.x, y: dragged.y }
+        : group.includes(node.id)
+          ? { ...node, x: node.x + dx, y: node.y + dy }
+          : node,
+    )
+  }
+
+  /** The frame around a multi-selection, with room around the cards. */
+  private selectionFrame(): Readonly<{ x: number; y: number; w: number; h: number }> | null {
+    const selection = this.state?.selection ?? []
+    if (selection.length < 2) return null
+    const cards = this.shown()
+    const members = selection.flatMap((id) => cards.get(id) ?? [])
+    if (members.length < 2) return null
+    const pad = 14
+    const left = Math.min(...members.map((node) => node.x)) - pad
+    const top = Math.min(...members.map((node) => node.y)) - pad
+    return {
+      x: left,
+      y: top,
+      w: Math.max(...members.map((node) => node.x + CARD_W)) + pad - left,
+      h: Math.max(...members.map((node) => node.y + heightOf(node.type))) + pad - top,
+    }
+  }
+
+  /** The Nodes that move with this one: the whole selection when it is part of it. */
+  private groupOf(id: string): ReadonlyArray<string> {
+    const selection = this.state?.selection ?? []
+    return selection.length > 1 && selection.includes(id) ? selection : [id]
   }
 
   /** The Nodes where their cards are drawn, so wires stay attached while cards glide. */
@@ -2163,11 +2204,24 @@ class BoardController {
     const key = `${this.routedFor}/${dragged?.id}:${dragged?.x}:${dragged?.y}/${state.placing}/${state.stamp ? 'stamp' : ''}/${pointer.x}:${pointer.y}`
     if (key === this.landingKey) return this.landing
     this.landingKey = key
-    const others = state.game.nodes.filter((node) => node.id !== dragged?.id).map(boxOf)
+    const group = dragged ? this.groupOf(dragged.id) : []
+    const others = state.game.nodes.filter((node) => !group.includes(node.id)).map(boxOf)
     const held = state.game.nodes.find((node) => node.id === dragged?.id)
+    const members = state.game.nodes.filter((node) => group.includes(node.id))
+    // The group lands as one box, and the lead card keeps its place inside it.
+    const left = Math.min(...members.map((node) => node.x))
+    const top = Math.min(...members.map((node) => node.y))
     this.landing =
       dragged && held
-        ? freeSpot(others, { x: dragged.x, y: dragged.y, w: CARD_W, h: heightOf(held.type) })
+        ? (() => {
+            const spot = freeSpot(others, {
+              x: left + dragged.x - held.x,
+              y: top + dragged.y - held.y,
+              w: Math.max(...members.map((node) => node.x + CARD_W)) - left,
+              h: Math.max(...members.map((node) => node.y + heightOf(node.type))) - top,
+            })
+            return { x: held.x + spot.x - left, y: held.y + spot.y - top }
+          })()
         : state.stamp
           ? freeSpot(others, {
               x: pointer.x,
@@ -2299,6 +2353,29 @@ class BoardController {
         if (this.selectedLink && this.onBadge(point)) {
           this.events.onUnlink(this.selectedLink.from, this.selectedLink.to)
           this.selectedLink = null
+          return
+        }
+        // Inside the frame of a multi-selection, a drag takes the whole group.
+        const frame = this.selectionFrame()
+        const lead = this.nodes().find((entry) => this.state?.selection[0] === entry.id)
+        if (
+          frame &&
+          lead &&
+          point.x >= frame.x &&
+          point.x <= frame.x + frame.w &&
+          point.y >= frame.y &&
+          point.y <= frame.y + frame.h
+        ) {
+          this.gesture = {
+            kind: 'node',
+            id: lead.id,
+            dx: point.x - lead.x,
+            dy: point.y - lead.y,
+            x: event.clientX,
+            y: event.clientY,
+            moved: false,
+            frame: true,
+          }
           return
         }
         if (this.hoverLink) {
@@ -2447,6 +2524,8 @@ class BoardController {
           this.dragged = { id: gesture.id, x: landing.x, y: landing.y }
           this.syncCards()
           this.events.onNodeMove(gesture.id, landing.x, landing.y)
+        } else if (gesture.frame) {
+          this.dragged = null
         } else {
           this.dragged = null
           if (event.shiftKey) this.events.onNodeToggle(gesture.id)
@@ -2480,6 +2559,7 @@ class BoardController {
                 node.y + heightOf(node.type) > top,
             )
             .map((node) => node.id),
+          event.altKey ? 'subtract' : event.ctrlKey || event.metaKey ? 'add' : 'replace',
         )
       }
     }
@@ -2968,6 +3048,26 @@ class BoardController {
       }
     }
 
+    const frame = this.selectionFrame()
+    if (frame) {
+      this.overlay
+        .roundRect(frame.x, frame.y, frame.w, frame.h, 6)
+        .fill({ color: colors.accent, alpha: 0.04 })
+        .stroke({ color: colors.accent, width: 1.5, alpha: 0.85 })
+      // Square handles on the corners, as in a design tool.
+      const size = 8
+      for (const [cx, cy] of [
+        [frame.x, frame.y],
+        [frame.x + frame.w, frame.y],
+        [frame.x, frame.y + frame.h],
+        [frame.x + frame.w, frame.y + frame.h],
+      ] as const)
+        this.overlay
+          .rect(cx - size / 2, cy - size / 2, size, size)
+          .fill({ color: 0xffffff })
+          .stroke({ color: colors.accent, width: 1.5 })
+    }
+
     if (gesture?.kind === 'box') {
       const left = Math.min(gesture.from.x, gesture.at.x)
       const top = Math.min(gesture.from.y, gesture.at.y)
@@ -3013,17 +3113,30 @@ class BoardController {
             }
           : undefined
     if (held && landing && (landing.x !== held.x || landing.y !== held.y)) {
-      silhouette(
-        this.overlay,
-        COMPONENTS[held.type].group,
-        landing.x,
-        landing.y,
-        CARD_W,
-        heightOf(held.type),
-        0,
-      )
-        .fill({ color: colors.accent, alpha: 0.08 })
-        .stroke({ color: colors.accent, width: 2, alpha: 0.7 })
+      const group = gesture?.kind === 'node' && this.dragged ? this.groupOf(this.dragged.id) : []
+      const from = state.game.nodes.find((node) => node.id === this.dragged?.id)
+      const outlines =
+        group.length > 1 && from
+          ? state.game.nodes
+              .filter((node) => group.includes(node.id))
+              .map((node) => ({
+                type: node.type,
+                x: node.x + landing.x - from.x,
+                y: node.y + landing.y - from.y,
+              }))
+          : [{ type: held.type, x: landing.x, y: landing.y }]
+      for (const outline of outlines)
+        silhouette(
+          this.overlay,
+          COMPONENTS[outline.type].group,
+          outline.x,
+          outline.y,
+          CARD_W,
+          heightOf(outline.type),
+          0,
+        )
+          .fill({ color: colors.accent, alpha: 0.08 })
+          .stroke({ color: colors.accent, width: 2, alpha: 0.7 })
     }
 
     if (this.ghost.visible)
