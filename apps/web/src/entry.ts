@@ -1,13 +1,18 @@
 import { Runtime } from 'foldkit'
 import { init, Message, Model, subscriptions, update, view } from './app/main.ts'
 import { startMotion } from './game/motion.ts'
+import { publish, registerWebMcp } from './game/webmcp.ts'
 import { ApiRpc } from './platform/rpc.ts'
 import './styles.css'
 
 const application = Runtime.makeApplication({
   Model,
   init,
-  update,
+  update: (model, message) => {
+    const result = update(model, message)
+    publish(result.model)
+    return result
+  },
   view,
   subscriptions,
   routing: {
@@ -26,5 +31,6 @@ addEventListener('pointerdown', () => (root.dataset['input'] = 'pointer'), true)
 
 // Foldkit replaces the container it renders into, so motion watches the body.
 startMotion(document.body)
+registerWebMcp()
 
 Runtime.run(application)
