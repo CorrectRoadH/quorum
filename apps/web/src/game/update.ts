@@ -189,6 +189,7 @@ import {
   type Tone,
   type Tradeoff,
   type TradeoffOption,
+  halted,
   offCompany,
   stampedPlaybook,
   type ChallengeRun,
@@ -318,6 +319,18 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, void, ApiRpc> 
 type Result = Update.Return<Model, Message, ApiRpc>
 type AnyCommand = NonNullable<Result['commands']>[number]
 
+/** The panel under the open one: the Glossary goes back to where it opened, Settings on the board to the game menu. */
+const closePanel = (model: Model): Model => ({
+  ...model,
+  panel:
+    model.panel === 'glossary'
+      ? model.glossaryReturn
+      : model.panel === 'settings' && onBoard(model.route)
+        ? 'menu'
+        : 'none',
+  glossaryReturn: 'none',
+})
+
 const sync = (model: Model): AnyCommand =>
   SyncBoard({
     game: model.game,
@@ -329,7 +342,7 @@ const sync = (model: Model): AnyCommand =>
     stamp: stampOf(model),
     history: model.nodeHistory,
     region: model.region,
-    paused: model.paused,
+    paused: halted(model),
     cue: cueNode(model),
   })
 
@@ -1371,7 +1384,6 @@ const MORE_ACTIONS: Record<MoreItem, Message> = {
   dashboard: Message.PanelOpened({ panel: 'dashboard' }),
   help: Message.PanelOpened({ panel: 'help' }),
   glossary: Message.GlossaryOpened({ id: null }),
-  settings: Message.PanelOpened({ panel: 'settings' }),
   undo: Message.UndoChosen(),
   redo: Message.RedoChosen(),
   tidy: Message.BoardTidied(),
@@ -1928,12 +1940,10 @@ const handle = (model: Model, message: Message): Result =>
               : model.buildGroup !== null
                 ? { ...model, buildGroup: null }
                 : model.panel !== 'none'
-                  ? {
-                      ...model,
-                      panel: model.panel === 'glossary' ? model.glossaryReturn : 'none',
-                      glossaryReturn: 'none',
-                    }
-                  : { ...model, selected: null }
+                  ? closePanel(model)
+                  : model.selected !== null
+                    ? { ...model, selected: null }
+                    : { ...model, panel: 'menu' }
           return { model: next, commands: [sync(next)] }
         }
         case 'r':
@@ -2906,19 +2916,15 @@ const handle = (model: Model, message: Message): Result =>
         researchFocus: null,
         dashboardHover: null,
       }
-      return { model: panel === 'inbox' ? reading({ ...opened, folder: 'action' }) : opened }
+      const next = panel === 'inbox' ? reading({ ...opened, folder: 'action' }) : opened
+      return { model: next, commands: [sync(next)] }
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
-    PanelClosed: () =>
-      model.exited
-        ? leaveExited(model, 'found')
-        : {
-            model: {
-              ...model,
-              panel: model.panel === 'glossary' ? model.glossaryReturn : 'none',
-              glossaryReturn: 'none',
-            },
-          },
+    PanelClosed: () => {
+      if (model.exited) return leaveExited(model, 'found')
+      const next = closePanel(model)
+      return { model: next, commands: [sync(next)] }
+    },
 
     LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
     MoreMenuChanged: ({ message }) => foldMoreMenu(model, message),

@@ -24,7 +24,6 @@ import {
   Timer,
   TriangleAlert,
   Redo2,
-  Settings,
   Undo2,
   Users,
   UsersRound,
@@ -44,7 +43,6 @@ import {
 } from '@quorum/simulation/catalog'
 import { openRegions, regional } from '@quorum/simulation/regions'
 import { canRaise } from '@quorum/simulation/actions'
-import { exitOffers } from '@quorum/simulation/exit'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@quorum/simulation/lookups'
 import { limitingPool } from '@quorum/simulation/studies'
@@ -64,7 +62,7 @@ import { itemName } from '@quorum/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { clock as mmss, compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import { ledgerOf, offCompany, type Model } from '@/game/model.ts'
+import { exitLegacy, offCompany, type Model } from '@/game/model.ts'
 import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
 import { moreMenu, type MoreItem } from '@/game/more.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
@@ -414,11 +412,11 @@ const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
         [
           button(
             {
-              onClick: Message.TitleOpened(),
+              onClick: Message.PanelOpened({ panel: 'menu' }),
               variant: 'ghost',
               size: 'icon-sm',
               className: '-ml-1.5 text-muted-foreground',
-              attributes: [h.AriaLabel('Title screen'), h.Title('Title screen')],
+              attributes: [h.AriaLabel('Menu (Esc)'), h.Title('Menu (Esc)')],
             },
             icon(h, Menu, 'size-4'),
             h,
@@ -804,13 +802,6 @@ const desktopOnly = (children: ReadonlyArray<Html>, h: HtmlBuilder<Message>): Ht
 const divider = (h: HtmlBuilder<Message>): Html =>
   h.div([h.Class('mx-0.5 h-6 w-px bg-hairline compact:hidden')], [])
 
-/** The most Legacy an Exit pays now, or null while no Exit is on the table. */
-const exitLegacy = (model: Model): number | null => {
-  if (offCompany(model) || model.exited) return null
-  const offers = exitOffers(model.game, ledgerOf(model))
-  return offers.length === 0 ? null : Math.max(...offers.map((offer) => offer.legacy))
-}
-
 /** The Exit button, shown while an Exit is on the table; its badge is the best Legacy. */
 const exitButton = (model: Model, h: HtmlBuilder<Message>): Html => {
   const legacy = exitLegacy(model)
@@ -857,7 +848,6 @@ const MORE: Record<MoreItem, Readonly<{ label: string; glyph: IconNode }>> = {
   dashboard: { label: 'Dashboard', glyph: ChartLine },
   help: { label: 'How to play', glyph: CircleHelp },
   glossary: { label: 'Glossary', glyph: BookOpen },
-  settings: { label: 'Settings', glyph: Settings },
   undo: { label: 'Undo', glyph: Undo2 },
   redo: { label: 'Redo', glyph: Redo2 },
   tidy: { label: 'Tidy by zone', glyph: LayoutGrid },
@@ -871,7 +861,6 @@ const moreItems = (model: Model): ReadonlyArray<MoreItem> => [
   ...(has(model.game, 'metrics') ? (['dashboard'] as const) : []),
   'help',
   ...(shown(model, 'glossary') ? (['glossary'] as const) : []),
-  'settings',
   ...(shown(model, 'undo') ? (['undo', 'redo'] as const) : []),
   'tidy',
   'fit',
@@ -1064,13 +1053,6 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 glowing(model, 'glossary'),
               )
             : h.empty,
-          toolButton(
-            'Settings',
-            Settings,
-            Message.PanelOpened({ panel: model.panel === 'settings' ? 'none' : 'settings' }),
-            model.panel === 'settings',
-            h,
-          ),
           ...(shown(model, 'undo')
             ? [
                 divider(h),

@@ -6,7 +6,7 @@ import { BUILD_GROUPS, type BuildGroup } from '@quorum/simulation/catalog'
 import { Progress, SANDBOX_IDS } from '@quorum/simulation/sandbox'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { solveFlow } from '@quorum/simulation/solve'
-import { HistoryRow } from '@quorum/simulation/exit'
+import { HistoryRow, exitOffers } from '@quorum/simulation/exit'
 import { Founder } from '@quorum/simulation/founder'
 import { Playbook } from '@quorum/simulation/playbook'
 import { ChallengeResult, RunTotals } from '@quorum/simulation/challenges'
@@ -50,6 +50,7 @@ export const Panel = Schema.Literals([
   'dev',
   'passed',
   'challenge',
+  'menu',
   'settings',
   'glossary',
   'inbox',
@@ -412,6 +413,20 @@ export const ledgerOf = (model: Model): Ledger => ({
 /** The board is not the Company: a Sandbox or a Challenge is open. */
 export const offCompany = (model: Model): boolean =>
   model.sandbox !== null || model.challenge !== null
+
+/** The most Legacy an Exit pays now, or null while no Exit is on the table. */
+export const exitLegacy = (model: Model): number | null => {
+  if (offCompany(model) || model.exited) return null
+  const offers = exitOffers(model.game, ledgerOf(model))
+  return offers.length === 0 ? null : Math.max(...offers.map((offer) => offer.legacy))
+}
+
+/** The game menu, or the Settings it opens, is over the board. */
+export const inMenu = (model: Model): boolean =>
+  model.panel === 'menu' || model.panel === 'settings'
+
+/** The clock holds still: the player paused it, or the game menu is open. */
+export const halted = (model: Model): boolean => model.paused || inMenu(model)
 
 /** The Playbook that follows the pointer, if any. */
 export const stampedPlaybook = (model: Model): Playbook | null =>

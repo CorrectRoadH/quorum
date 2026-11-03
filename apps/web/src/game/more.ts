@@ -7,7 +7,6 @@ export type MoreItem =
   | 'dashboard'
   | 'help'
   | 'glossary'
-  | 'settings'
   | 'undo'
   | 'redo'
   | 'tidy'

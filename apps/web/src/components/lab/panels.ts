@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Copy, Download, Trash2, X } from 'lucide'
+import { Copy, DoorOpen, Download, House, Play, Settings, Trash2, X } from 'lucide'
 import { offer } from '@quorum/simulation/actions'
 import { PRE_IPO_STAGE } from '@quorum/simulation/ipo'
 import { INCIDENTS, INCIDENT_IDS } from '@quorum/simulation/catalog'
@@ -7,7 +7,7 @@ import { eraOf, isFinalEra, nextEra } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from '@/game/cheats.ts'
 import { clock, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import type { Model } from '@/game/model.ts'
+import { exitLegacy, type Model } from '@/game/model.ts'
 import { speedsOf } from '@/game/update.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
@@ -205,6 +205,50 @@ export const helpPanel = (h: HtmlBuilder<Message>): Html =>
       footer([primaryButton('Start building', Message.PanelClosed(), h)], h),
     ],
     'max-w-[980px]',
+    h,
+  )
+
+/* ---------- game menu ---------- */
+
+const menuItem = (
+  label: string,
+  glyph: Parameters<typeof icon>[1],
+  message: Message,
+  h: HtmlBuilder<Message>,
+  isPrimary = false,
+) =>
+  button(
+    {
+      onClick: message,
+      variant: isPrimary ? 'default' : 'outline',
+      size: 'lg',
+      className: 'h-11 w-full justify-start gap-2.5 px-3.5',
+      attributes: [h.Key(label)],
+    },
+    [icon(h, glyph, 'size-[18px]'), label],
+    h,
+  )
+
+/** The game menu over the board. The clock holds still while it is open. */
+export const menuPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
+  shell(
+    'Menu',
+    [],
+    [
+      h.div(
+        [h.Class('flex flex-col gap-2 px-5 pt-1 pb-5')],
+        [
+          menuItem('Resume', Play, Message.PanelClosed(), h, true),
+          menuItem('Settings', Settings, Message.PanelOpened({ panel: 'settings' }), h),
+          menuItem('Export playtest log', Download, Message.LogExported(), h),
+          exitLegacy(model) === null
+            ? h.empty
+            : menuItem('Exit company', DoorOpen, Message.PanelOpened({ panel: 'exit' }), h),
+          menuItem('Title screen', House, Message.TitleOpened(), h),
+        ],
+      ),
+    ],
+    'max-w-[320px]',
     h,
   )
 

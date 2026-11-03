@@ -5,7 +5,7 @@ import { Option, Schema } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
 import { Subscription } from 'foldkit'
 import { Message } from './message.ts'
-import type { Model } from './model.ts'
+import { halted, type Model } from './model.ts'
 import { onBoard } from './route.ts'
 import { TICK_MS } from './update.ts'
 
@@ -163,7 +163,9 @@ export const subscriptions = {
     tick: entry(
       { running: Schema.Boolean },
       {
-        modelToDependencies: (model: Model) => ({ running: onBoard(model.route) && !model.paused }),
+        modelToDependencies: (model: Model) => ({
+          running: onBoard(model.route) && !halted(model),
+        }),
         dependenciesToStream: ({ running }: { running: boolean }) =>
           running ? Stream.tick(TICK_MS).pipe(Stream.map(() => Message.Ticked())) : Stream.empty,
       },

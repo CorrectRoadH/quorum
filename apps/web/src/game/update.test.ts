@@ -51,6 +51,34 @@ test('dropping an engineer on another team moves them', () => {
   expect(dropped.game.engineers.find((engineer) => engineer.id === 'e1')?.team).toBe('t2')
 })
 
+test('the menu button opens a menu over the board that holds the clock, and Escape walks back out', () => {
+  const key = Message.KeyPressed({ key: 'Escape' })
+  const opened = update(inLab(), Message.PanelOpened({ panel: 'menu' }))
+  expect(opened.model.route).toEqual(AppRoute.Company())
+  expect(opened.model.paused).toBe(false)
+  expect(opened.commands).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'SyncBoard',
+        args: expect.objectContaining({ paused: true }),
+      }),
+    ]),
+  )
+  const settings = update(opened.model, Message.PanelOpened({ panel: 'settings' })).model
+  expect(update(settings, key).model.panel).toBe('menu')
+  const resumed = update(opened.model, key)
+  expect(resumed.model.panel).toBe('none')
+  expect(resumed.commands).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'SyncBoard',
+        args: expect.objectContaining({ paused: false }),
+      }),
+    ]),
+  )
+  expect(update(resumed.model, key).model.panel).toBe('menu')
+})
+
 describe('copy, cut, paste, and select all', () => {
   const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
     messages.reduce((current, message) => update(current, message).model, model)

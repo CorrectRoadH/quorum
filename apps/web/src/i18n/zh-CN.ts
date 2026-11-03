@@ -31,6 +31,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   Back: '返回',
   Close: '关闭',
   'Close (Esc)': '关闭（Esc）',
+  'Menu (Esc)': '菜单（Esc）',
   Cancel: '取消',
   Confirm: '确认',
   Delete: '删除',
