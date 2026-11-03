@@ -127,8 +127,8 @@ export const subscriptionsForRoot = (getTrackRoot: () => Document | ShadowRoot) 
       {
         dragActivity: DragActivity,
         id: S.String,
-        min: S.Number,
-        max: S.Number,
+        min: S.Finite,
+        max: S.Finite,
       },
       {
         modelToDependencies: (model) => ({

@@ -124,7 +124,7 @@ describe('Exits', () => {
 
 describe('the Founder record', () => {
   test('decodes from an empty object, so an old player starts empty', () => {
-    const founder = Schema.decodeUnknownSync(FounderSchema)({})
+    const founder = Schema.decodeSync(FounderSchema)({})
     expect(founder.legacy).toBe(0)
     expect(founder.ventures).toEqual(['b2b-saas'])
     expect(founder.history).toEqual([])

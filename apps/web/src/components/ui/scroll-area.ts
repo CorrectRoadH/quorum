@@ -126,20 +126,20 @@ const DragState = defineTaggedUnion({
   Idle: {},
   Dragging: {
     axis: S.Literals(['vertical', 'horizontal']),
-    pointer: S.Number,
-    scroll: S.Number,
+    pointer: S.Finite,
+    scroll: S.Finite,
   },
 })
 export type DragState = typeof DragState.Type
 
 export const Model = S.Struct({
   id: S.String,
-  scrollTop: S.Number,
-  scrollLeft: S.Number,
-  scrollHeight: S.Number,
-  scrollWidth: S.Number,
-  clientHeight: S.Number,
-  clientWidth: S.Number,
+  scrollTop: S.Finite,
+  scrollLeft: S.Finite,
+  scrollHeight: S.Finite,
+  scrollWidth: S.Finite,
+  clientHeight: S.Finite,
+  clientWidth: S.Finite,
   dragState: DragState,
 })
 export type Model = typeof Model.Type
@@ -148,32 +148,32 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   ScrolledViewport: {
-    scrollTop: S.Number,
-    scrollLeft: S.Number,
-    scrollHeight: S.Number,
-    scrollWidth: S.Number,
-    clientHeight: S.Number,
-    clientWidth: S.Number,
+    scrollTop: S.Finite,
+    scrollLeft: S.Finite,
+    scrollHeight: S.Finite,
+    scrollWidth: S.Finite,
+    clientHeight: S.Finite,
+    clientWidth: S.Finite,
   },
   MeasuredViewport: {
-    scrollTop: S.Number,
-    scrollLeft: S.Number,
-    scrollHeight: S.Number,
-    scrollWidth: S.Number,
-    clientHeight: S.Number,
-    clientWidth: S.Number,
+    scrollTop: S.Finite,
+    scrollLeft: S.Finite,
+    scrollHeight: S.Finite,
+    scrollWidth: S.Finite,
+    clientHeight: S.Finite,
+    clientWidth: S.Finite,
   },
   PressedThumb: {
     axis: S.Literals(['vertical', 'horizontal']),
-    clientX: S.Number,
-    clientY: S.Number,
+    clientX: S.Finite,
+    clientY: S.Finite,
   },
   PressedTrack: {
     axis: S.Literals(['vertical', 'horizontal']),
-    clientX: S.Number,
-    clientY: S.Number,
+    clientX: S.Finite,
+    clientY: S.Finite,
   },
-  MovedDragPointer: { clientX: S.Number, clientY: S.Number },
+  MovedDragPointer: { clientX: S.Finite, clientY: S.Finite },
   ReleasedDragPointer: {},
 })
 export type Message = typeof Message.Type
@@ -184,7 +184,7 @@ export type Message = typeof Message.Type
  *  through `ScrolledViewport`, so the thumb follows the pointer. Mirrors the
  *  silent no-op when the element is gone (virtual-list precedent). */
 export const ApplyScroll = Command.define('ApplyScroll', {
-  args: { id: S.String, scrollTop: S.Number, scrollLeft: S.Number },
+  args: { id: S.String, scrollTop: S.Finite, scrollLeft: S.Finite },
   messages: [Message.ScrolledViewport],
   execute: ({ id, scrollTop, scrollLeft }) =>
     Effect.sync(() => {
@@ -204,8 +204,8 @@ export const ScrollToPointer = Command.define('ScrollToPointer', {
   args: {
     id: S.String,
     axis: S.Literals(['vertical', 'horizontal']),
-    clientX: S.Number,
-    clientY: S.Number,
+    clientX: S.Finite,
+    clientY: S.Finite,
   },
   messages: [Message.ScrolledViewport],
   execute: ({ id, axis, clientX, clientY }) =>

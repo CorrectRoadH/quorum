@@ -65,7 +65,7 @@ export const Founder = Schema.Struct({
 })
 export type Founder = typeof Founder.Type
 
-export const emptyFounder = (): Founder => Schema.decodeUnknownSync(Founder)({})
+export const emptyFounder = (): Founder => Schema.decodeSync(Founder)({})
 
 type Change = Result.Result<Founder, Refusal>
 const ok = (founder: Founder): Change => Result.succeed(founder)
