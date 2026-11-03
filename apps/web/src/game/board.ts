@@ -103,7 +103,7 @@ import {
   type Route,
 } from './geometry.ts'
 import { compute } from './compute.ts'
-import { HOP, type Wire } from './routing.ts'
+import { HOP, type RoutedLink, type RoutedNode, type Wire } from './routing.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
 
 /* ==========================================================================
@@ -572,6 +572,21 @@ const laneUnder = (from: GameNode, toBottom: number): number =>
 
 const routeOf = (from: GameNode, to: GameNode): Route =>
   route(outPort(from), inPort(to), laneUnder(from, to.y + heightOf(to.type)))
+
+/** How far a card may be from where its links were routed before they take the quick route. */
+const SLACK = 32
+
+/** A path with its start moved by `a` and its end by `b`, each shift fading out along its length. */
+const bent = (path: Route, a: Pt, b: Pt): Route => {
+  const along = [0]
+  for (let index = 1; index < path.length; index += 1)
+    along.push((along[index - 1] as number) + gap(path[index - 1] as Pt, path[index] as Pt))
+  const total = along.at(-1) || 1
+  return path.map((point, index) => {
+    const s = (along[index] as number) / total
+    return { x: point.x + a.x * (1 - s) + b.x * s, y: point.y + a.y * (1 - s) + b.y * s }
+  })
+}
 
 /** The first `t` of a path, by length. */
 /** The middle of a path, measured once per path. */
@@ -1999,12 +2014,21 @@ class BoardController {
   /** Where the held card, new Node or Playbook lands: the nearest spot that keeps clear. */
   private landing: Pt | null = null
   private landingKey = ''
-  /** Routed links, the Nodes where they were routed, and the Design key asked for last. */
+  /** Routed links, the Nodes where they were routed, and the layout key asked for last. */
   private routed = new Map<string, Wire>()
-  private routedNodes = new Map<string, GameNode>()
+  private routedNodes = new Map<string, Pt>()
   private routedFor = ''
-  /** The Game the routes were last checked against. */
+  /** The Game and drag the routes were last checked against. */
   private routedGame: Game | null = null
+  private routedDrag: BoardController['dragged'] = null
+  /** The layout to route next, the one routed last, and whether the worker has one. */
+  private routeWanted: Readonly<{
+    key: string
+    nodes: Array<RoutedNode>
+    links: Array<RoutedLink>
+  }> | null = null
+  private routeDone = ''
+  private routing = false
   private ghostType: ComponentId | null = null
   private ghostLocale: Locale = 'en'
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
@@ -2281,41 +2305,66 @@ class BoardController {
   }
 
   /**
-   * Asks the compute worker to route every link once per change to the Design, not
-   * once per frame. Until it answers, the old routes stand for links whose Nodes did
-   * not move, and the others take the quick route. The key is built once per Game,
-   * since a Game is never changed in place.
+   * Asks the compute worker to route every link once per change to the layout,
+   * with held cards where they are dragged. One layout is on the worker at a
+   * time: when it answers, the newest layout asked for since goes next, so a long
+   * drag on a big board still gets routes as fast as the worker makes them.
    */
   private routes(): Map<string, Wire> {
     const game = this.state?.game
-    if (!game || game === this.routedGame) return this.routed
+    if (!game || (game === this.routedGame && this.dragged === this.routedDrag)) return this.routed
     this.routedGame = game
-    const key = `${game.nodes.map((node) => `${node.id}:${node.type}:${node.x}:${node.y}`).join('|')}#${game.links.map((link) => `${link.from}>${link.to}`).join('|')}`
+    this.routedDrag = this.dragged
+    const placed = this.nodes()
+    const key = `${placed.map((node) => `${node.id}:${node.type}:${node.x}:${node.y}`).join('|')}#${game.links.map((link) => `${link.from}>${link.to}`).join('|')}`
     if (key !== this.routedFor) {
       this.routedFor = key
-      const nodes = game.nodes.map(({ id, type, x, y }) => ({ id, type, x, y }))
-      const links = game.links.map(({ from, to }) => ({ from, to }))
-      void compute('route', { nodes, links }).then((wires) => {
-        if (!wires || this.destroyed) return
-        this.routed = wires
-        this.routedNodes = new Map(game.nodes.map((node) => [node.id, node]))
-      })
+      this.routeWanted = {
+        key,
+        nodes: placed.map(({ id, type, x, y }) => ({ id, type, x, y })),
+        links: game.links.map(({ from, to }) => ({ from, to })),
+      }
+      this.askRoute()
     }
     return this.routed
   }
 
+  private askRoute(): void {
+    const wanted = this.routeWanted
+    if (this.routing || !wanted || wanted.key === this.routeDone) return
+    this.routing = true
+    void compute('route', { nodes: wanted.nodes, links: wanted.links }).then((wires) => {
+      this.routing = false
+      if (this.destroyed) return
+      this.routeDone = wanted.key
+      if (wires) {
+        this.routed = wires
+        this.routedNodes = new Map(wanted.nodes.map((node) => [node.id, node]))
+      }
+      this.askRoute()
+    })
+  }
+
   /**
-   * A link's wire between Nodes where they are drawn. While either card is held
-   * or gliding, the link takes the quick route; it is routed again once both settle.
+   * A link's wire between Nodes where they are drawn. A card that eases toward
+   * where it was routed bends the routed wire to stay on its port. When a card is
+   * further away, as when the worker is behind a fast drag, the link takes the
+   * quick route until its routes arrive.
    */
   private wireOf(from: GameNode, to: GameNode): Wire {
-    const routes = this.routes()
-    const settled = (node: GameNode) => {
-      const entry = this.routedNodes.get(node.id)
-      return entry !== undefined && entry.x === node.x && entry.y === node.y
+    const wire = this.routes().get(`${from.id}>${to.id}`)
+    const a = this.routedNodes.get(from.id)
+    const b = this.routedNodes.get(to.id)
+    if (wire && a && b) {
+      const da = { x: from.x - a.x, y: from.y - a.y }
+      const db = { x: to.x - b.x, y: to.y - b.y }
+      const off = Math.max(Math.abs(da.x), Math.abs(da.y), Math.abs(db.x), Math.abs(db.y))
+      if (off === 0) return wire
+      if (off <= SLACK) {
+        const path = bent(wire.path, da, db)
+        return { path, pieces: [path], hops: [] }
+      }
     }
-    const routed = settled(from) && settled(to) ? routes.get(`${from.id}>${to.id}`) : undefined
-    if (routed) return routed
     const path = routeOf(from, to)
     return { path, pieces: [path], hops: [] }
   }
