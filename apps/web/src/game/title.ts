@@ -475,7 +475,7 @@ const challengesMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Ht
                 challenge.name,
                 challenge.brief,
                 challenge.legacy,
-                challengeOpen(challenge, founder.erasReached, model.passed),
+                challengeOpen(challenge, founder.completed),
               ),
             ),
           ]

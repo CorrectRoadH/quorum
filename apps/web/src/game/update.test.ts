@@ -249,6 +249,21 @@ describe('Challenges', () => {
     expect(offline.challenge?.verification).toBe('offline')
     expect(offline.challenge?.result?.passed).toBe(true)
   })
+
+  test('a locked Challenge URL lands on the Challenge list; a completed one opens', () => {
+    const locked = send(
+      initialModel(),
+      Message.ChangedUrl({ url: at('/challenges/split-the-box') }),
+    )
+    expect(locked.challenge).toBeNull()
+    expect(locked.route).toEqual(AppRoute.Menu({ menu: 'challenges' }))
+    const completed = {
+      ...initialModel(),
+      founder: { ...initialModel().founder, completed: ['hello-world'] },
+    }
+    const opened = send(completed, Message.ChangedUrl({ url: at('/challenges/split-the-box') }))
+    expect(opened.challenge?.id).toBe('split-the-box')
+  })
 })
 
 describe('M9: sound, achievements, glossary, keys', () => {

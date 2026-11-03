@@ -380,7 +380,7 @@ A Board outside any Company that changes nothing in a Company. A guided Sandbox 
 _Avoid_: lab, tutorial, lesson, scenario, creative mode
 
 **Sandbox track**:
-The ordered guided Sandboxes for one Era. Passing a track unlocks that Era's Challenges.
+The ordered guided Sandboxes for one Era.
 _Avoid_: course, campaign, chapter
 
 **Challenge**:
@@ -409,5 +409,5 @@ _Avoid_: leaderboard, ranking, high score
 - **Analytics** turns sampled traffic into **Insight**. Insight buys **Research**.
 - An **Exit** turns **Equity** × **Valuation** into **Legacy**.
 - The **Founder** keeps **Legacy**, **Perks**, and **Playbooks** from one **Company** to the next.
-- A **Sandbox track** holds guided **Sandboxes** for one **Era**. Passing it, or reaching the Era in any **Company**, unlocks that Era's **Challenges**.
+- A **Sandbox track** holds guided **Sandboxes** for one **Era**. **Challenges** form a separate sequence across Eras; completing one opens the next.
 - A **Challenge** result uploads as a **Replay**; the server re-runs it and places each axis on that Challenge's **Histograms**.

@@ -45,8 +45,7 @@ Insight, or Legacy, because a reward would make the Sandbox a required grind
 ### Sandbox tracks
 
 A **Sandbox track** is the ordered set of guided Sandboxes for one Era. Every track is available from
-the start. Inside a track, each Sandbox opens when the player passes the one before it. When the
-player passes every Sandbox in a track, that Era's Challenges unlock ([Rules](#rules)).
+the start. Inside a track, each Sandbox opens when the player passes the one before it.
 
 | Era      | Guided Sandbox       | The problem on the Board                            | The fix it teaches                                    |
 | -------- | -------------------- | --------------------------------------------------- | ----------------------------------------------------- |
@@ -116,8 +115,9 @@ picks a direction, and each player's best results usually come from different de
 
 ### Rules
 
-- An Era's Challenges unlock when the player reaches that Era in any Company or passes that Era's
-  [Sandbox track](#sandbox-tracks).
+- The first Challenge is open from the start. Completing a Challenge opens the next in the global
+  list, including across Era boundaries. Completed Challenges remain open for replay; the daily drill
+  is always open.
 - A Challenge's palette is fixed. Legacy perks do not apply. Every player has the same tools.
 - The seed is fixed. Incidents in a Challenge are scripted and the same for everyone.
 - Results upload as a design plus a seed, and the server re-runs them to verify. The server score is
@@ -131,7 +131,7 @@ picks a direction, and each player's best results usually come from different de
 Each Challenge is inspired by a real event or a real engineering problem. Briefs name the event as
 an inspiration; the numbers are the game's.
 
-| #   | Challenge                      | Unlock   | Inspired by                                                           | The problem                                                          |
+| #   | Challenge                      | Era      | Inspired by                                                           | The problem                                                          |
 | --- | ------------------------------ | -------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | 1   | Hello, World                   | Garage   | Every first deploy                                                    | Serve 20 rps of `page` on one box under $0.50/s                      |
 | 2   | Split the Box                  | Garage   | The first scaling step at most companies                              | App and database share a box; reach 100 rps                          |

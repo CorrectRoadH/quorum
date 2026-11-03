@@ -47,7 +47,7 @@ export const Founder = Schema.Struct({
   keep: withDefault(Schema.Array(ResearchSchema), []),
   playbooks: withDefault(Schema.Array(Playbook), []),
   history: withDefault(Schema.Array(HistoryRow), []),
-  /** Eras reached in any Company: each opens its Challenges (14 "Rules"). */
+  /** Eras reached in any Company. */
   erasReached: withDefault(Schema.Array(Schema.Finite), []),
   /** Challenges completed once, for their badge and first-completion Legacy. */
   completed: withDefault(Schema.Array(Schema.String), []),

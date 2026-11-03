@@ -36,6 +36,7 @@ import {
   advanceRun,
   beginRun,
   challengeById,
+  challengeOpen,
   resultOf,
   stepsOf,
   type Challenge,
@@ -1041,7 +1042,7 @@ const tick = (model: Model): Result => {
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     }
   }
-  // Reaching an Era in a Company opens its Challenges (14 "Rules").
+  // The Founder records each Era reached in a Company.
   if (!offCompany(next) && !next.founder.erasReached.includes(game.stage)) {
     next = { ...next, founder: recordEra(next.founder, game.stage) }
     commands.push(WriteFounder({ founder: next.founder }))
@@ -1450,8 +1451,8 @@ const leaveBoard = (model: Model): Result => {
   return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
 }
 
-/** Opens a route's screen. A board that cannot open (no Company to continue,
- *  an unknown Challenge) leaves the Model as it is. */
+/** Opens a route's screen. A board that cannot open (no Company to continue)
+ *  leaves the Model as it is; a locked Challenge lands on the Challenge list. */
 const open = (model: Model, route: AppRoute): Result =>
   AppRoute.match<Result>(route, {
     Title: () => ({ model: { ...model, route } }),
@@ -1461,7 +1462,13 @@ const open = (model: Model, route: AppRoute): Result =>
       sandbox === 'free'
         ? enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START })
         : enterSandbox(model, GUIDED[sandbox].start(), { id: sandbox, progress: START }),
-    Challenge: ({ challenge }) => enterChallenge(model, challenge),
+    Challenge: ({ challenge }) => {
+      const entry = challengeById(challenge)
+      if (!entry) return { model }
+      return challengeOpen(entry, model.founder.completed)
+        ? enterChallenge(model, challenge)
+        : { model: { ...model, route: AppRoute.Menu({ menu: 'challenges' }) } }
+    },
   })
 
 /** Follows a URL from back, forward, or a link: closes the open board, opens
