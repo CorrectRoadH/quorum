@@ -3,6 +3,9 @@
 /** Sim seconds in a calendar day: one sim second is one calendar minute. */
 export const CALENDAR_DAY = 1_440
 
+/** Dev Hours one engineer makes in a calendar day: one per hour of an 8-hour workday (08). */
+export const DEV_HOURS_PER_DAY = 8
+
 /** The founder produces this share of an engineer's Dev Hours: they also run the company. */
 export const FOUNDER_OUTPUT = 0.8
 

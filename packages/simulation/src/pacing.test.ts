@@ -51,12 +51,14 @@ describe('the Balanced bot at the design pace', { timeout: 60_000 }, () => {
 /*
  * The Balanced bot through Seed (10 "Era 2: Seed") and 40 minutes into Series A
  * (10 "Era 3: Series A"). Growth bounds Seed again: from 5,000 to 25,000 users
- * against a 35,000 market takes about 28 minutes at the design's g, so Series A
- * comes 27–33 minutes after Seed. The bot places a Search Engine and a WAF as
- * soon as it can; uploads wait on Profile photos, which its autopilot has not
- * built by Series A, and so do media, rt and buy. In Series A it researches
+ * against a 35,000 market takes about 28 minutes at the design's g, but the
+ * Team's Features raise growth and the market, so Series A comes 19–26 minutes
+ * after Seed. The bot places a Search Engine and a WAF as soon as it can. Its
+ * autopilot ships Video, Chat, and Checkout in Series A, so media, rt and buy
+ * reach its Design. PHP refuses realtime connections, so once Chat is on the
+ * backlog the bot migrates to Node.js cluster mode. In Series A it researches
  * Multiple zones first, then spreads its App Servers across two zones and gives
- * every data Node a standby, and raises Series B (112–121 min on seeds 1–5).
+ * every data Node a standby, and raises Series B (80–93 min on seeds 1–5).
  * Series C is a placeholder, so the run stops on the clock. Margins at the design's cost indexes are recorded, not asserted.
  */
 describe.skipIf(!SLOW)(

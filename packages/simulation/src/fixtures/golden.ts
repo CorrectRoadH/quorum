@@ -36,7 +36,10 @@ export const GOLDEN_STEPS = 10_000
 // SIM_VERSION 7 (M7): the save gains the founding (Venture, Mutators, perks),
 // banked Legacy, peak users, and the wall clock of the last save. The replay's
 // values are unchanged: with the new fields removed it still hashes to aed6bacd.
-export const GOLDEN_HASH = '2b638fc7'
+// SIM_VERSION 8: one Dev Hour is one engineer-hour, made 8 per calendar day on
+// the Team's calendar, and Features have real sizes and requirements, so the
+// founder's backlog builds at a new pace.
+export const GOLDEN_HASH = 'cbc357f7'
 
 /**
  * The hash of the Game each Challenge's reference solution ends on

@@ -216,22 +216,17 @@ const OPTION_SETS: ReadonlyArray<OptionSet> = [
 
 /**
  * Pairs no reference design separates yet. The GDD separates them on what this
- * test does not score: Go starts instantly where C# warms up, BEAM holds a
- * realtime connection in half the memory, Gin costs 5% CPU for 10% velocity.
- * They wait for the Series A reference designs and the Dev Hours axis (plan
- * B14). The list is exact: a new gap fails, and so does a closed one.
+ * test does not score: BEAM holds a realtime connection in half the memory, and
+ * Axum and Actix each beat the other by 5% (GDD 06: Axum 1.0× CPU and 1.15×
+ * velocity, Actix 0.95× and 1.10×), under the 10% bar. They wait for the Series
+ * A reference designs (plan B14). Go against Kestrel, and Gin, Axum, and Actix
+ * against their bare runtimes, separated once the design pace ran the Team on
+ * the live calendar (SIM_VERSION 8). The list is exact: a new gap fails, and so
+ * does a closed one.
  */
 const KNOWN_GAPS: Readonly<Record<string, ReadonlyArray<string>>> = {
-  runtimes: ['go never beats kestrel', 'beam never beats go', 'beam never beats kestrel'],
-  'go frameworks': ['none never beats gin'],
-  // GDD 06: Axum 1.0× CPU and 1.15× velocity, Actix 0.95× and 1.10×. Each beats the other by
-  // 5%, under the 10% bar; bare Tokio gives up velocity for no CPU, as bare Go does to Gin.
-  'rust frameworks': [
-    'none never beats axum',
-    'none never beats actix',
-    'axum never beats actix',
-    'actix never beats axum',
-  ],
+  runtimes: ['beam never beats go', 'beam never beats kestrel'],
+  'rust frameworks': ['axum never beats actix', 'actix never beats axum'],
 }
 
 /** `a` beats `b` by at least 10% on this score. Lower is better for p99 and errors. */

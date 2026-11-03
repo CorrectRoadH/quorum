@@ -56,12 +56,15 @@ describe('coordination', () => {
   })
 })
 
+/** Sim seconds in a calendar day at the design pace. */
+const DAY = CALENDAR_DAY / DESIGN_TUNING.calendarPace
+
 describe('Dev Hours', () => {
-  test('the founder makes 0.8 Dev Hours per calendar hour at velocity 1', () => {
+  test('the founder makes 6.4 Dev Hours per calendar day at velocity 1', () => {
     const game: Game = { ...newGame(), autopilot: false }
-    expect(devHoursRate(game, at(game), DESIGN_TUNING) * 60).toBeCloseTo(0.8)
+    expect(devHoursRate(game, at(game), DESIGN_TUNING) * DAY).toBeCloseTo(6.4)
     let current = game
-    for (let second = 0; second < 60; second += 1)
+    for (let second = 0; second < DAY; second += 1)
       current = advanceTeam(
         { ...current, time: current.time + 1 },
         at(current),
@@ -69,13 +72,13 @@ describe('Dev Hours', () => {
         DESIGN_TUNING,
       ).game
     // With nothing on the backlog, they go to the pool.
-    expect(current.devHours).toBeCloseTo(0.8)
+    expect(current.devHours).toBeCloseTo(6.4)
   })
 
-  test('the live game makes Dev Hours at its growth pace', () => {
+  test('the live game makes Dev Hours on the same calendar as the design', () => {
     const game = newGame()
     expect(devHoursRate(game, at(game), LIVE_TUNING)).toBeCloseTo(
-      devHoursRate(game, at(game), DESIGN_TUNING) * LIVE_TUNING.pace,
+      devHoursRate(game, at(game), DESIGN_TUNING),
     )
   })
 
@@ -97,7 +100,7 @@ describe('hiring', () => {
     const signed = ok(hire(start, DESIGN_TUNING))
     expect(start.cash - signed.cash).toBe(signingOf(start, 'php'))
     const offer = signed.hires[0]
-    expect(offer && offer.readyAt - signed.time).toBe(CALENDAR_DAY * LANGUAGES.php.hireTime)
+    expect(offer && offer.readyAt - signed.time).toBe(DAY * LANGUAGES.php.hireTime)
     const joined = advanceTeam(
       { ...signed, time: offer?.readyAt ?? 0 },
       at(signed),
@@ -107,7 +110,7 @@ describe('hiring', () => {
     expect(joined.engineers).toHaveLength(1)
     const ramping = teamOutputs(joined, at(joined), DESIGN_TUNING)[0]
     expect(ramping?.effective).toBeCloseTo((effectiveEngineers(2) * (0.8 + 0.3)) / 2)
-    const week: Game = { ...joined, time: joined.time + 7 * CALENDAR_DAY }
+    const week: Game = { ...joined, time: joined.time + 7 * DAY }
     const full = teamOutputs(week, at(week), DESIGN_TUNING)[0]
     expect(full?.effective).toBeCloseTo((effectiveEngineers(2) * (0.8 + 1)) / 2)
   })

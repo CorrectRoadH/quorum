@@ -156,6 +156,9 @@ const POLYGLOT_PRIORITY: ReadonlyArray<ResearchId> = [
   ...PRIORITY.slice(3),
 ]
 
+/** What the Balanced player researches once Chat is on the way and the Stack refuses realtime. */
+const REALTIME_RESEARCH: ReadonlyArray<ResearchId> = ['lang-node', 'node-cluster']
+
 /** The language research Polyglot moves to, and the runtime it moves to. */
 const LANGUAGE_RESEARCH: ReadonlyArray<readonly [ResearchId, RuntimeId]> = [
   ['lang-python', 'gunicorn'],
@@ -477,14 +480,23 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
       next = tried(next, setUnderAttack(next, waf.id, incident?.kind === 'ddos'))
 
   const ready = (id: ResearchId) => !has(next, id) && researchReady(next, id)
+  // Chat's realtime connections need a runtime that holds them, and PHP refuses them all.
+  const chat =
+    next.shipped.includes('chat') ||
+    next.awaiting.includes('chat') ||
+    next.backlog.some((item) => item.ref === 'chat')
+  const realtime =
+    strategy !== 'stubborn' && chat && RUNTIMES[stackOf(next).runtime].connectionKB === null
   const research =
     strategy === 'greedy'
       ? RESEARCH_IDS.filter(ready).toSorted((a, b) => RESEARCH[a].cost - RESEARCH[b].cost)[0]
-      : (strategy === 'polyglot' ? POLYGLOT_PRIORITY : PRIORITY).find(ready)
+      : ((realtime ? REALTIME_RESEARCH : []).find(ready) ??
+        (strategy === 'polyglot' ? POLYGLOT_PRIORITY : PRIORITY).find(ready))
   if (research && next.insight >= RESEARCH[research].cost) next = tried(next, study(next, research))
 
   // PHP-FPM replaces Apache as soon as it is researched. Polyglot moves to the language it
-  // researched last. Either way it is a migration, which the autopilot shifts step by step.
+  // researched last. Once Chat is on the way, a Stack that refuses realtime connections moves
+  // to Node.js cluster mode. Each is a migration, which the autopilot shifts step by step.
   const first = servers(next)[0]
   if (strategy !== 'stubborn' && strategy !== 'greedy' && first && !serviceOf(next).migration) {
     const latest = next.researched.findLast((id) => LANGUAGE_RESEARCH.some(([lang]) => lang === id))
@@ -492,9 +504,11 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
     const target =
       strategy === 'polyglot' && polyglot
         ? polyglot
-        : stackOf(next).runtime === 'mod_php' && has(next, 'php-fpm')
-          ? 'php_fpm'
-          : null
+        : realtime && has(next, 'node-cluster')
+          ? 'node_cluster'
+          : stackOf(next).runtime === 'mod_php' && has(next, 'php-fpm')
+            ? 'php_fpm'
+            : null
     if (target && stackOf(next).runtime !== target)
       next = tried(next, changeStack(next, first.id, { runtime: target }))
   }

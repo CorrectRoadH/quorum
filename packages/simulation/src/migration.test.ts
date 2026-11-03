@@ -169,8 +169,9 @@ describe('migrations', () => {
     const queued = ok(queueFeature(four(), 'pagination'))
     const migrating = ok(changeStack(queued, 'server', { runtime: 'node' }))
     // The Feature is on top: the migration step waits behind it.
-    expect(work(queued, 60).backlog[0]?.spent).toBeCloseTo(0.8)
-    expect(work(migrating, 60).backlog[0]?.spent).toBeCloseTo(0.4)
+    // 5 sim s are a twelfth of a calendar day of the founder's work.
+    expect(work(queued, 5).backlog[0]?.spent).toBeCloseTo(6.4 / 12)
+    expect(work(migrating, 5).backlog[0]?.spent).toBeCloseTo(3.2 / 12)
   })
 
   test('a variant costs a tenth of a language change', () => {

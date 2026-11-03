@@ -24,7 +24,7 @@ export type Tuning = Readonly<{
   incidentGap: number
   /** Sim seconds from the Pre-seed raise to the first incident. */
   firstIncidentAfter: number
-  /** Divides the Team's calendar durations. Dev Hours flow at `pace`, like growth. */
+  /** Divides the Team's calendar durations. Dev Hours flow on the same calendar. */
   calendarPace: number
 }>
 
@@ -45,7 +45,7 @@ export const DESIGN_TUNING: Tuning = {
   pace: 1,
   incidentGap: 720,
   firstIncidentAfter: 600,
-  calendarPace: 1,
+  calendarPace: CALENDAR_PACE,
 }
 
 /** The design's cost index per Era (16 "Cost index"). The live game uses `EraDef.costIndex`. */

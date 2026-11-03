@@ -69,9 +69,9 @@ const shipped = (game: Game, ...features: ReadonlyArray<FeatureId>): Game => ({
 describe('the backlog', () => {
   test('the top item gets the Dev Hours; the next waits', () => {
     const game = ok(queueFeature(ok(queueFeature(preseed(), 'landing-page')), 'pagination'))
-    const after = work(game, 300)
-    // The founder makes 0.8 DH an hour: 4 DH in 300 calendar minutes.
-    expect(after.backlog[0]?.spent).toBeCloseTo(4)
+    // 5 sim s are a twelfth of a calendar day: the founder makes 6.4 / 12 DH.
+    const after = work(game, 5)
+    expect(after.backlog[0]?.spent).toBeCloseTo(6.4 / 12)
     expect(after.backlog[1]?.spent).toBe(0)
   })
 
@@ -83,9 +83,10 @@ describe('the backlog', () => {
       ...second,
       engineers: [{ id: 'e1', team, language: 'php', hiredAt: -1e6 }],
     }
-    const after = work(staffed, 60)
-    expect(after.backlog[0]?.spent).toBeCloseTo(0.8)
-    expect(after.backlog[1]?.spent).toBeCloseTo(1)
+    // A twelfth of a calendar day: the founder makes 6.4 / 12 DH, an engineer 8 / 12.
+    const after = work(staffed, 5)
+    expect(after.backlog[0]?.spent).toBeCloseTo(6.4 / 12)
+    expect(after.backlog[1]?.spent).toBeCloseTo(8 / 12)
   })
 
   test('items move, and the pool rushes one', () => {
@@ -103,9 +104,11 @@ describe('the backlog', () => {
   })
 
   test('Paid plans needs Password login on the way, and Pre-seed Features wait for Pre-seed', () => {
-    expect(Result.isFailure(queueFeature(preseed(), 'paid-plans'))).toBe(true)
+    const signedUp = shipped(preseed(), 'signup-flow')
+    expect(Result.isFailure(queueFeature(preseed(), 'password-login'))).toBe(true)
+    expect(Result.isFailure(queueFeature(signedUp, 'paid-plans'))).toBe(true)
     expect(
-      Result.isSuccess(queueFeature(ok(queueFeature(preseed(), 'password-login')), 'paid-plans')),
+      Result.isSuccess(queueFeature(ok(queueFeature(signedUp, 'password-login')), 'paid-plans')),
     ).toBe(true)
     expect(Result.isFailure(queueFeature({ ...preseed(), stage: 0 }, 'password-login'))).toBe(true)
   })
@@ -242,8 +245,9 @@ describe('Engineering tasks and tech debt', () => {
     const slow = forceIncident(game, solveFlow(game), 'slow-query')
     if (!slow) throw new Error('no slow query')
     const indexed = work(ok(addIndex(slow, 'database')), 1)
-    // The pool paid the 4 DH; the founder's second of work went back into it.
-    expect(indexed.devHours).toBeCloseTo(6, 1)
+    // The pool paid the 4 DH; the founder's second of work (6.4 DH over a
+    // 60 s calendar day) went back into it.
+    expect(indexed.devHours).toBeCloseTo(6 + 6.4 / 60)
     expect(indexed.incident?.remaining ?? 0).toBeLessThanOrEqual(0)
   })
 
@@ -258,7 +262,7 @@ describe('Engineering tasks and tech debt', () => {
     const server = laravel.nodes.find((node) => node.type === 'server')
     if (!server) throw new Error('no server')
     expect(callsOf(laravel, server, 'read', false)['q-read']).toBe(3)
-    const fixedUp = work({ ...ok(queueTask(laravel, 'eager-loading')), devHours: 0 }, 13 * 60)
+    const fixedUp = work({ ...ok(queueTask(laravel, 'eager-loading')), devHours: 0 }, 39 * 60)
     expect(serviceOf(fixedUp).fixes).toContain('eager-loading')
     expect(callsOf(fixedUp, server, 'read', false)['q-read']).toBe(1)
   })
@@ -270,7 +274,7 @@ describe('Engineering tasks and tech debt', () => {
       (teamOutputs(indebted, at(indebted))[0]?.velocity ?? 0) /
       (teamOutputs(clean, at(clean))[0]?.velocity ?? 1)
     expect(ratio).toBeCloseTo(0.8)
-    const refactored = work(ok(queueTask(indebted, 'refactor')), 20 * 60)
+    const refactored = work(ok(queueTask(indebted, 'refactor')), 60 * 60)
     expect(serviceOf(refactored).debt).toBeCloseTo(0.2)
   })
 
@@ -278,7 +282,7 @@ describe('Engineering tasks and tech debt', () => {
     const built = (policy: 'move-fast' | 'quality') => {
       const set = ok(setTeamPolicy(preseed(), 'core', policy, DESIGN_TUNING))
       const queued = ok(queueFeature({ ...set, time: set.time + CALENDAR_DAY }, 'pagination'))
-      return serviceOf(work(queued, 10 * 60)).debt
+      return serviceOf(work(queued, 30 * 60)).debt
     }
     expect(built('move-fast')).toBeGreaterThan(built('quality'))
   })

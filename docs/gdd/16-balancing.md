@@ -218,36 +218,43 @@ playtest knobs in `catalog/tuning.ts`. Tests and bots pass the design values as 
 (`DESIGN_TUNING`, `DESIGN_COST_INDEX`, and the `tuning` parameter of `step`, `growthOf`,
 `directIncidents`, `raise`, and `decline`).
 
-| Topic                   | Live game                                                                                                     | This design                                           | Checked at the design value by                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------- |
-| Growth rate             | `g` × 2 (`PLAYTEST_PACE`)                                                                                     | `g` × 1                                               | `step.test.ts` “user growth at the design pace”          |
-| Incident gap            | 200 sim s mean (`INCIDENT_GAP`)                                                                               | 12 minutes (720 s)                                    | `pacing.ts` bots                                         |
-| First Pre-seed incident | 90 s after the raise (`FIRST_INCIDENT_AFTER`)                                                                 | About 10 minutes (600 s)                              | `pacing.ts` bots                                         |
-| Cost index              | Garage 1, Pre-seed 4, Seed 4, Series A 4                                                                      | Garage 1, Pre-seed 1, Seed 25, Series A 120           | `pacing.ts` margin at Seed and Series A entry (`burnAt`) |
-| Company speeds          | 1×, 3×, 10×                                                                                                   | 1×; 2× and 4× from Legacy                             | Not checked; bots step at 1 s                            |
-| Calendar pace           | Team durations ÷ 24 (`CALENDAR_PACE`): a hire takes 1 sim minute, ramp 7 sim minutes, deploys every 7.5 sim s | One sim second is one calendar minute                 | `pacing.ts` bots, `team.test.ts`                         |
-| Salary index            | Garage 1, Pre-seed 4, Seed 4 (follows the cost index)                                                         | Garage 1, Pre-seed 1, Seed 12 (`DESIGN_SALARY_INDEX`) | `pacing.ts` margin at Seed entry (`burnAt`)              |
+| Topic                   | Live game                                                                                                     | This design                                                                           | Checked at the design value by                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Growth rate             | `g` × 2 (`PLAYTEST_PACE`)                                                                                     | `g` × 1                                                                               | `step.test.ts` “user growth at the design pace”          |
+| Incident gap            | 200 sim s mean (`INCIDENT_GAP`)                                                                               | 12 minutes (720 s)                                                                    | `pacing.ts` bots                                         |
+| First Pre-seed incident | 90 s after the raise (`FIRST_INCIDENT_AFTER`)                                                                 | About 10 minutes (600 s)                                                              | `pacing.ts` bots                                         |
+| Cost index              | Garage 1, Pre-seed 4, Seed 4, Series A 4                                                                      | Garage 1, Pre-seed 1, Seed 25, Series A 120                                           | `pacing.ts` margin at Seed and Series A entry (`burnAt`) |
+| Company speeds          | 1×, 3×, 10×                                                                                                   | 1×; 2× and 4× from Legacy                                                             | Not checked; bots step at 1 s                            |
+| Calendar pace           | Team durations ÷ 24 (`CALENDAR_PACE`): a hire takes 1 sim minute, ramp 7 sim minutes, deploys every 7.5 sim s | Same since `SIM_VERSION` 8: a Team calendar day is 60 sim s, and Dev Hours flow on it | `pacing.ts` bots, `team.test.ts`                         |
+| Salary index            | Garage 1, Pre-seed 4, Seed 4 (follows the cost index)                                                         | Garage 1, Pre-seed 1, Seed 12 (`DESIGN_SALARY_INDEX`)                                 | `pacing.ts` margin at Seed entry (`burnAt`)              |
 
 At the design pace, on seeds 1–5, the Balanced bot reaches each milestone at:
 
 | Milestone      | Measured (sim min) | Target ([10](./10-progression.md#pacing-targets)) |
 | -------------- | ------------------ | ------------------------------------------------- |
 | First research | 2.3                | 2:00                                              |
-| First upgrade  | 7.9                | 0:30                                              |
-| Database split | 7.9                | 5:00                                              |
-| Pre-seed       | 12.4               | 15–20                                             |
-| First hire     | 12.5               | Pre-seed                                          |
-| First Feature  | 18.0               | Not stated                                        |
+| First upgrade  | 7.8                | 0:30                                              |
+| Database split | 7.8                | 5:00                                              |
+| First Feature  | 1.4                | Not stated                                        |
+| Pre-seed       | 10.6               | 15–20                                             |
+| First hire     | 10.7               | Pre-seed                                          |
 | Second server  | Never before Seed  | 8:00                                              |
-| First incident | 18.0–22.4          | About 30                                          |
-| Seed           | 35.4–40.1          | 45–60                                             |
+| First incident | 16.3–20.6          | About 30                                          |
+| Seed           | 27.1–29.3          | 45–60                                             |
 
-Greedy (bigger boxes, cheapest research) reaches Seed at 31–33 minutes, Stubborn at 30–33, Polyglot
-(switches to Node.js through a migration) at 37–40, and Decliner at 43–46. Since M4, Stubborn beats
+These times are from `SIM_VERSION` 8, where the design pace runs the Team's calendar at the live
+pace and Features have [real sizes](./08-team-and-velocity.md#sizes). The founder makes 6.4 DH per
+sim minute, so the 8 DH Landing page ships in under 2 minutes, and the bot reaches Seed with 4
+engineers and 6 Features live. Before, the first Feature shipped at 18 minutes and Seed came at
+35–40.
+
+Before `SIM_VERSION` 8, Greedy (bigger boxes, cheapest research) reached Seed at 31–33 minutes, Stubborn at 30–33, Polyglot
+(switches to Node.js through a migration) at 37–40, and Decliner at 43–46. These were not
+re-measured; the bounds the tests assert below still hold. Since M4, Stubborn beat
 Balanced: Balanced's switch to PHP-FPM is now a migration, and Features build at half speed while
 it runs, so Balanced ships its first Feature at 18 minutes and Stubborn ships two by 12. At the
-design pace a hire takes a calendar day (24 sim minutes), so the hire both bots sign at Pre-seed
-barely joins before Seed. This is recorded, not tuned. At the live pace the Balanced bot raises Pre-seed
+design pace a hire took a calendar day (24 sim minutes), so the hire both bots signed at Pre-seed
+barely joined before Seed. Now a hire takes one sim minute. This is recorded, not tuned. At the live pace the Balanced bot raises Pre-seed
 at 6.3 minutes, ships its first Feature at 7.1, and reaches Seed at 17–21 with 3–4 engineers and
 3–4 Features live. Seed time is bound by user growth, not by the Design: the Garage grows from 150 to
 1,000 users in 12 minutes and Pre-seed from 1,000 to 5,000 in 21, both as this document specifies,
@@ -481,10 +488,19 @@ spike, and 99.40% in a week with one: a 3–10× spike still drops what spare ca
 before these changes), so it still spends its budget, mostly in the minutes a spike or slow query outruns
 its responder.
 
-At the design pace, on seeds 1–5, the Balanced bot raises Series A at 62.7–71.3 sim minutes and Series B
-at 112.2–121.3 (`pacing.test.ts`, `runBot(…, 'balanced', 5)` until 130 minutes). By then its autopilot
-has shipped none of the Series B Features, so `job`, `report` and `ai`, the Warehouse and the GPU Node
-do not appear in a bot Company; `series-b.test.ts` and the Series B Sandboxes play them.
+At the design pace, on seeds 1–5, the Balanced bot raises Series A at 46.5–54.9 sim minutes and Series B
+at 80.1–93.3 (`pacing.test.ts`, `runBot(…, 'balanced', 5)` until 130 minutes; 62.7–71.3 and
+112.2–121.3 before `SIM_VERSION` 8). Its autopilot ships Video, Chat, Checkout, and Notifications
+center in Series A, so `media`, `rt`, and `buy` reach a bot Company. It still ships none of the
+Series B Features, so `job`, `report` and `ai`, the Warehouse and the GPU Node do not appear;
+`series-b.test.ts` and the Series B Sandboxes play them. PHP-FPM holds no realtime connections and
+refuses every `rt` request, which alone costs about 10% of requests. So once Chat is on the backlog,
+the bot researches Node.js cluster mode and migrates to it. At 130 minutes it holds Apdex
+0.951–0.964 with 4 engineers, 42–43 App Servers, and 265,000–305,000 users; on two seeds the
+migration is still at step 3, where `rt` succeeds about 70% of the time. Without the migration it
+held Apdex 0.881–0.904 with 66,000–104,000 users. The Realtime Hub
+([Components](./05-components.md#realtime-hub)) is not built, so a migration is the only way to serve
+`rt`.
 
 ### Series C to Public (M6, batches B15–B22)
 
@@ -504,7 +520,7 @@ do not appear in a bot Company; `series-b.test.ts` and the Series B Sandboxes pl
 | Quarters               | 7 calendar days. Guidance: growth 5/10/20%, margin 10/20/30%, set in the first day. A beat adds 0.5 + 0.25 per level to the multiple, a miss takes 1, a streak adds 1, up to 10 (proposed). Quarter growth is revenue against the quarter's start                                     |
 | Fit the board          | Fit measures the current region tab's Nodes and keeps 380 px clear on the left for the HUD on desktop                                                                                                                                                                                 |
 
-The Balanced bot does not reach Series C: on seed 3 it holds 255,000 users at 200 sim minutes
+The Balanced bot does not reach Series C: before `SIM_VERSION` 8, on seed 3 it held 255,000 users at 200 sim minutes
 (Series A at 62.7, Series B at 112.2, availability 96.3%), far from the 10,000,000 Series C needs.
 M6's exit check (IPO in 9–12 hours) is not measured. `series-c.test.ts` and the Series C Sandboxes play
 the Series C to Public mechanics on built Designs.
@@ -590,21 +606,22 @@ axe-core 4.11 (WCAG 2.0/2.1 A and AA plus best practices), before and after:
 | Lab, panel closed       | 1 violation                                               | 0       |
 | Daily drill (Challenge) | 1 serious `color-contrast` (`.text-ok`, 3.64:1)           | 0       |
 
-### Features: sizes, outcomes, and upkeep (designed, not built)
+### Features: sizes, outcomes, and upkeep (partly built)
 
 [Features](./08-team-and-velocity.md#features) now have real sizes, rolled outcomes, rollouts,
-adoption, measured lift, and upkeep. None of it is built.
+adoption, measured lift, and upkeep. `SIM_VERSION` 8 builds the Dev Hours rate, the sizes, and the
+requirements; the rest is not built.
 
-| Topic         | Current build                                                                               | This design                                                  | What closes it                                                    |
-| ------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Dev Hours     | `effective × velocity × pace / 60` per sim s: about 2 DH per engineer per calendar day live | 8 DH per engineer per calendar day, on the Team's calendar   | DH flow at `calendarPace`, not `pace`; re-run the pacing bots     |
-| Feature sizes | 6 to 120 DH                                                                                 | 4 to 1,440 DH                                                | New `dh` values in `catalog/work.ts`                              |
-| Requirements  | Paid plans, Notifications center, Recommendations only                                      | Every row of the Features table                              | New `requires` values; Data residency also needs an EU region     |
-| Effects       | Certain, at full strength on deploy                                                         | Rolled outcome × rollout × adoption                          | An outcome roll on queue and an `adoption` field per live Feature |
-| Market gains  | Multiply                                                                                    | Add, capped at +100% of the Era market                       | `marketOf` in `features.ts`                                       |
-| Feature Flags | Not built                                                                                   | Seed research and Component; rollout steps; turn off; remove | The Component, a rollout per Feature, and a Remove work item      |
-| A/B testing   | Not built (designed as "Feature effects +20%")                                              | Measures lift against the holdout                            | Counting sampled requests per group on the Analytics tap          |
-| Upkeep        | None                                                                                        | `0.4 × S / (S + 2,000) × (1 + debt)`, max 0.6                | A per-service share taken before the backlog                      |
+| Topic         | Current build                                              | This design                                                  | What closes it                                                    |
+| ------------- | ---------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Dev Hours     | 8 DH per engineer per calendar day, on the Team's calendar | Same                                                         | Built                                                             |
+| Feature sizes | 4 to 960 DH                                                | 4 to 1,440 DH                                                | Data residency (1,440 DH) is not in the catalog                   |
+| Requirements  | Every row of the Features table that is in the catalog     | Every row, and Data residency needs an EU region             | Data residency                                                    |
+| Effects       | Certain, at full strength on deploy                        | Rolled outcome × rollout × adoption                          | An outcome roll on queue and an `adoption` field per live Feature |
+| Market gains  | Multiply                                                   | Add, capped at +100% of the Era market                       | `marketOf` in `features.ts`                                       |
+| Feature Flags | Not built                                                  | Seed research and Component; rollout steps; turn off; remove | The Component, a rollout per Feature, and a Remove work item      |
+| A/B testing   | Not built (designed as "Feature effects +20%")             | Measures lift against the holdout                            | Counting sampled requests per group on the Analytics tap          |
+| Upkeep        | None                                                       | `0.4 × S / (S + 2,000) × (1 + debt)`, max 0.6                | A per-service share taken before the backlog                      |
 
 A rough budget checks that the sizes fit the Eras at the live pace, where a calendar day is one real
 minute. It multiplies each Era's live length by the effective engineers the bots reach:
@@ -617,9 +634,9 @@ minute. It multiplies each Era's live length by the effective engineers the bots
 | Series A | ~28 min     | ~9                  | ~2,000        | 2,320                 |
 
 Before upkeep, a player can build most of each Era's Features but not all of Series A. That is the
-intended choice. Upkeep and Engineering tasks take their share, so the bots must re-measure the
-milestone times before the values are final. At the design pace the Team's calendar is 24× slower
-than live, so Dev Hours are too. This is one more reason to make the live calendar pace the design
-value.
+intended choice. The design pace now runs the Team's calendar at the live pace, so the budget holds
+for the bots too: the Balanced bot reaches Seed with 6 Features live and ships the four cheapest
+Series A Features before Series B. Upkeep is not built, so the times above must be measured again
+when it is.
 
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.

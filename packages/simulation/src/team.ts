@@ -6,6 +6,7 @@ import {
   CI_DEPLOY_MINUTES,
   CODE_REVIEW_FACTOR,
   COORDINATION,
+  DEV_HOURS_PER_DAY,
   ERAS,
   FOUNDER_OUTPUT,
   HIRE_DAYS,
@@ -136,9 +137,10 @@ export const membersOf = (game: Game, team: Team): ReadonlyArray<Engineer> =>
   game.engineers.filter((engineer) => engineer.team === team.id)
 
 /**
- * Dev Hours each team makes (08): effective engineers × velocity / 60, where
- * velocity is the Stack's, slowed by debt, set by the policy, and hit by morale.
- * `pace` speeds Dev Hours as it speeds growth.
+ * Dev Hours each team makes (08): effective engineers × velocity × 8 per
+ * calendar day, where velocity is the Stack's, slowed by debt, set by the
+ * policy, and hit by morale. Dev Hours follow the Team's calendar, so
+ * `calendarPace` speeds them as it speeds hiring and deploys.
  */
 export const teamOutputs = (
   game: Game,
@@ -164,7 +166,8 @@ export const teamOutputs = (
       policyNow(game, team, tuning).velocity *
       morale *
       budgetVelocity(game)
-    return { team, headcount, effective, velocity, rate: (effective * velocity * tuning.pace) / 60 }
+    const rate = (effective * velocity * DEV_HOURS_PER_DAY * tuning.calendarPace) / CALENDAR_DAY
+    return { team, headcount, effective, velocity, rate }
   })
 }
 
