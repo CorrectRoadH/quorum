@@ -24,6 +24,7 @@ const keys = Stream.callback<KeyMessage>((queue) =>
           if (event.defaultPrevented) return
           if (event.key === 'Escape' && document.querySelector('[data-team-drag-active]')) return
           const target = event.target as HTMLElement | null
+          if (target?.closest('[data-language-picker], [role="listbox"]')) return
           if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
           if (event.metaKey || event.ctrlKey || event.altKey) return
           // Arrows and Enter move over the board only when no control has focus.

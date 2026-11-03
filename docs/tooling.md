@@ -43,3 +43,8 @@ pnpm dev:reference
 
 `pnpm deploy` modifies Cloudflare infrastructure. It is not part of routine verification.
 `pnpm dev:reference` uses the same root entrypoint with the `reference` stage; the default stage selects `apps/web`.
+
+## Interface languages
+
+See [Interface languages](i18n.md) for the English/Chinese presentation boundary,
+translation catalog and acceptance checks.

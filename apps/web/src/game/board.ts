@@ -1,3 +1,4 @@
+import { translate, type Locale } from '../i18n/index.ts'
 import {
   Activity,
   Archive,
@@ -126,6 +127,7 @@ export type Stamp = ReadonlyArray<
 >
 
 export type BoardState = Readonly<{
+  locale: Locale
   game: Game
   ledger: Ledger
   selected: string | null
@@ -1319,6 +1321,7 @@ class NodeView {
     colors: Palette,
     history: ReadonlyArray<number>,
     region: Region | null,
+    locale: Locale,
   ): void {
     const own = ledger.nodes[node.id]
     if (!own) return
@@ -1334,6 +1337,7 @@ class NodeView {
       this.drawRing()
     }
     const digest = JSON.stringify([
+      locale,
       pressed,
       rows,
       footer,
@@ -1455,7 +1459,7 @@ class NodeView {
       const { x, y, w, h } = rect
       const ink =
         footer.tone === 'muted' ? colors.muted : footer.tone === 'accent' ? colors.onFill : 0xffffff
-      this.foot.text = footer.text
+      this.foot.text = translate(locale, footer.text)
       // Center the glyph and text together.
       const start = x + (w - (14 + 6 + this.foot.width)) / 2
       const mid = y + h / 2 + (footer.tone === 'muted' ? 1 : sink)
@@ -1536,12 +1540,12 @@ class NodeView {
         )
       right -= width + 7
     }
-    this.level.text = levelOf(game, node, region)
+    this.level.text = translate(locale, levelOf(game, node, region))
     this.level.style.fill = colors.muted
     this.level.position.set(right, HEAD / 2)
     if (this.level.text) right -= this.level.width + 8
     // A long title gives way to the level: it is cut with an ellipsis before the two touch.
-    fitText(this.title, title, right - 4 - this.title.x)
+    fitText(this.title, translate(locale, title), right - 4 - this.title.x)
 
     rows.forEach((row, index) => {
       const mark = this.glyphs[index]
@@ -1553,10 +1557,14 @@ class NodeView {
       else if (row.pool) paint(mark, POOL_ICONS[row.pool], POOLS[row.pool].color)
       else paint(mark, ROW_ICONS[row.glyph], colors.muted)
       name.style.fill = row.logo ? colors.ink : colors.muted
-      value.text = row.value
+      value.text = translate(locale, row.value)
       value.style.fill = toneOf(row.tone)
       // A long name gives way to the value: it is cut with an ellipsis before the two touch.
-      fitText(name, row.name, value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x)
+      fitText(
+        name,
+        translate(locale, row.name),
+        value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x,
+      )
       valueMark.visible = row.valueLogo !== undefined
       if (row.valueLogo) {
         paintLogo(valueMark, row.valueLogo, colors.ink)
@@ -1758,6 +1766,7 @@ class BoardController {
   /** The Model's Nodes by id, where they are in the Design (not where they are drawn). */
   private modelNodes = new Map<string, GameNode>()
   private ghostType: ComponentId | null = null
+  private ghostLocale: Locale = 'en'
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
   private wireEnd: Pt | null = null
   /** The Node a pulled wire is snapped to, and how far its highlight has come in. */
@@ -2465,6 +2474,7 @@ class BoardController {
         colors,
         state.history[node.id] ?? [],
         state.region,
+        state.locale,
       )
       view.dim = path !== null && !path.has(node.id)
     }
@@ -2528,7 +2538,9 @@ class BoardController {
 
   private syncGhost(): void {
     const type = this.state?.placing ?? null
-    if (type === this.ghostType) return
+    const locale = this.state?.locale ?? 'en'
+    if (type === this.ghostType && locale === this.ghostLocale) return
+    this.ghostLocale = locale
     this.ghostType = type
     this.ghost.removeChildren().forEach((child) => child.destroy({ children: true }))
     this.ghost.visible = type !== null
@@ -2543,7 +2555,7 @@ class BoardController {
     silhouette(frame, group, 0, 0, CARD_W, height).stroke({ color: hue, width: 2 })
     medallion(frame, group, hue, colors)
     const name = label(15, SANS, '700')
-    name.text = COMPONENTS[type].name
+    name.text = translate(locale, COMPONENTS[type].name)
     name.style.fill = colors.ink
     name.anchor.set(0, 0.5)
     name.position.set(TITLE_X, HEAD / 2)
@@ -2743,11 +2755,17 @@ class BoardController {
         heightOf(bottleneck.type),
         pad,
       ).stroke({ color: colors.warn, width: 2.5, alpha: pulse })
-      const tag = 'BOTTLENECK'
-      this.overlay
-        .roundRect(bottleneck.x - pad + 6, bottleneck.y - pad - 18, tag.length * 6.4 + 12, 15, 5)
-        .fill({ color: colors.warn, alpha: 0.95 })
+      const tag = translate(state.locale, 'BOTTLENECK')
       this.bottleneckTag.text = tag
+      this.overlay
+        .roundRect(
+          bottleneck.x - pad + 6,
+          bottleneck.y - pad - 18,
+          this.bottleneckTag.width + 12,
+          15,
+          5,
+        )
+        .fill({ color: colors.warn, alpha: 0.95 })
       this.bottleneckTag.position.set(bottleneck.x - pad + 12, bottleneck.y - pad - 16.5)
       this.bottleneckTag.visible = true
     } else {

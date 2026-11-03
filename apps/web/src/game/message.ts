@@ -1,5 +1,6 @@
+import { DragAndDrop, Listbox } from '@foldkit/ui'
+import { Locale } from '../i18n/index.ts'
 import { Schema } from 'effect'
-import { DragAndDrop } from '@foldkit/ui'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
 import { Url } from 'foldkit/url'
@@ -237,6 +238,8 @@ export const Message = defineMessageUnion({
   /** Settings and the Glossary (15). */
   MuteToggled: {},
   MotionToggled: {},
+  LocaleChosen: { locale: Locale },
+  LanguagePickerChanged: { message: Listbox.Message },
   InsightHelpToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },

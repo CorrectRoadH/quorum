@@ -47,7 +47,7 @@ export default Alchemy.Stack(
       rootDir: stage === 'reference' ? 'examples/reference' : 'apps/web',
       main: 'src/worker.ts',
       env: { API: ApiWorker },
-      assets: { runWorkerFirst: [`${API_PREFIX}/*`] },
+      assets: { runWorkerFirst: [`${API_PREFIX}/*`], notFoundHandling: 'single-page-application' },
       ...(stage === 'prod' && { domain: PRODUCTION_DOMAIN }),
       compatibility,
       observability,

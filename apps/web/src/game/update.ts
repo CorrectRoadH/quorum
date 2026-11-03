@@ -1,6 +1,7 @@
+import { DragAndDrop, Listbox } from '@foldkit/ui'
+import { languageListbox } from '../i18n/listbox.ts'
 import { Option, Result, Schema } from 'effect'
 import { Update, type Runtime } from 'foldkit'
-import { DragAndDrop } from '@foldkit/ui'
 import { UrlRequest } from 'foldkit/navigation'
 import { toString as urlToString, type Url } from 'foldkit/url'
 import * as Actions from '@quorum/simulation/actions'
@@ -256,6 +257,8 @@ export const initialModel = (): Model =>
     cue: null,
     muted: false,
     motion: 'system',
+    locale: 'en',
+    languagePicker: Listbox.init({ id: 'interface-language' }),
     glossaryFocus: null,
     glossaryReturn: 'none',
     insightHelp: false,
@@ -302,6 +305,7 @@ type AnyCommand = NonNullable<Result['commands']>[number]
 const sync = (model: Model): AnyCommand =>
   SyncBoard({
     game: model.game,
+    locale: model.locale,
     bottleneck: model.bottleneck,
     selected: model.selected,
     selection: model.selection,
@@ -627,6 +631,7 @@ const prefsOf = (model: Model): Prefs => ({
   seenTradeoffs: model.seenTradeoffs,
   muted: model.muted,
   motion: model.motion,
+  locale: model.locale,
 })
 
 /** Saves and applies a settings change. */
@@ -634,7 +639,7 @@ const settled = (next: Model): Result => ({
   model: next,
   commands: [
     WritePrefs({ prefs: prefsOf(next) }),
-    ApplySettings({ muted: next.muted, motion: next.motion }),
+    ApplySettings({ muted: next.muted, motion: next.motion, locale: next.locale }),
   ],
 })
 
@@ -1069,6 +1074,7 @@ const ARROWS: Record<string, Direction> = {
 const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
   const fresh: Model = {
     ...initialModel(),
+    ...prefsOf(model),
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
@@ -1107,6 +1113,7 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
 const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
   const next: Model = {
     ...initialModel(),
+    ...prefsOf(model),
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
@@ -1236,6 +1243,17 @@ const listed = (model: Model, game: Game): Readonly<{ game: Game; founder: Found
 
 /* ---------- Challenges ---------- */
 
+const foldLanguagePicker = Update.foldChild({
+  update: languageListbox.update,
+  read: (model: Model) => Option.some(model.languagePicker),
+  write: (model, languagePicker) => ({ ...model, languagePicker }),
+  toParentMessage: (message) => Message.LanguagePickerChanged({ message }),
+  foldOutMessage:
+    ({ value }) =>
+    (model) =>
+      handle(model, Message.LocaleChosen({ locale: value })),
+})
+
 const histograms = histogramQuery.lift<Model, Message>({
   parentField: 'histograms',
   toParentMessage: (message) => Message.GotHistograms({ message }),
@@ -1253,6 +1271,7 @@ const enterChallenge = (model: Model, id: string): Result => {
   const game = boardOf(challenge)
   const next: Model = {
     ...initialModel(),
+    ...prefsOf(model),
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
@@ -1581,8 +1600,12 @@ const handle = (model: Model, message: Message): Result =>
             seenTradeoffs: prefs.seenTradeoffs,
             muted: prefs.muted,
             motion: prefs.motion,
+            locale: prefs.locale,
           },
-          commands: [ApplySettings({ muted: prefs.muted, motion: prefs.motion })],
+          commands: [
+            ApplySettings({ muted: prefs.muted, motion: prefs.motion, locale: prefs.locale }),
+            sync({ ...model, locale: prefs.locale }),
+          ],
         }),
       }),
 
@@ -2577,6 +2600,12 @@ const handle = (model: Model, message: Message): Result =>
             },
           },
 
+    LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
+    LocaleChosen: ({ locale }) => {
+      const next = { ...model, locale }
+      const result = settled(next)
+      return { ...result, commands: [...(result.commands ?? []), sync(next)] }
+    },
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
     InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>

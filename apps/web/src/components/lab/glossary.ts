@@ -1,3 +1,4 @@
+import { translate, type Locale } from '@/i18n/index.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowUpRight, Check, Search } from 'lucide'
 import {
@@ -34,14 +35,22 @@ const CATEGORY_NAMES: Record<GlossaryCategory, string> = {
 
 const BY_ID = new Map(GLOSSARY.map((entry) => [entry.id, entry]))
 
-const matches = (entry: GlossaryEntry, query: string, category: string | null): boolean => {
+const matches = (
+  entry: GlossaryEntry,
+  query: string,
+  category: string | null,
+  locale: Locale,
+): boolean => {
   if (category !== null && entry.category !== category) return false
   const text = query.trim().toLowerCase()
   return (
     text === '' ||
     entry.term.toLowerCase().includes(text) ||
     entry.definition.toLowerCase().includes(text) ||
-    entry.inGame.toLowerCase().includes(text)
+    entry.inGame.toLowerCase().includes(text) ||
+    [entry.term, entry.definition, entry.inGame].some((copy) =>
+      translate(locale, copy).toLowerCase().includes(text),
+    )
   )
 }
 
@@ -216,7 +225,7 @@ const detail = (entry: GlossaryEntry, met: (id: string) => boolean, h: HtmlBuild
 
 export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
   const shown = GLOSSARY.filter((entry) =>
-    matches(entry, model.glossaryQuery, model.glossaryCategory),
+    matches(entry, model.glossaryQuery, model.glossaryCategory, model.locale),
   )
   const open =
     (model.glossaryFocus !== null ? BY_ID.get(model.glossaryFocus) : undefined) ??
