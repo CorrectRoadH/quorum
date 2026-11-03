@@ -51,7 +51,17 @@ import type { Game, GameNode } from './state.ts'
    what is researched, what a Node's hardware is, and what things cost.
    ========================================================================== */
 
-export const has = (game: Game, id: ResearchId): boolean => game.researched.includes(id)
+/** The researched list as a set, built once per list: the solver asks on every hop. */
+const researchedSets = new WeakMap<ReadonlyArray<ResearchId>, ReadonlySet<ResearchId>>()
+
+export const has = (game: Game, id: ResearchId): boolean => {
+  let set = researchedSets.get(game.researched)
+  if (!set) {
+    set = new Set(game.researched)
+    researchedSets.set(game.researched, set)
+  }
+  return set.has(id)
+}
 
 /** All pools together, for figures that show one Insight number. */
 export const insightTotal = (pools: Readonly<Record<string, number>>): number =>
@@ -156,14 +166,23 @@ export const isDown = (node: GameNode): boolean => node.down !== 0
 
 /** The Node links into a live Kubernetes Cluster: it runs as pods. */
 export const inCluster = (game: Game, node: GameNode): boolean =>
-  (node.type === 'server' || node.type === 'worker') &&
-  game.links.some(
-    (link) =>
-      link.from === node.id &&
-      game.nodes.some(
-        (entry) => entry.id === link.to && entry.type === 'cluster' && !isDown(entry),
-      ),
-  )
+  (node.type === 'server' || node.type === 'worker') && clusteredOf(game).has(node.id)
+
+/** The ids of Nodes with a Link into a live Cluster, found once per Game. */
+const clustered = new WeakMap<Game, ReadonlySet<string>>()
+const clusteredOf = (game: Game): ReadonlySet<string> => {
+  let ids = clustered.get(game)
+  if (!ids) {
+    const live = new Set(
+      game.nodes
+        .filter((entry) => entry.type === 'cluster' && !isDown(entry))
+        .map((entry) => entry.id),
+    )
+    ids = new Set(game.links.filter((link) => live.has(link.to)).map((link) => link.from))
+    clustered.set(game, ids)
+  }
+  return ids
+}
 
 /** Copies of a Node that bill: the ones serving and the ones still booting. */
 export const copiesOf = (node: GameNode): number => node.replicas + node.pending

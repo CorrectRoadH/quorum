@@ -59,3 +59,118 @@ export const stressBoard = (): Game => ({
   ),
   links: STRESS_LINKS.map((entry) => link(entry.from, entry.to)),
 })
+
+/*
+ * The big board: a later screenshot of the same player's NA board, at 61 Nodes and
+ * 282 Links. Every Load Balancer feeds every App Server, and every App Server calls
+ * every Cache, Pooler and Queue. The positions are the screenshot's, scaled to the board.
+ */
+const BIG_DROPS: ReadonlyArray<readonly [string, ComponentId, number, number]> = [
+  ['users', 'users', 85, 770],
+  ...[680, 790].map((y, index) => [`waf${index}`, 'waf', 175, y] as const),
+  ...[1100, 1170].map((y, index) => [`cdn${index}`, 'cdn', 310, y] as const),
+  ...[520, 610, 690, 770, 850, 930, 1010].map((y, index) => [`lb${index}`, 'lb', 380, y] as const),
+  ...[430, 540, 650, 760, 875, 990, 1100, 1210].map(
+    (y, index) => [`app${index}`, 'server', 560, y] as const,
+  ),
+  ['analytics0', 'analytics', 515, 265],
+  ...[
+    [720, 88],
+    [752, 170],
+    [762, 265],
+    [768, 345],
+  ].map(([x, y], index) => [`cache${index}`, 'cache', x as number, y as number] as const),
+  ...[440, 520, 600].map((y, index) => [`pool${index}`, 'pooler', 825, y] as const),
+  ['payments', 'payments', 990, 540],
+  ...[
+    [1130, 390],
+    [1255, 390],
+    [1410, 400],
+    [1545, 362],
+    [1255, 500],
+    [1135, 615],
+    [1250, 615],
+    [1570, 662],
+    [1675, 532],
+  ].map(([x, y], index) => [`db${index}`, 'database', x as number, y as number] as const),
+  ['replica0', 'replica', 1135, 500],
+  ['replica1', 'replica', 1410, 662],
+  ...[
+    [1410, 505],
+    [1520, 580],
+    [1270, 715],
+  ].map(([x, y], index) => [`storage${index}`, 'storage', x as number, y as number] as const),
+  ['search', 'search', 1388, 575],
+  ['warehouse', 'warehouse', 1535, 467],
+  ['analytics1', 'analytics', 1012, 802],
+  ['analytics2', 'analytics', 1190, 890],
+  ['psp', 'psp', 1012, 995],
+  ['llm', 'llm', 1005, 1062],
+  ['auth', 'auth', 1790, 1055],
+  ['autoscaler', 'autoscaler', 1765, 105],
+  ['cluster', 'cluster', 860, 1168],
+  ['queue0', 'queue', 860, 1222],
+  ['queue1', 'queue', 860, 1322],
+  ...[1175, 1262, 1350, 1438].map((y, index) => [`worker${index}`, 'worker', 1035, y] as const),
+  ...[1155, 1255, 1355].map((y, index) => [`gpu${index}`, 'gpu', 1370, y] as const),
+]
+
+const ids = (prefix: string, count: number): ReadonlyArray<string> =>
+  Array.from({ length: count }, (_, index) => `${prefix}${index}`)
+const every = (
+  froms: ReadonlyArray<string>,
+  tos: ReadonlyArray<string>,
+): ReadonlyArray<RoutedLink> => froms.flatMap((from) => tos.map((to) => ({ from, to })))
+
+const BIG_APPS = ids('app', 8)
+const POOLS = ids('pool', 3)
+
+export const BIG_LINKS: ReadonlyArray<RoutedLink> = [
+  ...every(['users'], [...ids('waf', 2), ...ids('cdn', 2)]),
+  ...every([...ids('waf', 2), ...ids('cdn', 2)], ids('lb', 7)),
+  ...every(ids('lb', 7), BIG_APPS),
+  ...every(BIG_APPS, [
+    ...ids('cache', 4),
+    ...POOLS,
+    ...ids('queue', 2),
+    'search',
+    'psp',
+    'llm',
+    'auth',
+    'warehouse',
+  ]),
+  ...BIG_APPS.flatMap((from, index) =>
+    [`analytics${index % 3}`, `storage${index % 3}`, `gpu${index % 3}`].map((to) => ({ from, to })),
+  ),
+  ...every(ids('cache', 4), POOLS),
+  ...every(POOLS, [...ids('db', 9), ...ids('replica', 2)]),
+  ...every(ids('queue', 2), ids('worker', 4)),
+  { from: 'app0', to: 'autoscaler' },
+  { from: 'app0', to: 'cluster' },
+]
+
+/** The big board's cards, dropped in order where the screenshot has them. */
+export const bigNodes = (): ReadonlyArray<RoutedNode> =>
+  BIG_DROPS.reduce<ReadonlyArray<RoutedNode>>((nodes, [id, type, x, y]) => {
+    const spot = freeSpot(nodes.map(boxOf), {
+      x: (x - 85) * 2,
+      y: y * 2,
+      w: CARD_W,
+      h: heightOf(type),
+    })
+    return [...nodes, { id, type, ...spot }]
+  }, [])
+
+/** The free Sandbox with the big board on it, at Public-era demand. */
+export const bigBoard = (): Game => ({
+  ...freeSandbox(),
+  users: 2_000_000,
+  nodes: bigNodes().map((entry, index) =>
+    node(entry.id, entry.type, entry.x, entry.y, {
+      zone: index % 3 === 0 ? 'a' : index % 3 === 1 ? 'b' : 'c',
+      ...(entry.type === 'server' ? { size: 4, runtime: 'go', workers: 64 } : {}),
+      ...(entry.type === 'database' ? { size: 5 } : {}),
+    }),
+  ),
+  links: BIG_LINKS.map((entry) => link(entry.from, entry.to)),
+})

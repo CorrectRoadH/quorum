@@ -38,10 +38,14 @@ import {
   Container,
   FillGradient,
   Graphics,
+  Particle,
+  ParticleContainer,
   Point,
+  Rectangle,
   Sprite,
   Text,
   Texture,
+  type Renderer,
 } from 'pixi.js'
 import {
   COMPONENTS,
@@ -94,6 +98,7 @@ import {
   route,
   rowMid,
   rowTop,
+  type Box,
   type Pt,
   type Route,
 } from './geometry.ts'
@@ -194,7 +199,6 @@ const token = (name: string, fallback: string): number => {
 
 const resolvePalette = () => ({
   canvas: token('--canvas', '#f1f4f9'),
-  grid: token('--canvas-dot', '#c9d3e3'),
   card: token('--card', '#ffffff'),
   well: token('--well', '#eeeef0'),
   border: token('--input', '#d5ddea'),
@@ -569,6 +573,17 @@ const routeOf = (from: GameNode, to: GameNode): Route =>
   route(outPort(from), inPort(to), laneUnder(from, to.y + heightOf(to.type)))
 
 /** The first `t` of a path, by length. */
+/** The middle of a path, measured once per path. */
+const mids = new WeakMap<Route, Pt>()
+const midOf = (path: Route): Pt => {
+  let mid = mids.get(path)
+  if (!mid) {
+    mid = pointOn(path, 0.5)
+    mids.set(path, mid)
+  }
+  return mid
+}
+
 const partOf = (path: Route, t: number): Route => {
   const out: Array<Pt> = []
   let left = lengthOf(path) * Math.max(0, Math.min(1, t))
@@ -1174,6 +1189,8 @@ class NodeView {
   private readonly names: Array<Text> = []
   private readonly values: Array<Text> = []
   private readonly valueMarks: Array<Sprite> = []
+  /** The rows' icons, names and values. */
+  private readonly rows = new Container()
   private readonly foot = label(12, SANS, '600')
   private readonly footMark = glyph(14)
   /** A ring round the footer icon of a held button; it fills clockwise as the hold does. */
@@ -1231,6 +1248,20 @@ class NodeView {
       if (!reducedMotion()) this.root.scale.set(0.96)
     }
     this.shadow.alpha = 0
+    // Unbatched, each larger shape would cost a draw call per card. The card layer
+    // rebuilds only when a card changes, on a tick, not on every frame.
+    for (const part of [
+      this.shadow,
+      this.ring,
+      this.frame,
+      this.holdFill,
+      this.burst,
+      this.bars,
+      this.ports,
+      this.medal,
+      this.markRing,
+    ])
+      part.context.batchMode = 'batch'
     this.root.addChild(
       this.shadow,
       this.ring,
@@ -1268,9 +1299,15 @@ class NodeView {
       this.names.push(name)
       this.values.push(value)
       this.valueMarks.push(valueMark)
-      this.root.addChild(mark, name, value, valueMark)
+      this.rows.addChild(mark, name, value, valueMark)
     }
+    this.root.addChild(this.rows)
     this.foot.anchor.set(0, 0.5)
+  }
+
+  /** Level of detail: zoomed far out, the rows are a few pixels tall and are left out. */
+  detail(shown: boolean): void {
+    this.rows.visible = shown
   }
 
   leave(): void {
@@ -1719,76 +1756,164 @@ class NodeView {
  */
 /** How far a card or belt off the focused path fades. */
 const DIM = 0.3
+/** Below this zoom the belts' chevrons and the cards' rows are left out: a few pixels apart or tall. */
+const DETAIL_SCALE = 0.5
 
 class BeltView {
-  readonly root = new Container()
-  private readonly body = new Graphics()
-  private readonly chevrons = new Graphics()
-  private readonly mouths = new Graphics()
+  readonly body = new Graphics()
+  readonly mouths = new Graphics()
   private bodyFor: unknown = null
   private bodyKey = ''
-  private chevronsFor: unknown = null
-  private chevronsKey = ''
+  /** The box round the belt's pieces, for culling its chevrons and packets off screen. */
+  private boxFor: unknown = null
+  private box = { x0: 0, y0: 0, x1: 0, y1: 0 }
 
   constructor() {
-    // Moving chevrons change every frame. In a render group of their own, a change
-    // rebuilds only them, not every belt's batches.
-    const moving = new Container({ isRenderGroup: true })
-    moving.addChild(this.chevrons)
-    this.root.addChild(this.body, moving, this.mouths)
+    // Pixi batches only small Graphics by itself, and a belt is long: unbatched, every
+    // belt costs a draw call in each layer.
+    this.body.context.batchMode = 'batch'
+    this.mouths.context.batchMode = 'batch'
   }
 
-  draw(
-    pieces: ReadonlyArray<Route>,
-    rail: number,
-    body: number,
-    busy: boolean,
-    chevron: number,
-    offset: number,
-  ): void {
-    const key = `${rail}:${body}:${busy}`
-    if (pieces !== this.bodyFor || key !== this.bodyKey) {
-      this.bodyFor = pieces
-      this.bodyKey = key
-      this.body.clear()
-      for (const piece of pieces) traceOf(this.body, piece)
-      this.body.stroke({ color: rail, width: BELT + 3, join: 'round', alpha: busy ? 0.9 : 0.6 })
-      for (const piece of pieces) traceOf(this.body, piece)
-      this.body.stroke({ color: body, width: BELT, join: 'round' })
-      // The mouths where the belt dips under another one.
-      this.mouths.clear()
-      pieces.forEach((piece, index) => {
-        const ends = [
-          index > 0 ? piece[0] : undefined,
-          index < pieces.length - 1 ? piece.at(-1) : undefined,
-        ]
-        for (const end of ends)
-          if (end)
-            this.mouths.moveTo(end.x - BELT / 2 - 2.5, end.y).lineTo(end.x + BELT / 2 + 2.5, end.y)
-      })
-      this.mouths.stroke({ color: rail, width: 3, cap: 'round' })
+  /** Shows or hides the belt and dims it. */
+  show(visible: boolean, alpha: number): void {
+    for (const part of [this.body, this.mouths]) {
+      part.visible = visible
+      part.alpha = alpha
     }
-    // Chevrons point the way the belt runs, and move with it.
-    const step = ((offset % CHEVRON_GAP) + CHEVRON_GAP) % CHEVRON_GAP
-    const chevronKey = `${chevron}:${busy}:${step}`
-    if (pieces === this.chevronsFor && chevronKey === this.chevronsKey) return
-    this.chevronsFor = pieces
-    this.chevronsKey = chevronKey
-    this.chevrons.clear()
+  }
+
+  destroy(): void {
+    this.body.destroy()
+    this.mouths.destroy()
+  }
+
+  /** Whether any piece of the belt is inside `view`, in world coordinates. */
+  onScreen(pieces: ReadonlyArray<Route>, view: Box): boolean {
+    if (pieces !== this.boxFor) {
+      this.boxFor = pieces
+      const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
+      for (const piece of pieces)
+        for (const point of piece) {
+          box.x0 = Math.min(box.x0, point.x)
+          box.y0 = Math.min(box.y0, point.y)
+          box.x1 = Math.max(box.x1, point.x)
+          box.y1 = Math.max(box.y1, point.y)
+        }
+      this.box = box
+    }
+    const box = this.box
+    return (
+      box.x1 >= view.x && box.x0 <= view.x + view.w && box.y1 >= view.y && box.y0 <= view.y + view.h
+    )
+  }
+
+  draw(pieces: ReadonlyArray<Route>, rail: number, body: number, busy: boolean): void {
+    const key = `${rail}:${body}:${busy}`
+    if (pieces === this.bodyFor && key === this.bodyKey) return
+    this.bodyFor = pieces
+    this.bodyKey = key
+    this.body.clear()
+    for (const piece of pieces) traceOf(this.body, piece)
+    this.body.stroke({ color: rail, width: BELT + 3, join: 'round', alpha: busy ? 0.9 : 0.6 })
+    for (const piece of pieces) traceOf(this.body, piece)
+    this.body.stroke({ color: body, width: BELT, join: 'round' })
+    // The mouths where the belt dips under another one.
+    this.mouths.clear()
+    pieces.forEach((piece, index) => {
+      const ends = [
+        index > 0 ? piece[0] : undefined,
+        index < pieces.length - 1 ? piece.at(-1) : undefined,
+      ]
+      for (const end of ends)
+        if (end)
+          this.mouths.moveTo(end.x - BELT / 2 - 2.5, end.y).lineTo(end.x + BELT / 2 + 2.5, end.y)
+    })
+    this.mouths.stroke({ color: rail, width: 3, cap: 'round' })
+  }
+}
+
+/**
+ * The moving chevrons of every belt, as particles of one texture: a frame only moves
+ * them, in one draw call, where Graphics would rebuild their shapes. The pool only
+ * grows; the particles a frame does not use are left transparent.
+ */
+class ChevronLayer {
+  readonly root = new ParticleContainer<Particle>({
+    dynamicProperties: { position: true, rotation: true, color: true },
+  })
+  private texture: Texture | null = null
+  private anchor = { x: 0, y: 0 }
+  private used = 0
+  /** Particles were added this frame: the container must take in the new ones. */
+  private grown = false
+
+  /** The chevron, tip at its anchor and pointing along +x, drawn once at 4× resolution. */
+  init(renderer: Renderer): void {
+    const pad = 1.5
+    const shape = new Graphics()
+      .moveTo(pad, pad)
+      .lineTo(pad + CHEVRON_DEPTH, pad + CHEVRON_HALF)
+      .lineTo(pad, pad + 2 * CHEVRON_HALF)
+      .stroke({ color: 0xffffff, width: 1.2 })
+    const w = CHEVRON_DEPTH + 2 * pad
+    const h = 2 * CHEVRON_HALF + 2 * pad
+    this.texture = renderer.generateTexture({
+      target: shape,
+      resolution: 4,
+      frame: new Rectangle(0, 0, w, h),
+    })
+    shape.destroy()
+    this.anchor = { x: (pad + CHEVRON_DEPTH) / w, y: (pad + CHEVRON_HALF) / h }
+  }
+
+  begin(): void {
+    this.used = 0
+  }
+
+  /** Lays chevrons along a belt's pieces, `offset` pixels along, where `view` shows them. */
+  add(pieces: ReadonlyArray<Route>, offset: number, tint: number, alpha: number, view: Box): void {
+    const texture = this.texture
+    if (!texture) return
+    const pool = this.root.particleChildren
+    // The packed colour the particle shader reads: alpha over a BGR tint. Setting
+    // `tint` instead parses the colour for every chevron.
+    const color =
+      ((tint & 0xff) << 16) + (tint & 0xff00) + ((tint >> 16) & 0xff) + (((alpha * 255) | 0) << 24)
+    const x1 = view.x + view.w
+    const y1 = view.y + view.h
+    let ux = Number.NaN
+    let uy = Number.NaN
+    let rotation = 0
     for (const piece of pieces)
-      walk(piece, CHEVRON_GAP, offset, (point, ux, uy) => {
-        this.chevrons
-          .moveTo(
-            point.x - uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
-            point.y + ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
-          )
-          .lineTo(point.x, point.y)
-          .lineTo(
-            point.x + uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
-            point.y - ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
-          )
+      walk(piece, CHEVRON_GAP, offset, (point, dx, dy) => {
+        if (point.x < view.x || point.x > x1 || point.y < view.y || point.y > y1) return
+        if (dx !== ux || dy !== uy) {
+          ux = dx
+          uy = dy
+          rotation = Math.atan2(dy, dx)
+        }
+        let particle = pool[this.used]
+        if (!particle) {
+          particle = new Particle({ texture, anchorX: this.anchor.x, anchorY: this.anchor.y })
+          pool.push(particle)
+          this.grown = true
+        }
+        particle.x = point.x
+        particle.y = point.y
+        particle.rotation = rotation
+        particle.color = color
+        this.used += 1
       })
-    this.chevrons.stroke({ color: chevron, width: 1.2, alpha: busy ? 0.9 : 0.5 })
+  }
+
+  end(): void {
+    const pool = this.root.particleChildren
+    for (let index = this.used; index < pool.length; index += 1) (pool[index] as Particle).color = 0
+    if (this.grown) {
+      this.grown = false
+      this.root.update()
+    }
   }
 }
 
@@ -1821,10 +1946,16 @@ type Gesture =
 class BoardController {
   private readonly app = new Application()
   private readonly world = new Container()
-  private readonly grid = new Graphics()
-  private gridKey = ''
-  /** The belts, one BeltView per link in the Model's order, under the splitters. */
+  /**
+   * The belts, one BeltView per link in the Model's order, under the splitters. Each
+   * belt draws in three shared layers, so a busy Design draws in a few batches, not
+   * a few per link: bodies, then the moving chevrons in a render group of their own
+   * (they change every frame, the rest does not), then the mouths.
+   */
   private readonly wires = new Container()
+  private readonly bodies = new Container()
+  private readonly chevrons = new ChevronLayer()
+  private readonly mouths = new Container()
   private readonly belts = new Map<string, BeltView>()
   private beltLinks: ReadonlyArray<unknown> = []
   private beltOrder = ''
@@ -1833,6 +1964,10 @@ class BoardController {
   private readonly packets = new Graphics()
   private readonly cards = new Container()
   private readonly overlay = new Graphics()
+  /** The "!" badges on links that cross zones: they move only with the links, so they
+   *  redraw only then, not every frame like the overlay. */
+  private readonly badges = new Graphics()
+  private badgesAt: ReadonlyArray<number> = []
   private readonly bottleneckTag = label(9, MONO, '600')
   private readonly ghost = new Container()
   private readonly views = new Map<string, NodeView>()
@@ -1919,13 +2054,16 @@ class BoardController {
       return
     }
     this.host.append(this.app.canvas)
-    this.app.stage.addChild(this.grid, this.world)
+    this.app.stage.addChild(this.world)
     this.bottleneckTag.style.fill = 0xffffff
     this.bottleneckTag.visible = false
+    this.chevrons.init(this.app.renderer)
+    this.wires.addChild(this.bodies, this.chevrons.root, this.mouths, this.splitters)
     this.world.addChild(
       this.wires,
       this.packets,
       this.cards,
+      this.badges,
       this.overlay,
       this.bottleneckTag,
       this.ghost,
@@ -1997,7 +2135,6 @@ class BoardController {
     if (w === 0 || h === 0) return
     this.app.renderer.resize(w, h)
     if (!this.fitted) this.fit()
-    this.drawGrid()
   }
 
   fit(): void {
@@ -2030,29 +2167,6 @@ class BoardController {
         : left + across / 2 - ((minX + maxX) / 2) * scale
     this.world.position.set(x, top + room / 2 - ((minY + maxY) / 2) * scale)
     this.fitted = true
-    this.drawGrid()
-  }
-
-  /** The dots are drawn once per zoom and size, from the top-left corner; a pan only
-   *  slides them by less than one step. */
-  private drawGrid(): void {
-    const { clientWidth: w, clientHeight: h } = this.host
-    const step = 32 * this.world.scale.x
-    const key = `${step}:${w}:${h}`
-    if (key !== this.gridKey) {
-      this.gridKey = key
-      this.grid.clear()
-      if (step < 8) return
-      for (let x = 0; x < w; x += step) {
-        for (let y = 0; y < h; y += step) this.grid.rect(x - 0.75, y - 0.75, 1.5, 1.5)
-      }
-      this.grid.fill(palette().grid)
-    }
-    if (step < 8) return
-    this.grid.position.set(
-      ((this.world.position.x % step) + step) % step,
-      ((this.world.position.y % step) + step) % step,
-    )
   }
 
   private toWorld(event: PointerEvent | WheelEvent): Pt {
@@ -2268,7 +2382,6 @@ class BoardController {
       next.center.x - rect.left - from.x * scale,
       next.center.y - rect.top - from.y * scale,
     )
-    this.drawGrid()
   }
 
   private bindPointer(): void {
@@ -2415,7 +2528,6 @@ class BoardController {
           this.world.position.y += dy
           gesture.x = event.clientX
           gesture.y = event.clientY
-          this.drawGrid()
           canvas.style.cursor = 'grabbing'
           return
         }
@@ -2601,7 +2713,6 @@ class BoardController {
         )
         this.world.scale.set(scale)
         this.world.position.set(screen.x - before.x * scale, screen.y - before.y * scale)
-        this.drawGrid()
       },
       { signal, passive: false },
     )
@@ -2720,19 +2831,20 @@ class BoardController {
     const live = new Set(keys)
     for (const [key, belt] of this.belts) {
       if (live.has(key)) continue
-      belt.root.destroy({ children: true })
+      belt.destroy()
       this.belts.delete(key)
     }
-    this.wires.removeChildren()
+    this.bodies.removeChildren()
+    this.mouths.removeChildren()
     for (const key of keys) {
       let belt = this.belts.get(key)
       if (!belt) {
         belt = new BeltView()
         this.belts.set(key, belt)
       }
-      this.wires.addChild(belt.root)
+      this.bodies.addChild(belt.body)
+      this.mouths.addChild(belt.mouths)
     }
-    this.wires.addChild(this.splitters)
   }
 
   private syncGhost(): void {
@@ -2765,6 +2877,25 @@ class BoardController {
     this.ghost.addChild(frame, name, mark)
   }
 
+  /** Redraws the zone badges when one moved, came or went. `at` holds x, y pairs. */
+  private drawBadges(at: ReadonlyArray<number>, colors: Palette): void {
+    const last = this.badgesAt
+    if (at.length === last.length && at.every((value, index) => value === last[index])) return
+    this.badgesAt = at
+    this.badges.clear()
+    for (let index = 0; index < at.length; index += 2) {
+      const x = at[index] as number
+      const y = at[index + 1] as number
+      this.badges.circle(x, y, 8).fill(colors.warn)
+      this.badges
+        .moveTo(x, y - 4)
+        .lineTo(x, y + 0.5)
+        .moveTo(x, y + 3)
+        .lineTo(x, y + 3.2)
+      this.badges.stroke({ color: colors.card, width: 2, cap: 'round' })
+    }
+  }
+
   private animate(seconds: number): void {
     const state = this.state
     if (!state) return
@@ -2772,7 +2903,11 @@ class BoardController {
     if (!state.paused) this.phase += seconds
     // Reduced motion: packets hold still along the pipe, and the bottleneck does not pulse.
     const still = reducedMotion()
-    for (const view of this.views.values()) view.tick(seconds, still)
+    const detailed = this.world.scale.x >= DETAIL_SCALE
+    for (const view of this.views.values()) {
+      view.tick(seconds, still)
+      view.detail(detailed)
+    }
     this.advanceHold()
     this.leaving = this.leaving.filter((view) => {
       if (view.tick(seconds, still)) return true
@@ -2785,6 +2920,17 @@ class BoardController {
       else this.fresh.set(key, age + seconds)
     const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 
+    // Chevrons and packets draw only for belts on screen.
+    const scale = this.world.scale.x
+    const margin = 40 / scale
+    const view: Box = {
+      x: -this.world.position.x / scale - margin,
+      y: -this.world.position.y / scale - margin,
+      w: this.host.clientWidth / scale + 2 * margin,
+      h: this.host.clientHeight / scale + 2 * margin,
+    }
+    this.chevrons.begin()
+    const badges: Array<number> = []
     const focus = this.pathOf(state)
     this.packets.clear()
     this.overlay.clear()
@@ -2796,11 +2942,11 @@ class BoardController {
       const belt = this.belts.get(`${link.from}>${link.to}`)
       const from = byId.get(link.from)
       const to = byId.get(link.to)
-      if (belt) belt.root.visible = from !== undefined && to !== undefined
+      if (belt && (!from || !to)) belt.show(false, 1)
       if (!belt || !from || !to) continue
       // Off the focused path, a belt fades back.
       const off = focus !== null && !(focus.has(link.from) && focus.has(link.to))
-      belt.root.alpha = off ? DIM : 1
+      belt.show(true, off ? DIM : 1)
       const age = this.fresh.get(`${link.from}>${link.to}`)
       const wire = this.wireOf(from, to)
       // A new link draws out of its port before anything flows along it.
@@ -2808,6 +2954,7 @@ class BoardController {
       const path = drawn < 1 ? partOf(wire.path, drawn) : wire.path
       // Where another lane crosses, a vertical lane has a gap: it is the one passing under.
       const pieces = drawn < 1 ? [path] : wire.pieces
+      const seen = belt.onScreen(pieces, view)
       const flow = rates.get(`${link.from}>${link.to}`)
       const tap = COMPONENTS[to.type].tap
       const picked = this.selectedLink?.from === link.from && this.selectedLink.to === link.to
@@ -2841,24 +2988,19 @@ class BoardController {
         zones && !crossing && !hovered
           ? mix(zoneHue[from.zone], colors.canvas, busy ? 0.75 : 0.85)
           : mix(packet, colors.canvas, hovered ? 0.6 : busy ? 0.8 : 0.92)
-      belt.draw(
-        pieces,
-        rail,
-        body,
-        busy,
-        busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
-        this.phase * speed,
-      )
+      belt.draw(pieces, rail, body, busy)
+      if (detailed && seen)
+        this.chevrons.add(
+          pieces,
+          this.phase * speed,
+          busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
+          (busy ? 0.9 : 0.5) * (off ? DIM : 1),
+          view,
+        )
       // A link that crosses zones carries an orange "!" badge: a zone outage cuts it.
       if (crossing && !picked && drawn >= 1) {
-        const mid = pointOn(path, 0.5)
-        this.overlay.circle(mid.x, mid.y, 8).fill(colors.warn)
-        this.overlay
-          .moveTo(mid.x, mid.y - 4)
-          .lineTo(mid.x, mid.y + 0.5)
-          .moveTo(mid.x, mid.y + 3)
-          .lineTo(mid.x, mid.y + 3.2)
-        this.overlay.stroke({ color: colors.card, width: 2, cap: 'round' })
+        const mid = midOf(path)
+        badges.push(mid.x, mid.y)
       }
       if (picked) {
         const mid = pointOn(path, 0.5)
@@ -2885,7 +3027,7 @@ class BoardController {
           continue
         }
       }
-      if (!flow || !busy || off) continue
+      if (!flow || !busy || off || !seen) continue
       const length = lengthOf(path)
       const count = Math.max(
         1,
@@ -2902,6 +3044,9 @@ class BoardController {
       }
       this.packets.fill({ color: packet, alpha: tap ? 0.6 : 0.95 })
     }
+
+    this.chevrons.end()
+    this.drawBadges(badges, colors)
 
     // A port that feeds several belts has a splitter over the point where they part.
     const fans = new Map<string, { x: number; top: number; bottom: number; belts: number }>()

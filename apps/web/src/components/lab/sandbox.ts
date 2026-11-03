@@ -288,13 +288,24 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
       ),
       button(
         {
-          onClick: Message.StressBoardLoaded(),
+          onClick: Message.StressBoardLoaded({ big: false }),
           variant: 'ghost',
           size: 'sm',
           className: 'text-muted-foreground',
           attributes: [h.Title('Load a crowded Design to test card placement and link lanes')],
         },
         [icon(h, Cable, 'size-3.5'), 'Stress board'],
+        h,
+      ),
+      button(
+        {
+          onClick: Message.StressBoardLoaded({ big: true }),
+          variant: 'ghost',
+          size: 'sm',
+          className: 'text-muted-foreground',
+          attributes: [h.Title('Load a 61-Node Design to test performance')],
+        },
+        [icon(h, Cable, 'size-3.5'), 'Big board'],
         h,
       ),
       h.div(

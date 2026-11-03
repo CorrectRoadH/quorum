@@ -5,7 +5,8 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsrs --noEmit -p tsconfig.json && effect-tsrs diagnostics --strict --project tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "stress": "node src/game/stress.perf.ts"
   },
   "dependencies": {
     "@foldkit/ui": "0.168.0",

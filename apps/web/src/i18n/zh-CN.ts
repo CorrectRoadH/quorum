@@ -377,6 +377,8 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Load a crowded Design to test card placement and link lanes':
     '载入拥挤的设计，测试卡片布局与连线路径',
   'Stress board': '压力测试画布',
+  'Load a 61-Node Design to test performance': '载入 61 个节点的设计，测试性能',
+  'Big board': '大型画布',
   'Copy the Company Design onto this board': '将公司的设计复制到此画布',
   'Copy Company': '复制公司设计',
   Stranded: '滞留',

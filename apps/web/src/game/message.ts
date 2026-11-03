@@ -76,8 +76,8 @@ export const Message = defineMessageUnion({
   GotHistograms: { message: histogramQuery.Message },
   FreeSandboxStarted: {},
   FreeSandboxReset: {},
-  /** Replaces the free Sandbox with the stress board for link routing. */
-  StressBoardLoaded: {},
+  /** Replaces the free Sandbox with a stress board: the link-routing one, or the big one. */
+  StressBoardLoaded: { big: Schema.Boolean },
   CompanyCopied: {},
   DemandStepped: { direction: Schema.Literals([1, -1]) },
   MixChosen: { stage: Schema.Finite },

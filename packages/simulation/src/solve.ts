@@ -175,8 +175,8 @@ export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
 
 type Graph = Readonly<{
   byId: ReadonlyMap<string, GameNode>
-  /** Each routing Link, by `from>to`. */
-  links: ReadonlyMap<string, GameLink>
+  /** Each routing Link, by caller, then callee. */
+  linkTo: ReadonlyMap<string, ReadonlyMap<string, GameLink>>
   routes: ReadonlyMap<string, ReadonlyArray<GameNode>>
   parents: ReadonlyMap<string, ReadonlyArray<GameNode>>
   taps: ReadonlyMap<string, ReadonlyArray<string>>
@@ -192,7 +192,7 @@ const graphOf = (game: Game): Graph => {
   const routes = new Map<string, Array<GameNode>>()
   const parents = new Map<string, Array<GameNode>>()
   const taps = new Map<string, Array<string>>()
-  const links = new Map<string, GameLink>()
+  const linkTo = new Map<string, Map<string, GameLink>>()
   for (const link of game.links) {
     const from = byId.get(link.from)
     const to = byId.get(link.to)
@@ -202,7 +202,9 @@ const graphOf = (game: Game): Graph => {
     if (COMPONENTS[to.type].tap) {
       taps.set(to.id, [...(taps.get(to.id) ?? []), from.id])
     } else {
-      links.set(`${from.id}>${to.id}`, link)
+      const out = linkTo.get(from.id) ?? new Map<string, GameLink>()
+      out.set(to.id, link)
+      linkTo.set(from.id, out)
       routes.set(from.id, [...(routes.get(from.id) ?? []), to])
       parents.set(to.id, [...(parents.get(to.id) ?? []), from])
     }
@@ -222,7 +224,7 @@ const graphOf = (game: Game): Graph => {
   }
   return {
     byId,
-    links,
+    linkTo,
     routes,
     parents,
     taps,
@@ -257,8 +259,27 @@ export const policyOf = (game: Game, link: GameLink | undefined): Policy => {
   }
 }
 
-const linkPolicy = (game: Game, graph: Graph, from: string, to: string): Policy =>
-  policyOf(game, graph.links.get(`${from}>${to}`))
+/** Policies by caller and callee, per solve: a solve asks for each Link's policy many times. */
+const policies = new WeakMap<Graph, Map<string, Map<string, Policy>>>()
+
+const linkPolicy = (game: Game, graph: Graph, from: string, to: string): Policy => {
+  let byFrom = policies.get(graph)
+  if (!byFrom) {
+    byFrom = new Map()
+    policies.set(graph, byFrom)
+  }
+  let byTo = byFrom.get(from)
+  if (!byTo) {
+    byTo = new Map()
+    byFrom.set(from, byTo)
+  }
+  let policy = byTo.get(to)
+  if (!policy) {
+    policy = policyOf(game, graph.linkTo.get(from)?.get(to))
+    byTo.set(to, policy)
+  }
+  return policy
+}
 
 /** Calls per call a retrying Link sends when a share `failure` fails. */
 const amplification = (policy: Policy, failure: number): number =>
@@ -435,7 +456,7 @@ const forward = (inputs: Inputs): Pass => {
       // Retries resend what failed: the callee sees more. An open breaker sends nothing.
       const amplified = amplification(
         linkPolicy(game, graph, node.id, child.id),
-        inputs.failures.get(`${key}:${kind}`) ?? 0,
+        inputs.failures.size > 0 ? (inputs.failures.get(`${key}:${kind}`) ?? 0) : 0,
       )
       const sent = rate * weight * amplified
       const into = arriving.get(child.id) ?? {}
@@ -526,15 +547,36 @@ const noticed = (graph: Graph, child: GameNode, after: number): boolean =>
 
 /** The kinds a Link carries: an L7 Load Balancer Link can carry only some. */
 const carries = (graph: Graph, node: GameNode, child: GameNode, kind: Kind): boolean => {
-  const kinds = graph.links.get(`${node.id}>${child.id}`)?.kinds
-  return node.type !== 'lb' || !kinds || (kinds as ReadonlyArray<Kind>).includes(kind)
+  if (node.type !== 'lb') return true
+  const kinds = graph.linkTo.get(node.id)?.get(child.id)?.kinds
+  return !kinds || (kinds as ReadonlyArray<Kind>).includes(kind)
 }
 
-const splitOf = (
-  inputs: Inputs,
-  node: GameNode,
-  kind: Kind,
-): ReadonlyArray<readonly [GameNode, number]> => {
+type Split = ReadonlyArray<readonly [GameNode, number]>
+
+/** Splits by Node and kind, per pass: routing, outcomes and held time all ask for the same ones. */
+const splits = new WeakMap<Inputs, Map<GameNode, Map<Kind, Split>>>()
+
+const splitOf = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
+  let byNode = splits.get(inputs)
+  if (!byNode) {
+    byNode = new Map()
+    splits.set(inputs, byNode)
+  }
+  let byKind = byNode.get(node)
+  if (!byKind) {
+    byKind = new Map()
+    byNode.set(node, byKind)
+  }
+  let split = byKind.get(kind)
+  if (!split) {
+    split = splitFor(inputs, node, kind)
+    byKind.set(kind, split)
+  }
+  return split
+}
+
+const splitFor = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
   const { game, graph } = inputs
   const linked = (graph.routes.get(node.id) ?? []).filter(
     (child) => accepts(child, kind) && carries(graph, node, child, kind),
@@ -600,7 +642,7 @@ const weighted = (
 
 const outcomesOf = (inputs: Inputs, pass: Pass) => {
   const { game, graph } = inputs
-  const memo = new Map<string, Outcome>()
+  const memo = new Map<GameNode, Map<Kind, Outcome>>()
 
   const ownHop = (node: GameNode, kind: Kind, value = 1) => {
     const model = pass.models.get(node.id)
@@ -687,8 +729,12 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     }, 0)
 
   const outcome = (node: GameNode, kind: Kind): Outcome => {
-    const key = `${node.id}:${kind}`
-    const cached = memo.get(key)
+    let byKind = memo.get(node)
+    if (!byKind) {
+      byKind = new Map()
+      memo.set(node, byKind)
+    }
+    const cached = byKind.get(kind)
     if (cached) return cached
     // A Node the kernel killed for memory fails as `oom` until it is back.
     const result = isDown(node)
@@ -706,7 +752,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
           node,
           kind,
         )
-    memo.set(key, result)
+    byKind.set(kind, result)
     return result
   }
 

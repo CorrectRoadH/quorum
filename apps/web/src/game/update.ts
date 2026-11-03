@@ -173,7 +173,7 @@ import {
   type Reversal,
 } from './feedback.ts'
 import { BIG_PURCHASE, cueOf } from './cues.ts'
-import { stressBoard } from './stress.ts'
+import { bigBoard, stressBoard } from './stress.ts'
 import { CARD_W, boxOf, crowds, freeSpot, heightOf, tidy } from './geometry.ts'
 import { alertText, duration, money } from './format.ts'
 import { Message } from './message.ts'
@@ -1840,7 +1840,10 @@ const handle = (model: Model, message: Message): Result =>
     FreeSandboxStarted: () =>
       enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START }),
     FreeSandboxReset: () => replaceFree(model, freeSandbox(), 'The free Sandbox is reset.'),
-    StressBoardLoaded: () => replaceFree(model, stressBoard(), 'The stress board is loaded.'),
+    StressBoardLoaded: ({ big }) =>
+      big
+        ? replaceFree(model, bigBoard(), 'The big board is loaded.')
+        : replaceFree(model, stressBoard(), 'The stress board is loaded.'),
     CompanyCopied: () =>
       model.company && model.saved
         ? replaceFree(model, sandboxOf(model.company), 'Copied the Company Design.')

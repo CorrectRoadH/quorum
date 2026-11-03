@@ -730,9 +730,14 @@ export const RULES: Record<ComponentId, ComponentRule> = {
 export const gpuCapacity = (node: GameNode): number =>
   (GPU_TYPES[node.gpu].tokens * flatScale(node)) / TOKENS_PER_PROMPT
 
+/** Each Component's accepted kinds as a set: the solver asks on every route. */
+const ACCEPTS = new Map<ComponentId, ReadonlySet<Kind>>(
+  Object.values(COMPONENTS).map((component) => [component.id, new Set(component.accepts)]),
+)
+
 /** Whether a Node takes a kind on an inbound Link. */
 export const accepts = (node: GameNode, kind: Kind): boolean =>
-  COMPONENTS[node.type].accepts.includes(kind)
+  (ACCEPTS.get(node.type) as ReadonlySet<Kind>).has(kind)
 
 /* ---------- quorums, consensus and hot keys ---------- */
 

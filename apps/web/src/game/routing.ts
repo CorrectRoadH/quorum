@@ -115,6 +115,9 @@ type Tree = {
   /** The direction of each vertex's step toward the port. The root steps +x into the port. */
   dir: Map<number, number>
   edges: Set<number>
+  /** `dir` + 1 per vertex, 0 off the tree, and 1 per edge in `edges`: the search reads these. */
+  joins: Int8Array
+  owns: Uint8Array
   /** Out-port stubs of the links in this tree. */
   starts: Set<number>
   box: { x0: number; y0: number; x1: number; y1: number }
@@ -180,14 +183,17 @@ export const routeLinks = (
   const xOf = (v: number): number => xs[Math.floor(v / ny)] as number
   const yOf = (v: number): number => ys[v % ny] as number
 
-  const inside = (x: number, y: number): boolean =>
-    rects.some(
-      (rect) =>
+  const inside = (x: number, y: number): boolean => {
+    for (const rect of rects)
+      if (
         x > rect.x0 - MARGIN &&
         x < rect.x1 + MARGIN &&
         y > rect.y0 - MARGIN &&
-        y < rect.y1 + MARGIN,
-    )
+        y < rect.y1 + MARGIN
+      )
+        return true
+    return false
+  }
 
   // Edge ids: vertex * 2 is the edge to i + 1 (horizontal), vertex * 2 + 1 the edge to j + 1.
   const count = nx * ny
@@ -210,9 +216,10 @@ export const routeLinks = (
     let lo = Number.NEGATIVE_INFINITY
     let hi = Number.POSITIVE_INFINITY
     for (const rect of rects) {
-      const [a0, a1, c0, c1] = vertical
-        ? [rect.y0, rect.y1, rect.x0, rect.x1]
-        : [rect.x0, rect.x1, rect.y0, rect.y1]
+      const a0 = vertical ? rect.y0 : rect.x0
+      const a1 = vertical ? rect.y1 : rect.x1
+      const c0 = vertical ? rect.x0 : rect.y0
+      const c1 = vertical ? rect.x1 : rect.y1
       if (a0 >= to || a1 <= from) continue
       if (c1 <= at) lo = Math.max(lo, c1)
       else if (c0 >= at) hi = Math.min(hi, c0)
@@ -269,6 +276,9 @@ export const routeLinks = (
   let trees = new Map<string, Tree>()
   let paths = new Map<string, Array<number>>()
   const g = new Float64Array(count * 4)
+  // Which search last set each entry of `g`: a new search needs no clearing.
+  const seen = new Int32Array(count * 4)
+  let search = 0
   const came = new Int32Array(count * 4)
 
   for (let pass = 0; pass < PASSES; pass += 1) {
@@ -286,9 +296,12 @@ export const routeLinks = (
           next: new Map([[root, -1]]),
           dir: new Map([[root, 0]]),
           edges: new Set(),
+          joins: new Int8Array(count),
+          owns: new Uint8Array(count * 2),
           starts: new Set(),
           box: { x0: xOf(root), y0: yOf(root), x1: xOf(root), y1: yOf(root) },
         }
+        tree.joins[root] = 1
         trees.set(bundle, tree)
       }
       const t = tree
@@ -297,10 +310,11 @@ export const routeLinks = (
         const y = yOf(v)
         return Math.max(0, t.box.x0 - x, x - t.box.x1) + Math.max(0, t.box.y0 - y, y - t.box.y1)
       }
-      g.fill(Number.POSITIVE_INFINITY)
+      search += 1
       const heap = new Heap()
       const first = start * 4
       g[first] = 0
+      seen[first] = search
       came[first] = -1
       heap.push(h(start), first)
       let found = -1
@@ -309,32 +323,42 @@ export const routeLinks = (
         const v = state >> 2
         const d = state & 3
         const cost = g[state] as number
-        const joinDir = t.dir.get(v)
-        if (joinDir !== undefined) {
-          if (d !== (joinDir ^ 1)) {
+        const join = t.joins[v] as number
+        if (join !== 0) {
+          if (d !== ((join - 1) ^ 1)) {
             found = state
             break
           }
           // Running into the trunk head-on: no join here, and no way through it.
           continue
         }
+        const vi = Math.floor(v / ny)
+        const vj = v - vi * ny
         for (let nd = 0; nd < 4; nd += 1) {
           if (nd === (d ^ 1)) continue
-          const next = step(v, nd)
-          if (!next) continue
-          const length = Math.abs(xOf(next.to) - xOf(v)) + Math.abs(yOf(next.to) - yOf(v))
-          const crowd = t.edges.has(next.edge)
+          // The step to the next vertex, inlined from `step`: this loop is most of a route.
+          const i = vi + (DX[nd] as number)
+          const j = vj + (DY[nd] as number)
+          if (i < 0 || i >= nx || j < 0 || j >= ny) continue
+          const to = i * ny + j
+          const edge = nd === 0 ? v * 2 : nd === 1 ? to * 2 : nd === 2 ? v * 2 + 1 : to * 2 + 1
+          if (!open[edge]) continue
+          const length =
+            Math.abs((xs[i] as number) - (xs[vi] as number)) +
+            Math.abs((ys[j] as number) - (ys[vj] as number))
+          const crowd = t.owns[edge]
             ? 0
-            : Math.max(0, (use[next.edge] as number) + 1 - (capacity[next.edge] as number))
+            : Math.max(0, (use[edge] as number) + 1 - (capacity[edge] as number))
           const total =
             cost +
-            length * (1 + (history[next.edge] as number) + PRESENT_COST * crowd) +
+            length * (1 + (history[edge] as number) + PRESENT_COST * crowd) +
             (nd === d ? 0 : BEND_COST)
-          const ns = next.to * 4 + nd
-          if (total < (g[ns] as number)) {
+          const ns = to * 4 + nd
+          if (seen[ns] !== search || total < (g[ns] as number)) {
+            seen[ns] = search
             g[ns] = total
             came[ns] = state
-            heap.push(total + h(next.to), ns)
+            heap.push(total + h(to), ns)
           }
         }
       }
@@ -349,8 +373,10 @@ export const routeLinks = (
         const edge = (step(v, d) as { edge: number }).edge
         t.next.set(v, state >> 2)
         t.dir.set(v, d)
+        t.joins[v] = d + 1
         if (!t.edges.has(edge)) {
           t.edges.add(edge)
+          t.owns[edge] = 1
           use[edge] = (use[edge] as number) + 1
         }
         t.box.x0 = Math.min(t.box.x0, xOf(v))

@@ -45,20 +45,55 @@ export type Outcome = Readonly<{
   fail: Failures
 }>
 
-/** A Failures record with one value per cause. A plain loop: this runs on every hop of every solve. */
-const failuresBy = (value: (cause: ErrorCause) => number): Failures => {
-  const fail = {} as Record<ErrorCause, number>
-  for (const cause of ERROR_CAUSES) fail[cause] = value(cause)
-  return fail
+export const NO_FAILURES: Failures = {
+  stranded: 0,
+  dropped: 0,
+  refused: 0,
+  down: 0,
+  stale: 0,
+  oom: 0,
+  timeout: 0,
+  crash: 0,
+  blocked: 0,
+  upstream: 0,
+  throttled: 0,
+  duplicate: 0,
 }
 
-export const NO_FAILURES: Failures = failuresBy(() => 0)
+/*
+ * These run on every hop of every solve. Object literals with the causes in
+ * ERROR_CAUSES order keep one object shape, which is several times faster than
+ * a loop over the causes.
+ */
+const scaleFailures = (fail: Failures, by: number): Failures => ({
+  stranded: fail.stranded * by,
+  dropped: fail.dropped * by,
+  refused: fail.refused * by,
+  down: fail.down * by,
+  stale: fail.stale * by,
+  oom: fail.oom * by,
+  timeout: fail.timeout * by,
+  crash: fail.crash * by,
+  blocked: fail.blocked * by,
+  upstream: fail.upstream * by,
+  throttled: fail.throttled * by,
+  duplicate: fail.duplicate * by,
+})
 
-const scaleFailures = (fail: Failures, by: number): Failures =>
-  failuresBy((cause) => fail[cause] * by)
-
-const addFailures = (a: Failures, b: Failures): Failures =>
-  failuresBy((cause) => a[cause] + b[cause])
+const addFailures = (a: Failures, b: Failures): Failures => ({
+  stranded: a.stranded + b.stranded,
+  dropped: a.dropped + b.dropped,
+  refused: a.refused + b.refused,
+  down: a.down + b.down,
+  stale: a.stale + b.stale,
+  oom: a.oom + b.oom,
+  timeout: a.timeout + b.timeout,
+  crash: a.crash + b.crash,
+  blocked: a.blocked + b.blocked,
+  upstream: a.upstream + b.upstream,
+  throttled: a.throttled + b.throttled,
+  duplicate: a.duplicate + b.duplicate,
+})
 
 /** Every request fails for one cause. */
 export const failed = (cause: ErrorCause): Outcome => ({
