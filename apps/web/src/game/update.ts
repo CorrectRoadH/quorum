@@ -1,5 +1,6 @@
 import { refusal, stateJson } from './webmcp.ts'
-import { DragAndDrop, Listbox } from '@foldkit/ui'
+import { DragAndDrop, Listbox, Menu as UiMenu } from '@foldkit/ui'
+import { moreMenu, type MoreItem } from './more.ts'
 import { languageListbox } from '../i18n/listbox.ts'
 import { Option, Result, Schema } from 'effect'
 import { Update, type Runtime } from 'foldkit'
@@ -270,6 +271,7 @@ export const initialModel = (): Model =>
     agentAccess: false,
     locale: 'en',
     languagePicker: Listbox.init({ id: 'interface-language' }),
+    moreMenu: UiMenu.init({ id: 'more-menu' }),
     glossaryFocus: null,
     glossaryReturn: 'none',
     insightHelp: false,
@@ -1368,6 +1370,32 @@ const foldLanguagePicker = Update.foldChild({
     ({ value }) =>
     (model) =>
       handle(model, Message.LocaleChosen({ locale: value })),
+})
+
+/** What each item in the phone toolbar's More menu does: the same as its desktop button. */
+const MORE_ACTIONS: Record<MoreItem, Message> = {
+  exit: Message.PanelOpened({ panel: 'exit' }),
+  playbooks: Message.PanelOpened({ panel: 'playbooks' }),
+  dashboard: Message.PanelOpened({ panel: 'dashboard' }),
+  help: Message.PanelOpened({ panel: 'help' }),
+  glossary: Message.GlossaryOpened({ id: null }),
+  settings: Message.PanelOpened({ panel: 'settings' }),
+  undo: Message.UndoChosen(),
+  redo: Message.RedoChosen(),
+  tidy: Message.BoardTidied(),
+  fit: Message.BoardFitted(),
+  fullscreen: Message.FullscreenToggled(),
+}
+
+const foldMoreMenu = Update.foldChild({
+  update: moreMenu.update,
+  read: (model: Model) => Option.some(model.moreMenu),
+  write: (model, moreMenu) => ({ ...model, moreMenu }),
+  toParentMessage: (message) => Message.MoreMenuChanged({ message }),
+  foldOutMessage:
+    ({ value }) =>
+    (model) =>
+      handle(model, MORE_ACTIONS[value]),
 })
 
 const histograms = histogramQuery.lift<Model, Message>({
@@ -2873,6 +2901,7 @@ const handle = (model: Model, message: Message): Result =>
           },
 
     LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
+    MoreMenuChanged: ({ message }) => foldMoreMenu(model, message),
     LocaleChosen: ({ locale }) => {
       const next = { ...model, locale }
       const result = settled(next)

@@ -7,6 +7,8 @@ import {
   ChartLine,
   CircleHelp,
   DatabaseZap,
+  DoorOpen,
+  Ellipsis,
   Expand,
   FlaskConical,
   Hammer,
@@ -42,6 +44,7 @@ import {
 } from '@quorum/simulation/catalog'
 import { openRegions, regional } from '@quorum/simulation/regions'
 import { canRaise } from '@quorum/simulation/actions'
+import { exitOffers } from '@quorum/simulation/exit'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@quorum/simulation/lookups'
 import { limitingPool } from '@quorum/simulation/studies'
@@ -61,8 +64,9 @@ import { itemName } from '@quorum/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { clock as mmss, compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import { offCompany, type Model } from '@/game/model.ts'
+import { ledgerOf, offCompany, type Model } from '@/game/model.ts'
 import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
+import { moreMenu, type MoreItem } from '@/game/more.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
@@ -793,8 +797,143 @@ const historyButton = (
     [icon(h, glyph, 'size-[18px]')],
   )
 
+/** Controls a phone reaches through More instead. */
+const desktopOnly = (children: ReadonlyArray<Html>, h: HtmlBuilder<Message>): Html =>
+  h.div([h.Class('contents compact:hidden')], children)
+
 const divider = (h: HtmlBuilder<Message>): Html =>
   h.div([h.Class('mx-0.5 h-6 w-px bg-hairline compact:hidden')], [])
+
+/** The most Legacy an Exit pays now, or null while no Exit is on the table. */
+const exitLegacy = (model: Model): number | null => {
+  if (offCompany(model) || model.exited) return null
+  const offers = exitOffers(model.game, ledgerOf(model))
+  return offers.length === 0 ? null : Math.max(...offers.map((offer) => offer.legacy))
+}
+
+/** The Exit button, shown while an Exit is on the table; its badge is the best Legacy. */
+const exitButton = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const legacy = exitLegacy(model)
+  if (legacy === null) return h.empty
+  return h.button(
+    [
+      h.Key('exit'),
+      h.Type('button'),
+      h.Title(`Exit · up to ${legacy} Legacy`),
+      h.AriaLabel('Exit'),
+      h.AriaPressed(model.panel === 'exit' ? 'true' : 'false'),
+      h.OnClick(Message.PanelOpened({ panel: model.panel === 'exit' ? 'none' : 'exit' })),
+      h.Class(
+        cn(
+          tool(model.panel === 'exit'),
+          'enter-pop flex w-auto gap-2 px-3 text-[13px] font-medium compact:size-9 compact:px-0 max-2xl:w-9 max-2xl:px-0 max-2xl:justify-center',
+        ),
+      ),
+    ],
+    [
+      icon(h, DoorOpen, 'size-[18px]'),
+      h.span([h.Class('compact:hidden max-2xl:hidden')], ['Exit']),
+      legacy > 0
+        ? h.span(
+            [
+              h.Key('badge'),
+              h.Class(
+                cn(
+                  FIGURE,
+                  'enter-badge absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[9.5px] leading-none font-semibold text-white shadow-raised',
+                ),
+              ),
+            ],
+            [String(legacy)],
+          )
+        : h.empty,
+    ],
+  )
+}
+
+const MORE: Record<MoreItem, Readonly<{ label: string; glyph: IconNode }>> = {
+  exit: { label: 'Exit', glyph: DoorOpen },
+  playbooks: { label: 'Playbooks', glyph: BookCopy },
+  dashboard: { label: 'Dashboard', glyph: ChartLine },
+  help: { label: 'How to play', glyph: CircleHelp },
+  glossary: { label: 'Glossary', glyph: BookOpen },
+  settings: { label: 'Settings', glyph: Settings },
+  undo: { label: 'Undo', glyph: Undo2 },
+  redo: { label: 'Redo', glyph: Redo2 },
+  tidy: { label: 'Tidy by zone', glyph: LayoutGrid },
+  fit: { label: 'Fit the board', glyph: Scan },
+  fullscreen: { label: 'Fullscreen', glyph: Expand },
+}
+
+const moreItems = (model: Model): ReadonlyArray<MoreItem> => [
+  ...(exitLegacy(model) === null ? [] : (['exit'] as const)),
+  ...(playbooksShown(model) ? (['playbooks'] as const) : []),
+  ...(has(model.game, 'metrics') ? (['dashboard'] as const) : []),
+  'help',
+  ...(shown(model, 'glossary') ? (['glossary'] as const) : []),
+  'settings',
+  ...(shown(model, 'undo') ? (['undo', 'redo'] as const) : []),
+  'tidy',
+  'fit',
+  'fullscreen',
+]
+
+const moreButton = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const legacy = exitLegacy(model)
+  // A dot when something inside asks for attention: Legacy on offer, or a cue on a hidden control.
+  const calling = (legacy ?? 0) > 0 || glowing(model, 'undo') || glowing(model, 'glossary')
+  return h.submodel({
+    slotId: 'more-menu',
+    model: model.moreMenu,
+    view: moreMenu.view,
+    toParentMessage: (message) => Message.MoreMenuChanged({ message }),
+    viewInputs: {
+      items: moreItems(model),
+      className: 'hidden compact:block',
+      ariaLabel: 'More',
+      buttonClassName: cn(tool(model.moreMenu.isOpen), 'relative size-9'),
+      buttonContent: h.span(
+        [h.Class('contents')],
+        [
+          icon(h, Ellipsis, 'size-[18px]'),
+          calling
+            ? h.span(
+                [
+                  h.Class(
+                    'enter-badge absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-ok shadow-raised',
+                  ),
+                ],
+                [],
+              )
+            : h.empty,
+        ],
+      ),
+      anchor: { placement: 'bottom-end', gap: 6, padding: 8 },
+      backdropClassName: 'fixed inset-0 z-40',
+      itemsClassName: `z-50 min-w-48 p-1 outline-none ${FLOAT}`,
+      isItemDisabled: (item) =>
+        (item === 'undo' && !undoAvailable(model)) || (item === 'redo' && !redoAvailable(model)),
+      itemToConfig: (item, { isActive, isDisabled }) => ({
+        className: cn(
+          'flex h-10 cursor-pointer items-center gap-2.5 rounded-xl px-2.5 text-[13px] outline-none',
+          isActive && 'bg-well',
+          isDisabled && 'opacity-35',
+          item === 'fullscreen' && 'narrow:hidden',
+        ),
+        content: h.span(
+          [h.Class('flex w-full items-center gap-2.5')],
+          [
+            icon(h, MORE[item].glyph, 'size-[18px] text-muted-foreground'),
+            h.span([h.Class('flex-1')], [MORE[item].label]),
+            item === 'exit' && (legacy ?? 0) > 0
+              ? h.span([h.Class(cn(FIGURE, 'text-[11.5px] text-ok'))], [`+${legacy} Legacy`])
+              : h.empty,
+          ],
+        ),
+      }),
+    },
+  })
+}
 
 export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
@@ -805,10 +944,11 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
   return h.nav(
     [
       h.Class(
-        `absolute top-3 right-3 z-20 flex items-center gap-1 p-1.5 ${PANEL} compact:pointer-events-auto compact:top-[calc(max(8px,env(safe-area-inset-top))+10px)] compact:right-[calc(max(8px,env(safe-area-inset-right))+10px)] compact:gap-0.5 compact:bg-none compact:p-0 compact:shadow-none`,
+        `pointer-events-auto relative z-20 flex shrink-0 items-center gap-1 p-1.5 ${PANEL} compact:absolute compact:top-[calc(max(8px,env(safe-area-inset-top))+10px)] compact:right-[calc(max(8px,env(safe-area-inset-right))+10px)] compact:gap-0.5 compact:bg-none compact:p-0 compact:shadow-none`,
       ),
     ],
     [
+      desktopOnly([exitButton(model, h)], h),
       offCompany(model) || !shown(model, 'research')
         ? h.empty
         : h.button(
@@ -884,65 +1024,76 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 : h.empty,
             ],
           ),
-      !playbooksShown(model)
-        ? h.empty
-        : toolButton(
-            'Playbooks (P)',
-            BookCopy,
-            Message.PanelOpened({ panel: model.panel === 'playbooks' ? 'none' : 'playbooks' }),
-            model.panel === 'playbooks',
+      desktopOnly(
+        [
+          !playbooksShown(model)
+            ? h.empty
+            : toolButton(
+                'Playbooks (P)',
+                BookCopy,
+                Message.PanelOpened({ panel: model.panel === 'playbooks' ? 'none' : 'playbooks' }),
+                model.panel === 'playbooks',
+                h,
+              ),
+          has(model.game, 'metrics')
+            ? toolButton(
+                'Dashboard (D)',
+                ChartLine,
+                Message.PanelOpened({ panel: model.panel === 'dashboard' ? 'none' : 'dashboard' }),
+                model.panel === 'dashboard',
+                h,
+              )
+            : h.empty,
+          toolButton(
+            'How to play (H)',
+            CircleHelp,
+            Message.PanelOpened({ panel: model.panel === 'help' ? 'none' : 'help' }),
+            model.panel === 'help',
             h,
           ),
-      has(model.game, 'metrics')
-        ? toolButton(
-            'Dashboard (D)',
-            ChartLine,
-            Message.PanelOpened({ panel: model.panel === 'dashboard' ? 'none' : 'dashboard' }),
-            model.panel === 'dashboard',
+          shown(model, 'glossary')
+            ? toolButton(
+                'Glossary (G)',
+                BookOpen,
+                model.panel === 'glossary'
+                  ? Message.PanelClosed()
+                  : Message.GlossaryOpened({ id: null }),
+                model.panel === 'glossary',
+                h,
+                h.empty,
+                glowing(model, 'glossary'),
+              )
+            : h.empty,
+          toolButton(
+            'Settings',
+            Settings,
+            Message.PanelOpened({ panel: model.panel === 'settings' ? 'none' : 'settings' }),
+            model.panel === 'settings',
             h,
-          )
-        : h.empty,
-      toolButton(
-        'How to play (H)',
-        CircleHelp,
-        Message.PanelOpened({ panel: model.panel === 'help' ? 'none' : 'help' }),
-        model.panel === 'help',
+          ),
+          ...(shown(model, 'undo')
+            ? [
+                divider(h),
+                historyButton(
+                  'Undo (Z)',
+                  Undo2,
+                  Message.UndoChosen(),
+                  undoAvailable(model),
+                  h,
+                  glowing(model, 'undo'),
+                ),
+                historyButton(
+                  'Redo (Shift+Z)',
+                  Redo2,
+                  Message.RedoChosen(),
+                  redoAvailable(model),
+                  h,
+                ),
+              ]
+            : []),
+        ],
         h,
       ),
-      shown(model, 'glossary')
-        ? toolButton(
-            'Glossary (G)',
-            BookOpen,
-            model.panel === 'glossary'
-              ? Message.PanelClosed()
-              : Message.GlossaryOpened({ id: null }),
-            model.panel === 'glossary',
-            h,
-            h.empty,
-            glowing(model, 'glossary'),
-          )
-        : h.empty,
-      toolButton(
-        'Settings',
-        Settings,
-        Message.PanelOpened({ panel: model.panel === 'settings' ? 'none' : 'settings' }),
-        model.panel === 'settings',
-        h,
-      ),
-      ...(shown(model, 'undo')
-        ? [
-            divider(h),
-            historyButton(
-              'Undo (Z)',
-              Undo2,
-              Message.UndoChosen(),
-              undoAvailable(model),
-              h,
-              glowing(model, 'undo'),
-            ),
-            historyButton('Redo (Shift+Z)', Redo2, Message.RedoChosen(), redoAvailable(model), h),
-          ]
-        : []),
       divider(h),
       toolButton(
         model.paused ? 'Resume (Space)' : 'Pause (Space)',
@@ -962,13 +1113,16 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
         ],
         [`${model.speed}×`],
       ),
-      divider(h),
-      toolButton('Tidy by zone', LayoutGrid, Message.BoardTidied(), false, h),
-      toolButton('Fit the board', Scan, Message.BoardFitted(), false, h),
-      h.div(
-        [h.Class('contents narrow:hidden')],
-        [toolButton('Fullscreen (F)', Expand, Message.FullscreenToggled(), false, h)],
+      desktopOnly(
+        [
+          divider(h),
+          toolButton('Tidy by zone', LayoutGrid, Message.BoardTidied(), false, h),
+          toolButton('Fit the board', Scan, Message.BoardFitted(), false, h),
+          toolButton('Fullscreen (F)', Expand, Message.FullscreenToggled(), false, h),
+        ],
+        h,
       ),
+      moreButton(model, h),
     ],
   )
 }
@@ -996,7 +1150,7 @@ const undoButton = (danger: boolean, h: HtmlBuilder<Message>): Html =>
 
 /** One pill from the first change to the delta: Settling morphs into the result,
  *  and the pill leaves when the delta expires. */
-export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
+export const changeBar = (model: Model, h: HtmlBuilder<Message>, className: string): Html => {
   const undo = undoAvailable(model)
   const delta = model.delta
   if (!model.change && !delta) return h.empty
@@ -1043,7 +1197,7 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.Key('change'),
       h.DataAttribute('morph', 'notice'),
       h.DataAttribute('exit', 'notice'),
-      h.Class(`enter-down ${pill}`),
+      h.Class(cn(pill, className)),
     ],
     [body, undo ? undoButton(!model.change && !!delta?.worse, h) : h.empty],
   )

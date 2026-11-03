@@ -1,16 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import {
-  BookCopy,
-  Clipboard,
-  Copy,
-  CopyPlus,
-  DoorOpen,
-  Plus,
-  Stamp,
-  Trash2,
-  Upload,
-  X,
-} from 'lucide'
+import { BookCopy, Clipboard, Copy, CopyPlus, Plus, Stamp, Trash2, Upload, X } from 'lucide'
 import { COMPONENTS, ERAS, EXITS, RESEARCH } from '@quorum/simulation/catalog'
 import { exitOffers } from '@quorum/simulation/exit'
 import { keepSlots, playbookSlots } from '@quorum/simulation/founder'
@@ -42,26 +31,6 @@ const stats = (columns: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Me
 
 const footer = (children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
   h.div([h.Class('flex justify-end gap-2 border-t border-hairline bg-nested px-5 py-3')], children)
-
-/** The pill that says an Exit is on the table. */
-export const exitPill = (model: Model, h: HtmlBuilder<Message>): Html => {
-  if (offCompany(model) || model.exited) return h.empty
-  const offers = exitOffers(model.game, ledgerOf(model))
-  if (offers.length === 0) return h.empty
-  return button(
-    {
-      onClick: Message.PanelOpened({ panel: 'exit' }),
-      variant: 'outline',
-      size: 'sm',
-      className: 'pointer-events-auto enter-down',
-    },
-    [
-      icon(h, DoorOpen, 'size-3.5'),
-      `Exit · up to ${Math.max(...offers.map((o) => o.legacy))} Legacy`,
-    ],
-    h,
-  )
-}
 
 export const exitPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
@@ -301,7 +270,7 @@ export const selectionBar = (model: Model, h: HtmlBuilder<Message>): Html =>
           [
             h.Key('selection'),
             h.Class(
-              'pointer-events-auto enter-down flex items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
+              'pointer-events-auto enter-pop flex h-[52px] items-center gap-2 rounded-2xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
             ),
           ],
           [
@@ -340,7 +309,7 @@ export const sellBar = (model: Model, h: HtmlBuilder<Message>): Html => {
     [
       h.Key('sell'),
       h.Class(
-        'pointer-events-auto enter-down flex items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
+        'pointer-events-auto enter-pop flex h-[52px] items-center gap-2 rounded-2xl bg-surface py-1.5 pr-1.5 pl-3.5 text-[12.5px] shadow-card',
       ),
     ],
     [
@@ -368,7 +337,7 @@ export const stampBar = (model: Model, h: HtmlBuilder<Message>): Html => {
         [
           h.Key('stamp'),
           h.Class(
-            'enter-down flex items-center gap-2 rounded-xl bg-surface px-3.5 py-2 text-[12.5px] shadow-card',
+            'enter-pop flex h-[52px] items-center gap-2 rounded-2xl bg-surface px-3.5 text-[12.5px] shadow-card',
           ),
         ],
         [icon(h, Stamp, 'size-3.5 text-primary-strong'), `Click to place ${playbook.name} · Esc`],

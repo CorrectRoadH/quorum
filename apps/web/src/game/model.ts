@@ -1,4 +1,4 @@
-import { Listbox } from '@foldkit/ui'
+import { Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { Locale } from '../i18n/index.ts'
 import { Effect, Schema } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
@@ -359,6 +359,8 @@ export const Model = Schema.Struct({
   agentAccess: Schema.Boolean,
   locale: Locale,
   languagePicker: Listbox.Model,
+  /** The phone toolbar's More menu. */
+  moreMenu: UiMenu.Model,
   /** The Glossary panel's open entry, search, and category filter. */
   glossaryFocus: Schema.NullOr(Schema.String),
   /** The panel the Glossary closes back to: Research when a (?) link opened it. */

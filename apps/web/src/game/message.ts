@@ -1,4 +1,4 @@
-import { DragAndDrop, Listbox } from '@foldkit/ui'
+import { DragAndDrop, Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { Locale } from '../i18n/index.ts'
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
@@ -261,6 +261,7 @@ export const Message = defineMessageUnion({
   MotionToggled: {},
   LocaleChosen: { locale: Locale },
   LanguagePickerChanged: { message: Listbox.Message },
+  MoreMenuChanged: { message: UiMenu.Message },
   InsightHelpToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },

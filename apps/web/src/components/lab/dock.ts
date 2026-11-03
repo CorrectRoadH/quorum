@@ -117,9 +117,10 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   const groups = BUILD_GROUPS.filter((group) => dockGroups(model.game).includes(group.key))
   return h.div(
     [
+      h.Key('dock'),
       h.DataAttribute('morph', 'gesture'),
       h.Class(
-        `absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center justify-end p-1.5 ${PANEL} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0 compact:items-stretch`,
+        `pointer-events-auto flex flex-col items-center justify-end p-1.5 ${PANEL} compact:items-stretch`,
       ),
     ],
     [
