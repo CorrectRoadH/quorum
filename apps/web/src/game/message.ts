@@ -236,6 +236,8 @@ export const Message = defineMessageUnion({
   MotionToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },
+  DashboardRangeChosen: { minutes: Schema.Finite },
+  DashboardHovered: { index: Schema.NullOr(Schema.Finite) },
   MailOpened: { id: Schema.Finite },
   MailTrashed: { id: Schema.Finite },
   MailRestored: { id: Schema.Finite },

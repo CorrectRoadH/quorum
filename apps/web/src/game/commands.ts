@@ -9,6 +9,7 @@ import { ComponentId, Game, Region } from '@quorum/simulation/state'
 import { Message } from './message.ts'
 import { Founder } from '@quorum/simulation/founder'
 import { Motion, Prefs, Reveal, SandboxStore } from './model.ts'
+import { History } from './history.ts'
 import { play, setMuted, SOUND_NAMES } from './sound.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 import { ChallengeSubmission } from '@quorum/rpc'
@@ -119,15 +120,25 @@ export const LoadSave = Command.define('LoadSave', {
 })
 
 export const WriteSave = Command.define('WriteSave', {
-  args: { game: Game, revealed: Schema.Array(Reveal), pending: Schema.Array(Reveal) },
+  args: {
+    game: Game,
+    revealed: Schema.Array(Reveal),
+    pending: Schema.Array(Reveal),
+    dashboard: History,
+  },
   messages: [Message.Saved],
-  execute: ({ game, revealed, pending }) =>
+  execute: ({ game, revealed, pending, dashboard }) =>
     Effect.sync(() => {
       try {
         // The wall clock goes in at the last moment: it is the only one, for offline progress.
         window.localStorage.setItem(
           SAVE_KEY,
-          JSON.stringify({ ...game, wall: Date.now(), disclosure: { revealed, pending } }),
+          JSON.stringify({
+            ...game,
+            wall: Date.now(),
+            disclosure: { revealed, pending },
+            dashboard,
+          }),
         )
       } catch {
         // A full or blocked storage loses the save, not the game.

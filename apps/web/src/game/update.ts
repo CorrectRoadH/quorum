@@ -54,6 +54,7 @@ import {
   revealsOfSave,
   shown,
 } from './reveal.ts'
+import { EMPTY_HISTORY, historyOfSave, newSamples, record } from './history.ts'
 import { ipoExit, takeExit } from '@quorum/simulation/exit'
 import {
   Founder,
@@ -264,6 +265,9 @@ export const initialModel = (): Model =>
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
+    dashboardHistory: EMPTY_HISTORY,
+    dashboardRange: 360,
+    dashboardHover: null,
     lastGoal: '',
     lastBottleneck: '',
   })
@@ -305,7 +309,12 @@ const sync = (model: Model): AnyCommand =>
 
 /** The Company save: the Game, and what this Company has shown so far. */
 const saveOf = (model: Model): AnyCommand =>
-  WriteSave({ game: model.game, revealed: model.revealed, pending: model.pending })
+  WriteSave({
+    game: model.game,
+    revealed: model.revealed,
+    pending: model.pending,
+    dashboard: model.dashboardHistory,
+  })
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
 const stampOf = (model: Model) => {
@@ -976,6 +985,16 @@ const tick = (model: Model): Result => {
   if (settled.delta) logs.push(line(game.time, 'ChangeSettled', settled.delta))
   if (deltaExpired(next)) next = { ...next, delta: null }
 
+  // The Dashboard's long history: every Sample the Steps added.
+  next = {
+    ...next,
+    dashboardHistory: record(
+      next.dashboardHistory,
+      newSamples(game.history, model.game.time, game.time),
+      Math.floor(game.time),
+    ),
+  }
+
   // Utilization history, once per 10 sim seconds.
   if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.game.time / HISTORY_EVERY)) {
     const history: Record<string, ReadonlyArray<number>> = {}
@@ -1115,6 +1134,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
+    dashboardHistory: EMPTY_HISTORY,
     savedAt: game.time,
     sampledAt: game.time,
   }
@@ -1486,6 +1506,7 @@ const handle = (model: Model, message: Message): Result =>
             model: {
               ...model,
               ...revealsOfSave(JSON.parse(json ?? 'null')),
+              dashboardHistory: historyOfSave(JSON.parse(json ?? 'null')),
               game,
               saved: true,
               savedAt: game.time,
@@ -1692,6 +1713,12 @@ const handle = (model: Model, message: Message): Result =>
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
+          )
+        case 'd':
+          if (!has(model.game, 'metrics')) return { model }
+          return route(
+            model,
+            Message.PanelOpened({ panel: model.panel === 'dashboard' ? 'none' : 'dashboard' }),
           )
         case 'p':
           if (!playbooksShown(model)) return { model }
@@ -2474,7 +2501,13 @@ const handle = (model: Model, message: Message): Result =>
           ),
 
     PanelOpened: ({ panel }) => {
-      const opened: Model = { ...model, panel, placing: null, researchFocus: null }
+      const opened: Model = {
+        ...model,
+        panel,
+        placing: null,
+        researchFocus: null,
+        dashboardHover: null,
+      }
       return { model: panel === 'inbox' ? reading({ ...opened, folder: 'inbox' }) : opened }
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
@@ -2553,6 +2586,10 @@ const handle = (model: Model, message: Message): Result =>
       }
     },
     GlossarySearched: ({ query }) => ({ model: { ...model, glossaryQuery: query } }),
+    DashboardRangeChosen: ({ minutes }) => ({
+      model: { ...model, dashboardRange: minutes, dashboardHover: null },
+    }),
+    DashboardHovered: ({ index }) => ({ model: { ...model, dashboardHover: index } }),
 
     CheatCash: () => {
       const next: Model = {

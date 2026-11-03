@@ -13,6 +13,7 @@ import {
 } from '@/components/lab/panels.ts'
 import { inboxButton, inboxPanel } from '@/components/lab/inbox.ts'
 import { glossaryPanel } from '@/components/lab/glossary.ts'
+import { dashboardPanel } from '@/components/lab/dashboard.ts'
 import { researchPanel } from '@/components/lab/research.ts'
 import { teamPanel } from '@/components/lab/team.ts'
 import {
@@ -110,6 +111,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       model.panel === 'settings' ? settingsPanel(model, h) : h.empty,
       model.panel === 'inbox' ? inboxPanel(model, h) : h.empty,
       model.panel === 'glossary' ? glossaryPanel(model, h) : h.empty,
+      model.panel === 'dashboard' ? dashboardPanel(model, h) : h.empty,
       model.panel === 'offer' ? offerPanel(model, h) : h.empty,
       model.panel === 'era' ? eraPanel(model, h) : h.empty,
       model.panel === 'end' ? endPanel(model, h) : h.empty,
