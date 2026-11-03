@@ -8,7 +8,7 @@ import type { Game } from './state.ts'
    ========================================================================== */
 
 /** Converts a year of game revenue into real ARR (16 "Valuation scale"). */
-export const VALUATION_SCALE = 0.000075
+export const VALUATION_SCALE = 0.00015
 /** Investor relations adds this to the multiple. */
 export const INVESTOR_RELATIONS = 2
 const HOURS_PER_YEAR = 8_760

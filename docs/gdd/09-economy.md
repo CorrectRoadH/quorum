@@ -72,9 +72,31 @@ surfaces them on purpose.
 | Engineer salary (base)   | $0.40/s           |
 
 These are Garage prices. Every price in this document, including placement, Burn, egress, and
-third-party fees, is multiplied by the Era's cost index. The index keeps Burn a real share of
+third-party fees, is multiplied by the Era's cost index, except the Payment Provider's fee. The index keeps Burn a real share of
 revenue at every size of company. [Balancing](./16-balancing.md#cost-index) holds the index and the
 salary scale, and [Balancing](./16-balancing.md#prices) holds the full table.
+
+### How prices map to real prices
+
+Each price follows one of two rules, so a player who knows the real price can check it:
+
+| Rule        | Prices                                                                            | Mapping                                                             |
+| ----------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Time-billed | Instances, GPUs, managed Nodes, storage, the Kubernetes control plane, LLM tokens | $1 per sim second in the game is $1 per real hour. A vCPU is $0.05. |
+| Per use     | Egress, the Payment Provider, push and email messages, Data Warehouse scans       | The real list price per GB, per checkout, per message, or per scan. |
+
+LLM tokens use the time-billed rule because they compete with GPU Nodes for the same prompts. On
+the same scale, a busy H100 is cheaper per prompt than the LLM API only while it is more than half
+busy, as in real self-hosting ([Reality check](./reality-check.md#prices)).
+
+Request values set what a user is worth. On the time-billed rule, a user sends about 0.02 requests
+an hour at about $0.25 each, so revenue is about $4 per user per month. Meta's 2025 worldwide ARPU
+was $57 a year, about $4.75 a month.
+
+The two rules do not agree with each other: per-use prices are about 3,600 times cheaper, relative
+to compute, than in a real bill. This is on purpose. At the time-billed rate, every page view would
+pay half its value in egress. Request values, the cost index, and the salary index are balance
+controls and do not follow a real price.
 
 ## Pricing models
 
@@ -107,9 +129,9 @@ or R2 serves it. A player who ignores egress sees revenue rise and margin fall.
 
 | Service          | Price                                          |
 | ---------------- | ---------------------------------------------- |
-| Payment Provider | 2.9% + $0.30 per successful `buy`              |
+| Payment Provider | 2.9% + $0.30 per successful `buy`, not indexed |
 | Auth Provider    | $0.02 per monthly active user per calendar day |
-| LLM API          | Per 1,000 tokens, by model size                |
+| LLM API          | $3.24 per 1,000 tokens                         |
 | Push and email   | $0.0001 per message                            |
 | API Gateway      | $0.002 per request (game dollars)              |
 
@@ -120,10 +142,10 @@ When users reach an Era milestone, investors offer a round. The player can raise
 | Round    | Milestone (users)                | Grant         | Dilution                 | Notes                                            |
 | -------- | -------------------------------- | ------------- | ------------------------ | ------------------------------------------------ |
 | Pre-seed | 1,000                            | $2,500        | 10%                      |                                                  |
-| Seed     | 5,000                            | $15,000       | 15%                      |                                                  |
-| Series A | 25,000                           | $80,000       | 20%                      |                                                  |
-| Series B | 150,000                          | $1,500,000    | 18%                      |                                                  |
-| Series C | 1,000,000                        | $18,000,000   | 15%                      |                                                  |
+| Seed     | 5,000                            | $15,000       | 19%                      | Carta median 19.4% (Q2 2026)                     |
+| Series A | 25,000                           | $80,000       | 19%                      | Carta median 18.7% (Q2 2026)                     |
+| Series B | 150,000                          | $1,500,000    | 13%                      | Carta median 12.9% (2025)                        |
+| Series C | 1,000,000                        | $18,000,000   | 12%                      | Carta: 16% median across seed to Series C        |
 | Pre-IPO  | 10,000,000                       | $200,000,000  | 10%                      |                                                  |
 | IPO      | 50,000,000 and the IPO checklist | Public market | 15% sold in the offering | [Progression](./10-progression.md#era-6-pre-ipo) |
 
@@ -141,7 +163,7 @@ check that this path does not beat the raise-every-round path in Legacy per hour
 ([Balancing](./16-balancing.md#pacing-model)).
 
 Dilution compounds. A founder who raises every round keeps about
-0.90 × 0.85 × 0.80 × 0.82 × 0.85 × 0.90 ≈ 38% before the IPO offering and about 33% after it, which
+0.90 × 0.81 × 0.81 × 0.87 × 0.88 × 0.90 ≈ 41% before the IPO offering and about 35% after it, which
 is above a typical real founder stake at IPO.
 
 ## Valuation
@@ -157,7 +179,7 @@ multiple   = 4 + 0.15 × max(0, rule_of_40)            clamped to [2, 30]
 valuation  = ARR × multiple
 ```
 
-`valuation_scale` is 7.5 × 10⁻⁵. Request values are stylized game dollars, so Cash and revenue run
+`valuation_scale` is 1.5 × 10⁻⁴. Request values are stylized game dollars, so Cash and revenue run
 far above real figures. The scale converts a year of game revenue into the real-dollar ARR that the
 company would report ([Balancing](./16-balancing.md#valuation-scale)). The Valuation, Exit payout,
 and Legacy use real dollars. Cash, revenue, and Burn use game dollars.

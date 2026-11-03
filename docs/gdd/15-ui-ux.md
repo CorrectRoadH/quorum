@@ -75,6 +75,7 @@ time the game state makes it useful.
 | Engineering in the Team panel      | The first memory leak or the first tech debt                     |
 | Autopilot in the Team panel        | The backlog holds two items                                      |
 | Glossary (`G`)                     | The first Tradeoff card opens                                    |
+| Dashboard (`D`)                    | Metrics is researched                                            |
 | The pager                          | Alerting is researched                                           |
 | Postmortems                        | The first incident ends                                          |
 | Playbooks (`P`)                    | The first Exit                                                   |
@@ -208,6 +209,7 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
 | --------- | ------------ | -------------------------------------------------------------------------- |
 | Inspector | Click a Node | All numbers for the Node, its options, its history, and its Tradeoff cards |
 | Research  | `R`          | The tree by track ([Research screen](#research-screen))                    |
+| Dashboard | `D`          | Charts over time ([Observability](./12-observability.md#the-dashboard))    |
 | Team      | `T`          | Teams, engineers, the backlog, policies, DORA metrics                      |
 | Cost      | `C`          | The cloud bill by line, per service, and per kind                          |
 | Inbox     | `I`          | Mail: advice, offers, and reports ([Mail](./18-mail.md))                   |

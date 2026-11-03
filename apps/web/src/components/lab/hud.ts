@@ -4,6 +4,7 @@ import {
   CircleCheck,
   BookCopy,
   BookOpen,
+  ChartLine,
   CircleHelp,
   DatabaseZap,
   Expand,
@@ -640,6 +641,15 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
             model.panel === 'playbooks',
             h,
           ),
+      has(model.game, 'metrics')
+        ? toolButton(
+            'Dashboard (D)',
+            ChartLine,
+            Message.PanelOpened({ panel: model.panel === 'dashboard' ? 'none' : 'dashboard' }),
+            model.panel === 'dashboard',
+            h,
+          )
+        : h.empty,
       toolButton(
         'How to play (H)',
         CircleHelp,

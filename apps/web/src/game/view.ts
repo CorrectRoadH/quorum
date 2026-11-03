@@ -25,7 +25,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
           [onBoard(model.route) ? labScreen(model, h) : titleScreen(model, h)],
         ),
         toast(model.toast, h),
-        languagePicker(model.locale, onBoard(model.route), h),
+        languagePicker(model.locale, model.languagePicker, onBoard(model.route), h),
       ],
     ),
   ),

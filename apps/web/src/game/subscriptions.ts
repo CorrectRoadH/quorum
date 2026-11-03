@@ -21,6 +21,8 @@ const keys = Stream.callback<KeyMessage>((queue) =>
       Effect.sync(() => {
         const listener = (event: KeyboardEvent) => {
           const target = event.target as HTMLElement | null
+          if (event.defaultPrevented || target?.closest('[data-language-picker], [role="listbox"]'))
+            return
           if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
           if (event.metaKey || event.ctrlKey || event.altKey) return
           // Arrows and Enter move over the board only when no control has focus.

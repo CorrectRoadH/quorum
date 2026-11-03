@@ -87,9 +87,9 @@ const BenchMounted = Mount.define('BenchMounted', {
 })
 
 /* --------------------------------------------------------------------------
-   Sounds. Each bench pop sounds as its animation starts: the plates burst on a
-   rising pentatonic scale, left to right. Menu items tick under the pointer
-   and chime when chosen.
+   Sounds. Each bench pop sounds as its animation starts: the plates stamp down
+   on a rising pentatonic scale, left to right. Menu items blip under the
+   pointer and beep when chosen.
    -------------------------------------------------------------------------- */
 
 const SCALE = [0, 2, 4, 7, 9, 12, 14]

@@ -39,10 +39,20 @@ test('the glossary catalog matches docs/gdd/glossary.md', async () => {
   const headings = [...text.matchAll(/^## (.+)$/gm)].map(([, heading]) => heading ?? '')
   expect(GLOSSARY.map((entry) => entry.term)).toEqual(headings.map((heading) => heading.trim()))
   expect(GLOSSARY.map((entry) => entry.id)).toEqual(headings.map(slug))
-  for (const entry of GLOSSARY) {
+  const ids = new Set(GLOSSARY.map((entry) => entry.id))
+  const sections = text.split(/^## /m).slice(1)
+  GLOSSARY.forEach((entry, index) => {
     expect(entry.definition.length).toBeGreaterThan(0)
     expect(entry.inGame.length).toBeGreaterThan(0)
-  }
+    expect(entry.links.length, entry.id).toBeGreaterThan(0)
+    for (const link of entry.links) {
+      expect(link.url, entry.id).toMatch(/^https:\/\//)
+      expect(sections[index], entry.id).toContain(link.url)
+    }
+    for (const id of entry.related) {
+      expect(ids.has(id) && id !== entry.id, `${entry.id} → ${id}`).toBe(true)
+    }
+  })
 })
 
 test('discovery meets entries from what the Company runs and goes through, never in a Sandbox', () => {

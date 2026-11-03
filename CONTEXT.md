@@ -327,6 +327,14 @@ _Avoid_: telemetry node, research node
 An unlock bought with Insight: a Component, a variant, a technique, or more visibility.
 _Avoid_: tech, upgrade, skill
 
+**Dashboard**:
+The full-screen view of Charts that shows the Design over time. It opens with `metrics` and grows with each visibility research.
+_Avoid_: monitoring screen, Grafana (in UI copy), stats page
+
+**Chart**:
+One graph or number on the Dashboard, such as p99 latency or error budget left.
+_Avoid_: panel (that is a side panel such as the Inspector), widget, tile
+
 **Tradeoff card**:
 The forced choice shown when the player picks an option, with its six-axis profile and a preview on the player's own Design.
 _Avoid_: tooltip, info card, lesson

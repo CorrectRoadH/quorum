@@ -190,7 +190,7 @@ const token = (name: string, fallback: string): number => {
   return value
 }
 
-const palette = () => ({
+const resolvePalette = () => ({
   canvas: token('--canvas', '#f1f4f9'),
   grid: token('--canvas-dot', '#c9d3e3'),
   card: token('--card', '#ffffff'),
@@ -215,7 +215,12 @@ const palette = () => ({
   } satisfies Record<BuildGroup, number>,
 })
 
-type Palette = ReturnType<typeof palette>
+type Palette = ReturnType<typeof resolvePalette>
+
+let resolved: Palette | null = null
+
+/** Every token is resolved once and kept, so the palette is too. */
+const palette = (): Palette => (resolved ??= resolvePalette())
 
 /** Blends two 0xRRGGBB colours; `t` is the share of `b`. */
 const mix = (a: number, b: number, t: number): number => {
@@ -367,15 +372,18 @@ const GLOW_S = 0.6
 const CUT_S = 0.18
 const RETRACT_S = 0.18
 
-/** The system setting, or the player's Reduce motion setting (`data-motion` on the root). */
+let reduceQuery: MediaQueryList | null = null
+
+/** The system setting, or the player's Reduce motion setting (`data-motion` on the root).
+ *  The query is made once: its `matches` stays live, and the board asks every frame. */
 const reducedMotion = (): boolean =>
   document.documentElement.dataset['motion'] === 'reduce' ||
-  matchMedia('(prefers-reduced-motion: reduce)').matches
+  (reduceQuery ??= matchMedia('(prefers-reduced-motion: reduce)')).matches
 
 /** How far toward its target a followed value moves this frame. A follow keeps its
  *  speed when the target changes mid-way, so drags and selections never restart. */
-const follow = (seconds: number, rate: number): number =>
-  reducedMotion() ? 1 : 1 - Math.exp(-rate * seconds)
+const follow = (seconds: number, rate: number, still: boolean): number =>
+  still ? 1 : 1 - Math.exp(-rate * seconds)
 
 const glyphs = new Map<IconNode, Texture>()
 const GLYPH_PX = 96
@@ -505,8 +513,8 @@ const lengthOf = (path: Route): number =>
   }, 0)
 
 /** The point `t` of the way along a path, by length. */
-const pointOn = (path: Route, t: number): Pt => {
-  let left = lengthOf(path) * t
+const pointOn = (path: Route, t: number, length = lengthOf(path)): Pt => {
+  let left = length * t
   for (let index = 1; index < path.length; index += 1) {
     const a = path[index - 1]
     const b = path[index]
@@ -686,6 +694,22 @@ const pips = (
     const at = x + index * step
     g.poly([at + 2, y, at + w + 2, y, at + w, y + 9, at, y + 9]).fill(index < filled ? on : off)
   }
+}
+
+const fits = new WeakMap<Text, Readonly<{ text: string; room: number; fit: string }>>()
+
+/** Shows `text` in `view`, cut with an ellipsis until it is no wider than `room`. The
+ *  last cut is kept, so a label that has not changed is not measured again. */
+const fitText = (view: Text, text: string, room: number): void => {
+  const last = fits.get(view)
+  if (last?.text === text && last.room === room) {
+    view.text = last.fit
+    return
+  }
+  view.text = text
+  while (view.width > room && view.text.length > 2)
+    view.text = `${view.text.slice(0, -2).trimEnd()}…`
+  fits.set(view, { text, room, fit: view.text })
 }
 
 const label = (size: number, family: string, weight: '400' | '500' | '600' | '700' = '500') =>
@@ -1133,6 +1157,12 @@ class NodeView {
   private readonly foot = label(12, SANS, '600')
   private readonly footMark = glyph(14)
   private digest = ''
+  /** What each layer was last drawn for. */
+  private frameKey = ''
+  private medalKey = ''
+  private barsKey = ''
+  private stranded: boolean | null = null
+  private shadowDrawn = false
   /** Seconds since the card arrived; Infinity when it was already on the board. */
   private age = Number.POSITIVE_INFINITY
   /** Seconds into the exit, or -1 while the Node lives. */
@@ -1214,8 +1244,7 @@ class NodeView {
 
   /** Entrance 200ms and exit 150ms on --ease-out, from 0.96 scale; the follow,
    *  lift, press and selection ring on top. False once the exit ends. */
-  tick(seconds: number): boolean {
-    const still = reducedMotion()
+  tick(seconds: number, still: boolean): boolean {
     let scale = 1
     if (this.leaving >= 0) {
       this.leaving += seconds
@@ -1230,7 +1259,7 @@ class NodeView {
     }
     // A held card stays under the pointer; a released one eases into its grid cell.
     const at = this.at ?? this.target
-    const k = follow(seconds, this.lifted ? 38 : 16)
+    const k = follow(seconds, this.lifted ? 38 : 16, still)
     const x = at.x + (this.target.x - at.x) * k
     const y = at.y + (this.target.y - at.y) * k
     this.at = {
@@ -1238,14 +1267,14 @@ class NodeView {
       y: Math.abs(this.target.y - y) < 0.1 ? this.target.y : y,
     }
     this.root.position.set(this.at.x + CARD_W / 2, this.at.y + this.height / 2)
-    this.lift += ((this.lifted ? 1 : 0) - this.lift) * follow(seconds, 20)
-    this.hold += ((this.held ? 1 : 0) - this.hold) * follow(seconds, 32)
+    this.lift += ((this.lifted ? 1 : 0) - this.lift) * follow(seconds, 20, still)
+    this.hold += ((this.held ? 1 : 0) - this.hold) * follow(seconds, 32, still)
     this.shadow.alpha = this.lift
     if (!still) scale *= 1 + 0.03 * this.lift - 0.02 * this.hold
     this.root.scale.set(still ? 1 : scale)
     // Selection: the ring closes in from a little way out and comes up to full strength.
     const selection =
-      this.selection + ((this.selected ? 1 : 0) - this.selection) * follow(seconds, 24)
+      this.selection + ((this.selected ? 1 : 0) - this.selection) * follow(seconds, 24, still)
     if (Math.abs(selection - this.selection) > 0.001) {
       this.selection =
         Math.abs(selection - (this.selected ? 1 : 0)) < 0.01 ? (this.selected ? 1 : 0) : selection
@@ -1333,68 +1362,88 @@ class NodeView {
 
     const group = this.group
     const hue = colors.groups[group]
-    this.frame.clear()
-    // Depth: a wide soft shadow and a tight contact shadow under the card.
-    silhouette(this.frame, group, 1, 3, CARD_W - 2, height).fill({
-      color: colors.ink,
-      alpha: 0.035,
-    })
-    silhouette(this.frame, group, 0, 1, CARD_W, height).fill({ color: colors.ink, alpha: 0.05 })
-    silhouette(this.frame, group, 0, 0, CARD_W, height).fill(colors.card)
-    headerBand(this.frame, group, hue, colors)
     const badgeTone = node.down === -1 ? colors.muted : hue
-    this.medal.clear()
-    medallion(this.medal, group, badgeTone, colors)
-    for (let index = 1; index < layout.rows; index += 1) {
-      this.frame
-        .moveTo(10, rowTop(index))
-        .lineTo(CARD_W - 10, rowTop(index))
-        .stroke({ color: colors.border, width: 1, alpha: 0.55 })
-    }
-    if (node.down !== 0)
-      silhouette(this.frame, group, 0, 0, CARD_W, height).fill({
-        color: colors.danger,
-        alpha: 0.07,
+    const rect = footerRect(node.type)
+    const sink = footer && pressed && footer.enabled && footer.tone !== 'muted' ? 2 : 0
+    // Each layer is redrawn only when what it shows changes; values change every tick.
+    const frameKey = `${edge}:${node.down !== 0}:${footer?.tone}:${sink}:${selected}`
+    if (frameKey !== this.frameKey) {
+      this.frameKey = frameKey
+      this.frame.clear()
+      // Depth: a wide soft shadow and a tight contact shadow under the card.
+      silhouette(this.frame, group, 1, 3, CARD_W - 2, height).fill({
+        color: colors.ink,
+        alpha: 0.035,
       })
-    if (footer) {
-      const rect = footerRect(node.type)
-      const fill =
-        footer.tone === 'ok'
-          ? colors.ok
-          : footer.tone === 'danger'
-            ? colors.danger
-            : footer.tone === 'accent'
-              ? colors.accent
-              : colors.track
-      const { x, y, w, h } = rect
-      const sink = pressed && footer.enabled && footer.tone !== 'muted' ? 2 : 0
-      if (footer.tone === 'muted') {
-        // Disabled: sunk into the card instead of raised.
-        this.frame.roundRect(x, y + 1, w, h, 8).fill(fill)
+      silhouette(this.frame, group, 0, 1, CARD_W, height).fill({ color: colors.ink, alpha: 0.05 })
+      silhouette(this.frame, group, 0, 0, CARD_W, height).fill(colors.card)
+      headerBand(this.frame, group, hue, colors)
+      for (let index = 1; index < layout.rows; index += 1) {
         this.frame
-          .roundRect(x, y + 1, w, h, 8)
-          .stroke({ color: colors.ink, width: 1, alignment: 1, alpha: 0.06 })
-        this.frame
-          .moveTo(x + 8, y + 1.5)
-          .lineTo(x + w - 8, y + 1.5)
-          .stroke({ color: colors.ink, width: 1, alpha: 0.06 })
-      } else {
-        const top = footer.tone === 'accent' ? colors.fillTop : mix(fill, 0xffffff, 0.16)
-        const bottom = footer.tone === 'accent' ? colors.fillBottom : mix(fill, 0x000000, 0.08)
-        // Raised: soft drop, a darker lip, a top-lit body and a glossy top edge.
-        // Pressed, the body sinks onto its lip and the drop shadow goes.
-        const lifted = y + sink
-        if (!sink) this.frame.roundRect(x, y + 3, w, h, 8).fill({ color: colors.ink, alpha: 0.12 })
-        this.frame.roundRect(x, y + 2, w, h, 8).fill(mix(bottom, 0x000000, 0.28))
-        this.frame.roundRect(x, lifted, w, h, 8).fill(gradient(top, bottom))
-        this.frame
-          .roundRect(x, lifted, w, h, 8)
-          .stroke({ color: mix(bottom, 0x000000, 0.3), width: 1, alignment: 1, alpha: 0.7 })
-        this.frame
-          .moveTo(x + 8, lifted + 1.5)
-          .lineTo(x + w - 8, lifted + 1.5)
-          .stroke({ color: 0xffffff, width: 1, alpha: 0.28 })
+          .moveTo(10, rowTop(index))
+          .lineTo(CARD_W - 10, rowTop(index))
+          .stroke({ color: colors.border, width: 1, alpha: 0.55 })
       }
+      if (node.down !== 0)
+        silhouette(this.frame, group, 0, 0, CARD_W, height).fill({
+          color: colors.danger,
+          alpha: 0.07,
+        })
+      if (footer) {
+        const fill =
+          footer.tone === 'ok'
+            ? colors.ok
+            : footer.tone === 'danger'
+              ? colors.danger
+              : footer.tone === 'accent'
+                ? colors.accent
+                : colors.track
+        const { x, y, w, h } = rect
+        if (footer.tone === 'muted') {
+          // Disabled: sunk into the card instead of raised.
+          this.frame.roundRect(x, y + 1, w, h, 8).fill(fill)
+          this.frame
+            .roundRect(x, y + 1, w, h, 8)
+            .stroke({ color: colors.ink, width: 1, alignment: 1, alpha: 0.06 })
+          this.frame
+            .moveTo(x + 8, y + 1.5)
+            .lineTo(x + w - 8, y + 1.5)
+            .stroke({ color: colors.ink, width: 1, alpha: 0.06 })
+        } else {
+          const top = footer.tone === 'accent' ? colors.fillTop : mix(fill, 0xffffff, 0.16)
+          const bottom = footer.tone === 'accent' ? colors.fillBottom : mix(fill, 0x000000, 0.08)
+          // Raised: soft drop, a darker lip, a top-lit body and a glossy top edge.
+          // Pressed, the body sinks onto its lip and the drop shadow goes.
+          const lifted = y + sink
+          if (!sink)
+            this.frame.roundRect(x, y + 3, w, h, 8).fill({ color: colors.ink, alpha: 0.12 })
+          this.frame.roundRect(x, y + 2, w, h, 8).fill(mix(bottom, 0x000000, 0.28))
+          this.frame.roundRect(x, lifted, w, h, 8).fill(gradient(top, bottom))
+          this.frame
+            .roundRect(x, lifted, w, h, 8)
+            .stroke({ color: mix(bottom, 0x000000, 0.3), width: 1, alignment: 1, alpha: 0.7 })
+          this.frame
+            .moveTo(x + 8, lifted + 1.5)
+            .lineTo(x + w - 8, lifted + 1.5)
+            .stroke({ color: 0xffffff, width: 1, alpha: 0.28 })
+        }
+      }
+      silhouette(this.frame, group, 0, 0, CARD_W, height).stroke({
+        color: edge,
+        width: 1,
+        alignment: 1,
+        alpha: 0.8,
+      })
+      // The selection is the board's focus: a ring outside the card, as on a focused control.
+      if (selected)
+        silhouette(this.frame, group, 0, 0, CARD_W, height, 4).stroke({
+          color: colors.accent,
+          width: 2.5,
+          alpha: 0.55,
+        })
+    }
+    if (footer) {
+      const { x, y, w, h } = rect
       const ink =
         footer.tone === 'muted' ? colors.muted : footer.tone === 'accent' ? colors.onFill : 0xffffff
       this.foot.text = translate(locale, footer.text)
@@ -1410,32 +1459,45 @@ class NodeView {
       this.foot.text = ''
       this.footMark.visible = false
     }
-    silhouette(this.frame, group, 0, 0, CARD_W, height).stroke({
-      color: edge,
-      width: 1,
-      alignment: 1,
-      alpha: 0.8,
-    })
     // The lifted shadow: drawn once, faded in by the lift.
-    this.shadow.clear()
-    silhouette(this.shadow, group, 6, 18, CARD_W - 12, height - 6, 10).fill({
-      color: colors.ink,
-      alpha: 0.05,
-    })
-    silhouette(this.shadow, group, 2, 9, CARD_W - 4, height - 2, 3).fill({
-      color: colors.ink,
-      alpha: 0.08,
-    })
-    // The selection is the board's focus: a ring outside the card, as on a focused control.
-    if (selected)
-      silhouette(this.frame, group, 0, 0, CARD_W, height, 4).stroke({
-        color: colors.accent,
-        width: 2.5,
-        alpha: 0.55,
+    if (!this.shadowDrawn) {
+      this.shadowDrawn = true
+      silhouette(this.shadow, group, 6, 18, CARD_W - 12, height - 6, 10).fill({
+        color: colors.ink,
+        alpha: 0.05,
       })
+      silhouette(this.shadow, group, 2, 9, CARD_W - 4, height - 2, 3).fill({
+        color: colors.ink,
+        alpha: 0.08,
+      })
+    }
+    // Status is a shape as well as a colour: a dot, a triangle, a square, a cross. It sits
+    // on the medallion's corner, on a disc of the card's colour.
+    const medalKey = `${badgeTone}:${own.status}`
+    if (medalKey !== this.medalKey) {
+      this.medalKey = medalKey
+      this.medal.clear()
+      medallion(this.medal, group, badgeTone, colors)
+      if (status !== colors.border) {
+        const sx = BADGE_X + 15
+        const sy = BADGE_Y + 15
+        this.medal.circle(sx, sy, 6).fill(colors.card)
+        if (own.status === 'ok') this.medal.circle(sx, sy, 3.5).fill(status)
+        else if (own.status === 'warn')
+          this.medal.poly([sx, sy - 4, sx + 4.2, sy + 3.2, sx - 4.2, sy + 3.2]).fill(status)
+        else if (own.status === 'danger') this.medal.rect(sx - 3.3, sy - 3.3, 6.6, 6.6).fill(status)
+        else
+          this.medal
+            .moveTo(sx - 3.5, sy - 3.5)
+            .lineTo(sx + 3.5, sy + 3.5)
+            .moveTo(sx + 3.5, sy - 3.5)
+            .lineTo(sx - 3.5, sy + 3.5)
+            .stroke({ color: status, width: 2.2, cap: 'round' })
+      }
+    }
 
     paint(this.mark, COMPONENT_ICONS[node.type], 0xffffff)
-    this.title.text =
+    const title =
       node.down === -1
         ? `${def.name} · failed`
         : node.down > 0
@@ -1443,23 +1505,26 @@ class NodeView {
           : node.warm < 1 && (def.sized || node.type === 'cache')
             ? `${def.name} · cold`
             : def.name
-    this.title.text = translate(locale, this.title.text)
     this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
-    this.bars.clear()
+    const size = sizePips(node)
+    const barsKey = JSON.stringify([size, badgeTone, rows.map((row) => row.trend ?? row.bar)])
+    const bars = barsKey !== this.barsKey
+    this.barsKey = barsKey
+    if (bars) this.bars.clear()
     // Right to left: the size pips, then the zone and copies, then the title takes the rest.
     let right = CARD_W - 12
-    const size = sizePips(node)
     if (size) {
       const width = pipsWidth(size.total)
-      pips(
-        this.bars,
-        right - width,
-        HEAD / 2 - 4.5,
-        size.filled,
-        size.total,
-        badgeTone,
-        colors.well,
-      )
+      if (bars)
+        pips(
+          this.bars,
+          right - width,
+          HEAD / 2 - 4.5,
+          size.filled,
+          size.total,
+          badgeTone,
+          colors.well,
+        )
       right -= width + 7
     }
     this.level.text = translate(locale, levelOf(game, node, region))
@@ -1467,27 +1532,8 @@ class NodeView {
     this.level.position.set(right, HEAD / 2)
     if (this.level.text) right -= this.level.width + 8
     // A long title gives way to the level: it is cut with an ellipsis before the two touch.
-    while (this.title.width > right - 4 - this.title.x && this.title.text.length > 2)
-      this.title.text = `${this.title.text.slice(0, -2).trimEnd()}…`
+    fitText(this.title, translate(locale, title), right - 4 - this.title.x)
 
-    // Status is a shape as well as a colour: a dot, a triangle, a square, a cross. It sits
-    // on the medallion's corner, on a disc of the card's colour.
-    if (status !== colors.border) {
-      const sx = BADGE_X + 15
-      const sy = BADGE_Y + 15
-      this.medal.circle(sx, sy, 6).fill(colors.card)
-      if (own.status === 'ok') this.medal.circle(sx, sy, 3.5).fill(status)
-      else if (own.status === 'warn')
-        this.medal.poly([sx, sy - 4, sx + 4.2, sy + 3.2, sx - 4.2, sy + 3.2]).fill(status)
-      else if (own.status === 'danger') this.medal.rect(sx - 3.3, sy - 3.3, 6.6, 6.6).fill(status)
-      else
-        this.medal
-          .moveTo(sx - 3.5, sy - 3.5)
-          .lineTo(sx + 3.5, sy + 3.5)
-          .moveTo(sx + 3.5, sy - 3.5)
-          .lineTo(sx - 3.5, sy + 3.5)
-          .stroke({ color: status, width: 2.2, cap: 'round' })
-    }
     rows.forEach((row, index) => {
       const mark = this.glyphs[index]
       const name = this.names[index]
@@ -1496,19 +1542,21 @@ class NodeView {
       if (!mark || !name || !value || !valueMark) return
       if (row.logo) paintLogo(mark, row.logo, colors.ink)
       else paint(mark, ROW_ICONS[row.glyph], colors.muted)
-      name.text = translate(locale, row.name)
       name.style.fill = row.logo ? colors.ink : colors.muted
       value.text = translate(locale, row.value)
       value.style.fill = toneOf(row.tone)
       // A long name gives way to the value: it is cut with an ellipsis before the two touch.
-      const room = value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x
-      while (name.width > room && name.text.length > 2)
-        name.text = `${name.text.slice(0, -2).trimEnd()}…`
+      fitText(
+        name,
+        translate(locale, row.name),
+        value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x,
+      )
       valueMark.visible = row.valueLogo !== undefined
       if (row.valueLogo) {
         paintLogo(valueMark, row.valueLogo, colors.ink)
         valueMark.position.set(value.x - value.width - 18, rowMid(index) - 7.5)
       }
+      if (!bars) return
       if (row.trend) {
         // Load over the last day: a sparkline in place of the bar.
         const bottom = rowTop(index) + ROW - 1
@@ -1536,6 +1584,9 @@ class NodeView {
       }
     })
 
+    const stranded = own.stranded > 0.01
+    if (stranded === this.stranded) return
+    this.stranded = stranded
     this.ports.clear()
     if (layout.inRow !== null) {
       const y = rowMid(layout.inRow)
@@ -1546,9 +1597,88 @@ class NodeView {
       const y = rowMid(layout.outRow)
       this.ports
         .circle(CARD_W, y, PORT_R)
-        .fill(own.stranded > 0.01 ? colors.danger : colors.groups[this.group])
+        .fill(stranded ? colors.danger : colors.groups[this.group])
       this.ports.circle(CARD_W, y, 2).fill(colors.card)
     }
+  }
+}
+
+/* ---------- one belt ---------- */
+
+/**
+ * One link's belt, in three layers so belts stack as they always have: a later belt
+ * covers an earlier one's chevrons where they share a trunk. The body and the mouths
+ * are redrawn only when their path or colours change; the chevrons only while they move.
+ */
+class BeltView {
+  readonly root = new Container()
+  private readonly body = new Graphics()
+  private readonly chevrons = new Graphics()
+  private readonly mouths = new Graphics()
+  private bodyFor: unknown = null
+  private bodyKey = ''
+  private chevronsFor: unknown = null
+  private chevronsKey = ''
+
+  constructor() {
+    // Moving chevrons change every frame. In a render group of their own, a change
+    // rebuilds only them, not every belt's batches.
+    const moving = new Container({ isRenderGroup: true })
+    moving.addChild(this.chevrons)
+    this.root.addChild(this.body, moving, this.mouths)
+  }
+
+  draw(
+    pieces: ReadonlyArray<Route>,
+    rail: number,
+    body: number,
+    busy: boolean,
+    chevron: number,
+    offset: number,
+  ): void {
+    const key = `${rail}:${body}:${busy}`
+    if (pieces !== this.bodyFor || key !== this.bodyKey) {
+      this.bodyFor = pieces
+      this.bodyKey = key
+      this.body.clear()
+      for (const piece of pieces) traceOf(this.body, piece)
+      this.body.stroke({ color: rail, width: BELT + 3, join: 'round', alpha: busy ? 0.9 : 0.6 })
+      for (const piece of pieces) traceOf(this.body, piece)
+      this.body.stroke({ color: body, width: BELT, join: 'round' })
+      // The mouths where the belt dips under another one.
+      this.mouths.clear()
+      pieces.forEach((piece, index) => {
+        const ends = [
+          index > 0 ? piece[0] : undefined,
+          index < pieces.length - 1 ? piece.at(-1) : undefined,
+        ]
+        for (const end of ends)
+          if (end)
+            this.mouths.moveTo(end.x - BELT / 2 - 2.5, end.y).lineTo(end.x + BELT / 2 + 2.5, end.y)
+      })
+      this.mouths.stroke({ color: rail, width: 3, cap: 'round' })
+    }
+    // Chevrons point the way the belt runs, and move with it.
+    const step = ((offset % CHEVRON_GAP) + CHEVRON_GAP) % CHEVRON_GAP
+    const chevronKey = `${chevron}:${busy}:${step}`
+    if (pieces === this.chevronsFor && chevronKey === this.chevronsKey) return
+    this.chevronsFor = pieces
+    this.chevronsKey = chevronKey
+    this.chevrons.clear()
+    for (const piece of pieces)
+      walk(piece, CHEVRON_GAP, offset, (point, ux, uy) => {
+        this.chevrons
+          .moveTo(
+            point.x - uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
+            point.y + ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
+          )
+          .lineTo(point.x, point.y)
+          .lineTo(
+            point.x + uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
+            point.y - ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
+          )
+      })
+    this.chevrons.stroke({ color: chevron, width: 1.2, alpha: busy ? 0.9 : 0.5 })
   }
 }
 
@@ -1572,7 +1702,14 @@ class BoardController {
   private readonly app = new Application()
   private readonly world = new Container()
   private readonly grid = new Graphics()
-  private readonly wires = new Graphics()
+  private gridKey = ''
+  /** The belts, one BeltView per link in the Model's order, under the splitters. */
+  private readonly wires = new Container()
+  private readonly belts = new Map<string, BeltView>()
+  private beltLinks: ReadonlyArray<unknown> = []
+  private beltOrder = ''
+  private readonly splitters = new Graphics()
+  private splittersKey = ''
   private readonly packets = new Graphics()
   private readonly cards = new Container()
   private readonly overlay = new Graphics()
@@ -1603,6 +1740,10 @@ class BoardController {
   /** Routed links for the Model's positions, and the Design they were routed for. */
   private routed = new Map<string, Wire>()
   private routedFor = ''
+  /** The Game the routes and `modelNodes` were last checked against. */
+  private routedGame: Game | null = null
+  /** The Model's Nodes by id, where they are in the Design (not where they are drawn). */
+  private modelNodes = new Map<string, GameNode>()
   private ghostType: ComponentId | null = null
   private ghostLocale: Locale = 'en'
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
@@ -1663,6 +1804,11 @@ class BoardController {
       this.bottleneckTag,
       this.ghost,
     )
+    // Pixi rebuilds a render group's batches whenever a Graphics in it changes. The
+    // chevrons, packets and overlay change every frame, the cards on each tick: in
+    // groups of their own, a frame does not repack every card.
+    this.wires.isRenderGroup = true
+    this.cards.isRenderGroup = true
     this.ghost.alpha = 0.55
     this.ghost.visible = false
     this.bindPointer()
@@ -1761,18 +1907,26 @@ class BoardController {
     this.drawGrid()
   }
 
+  /** The dots are drawn once per zoom and size, from the top-left corner; a pan only
+   *  slides them by less than one step. */
   private drawGrid(): void {
-    const colors = palette()
     const { clientWidth: w, clientHeight: h } = this.host
     const step = 32 * this.world.scale.x
-    this.grid.clear()
-    if (step < 8) return
-    const ox = ((this.world.position.x % step) + step) % step
-    const oy = ((this.world.position.y % step) + step) % step
-    for (let x = ox; x < w; x += step) {
-      for (let y = oy; y < h; y += step) this.grid.rect(x - 0.75, y - 0.75, 1.5, 1.5)
+    const key = `${step}:${w}:${h}`
+    if (key !== this.gridKey) {
+      this.gridKey = key
+      this.grid.clear()
+      if (step < 8) return
+      for (let x = 0; x < w; x += step) {
+        for (let y = 0; y < h; y += step) this.grid.rect(x - 0.75, y - 0.75, 1.5, 1.5)
+      }
+      this.grid.fill(palette().grid)
     }
-    this.grid.fill(colors.grid)
+    if (step < 8) return
+    this.grid.position.set(
+      ((this.world.position.x % step) + step) % step,
+      ((this.world.position.y % step) + step) % step,
+    )
   }
 
   private toWorld(event: PointerEvent | WheelEvent): Pt {
@@ -1838,10 +1992,13 @@ class BoardController {
     return null
   }
 
-  /** Routes every link once per change to the Design, not once per frame. */
+  /** Routes every link once per change to the Design, not once per frame. The key is
+   *  built once per Game, since a Game is never changed in place. */
   private routes(): Map<string, Wire> {
     const game = this.state?.game
-    if (!game) return this.routed
+    if (!game || game === this.routedGame) return this.routed
+    this.routedGame = game
+    this.modelNodes = new Map(game.nodes.map((node) => [node.id, node]))
     const key = `${game.nodes.map((node) => `${node.id}:${node.type}:${node.x}:${node.y}`).join('|')}#${game.links.map((link) => `${link.from}>${link.to}`).join('|')}`
     if (key !== this.routedFor) {
       this.routedFor = key
@@ -1855,11 +2012,12 @@ class BoardController {
    * or gliding, the link takes the quick route; it is routed again once both settle.
    */
   private wireOf(from: GameNode, to: GameNode): Wire {
-    const model = this.state?.game.nodes ?? []
-    const settled = (node: GameNode) =>
-      model.some((entry) => entry.id === node.id && entry.x === node.x && entry.y === node.y)
-    const routed =
-      settled(from) && settled(to) ? this.routes().get(`${from.id}>${to.id}`) : undefined
+    const routes = this.routes()
+    const settled = (node: GameNode) => {
+      const entry = this.modelNodes.get(node.id)
+      return entry !== undefined && entry.x === node.x && entry.y === node.y
+    }
+    const routed = settled(from) && settled(to) ? routes.get(`${from.id}>${to.id}`) : undefined
     if (routed) return routed
     const path = routeOf(from, to)
     return { path, pieces: [path], hops: [] }
@@ -2260,6 +2418,32 @@ class BoardController {
     this.seeded = true
   }
 
+  /** One belt per link, stacked in the Model's link order, with the splitters on top. */
+  private syncBelts(links: ReadonlyArray<Readonly<{ from: string; to: string }>>): void {
+    if (links === this.beltLinks) return
+    this.beltLinks = links
+    const keys = links.map((link) => `${link.from}>${link.to}`)
+    const order = keys.join('|')
+    if (order === this.beltOrder) return
+    this.beltOrder = order
+    const live = new Set(keys)
+    for (const [key, belt] of this.belts) {
+      if (live.has(key)) continue
+      belt.root.destroy({ children: true })
+      this.belts.delete(key)
+    }
+    this.wires.removeChildren()
+    for (const key of keys) {
+      let belt = this.belts.get(key)
+      if (!belt) {
+        belt = new BeltView()
+        this.belts.set(key, belt)
+      }
+      this.wires.addChild(belt.root)
+    }
+    this.wires.addChild(this.splitters)
+  }
+
   private syncGhost(): void {
     const type = this.state?.placing ?? null
     const locale = this.state?.locale ?? 'en'
@@ -2295,9 +2479,11 @@ class BoardController {
     if (!state) return
     const colors = palette()
     if (!state.paused) this.phase += seconds
-    for (const view of this.views.values()) view.tick(seconds)
+    // Reduced motion: packets hold still along the pipe, and the bottleneck does not pulse.
+    const still = reducedMotion()
+    for (const view of this.views.values()) view.tick(seconds, still)
     this.leaving = this.leaving.filter((view) => {
-      if (view.tick(seconds)) return true
+      if (view.tick(seconds, still)) return true
       view.root.destroy({ children: true })
       return false
     })
@@ -2307,15 +2493,15 @@ class BoardController {
       else this.fresh.set(key, age + seconds)
     const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 
-    // Reduced motion: packets hold still along the pipe, and the bottleneck does not pulse.
-    const still = reducedMotion()
-    this.wires.clear()
     this.packets.clear()
     this.overlay.clear()
+    this.syncBelts(state.game.links)
     for (const link of state.game.links) {
+      const belt = this.belts.get(`${link.from}>${link.to}`)
       const from = byId.get(link.from)
       const to = byId.get(link.to)
-      if (!from || !to) continue
+      if (belt) belt.root.visible = from !== undefined && to !== undefined
+      if (!belt || !from || !to) continue
       const age = this.fresh.get(`${link.from}>${link.to}`)
       const wire = this.wireOf(from, to)
       // A new link draws out of its port before anything flows along it.
@@ -2347,40 +2533,14 @@ class BoardController {
             ? mix(packet, colors.ink, 0.3)
             : colors.edge
       const body = mix(packet, colors.canvas, hovered ? 0.6 : busy ? 0.8 : 0.92)
-      for (const piece of pieces) traceOf(this.wires, piece)
-      this.wires.stroke({ color: rail, width: BELT + 3, join: 'round', alpha: busy ? 0.9 : 0.6 })
-      for (const piece of pieces) traceOf(this.wires, piece)
-      this.wires.stroke({ color: body, width: BELT, join: 'round' })
-      // Chevrons point the way the belt runs, and move with it.
-      for (const piece of pieces)
-        walk(piece, CHEVRON_GAP, this.phase * speed, (point, ux, uy) => {
-          this.wires
-            .moveTo(
-              point.x - uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
-              point.y + ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
-            )
-            .lineTo(point.x, point.y)
-            .lineTo(
-              point.x + uy * CHEVRON_HALF - ux * CHEVRON_DEPTH,
-              point.y - ux * CHEVRON_HALF - uy * CHEVRON_DEPTH,
-            )
-        })
-      this.wires.stroke({
-        color: busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
-        width: 1.2,
-        alpha: busy ? 0.9 : 0.5,
-      })
-      // The mouths where the belt dips under another one.
-      pieces.forEach((piece, index) => {
-        const ends = [
-          index > 0 ? piece[0] : undefined,
-          index < pieces.length - 1 ? piece.at(-1) : undefined,
-        ]
-        for (const end of ends)
-          if (end)
-            this.wires.moveTo(end.x - BELT / 2 - 2.5, end.y).lineTo(end.x + BELT / 2 + 2.5, end.y)
-      })
-      this.wires.stroke({ color: rail, width: 3, cap: 'round' })
+      belt.draw(
+        pieces,
+        rail,
+        body,
+        busy,
+        busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
+        this.phase * speed,
+      )
       if (hovered) {
         const mid = pointOn(path, 0.5)
         this.overlay.circle(mid.x, mid.y, 9).fill(colors.danger)
@@ -2416,7 +2576,7 @@ class BoardController {
       const along = speed / Math.max(1, length)
       for (let index = 0; index < count; index += 1) {
         const t = (this.phase * along + (index + 0.5) / count) % 1
-        const at = pointOn(path, t)
+        const at = pointOn(path, t, length)
         if (wire.hops.some((hop) => Math.abs(hop.x - at.x) < 1 && Math.abs(hop.y - at.y) < HOP))
           continue
         this.packets.roundRect(at.x - 2.5, at.y - 2.5, 5, 5, 1.5)
@@ -2449,10 +2609,14 @@ class BoardController {
       }
       fans.set(link.from, fan)
     }
-    for (const fan of fans.values()) {
+    const splitters = [...fans.values()].filter((fan) => fan.belts >= 2)
+    const splittersKey = splitters.map((fan) => `${fan.x}:${fan.top}:${fan.bottom}`).join('|')
+    if (splittersKey !== this.splittersKey) {
+      this.splittersKey = splittersKey
+      this.splitters.clear()
       const pad = BELT / 2 + 1.5
-      if (fan.belts >= 2)
-        this.wires
+      for (const fan of splitters)
+        this.splitters
           .roundRect(fan.x, fan.top - pad, SPLITTER_W, fan.bottom - fan.top + pad * 2, 3)
           .fill(colors.card)
           .stroke({ color: colors.edge, width: 1.5 })
@@ -2532,14 +2696,14 @@ class BoardController {
 
     const gesture = this.gesture
     const snapped = gesture?.kind === 'link' && this.snapTo ? byId.get(this.snapTo) : undefined
-    this.snapGlow += ((snapped ? 1 : 0) - this.snapGlow) * follow(seconds, 26)
+    this.snapGlow += ((snapped ? 1 : 0) - this.snapGlow) * follow(seconds, 26, still)
     if (gesture?.kind === 'link') {
       const from = byId.get(gesture.from)
       if (from) {
         // Free, the end rides the pointer; near a port it is pulled onto it.
         const aim = snapped ? inPort(snapped) : gesture.at
         const end = this.wireEnd ?? aim
-        const k = follow(seconds, snapped ? 30 : 60)
+        const k = follow(seconds, snapped ? 30 : 60, still)
         this.wireEnd = { x: end.x + (aim.x - end.x) * k, y: end.y + (aim.y - end.y) * k }
         const lane = laneUnder(from, snapped ? snapped.y + heightOf(snapped.type) : this.wireEnd.y)
         traceOf(this.overlay, route(outPort(from), this.wireEnd, lane)).stroke({

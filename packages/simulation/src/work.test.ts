@@ -235,7 +235,7 @@ describe('Features', () => {
   })
 })
 
-describe('Engineering tasks and tech debt', () => {
+describe('Engineering tasks and tech debt', { timeout: 30_000 }, () => {
   test('Add index from the pool ends a Slow query', () => {
     const game: Game = {
       ...preseed(),

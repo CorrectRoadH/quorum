@@ -129,13 +129,13 @@ const board = (
 /* ---------- the tracks ---------- */
 
 const STAMPEDE_USERS = 6_000
-const STAMPEDE_BURN = 3.7
+const STAMPEDE_BURN = 7.4
 const BOTS_USERS = 12_000
-const BOTS_BURN = 5.1
+const BOTS_BURN = 10.2
 const ZONE_USERS = 8_000
-const ZONE_BURN = 18.5
+const ZONE_BURN = 21.2
 const COLD_USERS = 8_000
-const COLD_BURN = 9.5
+const COLD_BURN = 17.4
 const COLD_SPIKE = 4
 const COLD_DATABASE = 5
 
@@ -164,11 +164,11 @@ const SERIES_A_RESEARCH: ReadonlyArray<ResearchId> = [
 const STALE_USERS = 8_000
 const GC_USERS = 4_000
 const GC_P99 = 110
-const GC_BURN = 21.5
+const GC_BURN = 93.2
 const STORM_USERS = 10_000
-const STORM_BURN = 49
+const STORM_BURN = 197
 const ANALYTICS_USERS = 8_000
-const ANALYTICS_BURN = 58
+const ANALYTICS_BURN = 254
 
 /** What a Series B Design needs besides App Servers and its Database: files, checkouts, AI, and exports. */
 const seriesBData = (warehouse: boolean): ReadonlyArray<GameNode> => [
@@ -571,10 +571,10 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
     objectives: [
       { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
       {
-        goal: 'Demand is up 60%. Keep Apdex above 0.9 with Burn at $2.60/s or less.',
+        goal: 'Demand is up 60%. Keep Apdex above 0.9 with Burn at $5.20/s or less.',
         users: 8_000,
         hold: 120,
-        met: within(0.9, 2.6),
+        met: within(0.9, 5.2),
       },
       {
         goal: 'A task will fail forever. Keep the Queue under 500 tasks for 2 minutes.',

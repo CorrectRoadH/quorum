@@ -80,7 +80,7 @@ details are in [Data tier](./07-data-tier.md). Runtime details for App Servers a
 | Worker                   | 60        | Instance price            | Runtime model                   | —                      | 9       |
 | Serverless Function      | 0         | Per request + GB-s        | 1,000 concurrent                | Cold start             | —       |
 | Kubernetes Cluster       | 500       | 0.10 control plane        | Holds services                  | —                      | —       |
-| GPU Node                 | 900       | 1.20 (T4) to 9.00 (H100)  | Tokens per second               | Model-based            | 3 types |
+| GPU Node                 | 900       | 0.53 (T4) to 3.30 (H100)  | Tokens per second               | Model-based            | 3 types |
 | Edge Function            | 0         | Per request               | Unlimited                       | 5 ms                   | —       |
 | Database                 | 90        | Instance price            | IOPS and CPU                    | 2 ms                   | 9       |
 | Connection Pooler        | 80        | 0.03                      | 10,000 client connections       | 0.3 ms                 | 4       |
@@ -92,7 +92,7 @@ details are in [Data tier](./07-data-tier.md). Runtime details for App Servers a
 | Data Warehouse           | 800       | Per scan                  | Scan throughput                 | 1,500 ms               | —       |
 | Vector Index             | 400       | 0.30                      | 500 queries/s                   | 20 ms                  | 6       |
 | Wide-column Store        | 1,200     | 0.40 per node             | 10,000 writes/s per node        | 3 ms                   | 6       |
-| Distributed SQL          | 2,500     | 0.80 per node             | 2,000 tx/s per node             | Quorum-based           | 6       |
+| Distributed SQL          | 2,500     | 0.65 per node             | 2,000 tx/s per node             | Quorum-based           | 6       |
 | Queue                    | 360       | 0.10                      | Variant-based                   | 2 ms enqueue           | 6       |
 | Realtime Hub             | 400       | 0.15                      | Connections by runtime          | 1 ms                   | 8       |
 | Event Stream             | 900       | 0.30                      | 100,000 msg/s per broker        | 5 ms                   | 6       |

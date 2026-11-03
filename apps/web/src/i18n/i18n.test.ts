@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { Schema } from 'effect'
+import { Option, Schema } from 'effect'
+import { Scene } from 'foldkit/test'
+import { Listbox } from '@foldkit/ui'
+import { glossaryPanel } from '../components/lab/glossary.ts'
 import { inertHtml, type Html } from 'foldkit/html'
 import { Prefs } from '../game/model.ts'
 import { Message } from '../game/message.ts'
@@ -64,6 +67,51 @@ describe('interface languages', () => {
         motion: 'reduce',
       })
     }
+  })
+
+  test('listbox selection closes, restores focus and uses the persisted locale path', () => {
+    const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
+    const opened = update(
+      model,
+      Message.LanguagePickerChanged({
+        message: Listbox.Message.Opened({ maybeActiveItemIndex: Option.some(0) }),
+      }),
+    )
+    expect(opened.model.languagePicker.isOpen).toBe(true)
+    const selected = update(
+      opened.model,
+      Message.LanguagePickerChanged({
+        message: Listbox.Message.SelectedItem({ item: 'zh-CN' }),
+      }),
+    )
+    expect(selected.model.languagePicker.isOpen).toBe(false)
+    expect(selected.model.locale).toBe('zh-CN')
+    expect(selected.model.game).toBe(model.game)
+    expect(selected.model.paused).toBe(true)
+    expect(selected.commands?.map((command) => command.name)).toEqual(
+      expect.arrayContaining(['FocusButton', 'WritePrefs', 'ApplySettings', 'SyncBoard']),
+    )
+    const closed = update(
+      opened.model,
+      Message.LanguagePickerChanged({ message: Listbox.Message.Closed() }),
+    )
+    expect(closed.model.locale).toBe('en')
+    expect(closed.model.languagePicker.isOpen).toBe(false)
+    expect(closed.commands?.map((command) => command.name)).not.toContain('WritePrefs')
+  })
+
+  test('upstream glossary categories still constrain Chinese search results', () => {
+    const model = { ...initialModel(), locale: 'zh-CN' as const, glossaryQuery: '背压' }
+    Scene.scene(
+      { update, view: glossaryPanel },
+      Scene.given(model),
+      Scene.expect(Scene.text('Backpressure')).toExist(),
+    )
+    Scene.scene(
+      { update, view: glossaryPanel },
+      Scene.given({ ...model, glossaryCategory: 'security' }),
+      Scene.expect(Scene.text('No matches')).toExist(),
+    )
   })
 
   test('complete messages interpolate values and preserve technical names and unknown prose', () => {

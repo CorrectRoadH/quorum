@@ -1,5 +1,7 @@
+import { Listbox } from '@foldkit/ui'
+import { languageListbox } from '../i18n/listbox.ts'
 import { Option, Result, Schema } from 'effect'
-import type { Runtime, Update } from 'foldkit'
+import { Update, type Runtime } from 'foldkit'
 import { UrlRequest } from 'foldkit/navigation'
 import { toString as urlToString, type Url } from 'foldkit/url'
 import * as Actions from '@quorum/simulation/actions'
@@ -54,6 +56,7 @@ import {
   revealsOfSave,
   shown,
 } from './reveal.ts'
+import { EMPTY_HISTORY, historyOfSave, newSamples, record } from './history.ts'
 import { ipoExit, takeExit } from '@quorum/simulation/exit'
 import {
   Founder,
@@ -253,8 +256,10 @@ export const initialModel = (): Model =>
     muted: false,
     motion: 'system',
     locale: 'en',
+    languagePicker: Listbox.init({ id: 'interface-language' }),
     glossaryFocus: null,
     glossaryQuery: '',
+    glossaryCategory: null,
     inbox: [],
     inboxFocus: null,
     folder: 'inbox',
@@ -265,6 +270,9 @@ export const initialModel = (): Model =>
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
+    dashboardHistory: EMPTY_HISTORY,
+    dashboardRange: 360,
+    dashboardHover: null,
     lastGoal: '',
     lastBottleneck: '',
   })
@@ -307,7 +315,12 @@ const sync = (model: Model): AnyCommand =>
 
 /** The Company save: the Game, and what this Company has shown so far. */
 const saveOf = (model: Model): AnyCommand =>
-  WriteSave({ game: model.game, revealed: model.revealed, pending: model.pending })
+  WriteSave({
+    game: model.game,
+    revealed: model.revealed,
+    pending: model.pending,
+    dashboard: model.dashboardHistory,
+  })
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
 const stampOf = (model: Model) => {
@@ -979,6 +992,16 @@ const tick = (model: Model): Result => {
   if (settled.delta) logs.push(line(game.time, 'ChangeSettled', settled.delta))
   if (deltaExpired(next)) next = { ...next, delta: null }
 
+  // The Dashboard's long history: every Sample the Steps added.
+  next = {
+    ...next,
+    dashboardHistory: record(
+      next.dashboardHistory,
+      newSamples(game.history, model.game.time, game.time),
+      Math.floor(game.time),
+    ),
+  }
+
   // Utilization history, once per 10 sim seconds.
   if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.game.time / HISTORY_EVERY)) {
     const history: Record<string, ReadonlyArray<number>> = {}
@@ -1120,6 +1143,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
+    dashboardHistory: EMPTY_HISTORY,
     savedAt: game.time,
     sampledAt: game.time,
   }
@@ -1208,6 +1232,17 @@ const listed = (model: Model, game: Game): Readonly<{ game: Game; founder: Found
 }
 
 /* ---------- Challenges ---------- */
+
+const foldLanguagePicker = Update.foldChild({
+  update: languageListbox.update,
+  read: (model: Model) => Option.some(model.languagePicker),
+  write: (model, languagePicker) => ({ ...model, languagePicker }),
+  toParentMessage: (message) => Message.LanguagePickerChanged({ message }),
+  foldOutMessage:
+    ({ value }) =>
+    (model) =>
+      handle(model, Message.LocaleChosen({ locale: value })),
+})
 
 const histograms = histogramQuery.lift<Model, Message>({
   parentField: 'histograms',
@@ -1492,6 +1527,7 @@ const handle = (model: Model, message: Message): Result =>
             model: {
               ...model,
               ...revealsOfSave(JSON.parse(json ?? 'null')),
+              dashboardHistory: historyOfSave(JSON.parse(json ?? 'null')),
               game,
               saved: true,
               savedAt: game.time,
@@ -1702,6 +1738,12 @@ const handle = (model: Model, message: Message): Result =>
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
+          )
+        case 'd':
+          if (!has(model.game, 'metrics')) return { model }
+          return route(
+            model,
+            Message.PanelOpened({ panel: model.panel === 'dashboard' ? 'none' : 'dashboard' }),
           )
         case 'p':
           if (!playbooksShown(model)) return { model }
@@ -2484,13 +2526,20 @@ const handle = (model: Model, message: Message): Result =>
           ),
 
     PanelOpened: ({ panel }) => {
-      const opened: Model = { ...model, panel, placing: null, researchFocus: null }
+      const opened: Model = {
+        ...model,
+        panel,
+        placing: null,
+        researchFocus: null,
+        dashboardHover: null,
+      }
       return { model: panel === 'inbox' ? reading({ ...opened, folder: 'inbox' }) : opened }
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () =>
       model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
 
+    LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
     LocaleChosen: ({ locale }) => {
       const next = { ...model, locale }
       const result = settled(next)
@@ -2501,12 +2550,15 @@ const handle = (model: Model, message: Message): Result =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
       const founder = id ? discoverTerm(model.founder, id) : model.founder
+      // Browsing inside the panel keeps the search and filter; opening it from outside resets them.
+      const browsing = model.panel === 'glossary' && id !== null
       const next: Model = {
         ...model,
         panel: 'glossary',
         placing: null,
         glossaryFocus: id,
-        glossaryQuery: '',
+        glossaryQuery: browsing ? model.glossaryQuery : '',
+        glossaryCategory: browsing ? model.glossaryCategory : null,
         founder,
       }
       return {
@@ -2568,6 +2620,11 @@ const handle = (model: Model, message: Message): Result =>
       }
     },
     GlossarySearched: ({ query }) => ({ model: { ...model, glossaryQuery: query } }),
+    DashboardRangeChosen: ({ minutes }) => ({
+      model: { ...model, dashboardRange: minutes, dashboardHover: null },
+    }),
+    DashboardHovered: ({ index }) => ({ model: { ...model, dashboardHover: index } }),
+    GlossaryFiltered: ({ category }) => ({ model: { ...model, glossaryCategory: category } }),
 
     CheatCash: () => {
       const next: Model = {

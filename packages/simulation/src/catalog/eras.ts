@@ -10,7 +10,10 @@ export type EraDef = Readonly<{
   raiseAt: number
   /** Cash the next round pays out. */
   grant: number
-  /** Equity the next round costs. */
+  /**
+   * Equity the next round costs. Seed through Series C follow Carta's medians: seed 19.4% and
+   * Series A 18.7% (Q2 2026), Series B 12.9% (2025), and 16% across seed to Series C.
+   */
   dilution: number
   /** Growth rate per sim second. */
   growth: number
@@ -103,7 +106,7 @@ export const ERAS: ReadonlyArray<EraDef> = [
     market: 7_000,
     raiseAt: 5_000,
     grant: 15_000,
-    dilution: 0.15,
+    dilution: 0.19,
     growth: 0.0022,
     apdexTarget: 0.86,
     costIndex: 4,
@@ -120,11 +123,11 @@ export const ERAS: ReadonlyArray<EraDef> = [
     market: 35_000,
     raiseAt: 25_000,
     grant: 80_000,
-    dilution: 0.2,
+    dilution: 0.19,
     growth: 0.0016,
     apdexTarget: 0.88,
-    costIndex: 4,
-    salaryIndex: 4,
+    costIndex: 8,
+    salaryIndex: 8,
     mix: {
       page: 0.3,
       read: 0.3,
@@ -145,11 +148,11 @@ export const ERAS: ReadonlyArray<EraDef> = [
     market: 200_000,
     raiseAt: 150_000,
     grant: 1_500_000,
-    dilution: 0.18,
+    dilution: 0.13,
     growth: 0.0009,
     apdexTarget: 0.9,
-    costIndex: 4,
-    salaryIndex: 4,
+    costIndex: 12,
+    salaryIndex: 12,
     mix: {
       page: 0.22,
       read: 0.25,
@@ -173,11 +176,11 @@ export const ERAS: ReadonlyArray<EraDef> = [
     market: 1_400_000,
     raiseAt: 1_000_000,
     grant: 18_000_000,
-    dilution: 0.15,
+    dilution: 0.12,
     growth: 0.0007,
     apdexTarget: 0.91,
-    costIndex: 4,
-    salaryIndex: 4,
+    costIndex: 16,
+    salaryIndex: 16,
     mix: SERIES_B_MIX,
     question: 'What happens when analytics and AI share a database built for checkouts?',
     arrivals: 'Exports, reports and AI prompts. Warehouses, GPUs, retries and breakers.',
@@ -193,8 +196,8 @@ export const ERAS: ReadonlyArray<EraDef> = [
     dilution: 0.12,
     growth: 0.0005,
     apdexTarget: 0.92,
-    costIndex: 4,
-    salaryIndex: 4,
+    costIndex: 20,
+    salaryIndex: 20,
     mix: SERIES_C_MIX,
     question: 'What happens when your users live on four continents?',
     arrivals: 'Feeds, webhooks and push. Regions, GeoDNS, quorums and consensus.',
@@ -211,8 +214,8 @@ export const ERAS: ReadonlyArray<EraDef> = [
     dilution: 0.15,
     growth: 0.0003,
     apdexTarget: 0.93,
-    costIndex: 4,
-    salaryIndex: 4,
+    costIndex: 24,
+    salaryIndex: 24,
     mix: SERIES_C_MIX,
     question: 'Can you prove the company is ready to go public?',
     arrivals: 'The IPO checklist: reliability, SOC 2, a DR drill, data residency, the Rule of 40.',
@@ -228,8 +231,8 @@ export const ERAS: ReadonlyArray<EraDef> = [
     dilution: 0,
     growth: 0.0002,
     apdexTarget: 0.94,
-    costIndex: 4,
-    salaryIndex: 4,
+    costIndex: 24,
+    salaryIndex: 24,
     mix: SERIES_C_MIX,
     question: 'Can you beat your guidance every quarter?',
     arrivals: 'Quarters, guidance and the market multiple. The game is endless.',

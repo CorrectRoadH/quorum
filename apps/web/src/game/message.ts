@@ -1,3 +1,4 @@
+import { Listbox } from '@foldkit/ui'
 import { Locale } from '../i18n/index.ts'
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
@@ -236,8 +237,12 @@ export const Message = defineMessageUnion({
   MuteToggled: {},
   MotionToggled: {},
   LocaleChosen: { locale: Locale },
+  LanguagePickerChanged: { message: Listbox.Message },
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },
+  DashboardRangeChosen: { minutes: Schema.Finite },
+  DashboardHovered: { index: Schema.NullOr(Schema.Finite) },
+  GlossaryFiltered: { category: Schema.NullOr(Schema.String) },
   MailOpened: { id: Schema.Finite },
   MailTrashed: { id: Schema.Finite },
   MailRestored: { id: Schema.Finite },

@@ -39,16 +39,18 @@ export const GOLDEN_STEPS = 10_000
 // SIM_VERSION 8: one Dev Hour is one engineer-hour, made 8 per calendar day on
 // the Team's calendar, and Features have real sizes and requirements, so the
 // founder's backlog builds at a new pace.
-export const GOLDEN_HASH = 'cbc357f7'
+// SIM_VERSION 9: prices follow real list prices, requests earn half as much, and
+// the cost and salary index rise from Seed (16 "Cost index").
+export const GOLDEN_HASH = '1a61571d'
 
 /**
  * The hash of the Game each Challenge's reference solution ends on
  * (`fixtures/challenges.ts`). Node, the browsers and workerd must agree.
  */
 export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
-  'hello-world': '6ad073ff',
-  'split-the-box': '0ba7488c',
-  slashdotted: 'cc27d67a',
-  'event-loop': 'b44ad660',
-  'too-many-connections': '19dbe862',
+  'hello-world': '479a2caf',
+  'split-the-box': '18a81de8',
+  slashdotted: '28453f42',
+  'event-loop': '2b3a9461',
+  'too-many-connections': 'c1bcede1',
 }

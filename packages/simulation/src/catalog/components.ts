@@ -536,7 +536,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     group: 'data',
     blurb: 'SQL on Raft. Every write waits for a majority of its replicas.',
     cost: 2_500,
-    burn: 2.4,
+    burn: 1.95,
     latency: 3,
     accepts: ['q-read', 'q-write', 'q-tx'],
     maxOut: 0,
@@ -614,8 +614,11 @@ export const POISON_SHARE = 0.9
 export const SEARCH_QPS = 400
 /** MB in one uploaded file (04 "Request kinds"). */
 export const UPLOAD_MB = 2
-/** Object Storage price per GB stored per second. Proposed: stylized, like every price here. */
-export const STORAGE_PRICE = 0.0005
+/**
+ * Object Storage price per GB stored per second. Like every time-billed price, a sim second bills
+ * a real hour: S3 Standard is $0.023 per GB-month, about $0.000032 per GB-hour.
+ */
+export const STORAGE_PRICE = 0.000032
 
 /** Egress price per GB (09 "Egress"). */
 export const EGRESS_ORIGIN = 0.09
@@ -626,7 +629,11 @@ export const COALESCED = 0.25
 /** How warm a Cache comes back from a restart with Cache warming. */
 export const WARMED = 0.8
 
-/** Payment Provider fee per successful checkout (09 "Third-party fees"): a share of the value plus a fixed part. */
+/**
+ * Payment Provider fee per successful checkout (09 "Third-party fees"): Stripe's standard US card
+ * price, a share of the value plus a fixed part. The checkout value is real dollars, so the cost
+ * index does not scale the fixed part.
+ */
 export const PSP_RATE = 0.029
 export const PSP_FIXED = 0.3
 /** Checkouts per second the Payment Provider takes at its first usage tier; each tier doubles it. */
@@ -672,19 +679,27 @@ export const SCAN_PRICE = 0.02
 /** Tokens in one AI prompt and its answer. Proposed: the GDD gives none. */
 export const TOKENS_PER_PROMPT = 400
 /**
- * GPU types (05 "GPU Node"): dollars per second per GPU and tokens per second. T4 is cheap and
- * slow; H100 is the cheapest per token, and scarce. The A100 price and every token rate are proposed.
+ * GPU types (05 "GPU Node"): dollars per second per GPU, at the real rental price per GPU-hour,
+ * and tokens per second serving one model. T4 is cheap and slow; H100 is the cheapest per token,
+ * and scarce. Prices: AWS g4dn.xlarge $0.526/h, the A100 80GB on-demand median $1.79/h, and the
+ * H100 market median $3.33/h (October 2026). The H100 rate is SemiAnalysis's 2,056 tokens/s for a
+ * 70B model at 30 tokens/s per user; the others follow memory bandwidth.
  */
 export const GPU_TYPES = {
-  t4: { name: 'T4', burn: 1.2, tokens: 600 },
-  a100: { name: 'A100', burn: 4, tokens: 2_500 },
-  h100: { name: 'H100', burn: 9, tokens: 6_000 },
+  t4: { name: 'T4', burn: 0.53, tokens: 200 },
+  a100: { name: 'A100', burn: 1.8, tokens: 900 },
+  h100: { name: 'H100', burn: 3.3, tokens: 2_000 },
 } as const
 /** Milliseconds to the first token on a GPU Node, and on the LLM API (05 "LLM API": 600 ms). */
 export const GPU_FIRST_TOKEN_MS = 300
 export const LLM_FIRST_TOKEN_MS = 600
-/** LLM API price per 1,000 tokens, × cost index. Above a busy GPU's cost per token, below an idle one's. Proposed. */
-export const LLM_PRICE = 1.875
+/**
+ * LLM API price per 1,000 tokens, × cost index. It is billed on the GPU's scale, a real hour per
+ * sim second, because the two serve the same prompts: $0.69 per million tokens, inside the real
+ * $0.23 to $0.88 for an open 70B model, is $2.50 per 1,000. An H100 is cheaper only while it is
+ * about two-thirds busy.
+ */
+export const LLM_PRICE = 2.5
 /** Prompts per second the LLM API takes at its first usage tier; each tier doubles it. Proposed. */
 export const LLM_RATE = 100
 
@@ -707,9 +722,9 @@ export const INSIGHT_YIELD = 0.5
 /** Samples per second Analytics keeps at size 1. Each size step doubles it. */
 export const ANALYTICS_CAPACITY = 4
 
-/** Push Provider: messages per second, and the price of one × cost index (05 "Push and Email Provider"). Price proposed. */
+/** Push Provider: messages per second, and the price of one × cost index (05 "Push and Email Provider"): Amazon SES's $0.10 per 1,000. */
 export const MSGP_RATE = 10_000
-export const MSGP_PRICE = 0.001
+export const MSGP_PRICE = 0.0001
 
 /**
  * Wide-column Store (07 "Wide-column Store"): replica operations per second at size 1 (three
