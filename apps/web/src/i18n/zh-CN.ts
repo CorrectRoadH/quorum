@@ -27,6 +27,10 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Copy state as JSON': '复制状态为 JSON',
   'Copied the game state as JSON.': '已将游戏状态复制为 JSON。',
   'Playtest build': '试玩版本',
+  'This game is not finished yet': '游戏尚未完成',
+  'Your saves can break or reset when the game changes. Treat this as a playtest, not a final release.':
+    '游戏更新时，存档可能损坏或被重置。请把这当作试玩，而不是正式版本。',
+  'Send feedback or report a bug on GitHub': '在 GitHub 上反馈意见或报告问题',
   Playtest: '试玩工具',
   Back: '返回',
   Close: '关闭',

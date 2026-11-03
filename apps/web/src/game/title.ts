@@ -1,7 +1,7 @@
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { ArrowLeft, ArrowRight, Check, Download, Lock } from 'lucide'
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Download, Lock } from 'lucide'
 import { icon } from '@/lib/icons'
 import {
   ACHIEVEMENTS,
@@ -862,6 +862,43 @@ const stamp = (h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+/** Saves can break between builds, so the title says so before anyone plays. */
+const notice = (h: HtmlBuilder<Message>): Html =>
+  h.aside(
+    [
+      h.Class(
+        'title-notice absolute top-10 right-10 left-10 z-10 sm:right-auto flex max-w-sm flex-col gap-1.5 rounded-lg border border-signal/30 bg-page/85 px-4 py-3 text-[12.5px] leading-relaxed text-muted-foreground backdrop-blur-sm',
+      ),
+    ],
+    [
+      h.p([h.Class('font-medium text-foreground')], ['This game is not finished yet']),
+      h.p(
+        [],
+        [
+          'Your saves can break or reset when the game changes. Treat this as a playtest, not a final release.',
+        ],
+      ),
+      h.a(
+        [
+          h.Href('https://github.com/elianiva/quorum/issues'),
+          h.Target('_blank'),
+          h.Rel('noreferrer noopener'),
+          h.Class(
+            'group inline-flex w-fit items-center gap-1 text-foreground underline decoration-foreground/25 underline-offset-[3px] transition-colors hover:decoration-foreground',
+          ),
+        ],
+        [
+          'Send feedback or report a bug on GitHub',
+          icon(
+            h,
+            ArrowUpRight,
+            'size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-px group-hover:-translate-y-px',
+          ),
+        ],
+      ),
+    ],
+  )
+
 export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.main(
     [
@@ -901,5 +938,6 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
             ],
           ),
       model.gate === 'open' ? stamp(h) : h.empty,
+      model.gate === 'open' ? notice(h) : h.empty,
     ],
   )
