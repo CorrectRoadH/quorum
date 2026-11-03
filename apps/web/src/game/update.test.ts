@@ -783,3 +783,12 @@ test('the board redraws after any Message that changes what it shows, and fits a
   expect((fitted.commands ?? []).map((command) => command.name)).toContain('FitBoard')
   expect(syncs(fitted)).toEqual([])
 })
+
+test("a toast from the last board cannot clear the next board's toast", () => {
+  const raised = update(inLab(), Message.ToastRaised({ message: 'Old news.', tone: 'plain' })).model
+  const oldId = raised.toast?.id
+  const entered = update(raised, Message.FreeSandboxStarted()).model
+  const fresh = update(entered, Message.ToastRaised({ message: 'New news.', tone: 'plain' })).model
+  const cleared = update(fresh, Message.ToastCleared({ id: oldId ?? -1 })).model
+  expect(cleared.toast?.message).toBe('New news.')
+})

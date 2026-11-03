@@ -691,6 +691,19 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
   }
 }
 
+/** What outlives a board: the player's settings and records. The toast counter
+ *  carries on too, so a ClearToast still waiting from the last board cannot
+ *  clear a new toast that reused its id. */
+const sessionOf = (model: Model) => ({
+  ...prefsOf(model),
+  founder: model.founder,
+  histograms: model.histograms,
+  today: model.today,
+  passed: model.passed,
+  freeBoard: model.freeBoard,
+  toastSeq: model.toastSeq,
+})
+
 const prefsOf = (model: Model): Prefs => ({
   seenTradeoffs: model.seenTradeoffs,
   muted: model.muted,
@@ -1175,15 +1188,10 @@ const ARROWS: Record<string, Direction> = {
 const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
   const fresh: Model = {
     ...initialModel(),
-    ...prefsOf(model),
-    founder: model.founder,
-    histograms: model.histograms,
-    today: model.today,
+    ...sessionOf(model),
     route: AppRoute.Company(),
     game,
     saved: true,
-    passed: model.passed,
-    freeBoard: model.freeBoard,
     panel,
     savedAt: game.time,
     sampledAt: game.time,
@@ -1213,17 +1221,12 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
 const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
   const next: Model = {
     ...initialModel(),
-    ...prefsOf(model),
-    founder: model.founder,
-    histograms: model.histograms,
-    today: model.today,
+    ...sessionOf(model),
     route: AppRoute.Sandbox({ sandbox: run.id ?? 'free' }),
     game,
     sandbox: run,
     company: model.sandbox ? model.company : model.game,
     saved: model.saved,
-    passed: model.passed,
-    freeBoard: model.freeBoard,
     savedAt: game.time,
     sampledAt: game.time,
   }
@@ -1398,10 +1401,7 @@ const enterChallenge = (model: Model, id: string): Result => {
   const game = boardOf(challenge)
   const next: Model = {
     ...initialModel(),
-    ...prefsOf(model),
-    founder: model.founder,
-    histograms: model.histograms,
-    today: model.today,
+    ...sessionOf(model),
     route: AppRoute.Challenge({ challenge: id }),
     game,
     challenge: {
@@ -1417,8 +1417,6 @@ const enterChallenge = (model: Model, id: string): Result => {
     },
     company: offCompany(model) ? model.company : model.game,
     saved: model.saved,
-    passed: model.passed,
-    freeBoard: model.freeBoard,
     savedAt: game.time,
     sampledAt: game.time,
   }
