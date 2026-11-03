@@ -292,13 +292,13 @@ describe('Tradeoff cards', () => {
     // In a Company, Confirm starts a migration: Dev Hours first, then the strangler.
     const confirmed = send(pinned, Message.OptionConfirmed())
     expect(confirmed.tradeoff).toBeNull()
-    expect(confirmed.seenTradeoffs).toEqual(['runtime'])
+    expect(confirmed.prefs.seenTradeoffs).toEqual(['runtime'])
     expect(confirmed.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
     expect(confirmed.game.services[0]?.migration?.runtime).toBe('node_cluster')
     expect(confirmed.game.backlog.some((item) => item.kind === 'migration')).toBe(true)
     expect(confirmed.change).not.toBeNull()
     // The second time, a click applies at once.
-    const fresh = { ...ready(), seenTradeoffs: confirmed.seenTradeoffs }
+    const fresh = { ...ready(), prefs: confirmed.prefs }
     const clicked = send(fresh, Message.OptionChosen({ nodeId: 'server', option }))
     expect(clicked.tradeoff).toBeNull()
     expect(clicked.game.services[0]?.migration?.runtime).toBe('node_cluster')
@@ -506,7 +506,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
 
   test('an incident plays its sound, unless muted', () => {
     expect(sounds(incidentDue())).toContain('incident')
-    expect(sounds(incidentDue({ muted: true }))).toEqual([])
+    expect(sounds(incidentDue({ prefs: { ...initialModel().prefs, muted: true } }))).toEqual([])
   })
 
   test('an alarm from before a reset does not sound again on every tick', () => {
@@ -551,12 +551,12 @@ describe('M9: sound, achievements, glossary, keys', () => {
   test('mute and reduced motion are saved as prefs, not in the Game', () => {
     const start = inLab()
     const muted = update(start, Message.MuteToggled())
-    expect(muted.model.muted).toBe(true)
+    expect(muted.model.prefs.muted).toBe(true)
     expect(muted.model.game).toBe(start.game)
     const write = names(muted.commands).find((command) => command.name === 'WritePrefs')
     expect(write?.args['prefs']).toMatchObject({ muted: true, motion: 'system' })
-    expect(update(start, Message.KeyPressed({ key: 'm' })).model.muted).toBe(true)
-    expect(update(start, Message.MotionToggled()).model.motion).toBe('reduce')
+    expect(update(start, Message.KeyPressed({ key: 'm' })).model.prefs.muted).toBe(true)
+    expect(update(start, Message.MotionToggled()).model.prefs.motion).toBe('reduce')
   })
 
   test('a Tradeoff term opens the Glossary on it and marks it met', () => {

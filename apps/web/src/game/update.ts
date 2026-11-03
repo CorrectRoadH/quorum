@@ -267,16 +267,18 @@ export const initialModel = (): Model =>
     delta: null,
     stableTicks: 0,
     tradeoff: null,
-    seenTradeoffs: [],
     revealed: [],
     pending: [],
     cue: null,
-    muted: false,
-    autoPause: false,
-    blurPause: true,
-    motion: 'system',
-    agentAccess: false,
-    locale: 'en',
+    prefs: {
+      locale: 'en',
+      seenTradeoffs: [],
+      muted: false,
+      autoPause: false,
+      blurPause: true,
+      motion: 'system',
+      agentAccess: false,
+    },
     languagePicker: Listbox.init({ id: 'interface-language' }),
     moreMenu: UiMenu.init({ id: 'more-menu' }),
     glossaryFocus: null,
@@ -339,7 +341,7 @@ const sync = (model: Model, fit: boolean): AnyCommand =>
   SyncBoard({
     fit,
     game: model.game,
-    locale: model.locale,
+    locale: model.prefs.locale,
     bottleneck: model.bottleneck,
     selected: model.selected,
     selection: model.selection,
@@ -670,15 +672,15 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
   const closed: Model = { ...model, tradeoff: null }
   const applied = route(closed, optionMessage(card.nodeId, card.option))
   if (applied.model.game === closed.game) return applied
-  const seen = applied.model.seenTradeoffs.includes(card.option.kind)
-    ? applied.model.seenTradeoffs
-    : [...applied.model.seenTradeoffs, card.option.kind]
-  const next: Model = { ...applied.model, seenTradeoffs: seen }
+  const seen = applied.model.prefs.seenTradeoffs.includes(card.option.kind)
+    ? applied.model.prefs.seenTradeoffs
+    : [...applied.model.prefs.seenTradeoffs, card.option.kind]
+  const next: Model = { ...applied.model, prefs: { ...applied.model.prefs, seenTradeoffs: seen } }
   return {
     model: next,
     commands: [
       ...(applied.commands ?? []),
-      WritePrefs({ prefs: prefsOf(next) }),
+      WritePrefs({ prefs: next.prefs }),
       AppendLog({
         entries: [
           line(model.game.time, 'TradeoffPreviewed', {
@@ -695,7 +697,7 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
  *  carries on too, so a ClearToast still waiting from the last board cannot
  *  clear a new toast that reused its id. */
 const sessionOf = (model: Model) => ({
-  ...prefsOf(model),
+  prefs: model.prefs,
   founder: model.founder,
   histograms: model.histograms,
   today: model.today,
@@ -704,29 +706,22 @@ const sessionOf = (model: Model) => ({
   toastSeq: model.toastSeq,
 })
 
-const prefsOf = (model: Model): Prefs => ({
-  seenTradeoffs: model.seenTradeoffs,
-  muted: model.muted,
-  autoPause: model.autoPause,
-  blurPause: model.blurPause,
-  motion: model.motion,
-  agentAccess: model.agentAccess,
-  locale: model.locale,
-})
-
-/** Saves and applies a settings change. */
-const settled = (next: Model): Result => ({
-  model: next,
-  commands: [
-    WritePrefs({ prefs: prefsOf(next) }),
-    ApplySettings({
-      muted: next.muted,
-      motion: next.motion,
-      locale: next.locale,
-      agentAccess: next.agentAccess,
-    }),
-  ],
-})
+/** Changes settings, then saves and applies them. */
+const settled = (model: Model, change: Partial<Prefs>): Result => {
+  const next: Model = { ...model, prefs: { ...model.prefs, ...change } }
+  return {
+    model: next,
+    commands: [
+      WritePrefs({ prefs: next.prefs }),
+      ApplySettings({
+        muted: next.prefs.muted,
+        motion: next.prefs.motion,
+        locale: next.prefs.locale,
+        agentAccess: next.prefs.agentAccess,
+      }),
+    ],
+  }
+}
 
 /** Puts the badge in the reader, once: it beeps, and the title follows. */
 const clockIn = (model: Model): Result =>
@@ -735,7 +730,7 @@ const clockIn = (model: Model): Result =>
     : {
         model: { ...model, gate: 'clocking' },
         commands: [
-          ...(model.muted ? [] : [PlaySound({ sound: 'clockin', pitch: 1, spatial: false })]),
+          ...(model.prefs.muted ? [] : [PlaySound({ sound: 'clockin', pitch: 1, spatial: false })]),
           RevealTitle({}),
         ],
       }
@@ -754,7 +749,8 @@ const achieve = (
     next = raised
     commands.push(clear)
   }
-  if (!next.muted) commands.push(PlaySound({ sound: 'achievement', pitch: 1, spatial: false }))
+  if (!next.prefs.muted)
+    commands.push(PlaySound({ sound: 'achievement', pitch: 1, spatial: false }))
   commands.push(
     AppendLog({ entries: fresh.map((id) => line(next.game.time, 'AchievementEarned', { id })) }),
   )
@@ -791,7 +787,7 @@ const milestones = (
   commands.push(...earnedCommands)
   if (next.founder !== after.founder && earnedCommands.length === 0)
     commands.push(WriteFounder({ founder: next.founder }))
-  if (!next.muted) {
+  if (!next.prefs.muted) {
     if (after.game.stage > before.game.stage)
       commands.push(PlaySound({ sound: 'era', pitch: 1, spatial: false }))
     else if (events.some((event) => event._tag === 'IncidentStarted'))
@@ -1019,7 +1015,7 @@ const tick = (model: Model): Result => {
   const severe = events.find(
     (event) => event._tag === 'IncidentStarted' && event.incident.severity <= 2,
   )
-  const autoPaused = model.autoPause && severe !== undefined && !model.paused
+  const autoPaused = model.prefs.autoPause && severe !== undefined && !model.paused
   let next: Model = {
     ...model,
     game,
@@ -1657,7 +1653,7 @@ const visit = (model: Model, url: Url): Result => {
 const route = (model: Model, message: Message): Result => {
   const handled = handle(model, message)
   const result = { ...handled, model: noticed(handled.model, message) }
-  if (result.model.muted || result.commands?.some((command) => command.name === 'PlaySound'))
+  if (result.model.prefs.muted || result.commands?.some((command) => command.name === 'PlaySound'))
     return result
   const cue = cueOf(model, message, result.model)
   return cue ? { ...result, commands: [...(result.commands ?? []), PlaySound(cue)] } : result
@@ -1743,13 +1739,7 @@ const handle = (model: Model, message: Message): Result =>
         onSome: (prefs) => ({
           model: {
             ...model,
-            seenTradeoffs: prefs.seenTradeoffs,
-            muted: prefs.muted,
-            autoPause: prefs.autoPause,
-            blurPause: prefs.blurPause,
-            motion: prefs.motion,
-            agentAccess: prefs.agentAccess,
-            locale: prefs.locale,
+            prefs,
           },
           commands: [
             ApplySettings({
@@ -1784,7 +1774,7 @@ const handle = (model: Model, message: Message): Result =>
         : { model },
     OptionChosen: ({ nodeId, option }) => {
       // Once an option set is confirmed, its options apply on click; the card stays one line.
-      if (model.seenTradeoffs.includes(option.kind)) {
+      if (model.prefs.seenTradeoffs.includes(option.kind)) {
         const hovered = model.tradeoff
         const same =
           hovered?.nodeId === nodeId &&
@@ -2957,21 +2947,19 @@ const handle = (model: Model, message: Message): Result =>
 
     LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
     MoreMenuChanged: ({ message }) => foldMoreMenu(model, message),
-    LocaleChosen: ({ locale }) => {
-      return settled({ ...model, locale })
-    },
-    MuteToggled: () => settled({ ...model, muted: !model.muted }),
-    AutoPauseToggled: () => settled({ ...model, autoPause: !model.autoPause }),
-    BlurPauseToggled: () => settled({ ...model, blurPause: !model.blurPause }),
+    LocaleChosen: ({ locale }) => settled(model, { locale }),
+    MuteToggled: () => settled(model, { muted: !model.prefs.muted }),
+    AutoPauseToggled: () => settled(model, { autoPause: !model.prefs.autoPause }),
+    BlurPauseToggled: () => settled(model, { blurPause: !model.prefs.blurPause }),
     WindowBlurred: () => {
-      if (!model.blurPause || halted(model) || !onBoard(model.route)) return { model }
+      if (!model.prefs.blurPause || halted(model) || !onBoard(model.route)) return { model }
       const next: Model = { ...model, paused: true }
-      return withToast(next, 'Paused while you were away. Space resumes.', 'plain', [sync(next)])
+      return withToast(next, 'Paused while you were away. Space resumes.', 'plain')
     },
-    AgentAccessToggled: () => settled({ ...model, agentAccess: !model.agentAccess }),
+    AgentAccessToggled: () => settled(model, { agentAccess: !model.prefs.agentAccess }),
     InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>
-      settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
+      settled(model, { motion: model.prefs.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
       const founder = id ? discoverTerm(model.founder, id) : model.founder
       // Browsing inside the panel keeps the search and filter; opening it from outside resets them.
@@ -3217,7 +3205,7 @@ const ROUNDS = new Set(['RoundRaised', 'RoundDeclined', 'CheatRound'])
 /** Whether the board draws anything differently after a Message, or has just come on screen. */
 const boardChanged = (before: Model, after: Model): boolean =>
   before.game !== after.game ||
-  before.locale !== after.locale ||
+  before.prefs.locale !== after.prefs.locale ||
   before.region !== after.region ||
   before.bottleneck !== after.bottleneck ||
   before.selected !== after.selected ||

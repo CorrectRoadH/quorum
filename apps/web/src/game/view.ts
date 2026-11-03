@@ -16,7 +16,7 @@ import { onBoard } from './route.ts'
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'Quorum',
   body: localizeHtml(
-    model.locale,
+    model.prefs.locale,
     h.div(
       [
         h.Class('h-dvh w-full overflow-hidden bg-background text-foreground select-none'),

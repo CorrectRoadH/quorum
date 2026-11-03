@@ -199,7 +199,7 @@ export const subscriptions = {
       { watching: Schema.Boolean },
       {
         modelToDependencies: (model: Model) => ({
-          watching: model.blurPause && onBoard(model.route) && !halted(model),
+          watching: model.prefs.blurPause && onBoard(model.route) && !halted(model),
         }),
         dependenciesToStream: ({ watching }: { watching: boolean }) =>
           watching ? blurs : Stream.empty,

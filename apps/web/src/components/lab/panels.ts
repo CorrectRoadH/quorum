@@ -266,7 +266,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             {
               id: 'setting-muted',
               label: 'Mute sound (M)',
-              isChecked: model.muted,
+              isChecked: model.prefs.muted,
               onToggle: () => Message.MuteToggled(),
             },
             h,
@@ -275,7 +275,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             {
               id: 'setting-auto-pause',
               label: 'Pause on SEV1 and SEV2',
-              isChecked: model.autoPause,
+              isChecked: model.prefs.autoPause,
               onToggle: () => Message.AutoPauseToggled(),
             },
             h,
@@ -284,7 +284,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             {
               id: 'setting-blur-pause',
               label: 'Pause when the window loses focus',
-              isChecked: model.blurPause,
+              isChecked: model.prefs.blurPause,
               onToggle: () => Message.BlurPauseToggled(),
             },
             h,
@@ -293,7 +293,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             {
               id: 'setting-motion',
               label: 'Reduce motion',
-              isChecked: model.motion === 'reduce',
+              isChecked: model.prefs.motion === 'reduce',
               onToggle: () => Message.MotionToggled(),
             },
             h,
@@ -302,7 +302,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             {
               id: 'setting-agent-access',
               label: 'Agent access',
-              isChecked: model.agentAccess,
+              isChecked: model.prefs.agentAccess,
               onToggle: () => Message.AgentAccessToggled(),
             },
             h,
@@ -311,7 +311,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             [h.Class('flex items-center justify-between gap-3')],
             [
               h.span([h.Class('text-sm font-medium')], ['Language']),
-              languagePicker(model.locale, model.languagePicker, h),
+              languagePicker(model.prefs.locale, model.languagePicker, h),
             ],
           ),
           secondaryButton('Copy state as JSON', Message.StateCopied(), h, Copy),

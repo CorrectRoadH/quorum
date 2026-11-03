@@ -355,21 +355,12 @@ export const Model = Schema.Struct({
   change: Schema.NullOr(Change),
   delta: Schema.NullOr(Delta),
   tradeoff: Schema.NullOr(Tradeoff),
-  /** Option sets the player confirmed once: their cards collapse to one line. */
-  seenTradeoffs: Schema.Array(TradeoffKind),
   /** Elements this Company shows, triggers that wait their turn, and the one that glows. */
   revealed: Schema.Array(Reveal),
   pending: Schema.Array(Reveal),
   cue: Schema.NullOr(RevealCue),
-  muted: Schema.Boolean,
-  /** Pause the clock when a SEV1 or SEV2 incident starts. */
-  autoPause: Schema.Boolean,
-  /** Pause the clock when the window loses focus. */
-  blurPause: Schema.Boolean,
-  motion: Motion,
-  /** An agent relay on this machine may read the game (packages/mcp-relay). */
-  agentAccess: Schema.Boolean,
-  locale: Locale,
+  /** The player's settings, kept in the browser apart from saves. */
+  prefs: Prefs,
   languagePicker: Listbox.Model,
   /** The phone toolbar's More menu. */
   moreMenu: UiMenu.Model,

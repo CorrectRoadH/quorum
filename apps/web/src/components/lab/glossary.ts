@@ -229,7 +229,7 @@ const detail = (entry: GlossaryEntry, met: (id: string) => boolean, h: HtmlBuild
 
 export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
   const shown = GLOSSARY.filter((entry) =>
-    matches(entry, model.glossaryQuery, model.glossaryCategory, model.locale),
+    matches(entry, model.glossaryQuery, model.glossaryCategory, model.prefs.locale),
   )
   const open =
     (model.glossaryFocus !== null ? BY_ID.get(model.glossaryFocus) : undefined) ??

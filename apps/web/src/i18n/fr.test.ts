@@ -156,7 +156,11 @@ describe('French presentation', () => {
   })
 
   test('French glossary search respects categories', () => {
-    const model = { ...initialModel(), locale: 'fr' as const, glossaryQuery: 'contre-pression' }
+    const model = {
+      ...initialModel(),
+      prefs: { ...initialModel().prefs, locale: 'fr' as const },
+      glossaryQuery: 'contre-pression',
+    }
     Scene.scene(
       { update, view: glossaryPanel },
       Scene.given(model),
@@ -172,7 +176,11 @@ describe('French presentation', () => {
   test('French glossary search accepts unaccented input', () => {
     Scene.scene(
       { update, view: glossaryPanel },
-      Scene.given({ ...initialModel(), locale: 'fr', glossaryQuery: 'repartiteur de charge' }),
+      Scene.given({
+        ...initialModel(),
+        prefs: { ...initialModel().prefs, locale: 'fr' },
+        glossaryQuery: 'repartiteur de charge',
+      }),
       Scene.expect(Scene.text('Load balancer')).toExist(),
     )
   })

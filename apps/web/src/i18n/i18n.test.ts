@@ -21,7 +21,7 @@ describe('interface languages', () => {
     (locale) => {
       const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
       const result = update(model, Message.LocaleChosen({ locale }))
-      expect(result.model.locale).toBe(locale)
+      expect(result.model.prefs.locale).toBe(locale)
       expect(result.model.game).toBe(model.game)
       expect(result.model.paused).toBe(true)
       expect(result.commands).toEqual(
@@ -46,7 +46,7 @@ describe('interface languages', () => {
           json: JSON.stringify({ locale, muted: true, motion: 'reduce' }),
         }),
       )
-      expect(restored.model).toMatchObject({ locale, muted: true, motion: 'reduce' })
+      expect(restored.model.prefs).toMatchObject({ locale, muted: true, motion: 'reduce' })
       expect(update(result.model, Message.LocaleChosen({ locale: 'en' })).model.game).toBe(
         model.game,
       )
@@ -58,9 +58,7 @@ describe('interface languages', () => {
     (locale) => {
       const model = {
         ...initialModel(),
-        locale,
-        muted: true,
-        motion: 'reduce' as const,
+        prefs: { ...initialModel().prefs, locale, muted: true, motion: 'reduce' as const },
       }
       for (const message of [
         Message.NewCompanyStarted(),
@@ -68,7 +66,7 @@ describe('interface languages', () => {
         Message.FreeSandboxStarted(),
         Message.ChallengeStarted({ id: 'hello-world' }),
       ]) {
-        expect(update(model, message).model).toMatchObject({
+        expect(update(model, message).model.prefs).toMatchObject({
           locale,
           muted: true,
           motion: 'reduce',
@@ -95,7 +93,7 @@ describe('interface languages', () => {
         }),
       )
       expect(selected.model.languagePicker.isOpen).toBe(false)
-      expect(selected.model.locale).toBe(locale)
+      expect(selected.model.prefs.locale).toBe(locale)
       expect(selected.model.game).toBe(model.game)
       expect(selected.model.paused).toBe(true)
       expect(selected.commands?.map((command) => command.name)).toEqual(
@@ -105,14 +103,18 @@ describe('interface languages', () => {
         opened.model,
         Message.LanguagePickerChanged({ message: Listbox.Message.Closed() }),
       )
-      expect(closed.model.locale).toBe('en')
+      expect(closed.model.prefs.locale).toBe('en')
       expect(closed.model.languagePicker.isOpen).toBe(false)
       expect(closed.commands?.map((command) => command.name)).not.toContain('WritePrefs')
     },
   )
 
   test('upstream glossary categories still constrain Chinese search results', () => {
-    const model = { ...initialModel(), locale: 'zh-CN' as const, glossaryQuery: '背压' }
+    const model = {
+      ...initialModel(),
+      prefs: { ...initialModel().prefs, locale: 'zh-CN' as const },
+      glossaryQuery: '背压',
+    }
     Scene.scene(
       { update, view: glossaryPanel },
       Scene.given(model),

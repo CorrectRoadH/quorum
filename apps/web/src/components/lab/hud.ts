@@ -607,7 +607,7 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
   return h.div(
     [
       h.Class('absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-2 compact:contents'),
-      h.Style({ '--hud-label-width': model.locale === 'fr' ? '64px' : '46px' }),
+      h.Style({ '--hud-label-width': model.prefs.locale === 'fr' ? '64px' : '46px' }),
     ],
     [header, shown(model, 'research') ? insightCard(model, ledger, h) : h.empty],
   )

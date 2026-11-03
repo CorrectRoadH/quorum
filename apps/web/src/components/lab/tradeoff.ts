@@ -245,7 +245,7 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
   const title = `${KIND_TITLE[card.option.kind]}: ${nameOf(current)} → ${nameOf(card.option)}`
 
   // A confirmed option set collapses to one line.
-  if (model.seenTradeoffs.includes(card.option.kind))
+  if (model.prefs.seenTradeoffs.includes(card.option.kind))
     return h.div(
       [
         h.Key('tradeoff-line'),

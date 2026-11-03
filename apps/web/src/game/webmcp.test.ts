@@ -40,9 +40,9 @@ describe('what an agent may read', () => {
 
 describe('Agent access', () => {
   test('is off until the player turns it on, and is saved and applied when they do', () => {
-    expect(company.agentAccess).toBe(false)
+    expect(company.prefs.agentAccess).toBe(false)
     const on = update(company, Message.AgentAccessToggled())
-    expect(on.model.agentAccess).toBe(true)
+    expect(on.model.prefs.agentAccess).toBe(true)
     expect(on.commands).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -60,9 +60,9 @@ describe('Agent access', () => {
   test('stays off for preferences saved before it existed, and returns when saved on', () => {
     const load = (prefs: object) =>
       update(initialModel(), Message.PrefsLoaded({ json: JSON.stringify(prefs) })).model
-    expect(load({ locale: 'en', muted: true, motion: 'system' }).agentAccess).toBe(false)
+    expect(load({ locale: 'en', muted: true, motion: 'system' }).prefs.agentAccess).toBe(false)
     expect(
-      load({ locale: 'en', muted: false, motion: 'system', agentAccess: true }).agentAccess,
+      load({ locale: 'en', muted: false, motion: 'system', agentAccess: true }).prefs.agentAccess,
     ).toBe(true)
   })
 })
