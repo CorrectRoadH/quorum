@@ -116,22 +116,27 @@ export type Model = NodeModel & { disk?: boolean }
 
 /** What one pass of the solve found. */
 export type Pass = Readonly<{
-  arriving: ReadonlyMap<string, Rates>
-  models: ReadonlyMap<string, Model>
-  hits: ReadonlyMap<string, number>
+  /** Each Node's place in the per-Node arrays below, by id. */
+  at: ReadonlyMap<string, number>
+  arriving: ReadonlyArray<Rates>
+  models: ReadonlyArray<Model | undefined>
+  hits: ReadonlyArray<number | undefined>
   /** Share of each Cache's hits that are stale. */
-  staleHits: ReadonlyMap<string, number>
-  stranded: ReadonlyMap<string, Readonly<{ rate: number; kinds: ReadonlySet<Kind> }>>
+  staleHits: ReadonlyArray<number | undefined>
+  stranded: ReadonlyArray<Readonly<{ rate: number; kinds: ReadonlySet<Kind> }> | undefined>
   /** What each routing Link carried, by kind, indexed by the solve's Edge numbers. */
   links: ReadonlyArray<Rates | undefined>
   /** The Edges that carried anything, in the order they first did: sums over Links run in it. */
   linkOrder: ReadonlyArray<number>
-  connections: ReadonlyMap<string, Readonly<{ used: number; max: number }>>
+  connections: ReadonlyArray<Readonly<{ used: number; max: number }> | undefined>
   /** Milliseconds replicas lag behind the primary. */
   lag: number
   /** Share of replica reads that are stale. */
   staleShare: number
 }>
+
+/** A Node's place in a pass's per-Node arrays. */
+export const slotOf = (pass: Pass, node: GameNode): number => pass.at.get(node.id) as number
 
 /** What `serve` may do: send work on, and record a Cache's hit ratio. */
 export type Serve = Readonly<{
@@ -392,7 +397,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
         (kind === 'q-write' || kind === 'q-tx' || kind === 'blob-put')
       )
         return failed('refused')
-      const pool = answer.pass.connections.get(node.id)
+      const pool = answer.pass.connections[slotOf(answer.pass, node)]
       const refused = pool && pool.used > pool.max ? 1 - pool.max / pool.used : 0
       const reply: Outcome = {
         ...answered(0, 0),
@@ -457,9 +462,9 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     },
     outcome: (answer, node, kind) => {
       if (kind !== 'q-read') return relay(answer, node, kind)
-      const hit = answer.pass.hits.get(node.id) ?? 0
+      const hit = answer.pass.hits[slotOf(answer.pass, node)] ?? 0
       const mixed = blend([
-        [{ ...answered(0, 0), stale: answer.pass.staleHits.get(node.id) ?? 0 }, hit],
+        [{ ...answered(0, 0), stale: answer.pass.staleHits[slotOf(answer.pass, node)] ?? 0 }, hit],
         [answer.downstream(kind, hopMs(answer.game)), 1 - hit],
       ])
       return through(answer.ownHop(kind), mixed ? [[mixed, 1]] : [])
@@ -690,7 +695,10 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       if (kind === 'q-tx')
         return failSome({ ...reply, stale: WIDE_TX_STALE }, WIDE_TX_DUPLICATE, 'duplicate')
       if (kind !== 'q-read') return reply
-      return { ...reply, stale: wideStale(answer.pass.arriving.get(node.id) ?? {}, node) }
+      return {
+        ...reply,
+        stale: wideStale(answer.pass.arriving[slotOf(answer.pass, node)] ?? {}, node),
+      }
     },
     ...terminal,
     probe: () => ({ 'q-read': 1 }),

@@ -78,6 +78,7 @@ import {
 } from './lookups.ts'
 import {
   RULES,
+  slotOf,
   accepts,
   cdnHitOf,
   flatCapacity,
@@ -184,6 +185,8 @@ type Edge = Readonly<{
   key: string
   from: GameNode
   to: GameNode
+  /** The callee's place in the per-Node arrays. */
+  toAt: number
   /** The last Link with these ends: its kinds and policy are the ones that apply. */
   link: GameLink
   policy: Policy
@@ -191,6 +194,8 @@ type Edge = Readonly<{
 
 type Graph = Readonly<{
   byId: ReadonlyMap<string, GameNode>
+  /** Each Node's place in the per-Node arrays of a solve: its index in the Design, by id. */
+  at: ReadonlyMap<string, number>
   /** Each routing Link, by caller, then callee. */
   edgeTo: ReadonlyMap<string, ReadonlyMap<string, Edge>>
   /** Each Node's outgoing Edges, one per routing Link, in the Design's order. */
@@ -221,6 +226,7 @@ const graphOf = (game: Game): Graph => {
 
 const buildGraph = (game: Game): Graph => {
   const byId = new Map(game.nodes.map((node) => [node.id, node]))
+  const at = new Map(game.nodes.map((node, index) => [node.id, index]))
   const routes = new Map<string, Array<GameNode>>()
   const parents = new Map<string, Array<GameNode>>()
   const taps = new Map<string, Array<string>>()
@@ -251,7 +257,15 @@ const buildGraph = (game: Game): Graph => {
     if (!edge) {
       const key = `${from.id}>${to.id}`
       const link = last.get(key) as GameLink
-      edge = { index: edges.length, key, from, to, link, policy: policyOf(game, link) }
+      edge = {
+        index: edges.length,
+        key,
+        from,
+        to,
+        toAt: at.get(to.id) as number,
+        link,
+        policy: policyOf(game, link),
+      }
       byTo.set(to.id, edge)
       edges.push(edge)
     }
@@ -274,6 +288,7 @@ const buildGraph = (game: Game): Graph => {
   }
   return {
     byId,
+    at,
     edgeTo,
     out,
     edges,
@@ -381,7 +396,7 @@ const originsOf = (
   const origins = new Map<string, ReadonlyArray<readonly [RequestKind, number]>>()
   for (const node of graph.order) {
     const mix = new Map<RequestKind, number>()
-    const arriving = pass.arriving.get(node.id) ?? {}
+    const arriving = pass.arriving[slotOf(pass, node)] ?? {}
     for (const kind of REQUEST_KINDS) {
       const rate = arriving[kind] ?? 0
       if (rate > 0) mix.set(kind, rate)
@@ -411,17 +426,18 @@ type Inputs = Readonly<{
   graph: Graph
   demand: Partial<Record<RequestKind, number>>
   boost: string | null
-  callLatency: ReadonlyMap<string, Calls>
-  inflight: ReadonlyMap<string, number>
-  weights: ReadonlyMap<string, number>
+  /** The per-Node figures below are indexed by the Graph's `at`. */
+  callLatency: ReadonlyArray<Calls | undefined>
+  inflight: ReadonlyArray<number | undefined>
+  weights: ReadonlyArray<number | undefined>
   /** Share of calls that fail on each retrying Link, by `from>to:kind`, from the last pass. */
   failures: ReadonlyArray<Partial<Record<Kind, number>> | undefined>
   /** Capacity each Node had on paper at the start of the solve: what a weighted split sees. */
-  nominal: ReadonlyMap<string, number>
+  nominal: ReadonlyArray<number | undefined>
   /** App Servers whose database is down or overloaded: a deep health check takes them out. */
-  sick: ReadonlySet<string>
+  sick: ReadonlyArray<boolean | undefined>
   /** Share of the demand each Users Node takes in. */
-  intake: ReadonlyMap<string, number>
+  intake: ReadonlyArray<number | undefined>
 }>
 
 const NO_CALLS: Calls = {}
@@ -432,8 +448,8 @@ const solverOf = (inputs: Inputs): Solver => {
   return {
     game,
     boost: (node) => (inputs.boost === node.id ? 2 : 1),
-    callLatency: (node) => inputs.callLatency.get(node.id) ?? NO_CALLS,
-    inflight: (node) => inputs.inflight.get(node.id) ?? 0,
+    callLatency: (node) => inputs.callLatency[graph.at.get(node.id) as number] ?? NO_CALLS,
+    inflight: (node) => inputs.inflight[graph.at.get(node.id) as number] ?? 0,
     delegates: (node) => delegates(graph, node),
     runsLocalDb: (node) => runsLocalDb(graph, node),
     sampling: (node) => samplingOf(game, graph, node),
@@ -475,33 +491,32 @@ const CALLOUT: Outcome = failSome(
 const forward = (inputs: Inputs): Pass => {
   const { game, graph, demand } = inputs
   const solver = solverOf(inputs)
-  const arriving = new Map<string, Rates>(game.nodes.map((node) => [node.id, {}]))
-  const models = new Map<string, Model>()
-  const hits = new Map<string, number>()
-  const staleHits = new Map<string, number>()
-  const stranded = new Map<string, { rate: number; kinds: Set<Kind> }>()
+  const at = graph.at
+  const arriving: Array<Rates> = game.nodes.map(() => ({}))
+  const models: Array<Model | undefined> = []
+  const hits: Array<number | undefined> = []
+  const staleHits: Array<number | undefined> = []
+  const stranded: Array<{ rate: number; kinds: Set<Kind> } | undefined> = []
   const links: Array<Rates | undefined> = []
   const linkOrder: Array<number> = []
 
-  const route = (node: GameNode, kind: Kind, rate: number) => {
+  const route = (node: GameNode, slot: number, kind: Kind, rate: number) => {
     // A webhook's call goes to a customer's server, outside the Design.
     if (rate <= 0 || kind === 'callout') return
     const targets = splitOf(inputs, node, kind)
     if (targets.length === 0) {
-      const entry = stranded.get(node.id) ?? { rate: 0, kinds: new Set<Kind>() }
+      const entry = stranded[slot] ?? { rate: 0, kinds: new Set<Kind>() }
       entry.rate += rate
       entry.kinds.add(kind)
-      stranded.set(node.id, entry)
+      stranded[slot] = entry
       return
     }
     for (const [edge, weight] of targets) {
-      const child = edge.to
       // Retries resend what failed: the callee sees more. An open breaker sends nothing.
       const amplified = amplification(edge.policy, inputs.failures[edge.index]?.[kind] ?? 0)
       const sent = rate * weight * amplified
-      const into = arriving.get(child.id) ?? {}
+      const into = arriving[edge.toAt] as Rates
       into[kind] = (into[kind] ?? 0) + sent
-      arriving.set(child.id, into)
       let carried = links[edge.index]
       if (!carried) {
         carried = {}
@@ -513,14 +528,13 @@ const forward = (inputs: Inputs): Pass => {
   }
 
   for (const node of graph.order) {
+    const slot = at.get(node.id) as number
     const rates =
-      node.type === 'users'
-        ? intakeOf(demand, inputs.intake.get(node.id) ?? 0)
-        : (arriving.get(node.id) ?? {})
-    arriving.set(node.id, rates)
+      node.type === 'users' ? intakeOf(demand, inputs.intake[slot] ?? 0) : (arriving[slot] as Rates)
+    arriving[slot] = rates
     const rule = RULES[node.type]
     const model = rule.model(solver, node, rates)
-    models.set(node.id, model)
+    models[slot] = model
     const shares = model.shares
     const share = isDown(node) ? 0 : shares ? 1 : model.share
     // Load shedding keeps a different share of each kind.
@@ -531,10 +545,10 @@ const forward = (inputs: Inputs): Pass => {
     rule.serve(
       {
         solver,
-        route: (kind, rate) => route(node, kind, rate),
+        route: (kind, rate) => route(node, slot, kind, rate),
         setHits: (hit, stale) => {
-          hits.set(node.id, hit)
-          staleHits.set(node.id, stale)
+          hits[slot] = hit
+          staleHits[slot] = stale
         },
       },
       node,
@@ -544,35 +558,34 @@ const forward = (inputs: Inputs): Pass => {
   }
 
   // Every app process holds its own pool to each database it reaches.
-  const connectionsIn = new Map<string, number>()
+  const connectionsIn: Array<number | undefined> = []
   for (const node of graph.order) {
-    const out = RULES[node.type].connections(
-      solver,
-      node,
-      models.get(node.id),
-      connectionsIn.get(node.id) ?? 0,
-    )
+    const slot = at.get(node.id) as number
+    const out = RULES[node.type].connections(solver, node, models[slot], connectionsIn[slot] ?? 0)
     if (out <= 0) continue
-    for (const child of graph.routes.get(node.id) ?? []) {
+    for (const edge of graph.out.get(node.id) ?? []) {
+      const child = edge.to
       if (!accepts(child, 'q-read') && !accepts(child, 'q-write')) continue
-      connectionsIn.set(child.id, (connectionsIn.get(child.id) ?? 0) + out)
+      connectionsIn[edge.toAt] = (connectionsIn[edge.toAt] ?? 0) + out
     }
   }
-  const connections = new Map<string, { used: number; max: number }>()
+  const connections: Array<{ used: number; max: number } | undefined> = []
   let writes = 0
   for (const node of game.nodes) {
     if (node.type !== 'database' && node.type !== 'replica') continue
-    connections.set(node.id, {
-      used: connectionsIn.get(node.id) ?? 0,
+    const slot = at.get(node.id) as number
+    connections[slot] = {
+      used: connectionsIn[slot] ?? 0,
       max: MAX_CONNECTIONS * (inputs.boost === node.id ? 2 : 1),
-    })
-    writes += arriving.get(node.id)?.['q-write'] ?? 0
+    }
+    writes += arriving[slot]?.['q-write'] ?? 0
   }
 
   // A burst of writes during a Replication lag incident leaves replicas far behind.
   const surge = game.incident?.kind === 'repl-lag'
   const lag = REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes
   return {
+    at,
     arriving,
     models,
     hits,
@@ -661,26 +674,26 @@ const splitFor = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
       : takers
     return even(live.length > 0 ? live : takers)
   }
-  if (node.type !== 'lb') return weighted(takers, (child) => inputs.weights.get(child.id))
+  if (node.type !== 'lb') return weighted(takers, (edge) => inputs.weights[edge.toAt])
   // A Load Balancer notices a dead host at its next health check. A deep check also takes out
   // servers whose database is down or overloaded, even when that leaves none.
   const up = takers.filter((edge) => !noticed(graph, edge.to, node.checkEvery))
   const checked = up.length > 0 ? up : takers
   const healthy =
     node.deepCheck && graph.healthChecked
-      ? checked.filter((edge) => !inputs.sick.has(edge.to.id))
+      ? checked.filter((edge) => !inputs.sick[edge.toAt])
       : checked
   if (healthy.length === 0) return []
   // A dead host the checks have not caught yet still looks as big as it was.
-  const live = (child: GameNode) =>
-    isDown(child) ? inputs.nominal.get(child.id) : inputs.weights.get(child.id)
+  const live = (edge: Edge) =>
+    isDown(edge.to) ? inputs.nominal[edge.toAt] : inputs.weights[edge.toAt]
   const policy =
     has(game, 'lb-algorithms') || node.policy === 'round-robin' ? node.policy : 'weighted'
   switch (policy) {
     case 'round-robin':
       return even(healthy)
     case 'weighted':
-      return weighted(healthy, (child) => inputs.nominal.get(child.id))
+      return weighted(healthy, (edge) => inputs.nominal[edge.toAt])
     case 'least-conn':
       return weighted(healthy, live)
     case 'p2c': {
@@ -695,10 +708,10 @@ const splitFor = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
 /** Shares proportional to each target's capacity. */
 const weighted = (
   targets: ReadonlyArray<Edge>,
-  weightOf: (child: GameNode) => number | undefined,
+  weightOf: (edge: Edge) => number | undefined,
 ): Split => {
   const raw = targets.map((edge) => {
-    const weight = weightOf(edge.to) ?? 1
+    const weight = weightOf(edge) ?? 1
     return Number.isFinite(weight) ? Math.max(weight, 1e-6) : 1e9
   })
   const sum = raw.reduce((total, weight) => total + weight, 0)
@@ -712,7 +725,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   const memo = new Map<GameNode, Map<Kind, Outcome>>()
 
   const ownHop = (node: GameNode, kind: Kind, value = 1) => {
-    const model = pass.models.get(node.id)
+    const model = pass.models[slotOf(pass, node)]
     const service = model?.service[kind] ?? { fixed: COMPONENTS[node.type].latency, variable: 0 }
     return hop({
       share: model?.shares?.[kind] ?? model?.share ?? 1,
@@ -855,7 +868,7 @@ const databaseSick = (graph: Graph, pass: Pass, server: GameNode): boolean => {
       if (isDown(child)) return true
       if (
         (child.type === 'database' || child.type === 'replica') &&
-        (pass.models.get(child.id)?.utilization ?? 0) >= 1
+        (pass.models[slotOf(pass, child)]?.utilization ?? 0) >= 1
       )
         return true
       return visit(child)
@@ -869,9 +882,9 @@ const sumRates = (rates: Rates): number =>
 const solveWith = (game: Game, boost: string | null): Ledger => {
   const graph = graphOf(game)
   const demand = demandOf(game)
-  let callLatency = new Map<string, Calls>()
-  let inflight = new Map<string, number>()
-  let weights = new Map<string, number>()
+  let callLatency: Array<Calls | undefined> = []
+  let inflight: Array<number | undefined> = []
+  let weights: Array<number | undefined> = []
   // Retrying Links start from the failure share they saw last Step: retries carry a storm forward.
   let failures: Array<Partial<Record<Kind, number>> | undefined> = []
   for (const link of game.links) {
@@ -881,12 +894,16 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
     for (const kind of COMPONENTS[edge.to.type].accepts) byKind[kind] = link.failure
     failures[edge.index] = byKind
   }
-  const nominal = new Map<string, number>()
-  const sick = new Set<string>()
+  const at = graph.at
+  const nominal: Array<number | undefined> = []
+  const sick: Array<boolean | undefined> = []
   const routes = userRoutes(game, (node) => (graph.routes.get(node.id)?.length ?? 0) > 0)
-  const intake = new Map<string, number>()
+  const intake: Array<number | undefined> = []
   for (const entry of routes)
-    if (entry.source) intake.set(entry.source.id, (intake.get(entry.source.id) ?? 0) + entry.share)
+    if (entry.source) {
+      const slot = at.get(entry.source.id) as number
+      intake[slot] = (intake[slot] ?? 0) + entry.share
+    }
   const seed: Inputs = {
     game,
     graph,
@@ -901,8 +918,9 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
     intake,
   }
   const seedSolver = solverOf(seed)
-  for (const node of game.nodes) nominal.set(node.id, probeCapacity(seed, seedSolver, node))
-  weights = new Map(nominal)
+  for (const node of game.nodes)
+    nominal[at.get(node.id) as number] = probeCapacity(seed, seedSolver, node)
+  weights = [...nominal]
 
   let pass: Pass | null = null
   let outcomes: ReturnType<typeof outcomesOf> | null = null
@@ -917,32 +935,34 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       weights,
       failures,
       nominal,
-      sick: new Set(sick),
+      sick: [...sick],
       intake,
     }
     pass = forward(inputs)
     outcomes = outcomesOf(inputs, pass)
-    const nextLatency = new Map<string, Calls>()
-    const nextInflight = new Map<string, number>()
-    const nextWeights = new Map<string, number>()
+    const nextLatency: Array<Calls | undefined> = []
+    const nextInflight: Array<number | undefined> = []
+    const nextWeights: Array<number | undefined> = []
     for (const node of game.nodes) {
-      const model = pass.models.get(node.id)
-      nextInflight.set(node.id, ((inflight.get(node.id) ?? 0) + (model?.inflight ?? 0)) / 2)
-      const rate = sumRates(pass.arriving.get(node.id) ?? {})
-      nextWeights.set(
-        node.id,
-        isDown(node) ? 0 : rate > 0 && model ? model.capacity : (weights.get(node.id) ?? 1),
-      )
+      const slot = at.get(node.id) as number
+      const model = pass.models[slot]
+      nextInflight[slot] = ((inflight[slot] ?? 0) + (model?.inflight ?? 0)) / 2
+      const rate = sumRates(pass.arriving[slot] ?? {})
+      nextWeights[slot] = isDown(node)
+        ? 0
+        : rate > 0 && model
+          ? model.capacity
+          : (weights[slot] ?? 1)
       // A Node that runs code holds its slot while it waits on each call it makes.
       if (!COMPONENTS[node.type].stack) continue
-      const previous = callLatency.get(node.id) ?? NO_CALLS
+      const previous = callLatency[slot] ?? NO_CALLS
       const blended: Partial<Record<BackendKind, number>> = {}
       for (const kind of COMPONENTS[node.type].sends) {
         if (!isBackendKind(kind)) continue
         const fresh = kind === 'callout' ? CALLOUT_MS : outcomes.held(node, kind, hopMs(game))
         blended[kind] = index === 0 ? fresh : ((previous[kind] ?? 0) + fresh) / 2
       }
-      nextLatency.set(node.id, blended)
+      nextLatency[slot] = blended
     }
     // Failure shares on retrying Links, blended like the call latencies.
     const nextFailures: Array<Partial<Record<Kind, number>> | undefined> = []
@@ -960,7 +980,8 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
     }
     // Once a deep check fails a server in a pass, it stays out for the solve: no flapping.
     for (const node of game.nodes)
-      if (node.type === 'server' && databaseSick(graph, pass, node)) sick.add(node.id)
+      if (node.type === 'server' && databaseSick(graph, pass, node))
+        sick[at.get(node.id) as number] = true
     callLatency = nextLatency
     inflight = nextInflight
     weights = nextWeights
@@ -1036,13 +1057,14 @@ const ledgerOf = (
   // Node ledgers.
   const nodes: Record<string, NodeLedger> = {}
   for (const node of game.nodes) {
-    const rates = pass.arriving.get(node.id) ?? {}
-    const model = pass.models.get(node.id)
+    const slot = slotOf(pass, node)
+    const rates = pass.arriving[slot] ?? {}
+    const model = pass.models[slot]
     const inbound = sumRates(rates)
     const share = isDown(node) ? 0 : (model?.share ?? 1)
-    const pool = pass.connections.get(node.id) ?? null
+    const pool = pass.connections[slot] ?? null
     const refusedShare = pool && pool.used > pool.max ? 1 - pool.max / pool.used : 0
-    const strand = pass.stranded.get(node.id)
+    const strand = pass.stranded[slot]
     const out: Rates = {}
     for (const child of graph.routes.get(node.id) ?? []) {
       const carried = carriedOn(graph, pass, node.id, child.id)
@@ -1093,7 +1115,7 @@ const ledgerOf = (
       stranded: strand?.rate ?? 0,
       strandedKinds: strand ? [...strand.kinds] : [],
       connections: pool,
-      hitRatio: node.type === 'cache' || node.type === 'cdn' ? (pass.hits.get(node.id) ?? 0) : null,
+      hitRatio: node.type === 'cache' || node.type === 'cdn' ? (pass.hits[slot] ?? 0) : null,
       lag: node.type === 'replica' ? pass.lag : null,
       disk: model?.disk ?? false,
       out,
@@ -1212,7 +1234,7 @@ const ledgerOf = (
       if (node.type === 'server')
         egress += ((nodes[node.id]?.resources.network?.used ?? 0) / 1_000_000) * EGRESS_ORIGIN
       if (node.type === 'cdn' && !isDown(node)) {
-        const rates = pass.arriving.get(node.id) ?? {}
+        const rates = pass.arriving[slotOf(pass, node)] ?? {}
         for (const kind of REQUEST_KINDS)
           egress +=
             (((rates[kind] ?? 0) * cdnHitOf(node, kind, game) * PROFILES[kind].payloadKB) /
