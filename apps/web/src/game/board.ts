@@ -2621,7 +2621,14 @@ class BoardController {
           : busy
             ? mix(packet, colors.ink, 0.3)
             : colors.edge
-      const body = mix(packet, colors.canvas, hovered ? 0.6 : busy ? 0.8 : 0.92)
+      // Once zones are researched a link inside one zone takes that zone's tint.
+      const zones = has(state.game, 'multi-az') && zoned(from) && zoned(to)
+      const crossing = zones && from.zone !== to.zone
+      const zoneHue = { a: colors.groups.edge, b: colors.groups.ops, c: colors.groups.data }
+      const body =
+        zones && !crossing && !hovered
+          ? mix(zoneHue[from.zone], colors.canvas, busy ? 0.75 : 0.85)
+          : mix(packet, colors.canvas, hovered ? 0.6 : busy ? 0.8 : 0.92)
       belt.draw(
         pieces,
         rail,
@@ -2630,6 +2637,17 @@ class BoardController {
         busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
         this.phase * speed,
       )
+      // A link that crosses zones carries an orange "!" badge: a zone outage cuts it.
+      if (crossing && !picked && drawn >= 1) {
+        const mid = pointOn(path, 0.5)
+        this.overlay.circle(mid.x, mid.y, 8).fill(colors.warn)
+        this.overlay
+          .moveTo(mid.x, mid.y - 4)
+          .lineTo(mid.x, mid.y + 0.5)
+          .moveTo(mid.x, mid.y + 3)
+          .lineTo(mid.x, mid.y + 3.2)
+        this.overlay.stroke({ color: colors.card, width: 2, cap: 'round' })
+      }
       if (picked) {
         const mid = pointOn(path, 0.5)
         this.overlay.circle(mid.x, mid.y, 9).fill(colors.danger)
