@@ -18,8 +18,7 @@
     "lucide": "1.58.0",
     "pixi.js": "8.22.0",
     "simple-icons": "16.36.0",
-    "vite": "8.3.2",
-    "zzfx": "1.4.0"
+    "vite": "8.3.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
