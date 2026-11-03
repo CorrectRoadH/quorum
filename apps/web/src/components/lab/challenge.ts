@@ -6,20 +6,26 @@ import {
   Menu,
   Play,
   RotateCcw,
+  Hammer,
+  Percent,
   Timer,
   TriangleAlert,
   Wallet,
   Waypoints,
 } from 'lucide'
 import type { ChallengeHistograms, Histogram } from '@quorum/rpc'
+import { FIXES, KINDS, TASKS, type RequestKind } from '@quorum/simulation/catalog'
 import {
   bucketOf,
   challengeById,
   complexityOf,
+  devHoursOf,
   stepsOf,
   type Challenge,
   type ScoreAxis,
 } from '@quorum/simulation/challenges'
+import { has } from '@quorum/simulation/lookups'
+import { serviceOf } from '@quorum/simulation/team'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { SIM_VERSION } from '@quorum/simulation/version'
 import { histogramQuery } from '@/game/challenge-query.ts'
@@ -74,6 +80,8 @@ const figures = (
 ): Html => {
   const errors = ledger.errorShare * 100
   const { targets } = challenge
+  const margin = ledger.revenue > 0 ? (ledger.revenue - ledger.burn) / ledger.revenue : -1
+  const spent = challenge.devHours === undefined ? 0 : devHoursOf(challenge.start(), model.game)
   return h.div(
     [h.Class(`flex flex-col divide-y divide-hairline ${WELL} ${CHIPS}`)],
     [
@@ -92,10 +100,28 @@ const figures = (
         h,
       ),
       figureRow('Complexity', Waypoints, String(complexityOf(model.game)), 'plain', h),
+      targets.margin === undefined
+        ? h.empty
+        : figureRow(
+            'Margin',
+            Percent,
+            `${Math.round(margin * 100)}%`,
+            margin >= targets.margin ? 'ok' : 'danger',
+            h,
+          ),
+      challenge.devHours === undefined
+        ? h.empty
+        : figureRow(
+            'Dev Hours',
+            Hammer,
+            `${Math.round(spent)} / ${challenge.devHours}`,
+            spent <= challenge.devHours ? 'plain' : 'danger',
+            h,
+          ),
       figureRow(
         'Errors',
         TriangleAlert,
-        `${errors.toFixed(errors >= 10 ? 0 : 1)}%`,
+        percent(ledger.errorShare),
         errors <= targets.errors * 100 ? 'ok' : 'danger',
         h,
       ),
@@ -103,15 +129,70 @@ const figures = (
   )
 }
 
-const targetText = (challenge: Challenge): string =>
-  [
-    `errors ≤ ${(challenge.targets.errors * 100).toFixed(0)}%`,
-    challenge.targets.refused !== undefined ? 'no refused' : '',
-    challenge.targets.tail !== undefined ? `tail ≤ ${ms(challenge.targets.tail)}` : '',
-    challenge.targets.cost !== undefined ? `cost ≤ ${money(challenge.targets.cost)}/s` : '',
+/** A share as a percent with two significant figures: 1%, 0.5%, 0.001%. */
+const percent = (share: number): string => `${Number((share * 100).toPrecision(2))}%`
+
+const kindName = (kind: string): string => KINDS[kind as RequestKind].label.toLowerCase()
+
+const targetText = (challenge: Challenge): string => {
+  const { targets } = challenge
+  return [
+    `errors ≤ ${percent(targets.errors)}`,
+    ...Object.entries(targets.kinds ?? {}).map(
+      ([kind, limit]) => `${kindName(kind)} errors ≤ ${percent(limit ?? 0)}`,
+    ),
+    ...Object.entries(targets.kindTail ?? {}).map(
+      ([kind, limit]) => `${kindName(kind)} p99 ≤ ${ms(limit ?? 0)}`,
+    ),
+    targets.refused !== undefined ? 'no refused' : '',
+    targets.tail !== undefined ? `tail ≤ ${ms(targets.tail)}` : '',
+    targets.cost !== undefined ? `cost ≤ ${money(targets.cost)}/s` : '',
+    targets.margin !== undefined ? `margin ≥ ${percent(targets.margin)}` : '',
+    challenge.devHours !== undefined ? `${challenge.devHours} Dev Hours` : '',
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+/** The code fixes a Design may pay Dev Hours for, while it is built. */
+const fixes = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  const open = FIXES.filter((fix) => {
+    const research = TASKS[fix].research
+    return research !== null && has(game, research)
+  })
+  if (!game.scenario?.tasks || open.length === 0) return h.empty
+  const on = serviceOf(game).fixes
+  return h.div(
+    [h.Class(`flex flex-col divide-y divide-hairline ${WELL} ${CHIPS}`)],
+    open.map((fix) => {
+      const active = on.includes(fix)
+      return h.button(
+        [
+          h.Key(fix),
+          h.Type('button'),
+          h.AriaPressed(active ? 'true' : 'false'),
+          h.OnClick(Message.FixChosen({ fix, on: !active })),
+          h.Class(
+            'press flex h-8 items-center gap-2.5 px-2.5 text-left hover:bg-foreground/5 compact:px-3',
+          ),
+        ],
+        [
+          icon(
+            h,
+            active ? Check : Hammer,
+            cn('size-3.5 shrink-0', active ? 'text-ok' : 'text-muted-foreground'),
+          ),
+          h.span([h.Class('flex-1 truncate text-[11.5px]')], [TASKS[fix].name]),
+          h.span(
+            [h.Class(cn(FIGURE, 'text-[12px] text-muted-foreground'))],
+            [`${TASKS[fix].dh} DH`],
+          ),
+        ],
+      )
+    }),
+  )
+}
 
 const actions = (run: ChallengeRun, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -187,6 +268,7 @@ export const challengeHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Messag
         ],
       ),
       figures(model, challenge, ledger, h),
+      run.phase === 'build' ? fixes(model, h) : h.empty,
       actions(run, h),
     ],
   )

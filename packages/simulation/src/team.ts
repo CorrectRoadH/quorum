@@ -65,9 +65,9 @@ export const withService = (game: Game, change: Partial<Service>): Game => ({
   services: [{ ...serviceOf(game), ...change }, ...game.services.slice(1)],
 })
 
-/** A Sandbox has no Team: every fix is in its code. */
+/** A Sandbox has no Team: every fix is in its code, unless its Challenge makes fixes cost Dev Hours. */
 export const fixed = (game: Game, fix: FixId): boolean =>
-  game.sandbox || serviceOf(game).fixes.includes(fix)
+  (game.sandbox && !game.scenario?.tasks) || serviceOf(game).fixes.includes(fix)
 
 const servers = (game: Game) => game.nodes.filter((node) => node.type === 'server')
 

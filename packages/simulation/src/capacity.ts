@@ -455,7 +455,16 @@ export const serverModel = (context: ServerContext, shed = true): NodeModel => {
       )
   const networkUtilization = bytes / (networkOf(node) * context.boost)
 
-  const utilization = Math.max(cpuUtilization, slotUtilization, networkUtilization)
+  // A thread per open connection needs RAM for its stack: past the box's RAM, the runtime
+  // cannot start another thread and refuses the work (06 "Concurrency models").
+  const threadUtilization =
+    runtime.model === 'threads' && connectionRam > 0 && ram > 0 ? ramUsed / ram : 0
+  const utilization = Math.max(
+    cpuUtilization,
+    slotUtilization,
+    networkUtilization,
+    threadUtilization,
+  )
   const share = utilization > 1 ? 1 / utilization : 1
   const limit: NodeModel['limit'] =
     utilization <= 0

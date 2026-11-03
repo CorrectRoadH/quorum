@@ -195,7 +195,7 @@ const ANALYTICS_USERS = 8_000
 const ANALYTICS_BURN = 254
 
 /** What a Series B Design needs besides App Servers and its Database: files, checkouts, AI, and exports. */
-const seriesBData = (warehouse: boolean): ReadonlyArray<GameNode> => [
+export const seriesBData = (warehouse: boolean): ReadonlyArray<GameNode> => [
   node('storage', 'storage', 880, 420),
   node('psp', 'psp', 880, 560),
   node('llm', 'llm', 880, 700),
@@ -203,7 +203,7 @@ const seriesBData = (warehouse: boolean): ReadonlyArray<GameNode> => [
   node('worker', 'worker', 880, 60, { size: 3, runtime: 'go' }),
   ...(warehouse ? [node('warehouse', 'warehouse', 1120, 420)] : []),
 ]
-const seriesBLinks = (
+export const seriesBLinks = (
   servers: ReadonlyArray<string>,
   warehouse: boolean,
 ): ReadonlyArray<readonly [string, string]> => [
@@ -220,7 +220,7 @@ const seriesBLinks = (
     ...(warehouse ? [[server, 'warehouse'] as const] : []),
   ]),
 ]
-const SERIES_B_RESEARCH: ReadonlyArray<ResearchId> = [
+export const SERIES_B_RESEARCH: ReadonlyArray<ResearchId> = [
   ...SERIES_A_RESEARCH,
   'lang-go',
   'background-jobs',
@@ -235,7 +235,7 @@ const MISSED_USERS = 8_000
 const HOT_USERS = 1_000_000
 
 /** What a Series C Design needs besides App Servers and its store: files, checkouts, AI, pushes, and async work. */
-const seriesCData = (scale = 1): ReadonlyArray<GameNode> => [
+export const seriesCData = (scale = 1): ReadonlyArray<GameNode> => [
   node('search', 'search', 1120, 60, { size: 2 + scale }),
   node('warehouse', 'warehouse', 1120, 220),
   node('storage', 'storage', 880, 420),
@@ -245,7 +245,7 @@ const seriesCData = (scale = 1): ReadonlyArray<GameNode> => [
   node('queue', 'queue', 360, 40),
   node('worker', 'worker', 880, 60, { size: scale > 1 ? 9 : 4, runtime: 'go' }),
 ]
-const seriesCLinks = (
+export const seriesCLinks = (
   servers: ReadonlyArray<string>,
   store: string,
 ): ReadonlyArray<readonly [string, string]> => [
@@ -264,7 +264,7 @@ const seriesCLinks = (
     [server, 'warehouse'],
   ]),
 ]
-const SERIES_C_RESEARCH: ReadonlyArray<ResearchId> = [
+export const SERIES_C_RESEARCH: ReadonlyArray<ResearchId> = [
   ...SERIES_B_RESEARCH,
   'notifications',
   'replication',

@@ -74,7 +74,8 @@ export const regionShares = (game: Game): ReadonlyArray<readonly [RegionId, numb
     (region) =>
       [
         region,
-        REGION_INFO[region].share * (game.sandbox ? 1 : regionDiurnal(game.time, region)),
+        REGION_INFO[region].share *
+          (game.sandbox && !game.scenario?.daily ? 1 : regionDiurnal(game.time, region)),
       ] as const,
   )
   const total = weights.reduce((sum, [, weight]) => sum + weight, 0)

@@ -475,6 +475,22 @@ export const NO_INSIGHT: InsightPools = Object.fromEntries(
 export const Study = Schema.Struct({ id: ResearchId, progress: Schema.Finite })
 export type Study = typeof Study.Type
 
+/**
+ * What a Challenge changes about its Board (14 "Challenges"), beyond the Era's rules. Absent
+ * from every Company and guided Sandbox, so their saves and hashes do not carry it.
+ */
+export const Scenario = Schema.Struct({
+  /** The request mix, instead of the Era's. */
+  mix: Schema.optionalKey(Schema.Record(Schema.String, Schema.Finite)),
+  /** Each region's users follow their own daily cycle, as in a Company. */
+  daily: Schema.optionalKey(Schema.Boolean),
+  /** Fixes are Design choices the Design pays Dev Hours for, not given. */
+  tasks: Schema.optionalKey(Schema.Boolean),
+  /** What a request of each kind earns, as a multiple of its catalog value: a paid plan's price. */
+  value: Schema.optionalKey(Schema.Record(Schema.String, Schema.Finite)),
+})
+export type Scenario = typeof Scenario.Type
+
 export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
 export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
@@ -525,6 +541,7 @@ export const Game = Schema.Struct({
    * placing costs nothing, and incidents come only from the Sandbox's script.
    */
   sandbox: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  scenario: Schema.optionalKey(Scenario),
   /** Dev Hours no backlog item took, ready to rush any item. */
   devHours: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   engineers: Schema.Array(Engineer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),

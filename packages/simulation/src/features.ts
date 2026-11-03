@@ -30,7 +30,7 @@ const product = (game: Game, of: (feature: FeatureDef) => number): number =>
  */
 export const mixOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const era = eraOf(game).mix
-  if (game.sandbox) return era
+  if (game.sandbox) return (game.scenario?.mix as Partial<Record<RequestKind, number>>) ?? era
   const shares: Partial<Record<RequestKind, number>> = { ...era }
   for (const id of FEATURE_IDS) {
     const unlocks = FEATURES[id].unlocks
@@ -78,7 +78,9 @@ export const churnFactor = (game: Game): number => product(game, (feature) => fe
 
 /** What a request of `kind` earns relative to its catalog value. */
 export const valueFactor = (game: Game, kind: RequestKind): number =>
-  product(game, (feature) => feature.value[kind] ?? 1) * ventureOf(game).value
+  product(game, (feature) => feature.value[kind] ?? 1) *
+  ventureOf(game).value *
+  (game.scenario?.value?.[kind] ?? 1)
 
 /** How big a response of `kind` is relative to its profile. */
 export const payloadFactor = (game: Game, kind: RequestKind): number =>

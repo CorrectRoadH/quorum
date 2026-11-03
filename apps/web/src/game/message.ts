@@ -4,7 +4,7 @@ import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
 import { Url } from 'foldkit/url'
-import { EXIT_IDS, PERK_IDS, TASK_IDS } from '@quorum/simulation/catalog'
+import { EXIT_IDS, FIXES, PERK_IDS, TASK_IDS } from '@quorum/simulation/catalog'
 import {
   CacheEngine,
   Collector,
@@ -80,6 +80,8 @@ export const Message = defineMessageUnion({
   ChallengeFinished: {},
   /** Back to the build board as it was at Run. */
   ChallengeRebuilt: {},
+  /** Turns a code fix on or off in a Challenge that pays Dev Hours for it. */
+  FixChosen: { fix: Schema.Literals(FIXES), on: Schema.Boolean },
   ChallengeVerified: { verdict: ChallengeVerdict },
   ChallengeUnverified: { message: Schema.String, offline: Schema.Boolean },
   GotHistograms: { message: histogramQuery.Message },

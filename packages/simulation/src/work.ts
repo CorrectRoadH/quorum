@@ -135,6 +135,22 @@ export const queueFeature = (game: Game, id: FeatureId): Action =>
 export const queueTask = (game: Game, id: TaskId): Action =>
   refused(taskRefusal(game, id), () => enqueue(game, 'task', id, TASKS[id].dh))
 
+/**
+ * Puts a fix in the code, or takes it out, on a Challenge whose fixes cost Dev Hours
+ * (14 "The N+1"). The Challenge counts the Dev Hours; the fix itself is instant.
+ */
+export const setFix = (game: Game, id: FixId, on: boolean): Action => {
+  if (!game.scenario?.tasks) return notAllowed(SANDBOX)
+  const research = TASKS[id].research
+  if (research && !has(game, research))
+    return no(Refusal.Locked({ what: TASKS[id].name, research: RESEARCH[research].name }))
+  const fixes = serviceOf(game).fixes
+  if (fixes.includes(id) === on) return ok(game)
+  return ok(
+    withService(game, { fixes: on ? [...fixes, id] : fixes.filter((entry) => entry !== id) }),
+  )
+}
+
 /** Puts a Team on the running Study (08 "Spikes"): it runs 2× while the Team works on it. */
 export const queueSpike = (game: Game): Action => {
   const running = game.studies[0]

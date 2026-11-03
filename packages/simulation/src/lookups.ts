@@ -150,7 +150,9 @@ export const zoned = (node: GameNode): boolean =>
   node.type !== 'psp' &&
   node.type !== 'llm' &&
   node.type !== 'lb' &&
-  node.type !== 'waf'
+  node.type !== 'waf' &&
+  // A store spread across regions keeps replicas in every zone too.
+  !((node.type === 'wide' || node.type === 'dsql') && node.spread)
 
 /** Extra milliseconds a call between two Nodes pays for leaving its zone. Regional Nodes span every zone. */
 export const zoneMs = (from: GameNode, to: GameNode): number =>

@@ -41,10 +41,11 @@ import {
   challengeById,
   challengeOpen,
   resultOf,
+  responseAllowed,
   stepsOf,
   type Challenge,
 } from '@quorum/simulation/challenges'
-import { designOf, encodeReplay, type ReplayAction } from '@quorum/simulation/replay'
+import { designOf, encodeReplay, type ReplayAction, type Response } from '@quorum/simulation/replay'
 import { SIM_VERSION } from '@quorum/simulation/version'
 import type { ApiRpc } from '@/platform/rpc.ts'
 import { histogramQuery } from './challenge-query.ts'
@@ -1569,6 +1570,17 @@ const logRunAction = (model: Model, action: ReplayAction): Result | null => {
   return { model: { ...model, challenge: { ...run, replay } } }
 }
 
+/** An incident response during a run: logged like any run action, or refused when the Challenge forbids it. */
+const logResponse = (model: Model, response: Response): Result | null => {
+  const run = model.challenge
+  if (run?.phase !== 'running') return null
+  const challenge = challengeById(run.id)
+  const action: ReplayAction = { _tag: 'Respond', response }
+  if (challenge && !responseAllowed(challenge, action))
+    return withToast(model, 'This Challenge does not allow that.', 'warn')
+  return logRunAction(model, action)
+}
+
 /** Leaves a Challenge for the Challenges menu; the Company comes back as it was. */
 const leaveChallenge = (model: Model): Result => ({
   model: {
@@ -1819,6 +1831,10 @@ const handle = (model: Model, message: Message): Result =>
       if (run?.phase !== 'running') return { model }
       return finishRun(runSteps(model, run, true).model)
     },
+    FixChosen: ({ fix, on }) =>
+      act(model, `${TASKS[fix].name} ${on ? 'on' : 'off'}`, Work.setFix(model.game, fix, on), {
+        undoable: true,
+      }),
     ChallengeRebuilt: () => {
       const run = model.challenge
       if (!run?.board) return { model }
@@ -2614,7 +2630,9 @@ const handle = (model: Model, message: Message): Result =>
         { undoable: true },
       ),
 
-    RuleDisabled: () => act(model, 'Disabled the WAF rule', Actions.disableRule(model.game)),
+    RuleDisabled: () =>
+      logResponse(model, 'disable-rule') ??
+      act(model, 'Disabled the WAF rule', Actions.disableRule(model.game)),
 
     RegionPicked: ({ region }) => {
       const next = { ...model, region, selected: null }
@@ -2670,23 +2688,32 @@ const handle = (model: Model, message: Message): Result =>
       ),
 
     RoutesRolledBack: () =>
+      logResponse(model, 'roll-back-routes') ??
       act(model, 'Rolled back the routes', Actions.rollBackRoutes(model.game)),
 
-    LeaderFenced: () => act(model, 'Fenced the old leader', Actions.fenceLeader(model.game)),
+    LeaderFenced: () =>
+      logResponse(model, 'fence-leader') ??
+      act(model, 'Fenced the old leader', Actions.fenceLeader(model.game)),
 
     DrillRun: () => act(model, 'DR drill', Actions.runDrill(model.game)),
 
     GuidanceChosen: ({ growth, margin }) =>
       act(model, 'Guidance', Actions.setGuidance(model.game, growth, margin)),
 
-    ReportCancelled: () => act(model, 'Cancelled the report', Actions.cancelReport(model.game)),
+    ReportCancelled: () =>
+      logResponse(model, 'cancel-report') ??
+      act(model, 'Cancelled the report', Actions.cancelReport(model.game)),
 
-    VolumeExpanded: () => act(model, 'Expanded the volume', Actions.expandVolume(model.game)),
+    VolumeExpanded: () =>
+      logResponse(model, 'expand-volume') ??
+      act(model, 'Expanded the volume', Actions.expandVolume(model.game)),
 
     CertificateRenewed: () =>
+      logResponse(model, 'renew-certificate') ??
       act(model, 'Renewed the certificate', Actions.renewCertificate(model.game)),
 
     MessageDeleted: () =>
+      logResponse(model, 'delete-message') ??
       act(model, 'Deleted the poison message', Actions.deleteMessage(model.game)),
 
     NodeSold: ({ nodeId }) =>

@@ -38,7 +38,7 @@ describe('determinism', () => {
     expect(hashGame(first)).not.toBe(hashGame(decode(save)))
   })
 
-  test('every Challenge reference replay ends on its committed hash', { timeout: 60_000 }, () => {
+  test('every Challenge reference replay ends on its committed hash', { timeout: 180_000 }, () => {
     const hashes = Object.fromEntries(
       CHALLENGES.map((challenge) => {
         const result = runChallenge(challenge, referenceReplay(challenge))

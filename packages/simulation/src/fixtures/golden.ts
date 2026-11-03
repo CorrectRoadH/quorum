@@ -49,6 +49,12 @@ export const GOLDEN_STEPS = 10_000
 // the disclosed CVEs, and a backlog item gains its deadline.
 // SIM_VERSION 12: Split the Box asks for p99 under 300 ms, and the daily drill's
 // boards serve their users until the incident. The Company replay is unchanged.
+// SIM_VERSION 13: all 32 Challenges. A Challenge board can set its request mix,
+// what each kind earns, regional daily cycles, and fixes paid in Dev Hours; a run
+// takes incident responses, and a coarse Step runs second by second while
+// something fails. A Tomcat box holding realtime connections refuses work at its
+// RAM instead of swapping, and a store spread across regions survives a zone.
+// The Company replay is unchanged.
 export const GOLDEN_HASH = '90ba0bf8'
 
 /**
@@ -58,7 +64,34 @@ export const GOLDEN_HASH = '90ba0bf8'
 export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
   'hello-world': 'c90d1a1b',
   'split-the-box': 'f08a87fb',
-  slashdotted: '9caa7bfd',
+  slashdotted: '213c0695',
+  c10k: 'bc5308ff',
   'event-loop': '546f8990',
   'too-many-connections': '140a8993',
+  shoestring: '97bbd978',
+  'n-plus-one': '06cbf6a8',
+  'thirteen-engineers': '29a60c15',
+  'credential-stuffing': 'c81b303f',
+  'black-friday': 'ea9860d3',
+  'us-east-1': '7304a4d1',
+  'exactly-once': '1b208f2f',
+  'two-million-sockets': 'e2d03c96',
+  'pokemon-go': '52c9108c',
+  'healthcare-launch': 'dd3baab2',
+  'thundering-herd': 'bb8154e9',
+  'read-states': 'c4769871',
+  'fail-whale': 'e8222ed9',
+  'reports-at-noon': '8c31368e',
+  'gpu-economics': 'c9d086db',
+  metastable: 'a96abdd1',
+  'regex-of-doom': '72ee666c',
+  'forty-three-seconds': '70ad50bb',
+  'follow-the-sun': '2944917a',
+  celebrity: 'b442fd7c',
+  'gone-from-the-internet': '7885be6e',
+  'the-typo': 'b1b41114',
+  'leap-second': 'd92d5c1a',
+  'rule-of-40': '3e9938c5',
+  'postgres-for-everything': '287adde9',
+  'five-nines': '9f20f63c',
 }

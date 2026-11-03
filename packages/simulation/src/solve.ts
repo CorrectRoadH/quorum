@@ -149,7 +149,9 @@ export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const mix = mixOf(game)
   const spike = game.incident?.kind === 'spike' ? game.incident.magnitude : 1
   const cycle = game.sandbox
-    ? 1
+    ? game.scenario?.daily && regional(game)
+      ? regionalCycle(game.time)
+      : 1
     : regional(game)
       ? regionalCycle(game.time) * ventureWeekly(game)
       : ventureDiurnal(game) * ventureWeekly(game)
