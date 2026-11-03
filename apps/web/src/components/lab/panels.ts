@@ -485,7 +485,7 @@ export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
                   button(
                     {
                       onClick: Message.SpeedChosen({ speed }),
-                      variant: model.board.speed === speed ? 'default' : 'outline',
+                      variant: model.board.clock.speed === speed ? 'default' : 'outline',
                       size: 'lg',
                       className: cn(FIGURE, 'w-16'),
                       attributes: [h.Key(String(speed))],

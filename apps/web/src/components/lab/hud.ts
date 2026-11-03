@@ -1088,10 +1088,10 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       divider(h),
       toolButton(
-        model.board.paused ? 'Resume (Space)' : 'Pause (Space)',
-        model.board.paused ? Play : Pause,
+        model.board.clock.paused ? 'Resume (Space)' : 'Pause (Space)',
+        model.board.clock.paused ? Play : Pause,
         Message.PauseToggled(),
-        model.board.paused,
+        model.board.clock.paused,
         h,
       ),
       h.button(
@@ -1102,10 +1102,14 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.AriaLabel('Speed (S)'),
           h.OnClick(Message.SpeedCycled()),
           h.Class(
-            cn(tool(model.board.speed > 1), FIGURE, 'text-[12.5px] font-medium compact:size-9'),
+            cn(
+              tool(model.board.clock.speed > 1),
+              FIGURE,
+              'text-[12.5px] font-medium compact:size-9',
+            ),
           ),
         ],
-        [`${model.board.speed}×`],
+        [`${model.board.clock.speed}×`],
       ),
       desktopOnly(
         [

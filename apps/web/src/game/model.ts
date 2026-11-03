@@ -334,6 +334,27 @@ export const Tool = Schema.Union([
 ])
 export type Tool = typeof Tool.Type
 
+/** Progressive disclosure (15): the elements this board shows, triggers that wait their turn, and the one that glows. */
+export const Disclosure = Schema.Struct({
+  revealed: Schema.Array(Reveal),
+  pending: Schema.Array(Reveal),
+  cue: Schema.NullOr(RevealCue),
+})
+export type Disclosure = typeof Disclosure.Type
+
+/** The board's clock: its speed, whether it runs, and when it last saved and sampled. */
+export const Clock = Schema.Struct({
+  speed: Schema.Finite,
+  paused: Schema.Boolean,
+  /** Steps owed but not run yet: a tick at 1× is 2.5 Steps. */
+  carry: Schema.Finite,
+  /** Game time of the last save, so the clock saves every few seconds. */
+  savedAt: Schema.Finite,
+  /** Game time of the last log sample. */
+  sampledAt: Schema.Finite,
+})
+export type Clock = typeof Clock.Type
+
 /**
  * One board: the Company, a Sandbox or a Challenge being played, and
  * everything the player does on it. Entering another board starts a fresh
@@ -369,23 +390,13 @@ export const Board = Schema.Struct({
   researchFocus: Schema.NullOr(ResearchId),
   /** The Insight card's help section is open. */
   insightHelp: Schema.Boolean,
-  speed: Schema.Finite,
-  paused: Schema.Boolean,
-  /** Steps owed to the clock but not run yet: a tick at 1× is 2.5 Steps. */
-  carry: Schema.Finite,
-  /** Game time of the last save, so the clock saves every few seconds. */
-  savedAt: Schema.Finite,
-  /** Game time of the last log sample. */
-  sampledAt: Schema.Finite,
+  clock: Clock,
   change: Schema.NullOr(Change),
   delta: Schema.NullOr(Delta),
   /** Ticks left to show "Stable" after a change settles. */
   stableTicks: Schema.Finite,
   tradeoff: Schema.NullOr(Tradeoff),
-  /** Elements this board shows, triggers that wait their turn, and the one that glows. */
-  revealed: Schema.Array(Reveal),
-  pending: Schema.Array(Reveal),
-  cue: Schema.NullOr(RevealCue),
+  disclosure: Disclosure,
   /** Board actions to undo, newest last, at most 50. */
   undo: Schema.Array(Undo),
   /** Undone actions to redo, newest last. A new action clears it. */
@@ -459,7 +470,7 @@ export const inMenu = (model: Model): boolean =>
   model.panel === 'menu' || model.panel === 'settings'
 
 /** The clock holds still: the player paused it, or the game menu is open. */
-export const halted = (model: Model): boolean => model.board.paused || inMenu(model)
+export const halted = (model: Model): boolean => model.board.clock.paused || inMenu(model)
 
 /** The Playbook that follows the pointer, if any. */
 export const stampedPlaybook = (model: Model): Playbook | null =>

@@ -65,7 +65,7 @@ test('the menu button opens a menu over the board that holds the clock, and Esca
   const key = Message.KeyPressed({ key: 'Escape' })
   const opened = update(inLab(), Message.PanelOpened({ panel: 'menu' }))
   expect(opened.model.route).toEqual(AppRoute.Company())
-  expect(opened.model.board.paused).toBe(false)
+  expect(opened.model.board.clock.paused).toBe(false)
   expect(opened.commands).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -211,7 +211,8 @@ describe('the clock', () => {
   })
 
   test('3× runs three times the Steps', () => {
-    const start = { ...inLab(), board: { ...inLab().board, speed: 3 } }
+    const lab = inLab()
+    const start = { ...lab, board: { ...lab.board, clock: { ...lab.board.clock, speed: 3 } } }
     expect(tick(start, 4).board.game.time).toBe(start.board.game.time + 3)
   })
 
@@ -658,23 +659,23 @@ describe('progressive disclosure', () => {
   test('a first Company opens on the board, with Research shut until Insight can buy an item', () => {
     const start = founded()
     expect(start.panel).toBe('none')
-    expect(start.board.revealed).not.toContain('research')
+    expect(start.board.disclosure.revealed).not.toContain('research')
     expect(send(start, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
     // The cheapest Garage item costs 15 Insight: 14 is not enough, 15 is.
     const short = tick({
       ...start,
       board: { ...start.board, game: { ...start.board.game, insight: 14 } },
     })
-    expect(short.board.revealed).not.toContain('research')
+    expect(short.board.disclosure.revealed).not.toContain('research')
     const enough = tick({
       ...start,
       board: { ...start.board, game: { ...start.board.game, insight: 15 } },
     })
-    expect(enough.board.revealed).toContain('research')
-    expect(enough.board.cue?.key).toBe('research')
+    expect(enough.board.disclosure.revealed).toContain('research')
+    expect(enough.board.disclosure.cue?.key).toBe('research')
     const opened = send(enough, Message.KeyPressed({ key: 'r' }))
     expect(opened.panel).toBe('research')
-    expect(opened.board.cue).toBeNull()
+    expect(opened.board.disclosure.cue).toBeNull()
   })
 
   test('two triggers at once show one element; the second waits until the first is used', () => {
@@ -688,19 +689,19 @@ describe('progressive disclosure', () => {
         Message.ResizeChosen({ nodeId: 'server', direction: 1 }),
       ),
     )
-    expect(both.board.revealed).toContain('undo')
-    expect(both.board.revealed).not.toContain('research')
-    expect(both.board.pending).toContain('research')
+    expect(both.board.disclosure.revealed).toContain('undo')
+    expect(both.board.disclosure.revealed).not.toContain('research')
+    expect(both.board.disclosure.pending).toContain('research')
     const used = tick(send(both, Message.UndoChosen()))
-    expect(used.board.revealed).toContain('research')
-    expect(used.board.cue?.key).toBe('research')
+    expect(used.board.disclosure.revealed).toContain('research')
+    expect(used.board.disclosure.cue?.key).toBe('research')
   })
 
   test('a save from before disclosure shows everything; a save with it keeps its set', () => {
     const game = preseedGame()
     const old = send(initialModel(), Message.SaveLoaded({ json: JSON.stringify(game), now: 0 }))
-    expect(old.board.revealed).toContain('team')
-    expect(old.board.revealed).toContain('glossary')
+    expect(old.board.disclosure.revealed).toContain('team')
+    expect(old.board.disclosure.revealed).toContain('glossary')
     const kept = send(
       initialModel(),
       Message.SaveLoaded({
@@ -708,8 +709,8 @@ describe('progressive disclosure', () => {
         now: 0,
       }),
     )
-    expect(kept.board.revealed).toEqual(['undo'])
-    expect(kept.board.pending).toEqual(['team'])
+    expect(kept.board.disclosure.revealed).toEqual(['undo'])
+    expect(kept.board.disclosure.pending).toEqual(['team'])
   })
 })
 

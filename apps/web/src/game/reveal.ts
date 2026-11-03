@@ -12,7 +12,7 @@ import {
 } from '@quorum/simulation/lookups'
 import type { Game } from '@quorum/simulation/state'
 import type { Message } from './message.ts'
-import { Reveal, offCompany, type Board, type Model } from './model.ts'
+import { Reveal, offCompany, type Disclosure, type Model } from './model.ts'
 
 /* ==========================================================================
    Progressive disclosure (GDD 15): a first Company shows each element the
@@ -30,10 +30,10 @@ export const veteran = (model: Model): boolean =>
   offCompany(model) || model.founder.history.length > 0
 
 export const shown = (model: Model, key: Reveal): boolean =>
-  veteran(model) || model.board.revealed.includes(key)
+  veteran(model) || model.board.disclosure.revealed.includes(key)
 
 export const glowing = (model: Model, key: Reveal): boolean =>
-  model.board.cue?.key === key && model.board.cue.left > 0
+  model.board.disclosure.cue?.key === key && model.board.disclosure.cue.left > 0
 
 /** Playbooks are a Legacy feature: they appear after the first Exit. */
 export const playbooksShown = (model: Model): boolean =>
@@ -89,9 +89,12 @@ export const revealAtStart = (model: Model, ledger: Ledger): Model => ({
   ...model,
   board: {
     ...model.board,
-    revealed: ALL.filter((key) => !CUES.includes(key) && triggered(key, model, ledger)),
-    pending: [],
-    cue: null,
+    disclosure: {
+      ...model.board.disclosure,
+      revealed: ALL.filter((key) => !CUES.includes(key) && triggered(key, model, ledger)),
+      pending: [],
+      cue: null,
+    },
   },
 })
 
@@ -99,26 +102,32 @@ export const revealAtStart = (model: Model, ledger: Ledger): Model => ({
 export const advanceReveals = (model: Model, ledger: Ledger): Model => {
   if (veteran(model)) return model
   const cue =
-    model.board.cue && model.board.cue.left > 0
-      ? { ...model.board.cue, left: model.board.cue.left - 1 }
+    model.board.disclosure.cue && model.board.disclosure.cue.left > 0
+      ? { ...model.board.disclosure.cue, left: model.board.disclosure.cue.left - 1 }
       : null
   const fired = ALL.filter(
     (key) =>
-      !model.board.revealed.includes(key) &&
-      !model.board.pending.includes(key) &&
+      !model.board.disclosure.revealed.includes(key) &&
+      !model.board.disclosure.pending.includes(key) &&
       triggered(key, model, ledger),
   )
-  const pending = [...model.board.pending, ...fired]
+  const pending = [...model.board.disclosure.pending, ...fired]
   const [next, ...rest] = pending
   if (next === undefined || cue !== null)
-    return { ...model, board: { ...model.board, pending, cue } }
+    return {
+      ...model,
+      board: { ...model.board, disclosure: { ...model.board.disclosure, pending, cue } },
+    }
   return {
     ...model,
     board: {
       ...model.board,
-      revealed: [...model.board.revealed, next],
-      pending: rest,
-      cue: { key: next, left: CUE_TICKS },
+      disclosure: {
+        ...model.board.disclosure,
+        revealed: [...model.board.disclosure.revealed, next],
+        pending: rest,
+        cue: { key: next, left: CUE_TICKS },
+      },
     },
   }
 }
@@ -145,26 +154,30 @@ export const noticed = (model: Model, message: Message): Model => {
     ...model,
     board: {
       ...model.board,
-      revealed: model.board.revealed.includes(key)
-        ? model.board.revealed
-        : [...model.board.revealed, key],
-      pending: model.board.pending.filter((entry) => entry !== key),
-      cue: model.board.cue?.key === key ? null : model.board.cue,
+      disclosure: {
+        ...model.board.disclosure,
+        revealed: model.board.disclosure.revealed.includes(key)
+          ? model.board.disclosure.revealed
+          : [...model.board.disclosure.revealed, key],
+        pending: model.board.disclosure.pending.filter((entry) => entry !== key),
+        cue: model.board.disclosure.cue?.key === key ? null : model.board.disclosure.cue,
+      },
     },
   }
 }
 
 /** The Node whose footer button glows on the board. */
 export const cueNode = (model: Model): string | null => {
-  if (!model.board.cue || !glowing(model, model.board.cue.key)) return null
-  if (model.board.cue.key === 'collect')
+  if (!model.board.disclosure.cue || !glowing(model, model.board.disclosure.cue.key)) return null
+  if (model.board.disclosure.cue.key === 'collect')
     return model.board.game.nodes.find((node) => node.type === 'payments')?.id ?? null
-  if (model.board.cue.key === 'resize') return resizable(model.board.game, model.board.bottleneck)
+  if (model.board.disclosure.cue.key === 'resize')
+    return resizable(model.board.game, model.board.bottleneck)
   return null
 }
 
 /** What a save says about disclosure. A save from before it shows everything. */
-export const revealsOfSave = (saved: unknown): Pick<Board, 'revealed' | 'pending'> => {
+export const revealsOfSave = (saved: unknown): Pick<Disclosure, 'revealed' | 'pending'> => {
   const disclosure =
     typeof saved === 'object' && saved !== null && 'disclosure' in saved ? saved.disclosure : null
   if (typeof disclosure !== 'object' || disclosure === null) return { revealed: ALL, pending: [] }

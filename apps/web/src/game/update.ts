@@ -255,18 +255,12 @@ export const freshBoard = (game: Game): Board => ({
   teamDrag: DragAndDrop.init({ id: 'team-drag' }),
   researchFocus: null,
   insightHelp: false,
-  speed: 1,
-  paused: false,
-  carry: 0,
-  savedAt: game.time,
-  sampledAt: game.time,
+  clock: { speed: 1, paused: false, carry: 0, savedAt: game.time, sampledAt: game.time },
   change: null,
   delta: null,
   stableTicks: 0,
   tradeoff: null,
-  revealed: [],
-  pending: [],
-  cue: null,
+  disclosure: { revealed: [], pending: [], cue: null },
   undo: [],
   redo: [],
   bottleneck: null,
@@ -360,8 +354,8 @@ const sync = (model: Model, fit: boolean): AnyCommand =>
 const saveOf = (model: Model): AnyCommand =>
   WriteSave({
     game: model.board.game,
-    revealed: model.board.revealed,
-    pending: model.board.pending,
+    revealed: model.board.disclosure.revealed,
+    pending: model.board.disclosure.pending,
     dashboard: model.board.dashboard.history,
   })
 
@@ -923,7 +917,7 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
 
 const tick = (model: Model): Result => {
   if (model.board.challenge?.phase === 'running') return runTick(model, model.board.challenge)
-  const owed = model.board.carry + STEPS_PER_TICK * model.board.speed
+  const owed = model.board.clock.carry + STEPS_PER_TICK * model.board.clock.speed
   const steps = Math.floor(owed)
   let game = model.board.game
   const events: Array<StepEvent> = []
@@ -963,18 +957,21 @@ const tick = (model: Model): Result => {
   const severe = events.find(
     (event) => event._tag === 'IncidentStarted' && event.incident.severity <= 2,
   )
-  const autoPaused = model.prefs.autoPause && severe !== undefined && !model.board.paused
+  const autoPaused = model.prefs.autoPause && severe !== undefined && !model.board.clock.paused
   let next: Model = {
     ...model,
     board: {
       ...model.board,
       game,
       sandbox: run,
-      paused: model.board.paused || autoPaused,
-      speed: incident ? Math.min(model.board.speed, 1) : model.board.speed,
-      carry: owed - steps,
       bottleneck,
       bottleneckAt: search ? second : model.board.bottleneckAt,
+      clock: {
+        ...model.board.clock,
+        paused: model.board.clock.paused || autoPaused,
+        speed: incident ? Math.min(model.board.clock.speed, 1) : model.board.clock.speed,
+        carry: owed - steps,
+      },
     },
   }
   next = advanceReveals(next, ledger)
@@ -1125,12 +1122,15 @@ const tick = (model: Model): Result => {
     logs.push(line(game.time, 'BottleneckChanged', { bottleneck: marker || null }))
     next = { ...next, board: { ...next.board, lastBottleneck: marker } }
   }
-  if (game.time - next.board.sampledAt >= SAMPLE_EVERY) {
+  if (game.time - next.board.clock.sampledAt >= SAMPLE_EVERY) {
     logs.push(line(game.time, 'Sample', sampleOf(next, ledger)))
-    next = { ...next, board: { ...next.board, sampledAt: game.time } }
+    next = {
+      ...next,
+      board: { ...next.board, clock: { ...next.board.clock, sampledAt: game.time } },
+    }
   }
-  if (game.time - model.board.savedAt >= SAVE_EVERY) {
-    next = { ...next, board: { ...next.board, savedAt: game.time } }
+  if (game.time - model.board.clock.savedAt >= SAVE_EVERY) {
+    next = { ...next, board: { ...next.board, clock: { ...next.board.clock, savedAt: game.time } } }
     if (!offCompany(next)) commands.push(saveOf(next))
     else if (next.board.sandbox?.id === null) {
       next = { ...next, freeBoard: game }
@@ -1229,8 +1229,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
       bottleneckAt: -1,
       nodeHistory: {},
       dashboard: { ...model.board.dashboard, history: EMPTY_HISTORY },
-      savedAt: game.time,
-      sampledAt: game.time,
+      clock: { ...model.board.clock, savedAt: game.time, sampledAt: game.time },
     },
   }
   return withToast(next, text, 'plain', [FitBoard({}), WriteSandboxStore({ store: storeOf(next) })])
@@ -1429,11 +1428,10 @@ const startRun = (model: Model, run: ChallengeRun): Result => {
             replay,
             totals: NO_TOTALS,
           },
-          carry: 0,
-          paused: false,
           tool: null,
           selected: null,
           bottleneckAt: -1,
+          clock: { ...model.board.clock, carry: 0, paused: false },
         },
       }
       return { model: next }
@@ -1451,8 +1449,8 @@ const runSteps = (
   if (!challenge || !run.replay) return { model, done: false }
   const owed = all
     ? Number.POSITIVE_INFINITY
-    : model.board.carry +
-      (STEPS_PER_TICK * model.board.speed * STEP_SECONDS) / challenge.stepSeconds
+    : model.board.clock.carry +
+      (STEPS_PER_TICK * model.board.clock.speed * STEP_SECONDS) / challenge.stepSeconds
   const total = stepsOf(challenge)
   let game = model.board.game
   let totals = run.totals
@@ -1466,7 +1464,12 @@ const runSteps = (
   return {
     model: {
       ...model,
-      board: { ...model.board, game, carry: all ? 0 : owed - taken, challenge: { ...run, totals } },
+      board: {
+        ...model.board,
+        game,
+        challenge: { ...run, totals },
+        clock: { ...model.board.clock, carry: all ? 0 : owed - taken },
+      },
     },
     done: totals.step >= total,
   }
@@ -1559,7 +1562,7 @@ const continued = (model: Model): Result => {
     ...model,
     route: AppRoute.Company(),
     panel: model.board.away ? 'away' : 'none',
-    board: { ...model.board, paused: false },
+    board: { ...model.board, clock: { ...model.board.clock, paused: false } },
   }
   return {
     model: next,
@@ -1670,11 +1673,10 @@ const handle = (model: Model, message: Message): Result =>
           saved: true,
           board: {
             ...model.board,
-            ...revealsOfSave(file),
+            disclosure: { ...model.board.disclosure, ...revealsOfSave(file) },
             dashboard: { ...model.board.dashboard, history: historyOfSave(file) },
             game,
-            savedAt: game.time,
-            sampledAt: game.time,
+            clock: { ...model.board.clock, savedAt: game.time, sampledAt: game.time },
             bottleneckAt: -1,
             away: back?.report ?? null,
           },
@@ -1894,17 +1896,28 @@ const handle = (model: Model, message: Message): Result =>
 
     SpeedCycled: () => {
       const speeds = speedsOf(model.board.game)
-      const index = speeds.indexOf(model.board.speed)
+      const index = speeds.indexOf(model.board.clock.speed)
       return {
         model: {
           ...model,
-          board: { ...model.board, speed: speeds[(index + 1) % speeds.length] ?? 1 },
+          board: {
+            ...model.board,
+            clock: { ...model.board.clock, speed: speeds[(index + 1) % speeds.length] ?? 1 },
+          },
         },
       }
     },
-    SpeedChosen: ({ speed }) => ({ model: { ...model, board: { ...model.board, speed } } }),
+    SpeedChosen: ({ speed }) => ({
+      model: { ...model, board: { ...model.board, clock: { ...model.board.clock, speed } } },
+    }),
     PauseToggled: () => {
-      const next = { ...model, board: { ...model.board, paused: !model.board.paused } }
+      const next = {
+        ...model,
+        board: {
+          ...model.board,
+          clock: { ...model.board.clock, paused: !model.board.clock.paused },
+        },
+      }
       return { model: next }
     },
     FullscreenToggled: () => ({ model, commands: [ToggleFullscreen({})] }),
@@ -2956,11 +2969,11 @@ const handle = (model: Model, message: Message): Result =>
             saved: false,
             board: {
               ...earned.board,
-              paused: true,
               selected: null,
               selection: [],
               tool: null,
               exited: { row: result.row, researched: model.board.game.researched },
+              clock: { ...earned.board.clock, paused: true },
             },
           }
           return {

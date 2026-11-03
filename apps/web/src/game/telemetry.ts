@@ -88,7 +88,7 @@ export const contextOf = (model: Model, ledger: Ledger): Record<string, unknown>
   errors: round(ledger.errorShare, 4),
   bottleneck: ledger.bottleneck,
   panel: model.panel,
-  speed: model.board.speed,
+  speed: model.board.clock.speed,
   selected: model.board.game.nodes.find((node) => node.id === model.board.selected)?.type ?? null,
 })
 
@@ -127,8 +127,8 @@ export const sampleOf = (model: Model, ledger: Ledger): Record<string, unknown> 
     nodes: model.board.game.nodes
       .filter((node) => !COMPONENTS[node.type].fixed)
       .map((node) => nodeBrief(node, ledger)),
-    speed: model.board.speed,
-    paused: model.board.paused,
+    speed: model.board.clock.speed,
+    paused: model.board.clock.paused,
     panel: model.panel,
     settling: model.board.change !== null,
   }

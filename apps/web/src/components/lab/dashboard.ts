@@ -1219,13 +1219,13 @@ const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 cn(
                   FIGURE,
                   'flex h-7 items-center gap-2 rounded-lg bg-raised px-2.5 text-[12px] shadow-raised',
-                  model.board.paused ? 'text-muted-foreground' : 'text-foreground',
+                  model.board.clock.paused ? 'text-muted-foreground' : 'text-foreground',
                 ),
               ),
             ],
             [
-              led(model.board.paused ? MUTED : GREEN, h),
-              model.board.paused
+              led(model.board.clock.paused ? MUTED : GREEN, h),
+              model.board.clock.paused
                 ? 'Paused'
                 : `Live · D${now.day} ${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`,
               icon(h, RefreshCw, 'size-3.5 text-muted-foreground'),

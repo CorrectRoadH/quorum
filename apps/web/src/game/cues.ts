@@ -98,10 +98,10 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
     case 'PostmortemFiled':
       return message.take ? gesture('unlock') : gesture('close')
     case 'PauseToggled':
-      return gesture('toggle', after.board.paused ? 0.8 : 1.15)
+      return gesture('toggle', after.board.clock.paused ? 0.8 : 1.15)
     case 'SpeedCycled':
     case 'SpeedChosen':
-      return gesture('tick', SPEED_PITCH[after.board.speed] ?? 1)
+      return gesture('tick', SPEED_PITCH[after.board.clock.speed] ?? 1)
     case 'KeyPressed':
       // Other keys route to the Message they stand for, which plays its own cue.
       return message.key === 'Escape' &&
