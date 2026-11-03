@@ -107,7 +107,10 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       inspector(model, ledger, h),
       tradeoffCard(model, h),
       postmortems(model, h),
-      model.challenge ? h.empty : inboxButton(model, h),
+      // The inspector takes the Inbox's corner; the Inbox comes back when it closes.
+      model.challenge || model.game.nodes.some((node) => node.id === model.selected)
+        ? h.empty
+        : inboxButton(model, h),
       model.panel === 'research' ? researchPanel(model, h) : h.empty,
       model.panel === 'team' ? teamPanel(model, h) : h.empty,
       model.panel === 'exit' ? exitPanel(model, h) : h.empty,

@@ -1,5 +1,4 @@
 import { localizeHtml } from '../i18n/index.ts'
-import { languagePicker } from '../i18n/picker.ts'
 import type { Document, HtmlBuilder } from 'foldkit/html'
 import { toast } from '@/components/lab/bits.ts'
 import { labScreen } from './screens.ts'
@@ -25,7 +24,6 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
           [onBoard(model.route) ? labScreen(model, h) : titleScreen(model, h)],
         ),
         toast(model.toast, h),
-        languagePicker(model.locale, model.languagePicker, onBoard(model.route), h),
       ],
     ),
   ),

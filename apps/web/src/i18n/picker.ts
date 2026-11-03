@@ -7,21 +7,10 @@ import { Message } from '../game/message.ts'
 import { languageListbox } from './listbox.ts'
 import { supportedLocales, translate, type Locale } from './index.ts'
 
-/** Always reachable, including before clock-in and while a company is paused. */
-export const languagePicker = (
-  locale: Locale,
-  model: Listbox.Model,
-  onBoard: boolean,
-  h: HtmlBuilder<Message>,
-) =>
+/** The interface language, in Settings. */
+export const languagePicker = (locale: Locale, model: Listbox.Model, h: HtmlBuilder<Message>) =>
   h.div(
-    [
-      h.DataAttribute('language-picker', ''),
-      // Keep the non-portaled menu inside the title's scoped dark palette.
-      h.Class(
-        `fixed z-50 text-foreground ${onBoard ? 'bottom-2 left-3 compact:bottom-20' : 'dark scheme-dark top-8 right-8 compact:top-4 compact:right-4'}`,
-      ),
-    ],
+    [h.DataAttribute('language-picker', '')],
     [
       h.submodel({
         slotId: 'interface-language',
@@ -34,7 +23,8 @@ export const languagePicker = (
           itemToSearchText: (choice) => choice.label,
           maybeSelectedValue: Option.some(locale),
           ariaLabel: translate(locale, 'Language'),
-          anchor: { placement: onBoard ? 'top-start' : 'bottom-end', gap: 6, portal: false },
+          // Settings clips its overflow, so the menu portals out of it.
+          anchor: { placement: 'bottom-end', gap: 6, portal: true },
           buttonClassName:
             'flex h-8 min-w-32 cursor-pointer items-center justify-between gap-3 rounded-lg bg-well px-2.5 text-sm text-foreground shadow-well outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
           buttonContent: h.span(

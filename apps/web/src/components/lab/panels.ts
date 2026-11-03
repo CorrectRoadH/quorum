@@ -14,6 +14,7 @@ import { button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { switch_ } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { languagePicker } from '@/i18n/picker.ts'
 import { EYEBROW, FIGURE, FLOAT, NESTED, SCROLL, WELL } from './bits.ts'
 
 /* ==========================================================================
@@ -252,6 +253,13 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               onToggle: () => Message.AgentAccessToggled(),
             },
             h,
+          ),
+          h.div(
+            [h.Class('flex items-center justify-between gap-3')],
+            [
+              h.span([h.Class('text-sm font-medium')], ['Language']),
+              languagePicker(model.locale, model.languagePicker, h),
+            ],
           ),
           secondaryButton('Copy state as JSON', Message.StateCopied(), h, Copy),
         ],
