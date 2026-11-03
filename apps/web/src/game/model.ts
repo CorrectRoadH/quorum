@@ -340,9 +340,10 @@ export const Model = Schema.Struct({
   cue: Schema.NullOr(RevealCue),
   muted: Schema.Boolean,
   motion: Motion,
-  /** The Glossary panel's open entry and search. */
+  /** The Glossary panel's open entry, search, and category filter. */
   glossaryFocus: Schema.NullOr(Schema.String),
   glossaryQuery: Schema.String,
+  glossaryCategory: Schema.NullOr(Schema.String),
   /** Advice the game has sent, oldest first, and the one the Inbox shows. */
   inbox: Schema.Array(Mail),
   inboxFocus: Schema.NullOr(Schema.Finite),

@@ -255,6 +255,7 @@ export const initialModel = (): Model =>
     motion: 'system',
     glossaryFocus: null,
     glossaryQuery: '',
+    glossaryCategory: null,
     inbox: [],
     inboxFocus: null,
     folder: 'inbox',
@@ -2519,12 +2520,15 @@ const handle = (model: Model, message: Message): Result =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
       const founder = id ? discoverTerm(model.founder, id) : model.founder
+      // Browsing inside the panel keeps the search and filter; opening it from outside resets them.
+      const browsing = model.panel === 'glossary' && id !== null
       const next: Model = {
         ...model,
         panel: 'glossary',
         placing: null,
         glossaryFocus: id,
-        glossaryQuery: '',
+        glossaryQuery: browsing ? model.glossaryQuery : '',
+        glossaryCategory: browsing ? model.glossaryCategory : null,
         founder,
       }
       return {
@@ -2590,6 +2594,7 @@ const handle = (model: Model, message: Message): Result =>
       model: { ...model, dashboardRange: minutes, dashboardHover: null },
     }),
     DashboardHovered: ({ index }) => ({ model: { ...model, dashboardHover: index } }),
+    GlossaryFiltered: ({ category }) => ({ model: { ...model, glossaryCategory: category } }),
 
     CheatCash: () => {
       const next: Model = {
