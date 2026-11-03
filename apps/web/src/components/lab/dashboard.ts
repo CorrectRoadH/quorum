@@ -103,7 +103,7 @@ const labelOf = (time: number, range: number): string =>
  * which draws the worst minute: a block's mean p99 would hide the spike the tail is about.
  */
 const rowsOf = (model: Model, slo: number): ReadonlyArray<Row> => {
-  const range = model.dashboardRange
+  const range = model.dashboard.range
   const tier = tierOf(range)
   const figures = (value: (field: Field) => number, at: number, span: number): Row => ({
     t: labelOf(at, range),
@@ -129,7 +129,7 @@ const rowsOf = (model: Model, slo: number): ReadonlyArray<Row> => {
     )
   }
   const { minutes } = TIERS[tier]
-  const blocks = model.dashboardHistory[tier]
+  const blocks = model.dashboard.history[tier]
   return blocks
     .slice(Math.max(0, blocks.length - Math.ceil(range / minutes)))
     .map((block) =>
@@ -426,7 +426,7 @@ const timeSeries = (
   spec: SeriesSpec,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const hovered = model.dashboardHover !== null ? rows[model.dashboardHover] : undefined
+  const hovered = model.dashboard.hover !== null ? rows[model.dashboard.hover] : undefined
   const id = (series: Series) => `fill-${spec.key}-${series.key}`
   return panel(
     spec.key,
@@ -447,7 +447,7 @@ const timeSeries = (
               title: spec.title,
               className: PLOT,
               accessibilityLayer: true,
-              activeIndex: model.dashboardHover,
+              activeIndex: model.dashboard.hover,
               onActiveIndexChange: (index) => Message.DashboardHovered({ index }),
               defs: spec.series
                 .filter((series) => series.fill)
@@ -1193,12 +1193,12 @@ const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 [
                   h.Key(`range-${minutes}`),
                   h.Type('button'),
-                  h.AriaPressed(minutes === model.dashboardRange ? 'true' : 'false'),
+                  h.AriaPressed(minutes === model.dashboard.range ? 'true' : 'false'),
                   h.OnClick(Message.DashboardRangeChosen({ minutes })),
                   h.Class(
                     cn(
                       'h-6 rounded-md px-2.5 text-[12px]',
-                      minutes === model.dashboardRange
+                      minutes === model.dashboard.range
                         ? 'bg-raised text-foreground shadow-raised'
                         : 'text-muted-foreground hover:text-foreground',
                     ),

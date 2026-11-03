@@ -296,9 +296,7 @@ export const initialModel = (): Model =>
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
-    dashboardHistory: EMPTY_HISTORY,
-    dashboardRange: 360,
-    dashboardHover: null,
+    dashboard: { history: EMPTY_HISTORY, range: 360, hover: null },
     lastGoal: '',
     lastBottleneck: '',
   })
@@ -358,7 +356,7 @@ const saveOf = (model: Model): AnyCommand =>
     game: model.game,
     revealed: model.revealed,
     pending: model.pending,
-    dashboard: model.dashboardHistory,
+    dashboard: model.dashboard.history,
   })
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
@@ -1028,11 +1026,14 @@ const tick = (model: Model): Result => {
   // The Dashboard's long history: every Sample the Steps added.
   next = {
     ...next,
-    dashboardHistory: record(
-      next.dashboardHistory,
-      newSamples(game.history, model.game.time, game.time),
-      Math.floor(game.time),
-    ),
+    dashboard: {
+      ...next.dashboard,
+      history: record(
+        next.dashboard.history,
+        newSamples(game.history, model.game.time, game.time),
+        Math.floor(game.time),
+      ),
+    },
   }
 
   // Utilization history, once per 10 sim seconds.
@@ -1175,7 +1176,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
     bottleneck: null,
     bottleneckAt: -1,
     nodeHistory: {},
-    dashboardHistory: EMPTY_HISTORY,
+    dashboard: { ...model.dashboard, history: EMPTY_HISTORY },
     savedAt: game.time,
     sampledAt: game.time,
   }
@@ -1607,7 +1608,7 @@ const handle = (model: Model, message: Message): Result =>
         model: {
           ...model,
           ...revealsOfSave(file),
-          dashboardHistory: historyOfSave(file),
+          dashboard: { ...model.dashboard, history: historyOfSave(file) },
           game,
           saved: true,
           savedAt: game.time,
@@ -2857,7 +2858,7 @@ const handle = (model: Model, message: Message): Result =>
         teamDrag: DragAndDrop.init({ id: 'team-drag' }),
         tool: null,
         researchFocus: null,
-        dashboardHover: null,
+        dashboard: { ...model.dashboard, hover: null },
       }
       const next =
         panel === 'inbox'
@@ -3008,9 +3009,11 @@ const handle = (model: Model, message: Message): Result =>
       model: { ...model, glossary: { ...model.glossary, query } },
     }),
     DashboardRangeChosen: ({ minutes }) => ({
-      model: { ...model, dashboardRange: minutes, dashboardHover: null },
+      model: { ...model, dashboard: { ...model.dashboard, range: minutes, hover: null } },
     }),
-    DashboardHovered: ({ index }) => ({ model: { ...model, dashboardHover: index } }),
+    DashboardHovered: ({ index }) => ({
+      model: { ...model, dashboard: { ...model.dashboard, hover: index } },
+    }),
     GlossaryFiltered: ({ category }) => ({
       model: { ...model, glossary: { ...model.glossary, category } },
     }),

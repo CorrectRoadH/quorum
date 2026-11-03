@@ -287,6 +287,17 @@ export const Undo = Schema.Struct({
 })
 export type Undo = typeof Undo.Type
 
+/** The Dashboard panel: its long history, time range, and crosshair. */
+export const Dashboard = Schema.Struct({
+  /** The 15-minute and 1-hour blocks, beyond the Game's 600 Samples. */
+  history: History,
+  /** The time range in calendar minutes. */
+  range: Schema.Finite,
+  /** The Sample the crosshair is on. */
+  hover: Schema.NullOr(Schema.Finite),
+})
+export type Dashboard = typeof Dashboard.Type
+
 /** The Inbox: the Mail the game has sent, and how the panel and its preview card show it. */
 export const Inbox = Schema.Struct({
   /** Oldest first. */
@@ -407,11 +418,7 @@ export const Model = Schema.Struct({
   bottleneckAt: Schema.Finite,
   /** Utilization per Node over the last two minutes, for Metrics. */
   nodeHistory: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
-  /** The Dashboard's 15-minute and 1-hour blocks, beyond the Game's 600 Samples. */
-  dashboardHistory: History,
-  /** The Dashboard's time range in calendar minutes, and the Sample its crosshair is on. */
-  dashboardRange: Schema.Finite,
-  dashboardHover: Schema.NullOr(Schema.Finite),
+  dashboard: Dashboard,
   /** The last goal and bottleneck logged, so the log records changes only. */
   lastGoal: Schema.String,
   lastBottleneck: Schema.String,
