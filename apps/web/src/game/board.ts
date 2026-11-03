@@ -2029,6 +2029,11 @@ class BoardController {
   }> | null = null
   private routeDone = ''
   private routing = false
+  /**
+   * While a held card sits on another card, its links run to the spot where it
+   * will land, and they stay there while the dropped card glides into it.
+   */
+  private heldLanding: Map<string, Pt> | null = null
   private ghostType: ComponentId | null = null
   private ghostLocale: Locale = 'en'
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
@@ -2201,9 +2206,8 @@ class BoardController {
 
   /* ---------- hit tests ---------- */
 
-  private nodes(): ReadonlyArray<GameNode> {
+  private nodes(dragged = this.dragged): ReadonlyArray<GameNode> {
     const nodes = this.state?.game.nodes ?? []
-    const dragged = this.dragged
     if (!dragged) return nodes
     const lead = nodes.find((node) => node.id === dragged.id)
     const group = this.groupOf(dragged.id)
@@ -2315,7 +2319,19 @@ class BoardController {
     if (!game || (game === this.routedGame && this.dragged === this.routedDrag)) return this.routed
     this.routedGame = game
     this.routedDrag = this.dragged
-    const placed = this.nodes()
+    // A held card on top of another card has no way out, so it is routed where it will land.
+    const held = this.gesture?.kind === 'node' ? this.dragged : null
+    const landing = held && this.landingOf()
+    const blocked = held && landing && (landing.x !== held.x || landing.y !== held.y)
+    const placed = blocked ? this.nodes({ id: held.id, x: landing.x, y: landing.y }) : this.nodes()
+    if (blocked) {
+      const group = this.groupOf(held.id)
+      this.heldLanding = new Map(
+        placed
+          .filter((node) => group.includes(node.id))
+          .map((node) => [node.id, { x: node.x, y: node.y }]),
+      )
+    } else if (held) this.heldLanding = null
     const key = `${placed.map((node) => `${node.id}:${node.type}:${node.x}:${node.y}`).join('|')}#${game.links.map((link) => `${link.from}>${link.to}`).join('|')}`
     if (key !== this.routedFor) {
       this.routedFor = key
@@ -2349,9 +2365,12 @@ class BoardController {
    * A link's wire between Nodes where they are drawn. A card that eases toward
    * where it was routed bends the routed wire to stay on its port. When a card is
    * further away, as when the worker is behind a fast drag, the link takes the
-   * quick route until its routes arrive.
+   * quick route until its routes arrive. A held card on another card has its
+   * links drawn to its landing spot instead (see heldLanding).
    */
-  private wireOf(from: GameNode, to: GameNode): Wire {
+  private wireOf(drawnFrom: GameNode, drawnTo: GameNode): Wire {
+    const from = { ...drawnFrom, ...this.heldLanding?.get(drawnFrom.id) }
+    const to = { ...drawnTo, ...this.heldLanding?.get(drawnTo.id) }
     const wire = this.routes().get(`${from.id}>${to.id}`)
     const a = this.routedNodes.get(from.id)
     const b = this.routedNodes.get(to.id)
@@ -2973,6 +2992,16 @@ class BoardController {
       return false
     })
     const byId = this.shown()
+    // Once the dropped cards are in their spots, their links follow them again.
+    if (
+      this.heldLanding &&
+      this.gesture?.kind !== 'node' &&
+      (performance.now() - this.droppedAt > 1000 ||
+        [...this.heldLanding].every(
+          ([id, spot]) => byId.get(id)?.x === spot.x && byId.get(id)?.y === spot.y,
+        ))
+    )
+      this.heldLanding = null
     for (const [key, age] of this.fresh)
       if (age >= GLOW_S) this.fresh.delete(key)
       else this.fresh.set(key, age + seconds)
