@@ -1,5 +1,5 @@
 import type { Limit, Resources } from './capacity.ts'
-import type { Kind, RequestKind } from './catalog.ts'
+import type { InsightPool, Kind, RequestKind } from './catalog.ts'
 import type { ErrorCause } from './distribution.ts'
 
 /* ==========================================================================
@@ -89,7 +89,10 @@ export type Ledger = Readonly<{
   revenue: number
   /** Dollars per second from paid plans, included in `revenue`. */
   subscriptions: number
-  insight: number
+  /** Insight per second, by pool (12 "Earning Insight"). */
+  insight: Readonly<Record<InsightPool, number>>
+  /** Component types that sample each request kind, for research that needs breadth. */
+  breadth: Readonly<Partial<Record<RequestKind, number>>>
   /** Dollars per second: the cloud bill, plus salaries. */
   burn: number
   /** Dollars per second of payroll, included in `burn`. */

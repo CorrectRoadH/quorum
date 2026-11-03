@@ -26,7 +26,7 @@ kinds as the packs ([Influences](./02-influences.md#research-in-factory-games)).
 ```text
 sampled(c, kind)  = Σ tapped Nodes of Component c: λ(node, kind) × sample_rate
 insight(kind)     = yield × Σ Component types c: √sampled(c, kind) × multipliers(c)
-insight(Failure)  = yield × Σ Component types c: √failed(c) × multipliers(c)
+insight(Failure)  = 3 × yield × Σ Component types c: √failed(c) × multipliers(c)
 ```
 
 | Term             | Value                                                                                                                                                                                |
@@ -74,11 +74,13 @@ Analytics keeps traces for a window: 15 minutes (default), 1 hour, or 6 hours of
 longer window multiplies the tap's Storage Burn by 1, 2, or 4.
 
 ```text
-cap(pool) = max(100, retention_window × insight(pool))
+cap(pool) = max(floor(pool), retention_window × insight(pool))
 ```
 
 Insight above a pool's cap is not added. The cap follows the live rate, so the player cannot save
-up a large balance and buy a whole Era when it opens. Grants ignore the cap.
+up a large balance and buy a whole Era when it opens. `floor(pool)` is the pool's share of the
+costliest item open in the Era, and at least 100: a pool always holds one Study, so the Failure
+Insight of an incident still pays for a Study after the incident ends. Grants ignore the cap.
 
 ### Other Insight sources
 

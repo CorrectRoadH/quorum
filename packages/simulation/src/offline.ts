@@ -3,6 +3,7 @@ import {
   FIRST_INCIDENT_AFTER,
   LIVE_TUNING,
   OFFLINE_CAP,
+  type ResearchId,
   type Tuning,
 } from './catalog.ts'
 import { clockOf } from './calendar.ts'
@@ -31,7 +32,8 @@ export type AwayReport = Readonly<{
   usersBefore: number
   usersAfter: number
   cash: number
-  insight: number
+  /** Studies that completed while away. */
+  studied: ReadonlyArray<ResearchId>
   devHours: number
   /** The highest utilization of any limiting Node, and its calendar hour and Node. */
   peak: number
@@ -94,7 +96,7 @@ export const simulateAway = (
       usersBefore: game.users,
       usersAfter: rested.users,
       cash: rested.cash - game.cash,
-      insight: rested.insight - game.insight,
+      studied: rested.researched.filter((id) => !game.researched.includes(id)),
       devHours,
       peak,
       peakHour,

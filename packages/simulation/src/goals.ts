@@ -326,15 +326,13 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
         { id: 'decline', label: 'Decline' },
       ],
     )
-  const affordable = researchList.some(
-    (entry) => !has(game, entry.id) && researchReady(game, entry.id) && game.insight >= entry.cost,
-  )
-  if (affordable && game.researched.length < 3)
+  const ready = researchList.some((entry) => !has(game, entry.id) && researchReady(game, entry.id))
+  if (ready && game.studies.length === 0 && game.researched.length < 3)
     return advice(
       'mentor:research',
       'mentor',
-      'You are sitting on Insight',
-      'Open Research and spend your Insight.',
+      'Start a Study',
+      'Open Research and queue a Study. It takes Insight as it runs.',
       'research',
       {},
     )

@@ -23,6 +23,8 @@ import {
   REQUEST_KINDS,
   RESEARCH,
   RUNTIMES,
+  MAX_STUDIES,
+  RETENTION_WINDOWS,
   SAMPLE_RATES,
   SIZES,
   type ComponentId,
@@ -103,7 +105,7 @@ export type Refusal = Data.TaggedEnum<{
   Unaffordable: {
     readonly what: string
     readonly price: number
-    readonly currency: 'cash' | 'insight'
+    readonly currency: 'cash'
   }
   /** Breaks a rule of the Design. */
   NotAllowed: { readonly reason: string }
@@ -117,10 +119,8 @@ export const describeRefusal = (refusal: Refusal): string =>
   Refusal.$match(refusal, {
     Locked: ({ what, research }) => `${what} needs ${research}.`,
     TooEarly: ({ what, era }) => `${what} opens in ${era}.`,
-    Unaffordable: ({ what, price, currency }) =>
-      currency === 'cash'
-        ? `${what} costs $${Math.round(price).toLocaleString('en-US')}.`
-        : `${what} needs ${Math.round(price)} Insight.`,
+    Unaffordable: ({ what, price }) =>
+      `${what} costs $${Math.round(price).toLocaleString('en-US')}.`,
     NotAllowed: ({ reason }) => reason,
     Missing: () => 'That is gone.',
   })
@@ -170,6 +170,7 @@ export const blankNode = (
     localDb: false,
     sample: 1,
     sampleRate: 0.1,
+    retention: 900,
     down: 0,
     downCause: 'restart',
     warm: COMPONENTS[type].coldStart ? 0 : 1,
@@ -865,6 +866,14 @@ export const setSample = (game: Game, id: string, sampleRate: number): Action =>
       : notAllowed('Only Analytics has a sample rate.'),
   )
 
+/** How long Analytics keeps traces (12 "Retention"). */
+export const setRetention = (game: Game, id: string, retention: number): Action =>
+  withNode(game, id, (node) =>
+    node.type === 'analytics' && (RETENTION_WINDOWS as ReadonlyArray<number>).includes(retention)
+      ? ok(patch(game, id, { retention }))
+      : notAllowed('Only Analytics keeps traces.'),
+  )
+
 /* ---------- incidents ---------- */
 
 /** Replaces a failed Node: it comes back cold after a restart. */
@@ -901,12 +910,16 @@ export const filePostmortem = (game: Game, id: number, take: boolean): Action =>
   }
   const action = postmortem.action
   if (!take || !action || has(game, action)) return ok(filed)
-  return study(filed, action)
+  return study(filed, action, true)
 }
 
 /* ---------- research and money ---------- */
 
-export const study = (game: Game, id: ResearchId): Action => {
+/**
+ * Queues an item's Study (10 "Studies"): at the end, or first so it runs now.
+ * A queued item put first keeps its progress.
+ */
+export const study = (game: Game, id: ResearchId, first = false): Action => {
   const entry = RESEARCH[id]
   if (has(game, id)) return notAllowed(`${entry.name} is already yours.`)
   if (entry.era > game.stage)
@@ -920,10 +933,38 @@ export const study = (game: Game, id: ResearchId): Action => {
       }),
     )
   }
-  if (game.insight < entry.cost)
-    return no(Refusal.Unaffordable({ what: entry.name, price: entry.cost, currency: 'insight' }))
-  return ok({ ...game, insight: game.insight - entry.cost, researched: [...game.researched, id] })
+  const queued = game.studies.find((item) => item.id === id)
+  if (queued) {
+    if (!first) return notAllowed(`${entry.name} is in the queue.`)
+    return ok({ ...game, studies: [queued, ...game.studies.filter((item) => item.id !== id)] })
+  }
+  if (game.studies.length >= MAX_STUDIES)
+    return notAllowed(`The queue holds ${MAX_STUDIES} Studies.`)
+  const added = { id, progress: 0 }
+  return ok({ ...game, studies: first ? [added, ...game.studies] : [...game.studies, added] })
 }
+
+/** Moves a queued Study up or down. The first one runs. */
+export const moveStudy = (game: Game, id: ResearchId, direction: 1 | -1): Action => {
+  const index = game.studies.findIndex((item) => item.id === id)
+  if (index === -1) return no(Refusal.Missing())
+  const to = index + direction
+  if (to < 0 || to >= game.studies.length) return ok(game)
+  const studies = [...game.studies]
+  const [item] = studies.splice(index, 1)
+  if (item) studies.splice(to, 0, item)
+  return ok({ ...game, studies })
+}
+
+/** Takes a Study off the queue. Its progress and the Insight it took are lost, and its Spike ends. */
+export const cancelStudy = (game: Game, id: ResearchId): Action =>
+  game.studies.some((item) => item.id === id)
+    ? ok({
+        ...game,
+        studies: game.studies.filter((item) => item.id !== id),
+        backlog: game.backlog.filter((item) => !(item.kind === 'spike' && item.ref === id)),
+      })
+    : no(Refusal.Missing())
 
 export const collect = (game: Game): Game => ({
   ...game,

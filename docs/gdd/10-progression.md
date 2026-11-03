@@ -167,21 +167,25 @@ The ◇ column in the track tables is an item's total cost. Its **recipe** says 
 pay it ([Observability](./12-observability.md#earning-insight)). The cost is split equally across
 the pools in the recipe.
 
-The default recipe is the request kinds that the item's Era brings:
+Until Seed, the default recipe is the request kinds that the item's Era brings. From Series A, it is
+the kinds of the Era before. A Series A kind such as `buy` arrives only when its Feature ships, and
+the Checkout Feature itself needs research, so a Series A default of `buy` could never be paid.
 
 | Era      | Default recipe                  |
 | -------- | ------------------------------- |
 | Garage   | `page`, `read`                  |
 | Pre-seed | `write`, `login`                |
 | Seed     | `search`, `upload`              |
-| Series A | `media`, `rt`, `buy`            |
-| Series B | `job`, `report`, `ai`           |
-| Series C | `feed`, `hook`, `push`          |
+| Series A | `search`, `upload`              |
+| Series B | `media`, `rt`, `buy`            |
+| Series C | `job`, `report`, `ai`           |
 | Pre-IPO  | Every request kind except `bot` |
 | Public   | Every request kind except `bot` |
 
-So the player cannot study Series B research before Series B traffic exists, and more `page`
-traffic never buys it. A Venture's request mix changes which recipes are cheap: Fintech serves 4×
+So the player cannot study Series B research before Series A's Features bring their traffic, and
+more `page` traffic never buys it. Items that teach a new kind's problem ask for that kind, so the
+player ships the Feature first: it is the production line for that kind's Insight. No item that a
+Feature needs costs the kind that Feature brings. A Venture's request mix changes which recipes are cheap: Fintech serves 4×
 `buy`, so its Series A research is fast. Every Venture serves every request kind, so every recipe
 can be paid.
 
@@ -208,6 +212,9 @@ Items whose recipe is not the default:
 | `waf`, `bot-management`                                                 | `bot`                           | Bots teach how bots behave                  |
 | `credential-protection`                                                 | `login`, `bot`                  | Credential stuffing is bot `login`          |
 | `funnels`                                                               | `page`, `login`                 | Sign-up is the funnel                       |
+| `auth-provider`                                                         | `login`                         |                                             |
+| `idempotency-keys`                                                      | `buy`                           | Retried charges                             |
+| `notifications`                                                         | `push`                          |                                             |
 | `websockets`                                                            | `rt`                            |                                             |
 | `tiered-caching`                                                        | `media`                         |                                             |
 | `esi`                                                                   | `page`, `media`                 |                                             |
@@ -263,7 +270,8 @@ night. The player can start a Study with no Insight saved.
 `speed` is 1, and two things raise it:
 
 - **A Spike.** A Team takes the running Study as its backlog item
-  ([Team](./08-team-and-velocity.md#spikes)). While it does, `speed` × 2.
+  ([Team](./08-team-and-velocity.md#spikes)). While it does, `speed` × 2. A Spike whose Study is
+  not running waits, and no Team takes it.
 - **Study-speed research.** `trace-search` and `notebooks` add +25% each.
 
 Studies run offline ([Simulation](./04-simulation.md#offline-progress)). A postmortem's action item

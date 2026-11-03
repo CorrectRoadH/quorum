@@ -41,6 +41,7 @@ import { recordBudget } from './slo.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
 import { advanceDrill } from './ipo.ts'
 import { advanceQuarter } from './quarters.ts'
+import { accrue, advanceStudies } from './studies.ts'
 import type { Alarms, FalseAlarms, Game, GameLink, GameNode, Sample } from './state.ts'
 import { advanceTeam } from './work.ts'
 
@@ -384,7 +385,8 @@ export const step = (
     apdex,
     alarms,
     falseAlarms,
-    insight: game.insight + ledger.insight * seconds + FIRST_KIND_INSIGHT * firsts.length,
+    insight: 0,
+    pools: accrue(game, ledger, seconds, firsts, FIRST_KIND_INSIGHT),
     servedKinds: firsts.length > 0 ? [...game.servedKinds, ...firsts] : game.servedKinds,
     stored: puts > 0 ? game.stored + (puts * UPLOAD_MB * seconds) / 1_000 : game.stored,
     budget: recordBudget(game, ledger, seconds),
@@ -398,6 +400,7 @@ export const step = (
   const running = advanceIncident(next, ledger, seconds)
   next = running.game
   events.push(...running.events)
+  next = advanceStudies(next, ledger, seconds, events)
   const team = advanceTeam(next, ledger, seconds, tuning, offline)
   next = team.game
   events.push(...team.events)

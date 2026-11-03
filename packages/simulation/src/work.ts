@@ -11,6 +11,7 @@ import {
   POLICIES,
   REFACTOR_PER_DH,
   RESEARCH,
+  type ResearchId,
   STRUCTURED_DEBT,
   TASKS,
   UNSTRUCTURED_DEBT,
@@ -74,6 +75,7 @@ const AUTO_REFACTOR = 0.3
 export const itemName = (item: WorkItem): string => {
   if (item.kind === 'feature') return FEATURES[item.ref as FeatureId]?.name ?? item.ref
   if (item.kind === 'task') return TASKS[item.ref as TaskId]?.name ?? item.ref
+  if (item.kind === 'spike') return `Spike: ${RESEARCH[item.ref as ResearchId]?.name ?? item.ref}`
   return `Migration step ${item.ref.slice(5)}`
 }
 
@@ -129,6 +131,17 @@ export const queueFeature = (game: Game, id: FeatureId): Action =>
 export const queueTask = (game: Game, id: TaskId): Action =>
   refused(taskRefusal(game, id), () => enqueue(game, 'task', id, TASKS[id].dh))
 
+/** Puts a Team on the running Study (08 "Spikes"): it runs 2× while the Team works on it. */
+export const queueSpike = (game: Game): Action => {
+  const running = game.studies[0]
+  if (game.sandbox) return notAllowed(SANDBOX)
+  if (!running) return notAllowed('No Study is running.')
+  if (queued(game, running.id))
+    return notAllowed(`A Team already spikes ${RESEARCH[running.id].name}.`)
+  // A Spike has no size: it holds its Team until its Study completes.
+  return ok(enqueue(game, 'spike', running.id, Number.MAX_SAFE_INTEGER, true))
+}
+
 /* ---------- the backlog ---------- */
 
 const withItem = (game: Game, id: number, apply: (index: number) => Action): Action => {
@@ -161,6 +174,7 @@ export const rushItem = (game: Game, id: number): Action =>
   withItem(game, id, (index) => {
     const item = game.backlog[index]
     if (!item) return no(Refusal.Missing())
+    if (item.kind === 'spike') return notAllowed('A Spike ends when its Study completes.')
     if (game.devHours < 0.01) return notAllowed('The Dev Hours pool is empty.')
     const paid = Math.min(game.devHours, item.cost - item.spent)
     const backlog = game.backlog.map((entry, at) =>
@@ -387,6 +401,7 @@ const autopilot = (game: Game, events: Array<StepEvent>): Game => {
 
 /** What a finished item does. */
 const complete = (game: Game, item: WorkItem): Game => {
+  if (item.kind === 'spike') return game
   const service = serviceOf(game)
   if (item.kind === 'migration') {
     const migration = service.migration
@@ -481,6 +496,10 @@ const deploy = (
   return next
 }
 
+/** Whether a Team can work on an item: a Spike waits while its Study is not the running one. */
+export const takeable = (game: Game, item: WorkItem): boolean =>
+  item.kind !== 'spike' || game.studies[0]?.id === item.ref
+
 /**
  * Advances the Team by some seconds: hires join, idle teams pick work, Dev
  * Hours build the backlog, finished items take effect, and deploys ship.
@@ -527,7 +546,7 @@ export const advanceTeam = (
     const made = output.rate * seconds
     const kept = made * policyNow(next, output.team, tuning).paydown
     paydown += kept
-    const item = backlog.find((entry) => !taken.has(entry.id))
+    const item = backlog.find((entry) => !taken.has(entry.id) && takeable(next, entry))
     if (!item) {
       pool += made - kept
       continue

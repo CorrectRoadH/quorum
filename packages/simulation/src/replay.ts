@@ -91,6 +91,7 @@ type Setter = (game: Game, id: string, node: GameNode) => Actions.Action
 const SETTERS: ReadonlyArray<readonly [ReadonlyArray<keyof GameNode>, Setter]> = [
   [['workers'], (game, id, node) => Actions.setWorkers(game, id, node.workers)],
   [['sampleRate'], (game, id, node) => Actions.setSample(game, id, node.sampleRate)],
+  [['retention'], (game, id, node) => Actions.setRetention(game, id, node.retention)],
   [['compress'], (game, id, node) => Actions.setCompression(game, id, node.compress)],
   [['policy'], (game, id, node) => Actions.setPolicy(game, id, node.policy)],
   [

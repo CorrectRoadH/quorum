@@ -8,6 +8,8 @@ import {
   FRAMEWORKS,
   FRAMEWORK_IDS,
   FRAMEWORK_RESEARCH,
+  FEATURES,
+  RECIPE,
   LANGUAGES,
   RESEARCH,
   RESEARCH_IDS,
@@ -115,6 +117,19 @@ describe('the research catalog', () => {
       done.add(id)
     }
     for (const id of RESEARCH_IDS) visit(id)
+  })
+
+  test('no Feature needs research that costs the traffic the Feature brings', () => {
+    // The Checkout Feature needs Checkout research: a recipe of `buy` could never be paid.
+    const chain = (id: ResearchId): ReadonlyArray<ResearchId> => [
+      id,
+      ...RESEARCH[id].requires.flatMap(chain),
+    ]
+    for (const feature of Object.values(FEATURES)) {
+      if (!feature.unlocks || !feature.research) continue
+      for (const id of chain(feature.research))
+        expect([id, RECIPE[id][feature.unlocks.kind] ?? 0]).toEqual([id, 0])
+    }
   })
 
   test('every framework has a language and a research item', () => {

@@ -14,6 +14,8 @@ import {
   RESEARCH,
   RUNTIMES,
   SAMPLE_RATES,
+  RETENTION_STORAGE,
+  RETENTION_WINDOWS,
   SAMPLE_STORAGE,
   GPU_TYPES,
   GZIP_RATIO,
@@ -50,6 +52,10 @@ import type { Game, GameNode } from './state.ts'
    ========================================================================== */
 
 export const has = (game: Game, id: ResearchId): boolean => game.researched.includes(id)
+
+/** All pools together, for figures that show one Insight number. */
+export const insightTotal = (pools: Readonly<Record<string, number>>): number =>
+  Object.values(pools).reduce((sum, value) => sum + value, 0)
 
 export const eraOf = (game: Game): EraDef => ERAS[Math.min(game.stage, ERAS.length - 1)] as EraDef
 
@@ -227,7 +233,14 @@ export const burnOf = (game: Game, node: GameNode): number => {
     return one * copiesOf(node) * (inCluster(game, node) ? POD_BURN : 1)
   }
   if (node.type === 'analytics')
-    return def.burn * (SAMPLE_STORAGE[sampleIndex(node)] ?? 1) * flatScale(node) * index
+    return (
+      def.burn *
+      (SAMPLE_STORAGE[sampleIndex(node)] ?? 1) *
+      (RETENTION_STORAGE[(RETENTION_WINDOWS as ReadonlyArray<number>).indexOf(node.retention)] ??
+        1) *
+      flatScale(node) *
+      index
+    )
   if (node.type === 'auth') return game.users * AUTH_PRICE_PER_USER
   if (node.type === 'storage') return (def.burn + game.stored * STORAGE_PRICE) * index
   if (node.type === 'gpu') return GPU_TYPES[node.gpu].burn * flatScale(node) * index

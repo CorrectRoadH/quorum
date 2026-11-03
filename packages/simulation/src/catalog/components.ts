@@ -712,13 +712,22 @@ export const AUTH_PRICE_PER_USER = 0.00006
 
 export const SAMPLE_RATES = [0.01, 0.05, 0.1, 0.5, 1] as const
 /** CPU overhead on tapped Nodes, per sample rate. */
-export const SAMPLE_OVERHEAD = [0.001, 0.005, 0.01, 0.03, 0.05] as const
+export const SAMPLE_OVERHEAD = [0.002, 0.01, 0.02, 0.08, 0.15] as const
+/** Milliseconds sampling adds to each tapped hop, per sample rate. */
+export const SAMPLE_LATENCY = [0, 0.5, 1, 3, 5] as const
 /** Storage Burn multiplier, per sample rate. */
 export const SAMPLE_STORAGE = [0.1, 0.5, 1, 5, 10] as const
-/** Insight the first successful request of a new kind teaches, once (16 D14). */
+/** Insight the first successful request of a new kind teaches, once, to that kind's pool (16 D14). */
 export const FIRST_KIND_INSIGHT = 20
-/** Insight per sampled request. Failed and slow requests teach twice as much. */
-export const INSIGHT_YIELD = 0.5
+/** Insight per second from one Component type and kind: this × √(sampled requests per second). */
+export const INSIGHT_YIELD = 1
+/** Seconds of traces Analytics keeps, and the Storage Burn multiplier of each window. */
+export const RETENTION_WINDOWS = [900, 3_600, 21_600] as const
+export const RETENTION_STORAGE = [1, 2, 4] as const
+/** Failed and frustrated samples teach this many times more: a healthy Design fails rarely. */
+export const FAILURE_YIELD = 3
+/** A pool's cap never falls below this, so a new pool can hold its first grant. */
+export const POOL_FLOOR = 100
 /** Samples per second Analytics keeps at size 1. Each size step doubles it. */
 export const ANALYTICS_CAPACITY = 4
 

@@ -86,6 +86,21 @@ export const KINDS: Record<Kind, KindInfo> = {
   'k-write': { label: 'Timeline write', value: 0, color: 0xc9a227 },
 }
 
+/**
+ * Insight pools (12 "Earning Insight"): one per request kind, and Failure. A
+ * sampled request gives Insight of its own request kind.
+ */
+export const INSIGHT_POOLS = [...REQUEST_KINDS, 'failure'] as const
+export type InsightPool = (typeof INSIGHT_POOLS)[number]
+
+/** Each pool's name and colour: a request kind's are its particle's; Failure's no kind uses. */
+export const POOLS: Record<InsightPool, Readonly<{ label: string; color: number }>> = {
+  ...(Object.fromEntries(
+    REQUEST_KINDS.map((kind) => [kind, { label: KINDS[kind].label, color: KINDS[kind].color }]),
+  ) as Record<RequestKind, Readonly<{ label: string; color: number }>>),
+  failure: { label: 'Failure', color: 0xf04438 },
+}
+
 export type RequestProfile = Readonly<{
   /** App CPU in reference ms, on a runtime with speed 1.0 (Go). */
   cpu: number

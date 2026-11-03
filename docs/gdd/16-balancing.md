@@ -650,9 +650,9 @@ for the bots too: the Balanced bot reaches Seed with 6 Features live and ships t
 Series A Features before Series B. Upkeep is not built, so the times above must be measured again
 when it is.
 
-### Insight by kind and Studies (not built)
+### Insight by kind and Studies (built)
 
-The Balanced bot never grows its Analytics tap, so it earns about 2 Insight/s from minute 20 on,
+The old Balanced bot never grew its Analytics tap, so it earned about 2 Insight/s from minute 20 on,
 and the pacing tests did not show how fast a player could research. Measured on seed 1 at 130
 minutes, with the bot's own Design and a larger tap:
 
@@ -663,28 +663,41 @@ minutes, with the bot's own Design and a larger tap:
 | Seed     | 11,150 ◇            | ~22 min at size 4 and 10%, for 6% of revenue; the Era is ~21 min     |
 | Series A | 59,000 ◇            | ~4 min at size 8 and 50% (the 512 samples/s cap), the Era is ~38 min |
 | Series B | 78,000 ◇            | ~5 min at the cap                                                    |
-| Series C | 640,000 ◇           | ~41 min at the cap                                                   |
 
-Insight grew with traffic (about 10× per Era) and costs about 5× per Era, a short burst of 100%
-sampling cost only Burn, and research took effect at once. The design in
-[Observability](./12-observability.md#earning-insight) and [Progression](./10-progression.md#studies)
-replaces it:
+`SIM_VERSION` 10 builds the design in [Observability](./12-observability.md#earning-insight) and
+[Progression](./10-progression.md#studies). Choices the calibration made:
 
-| Topic         | Current build                             | This design                                                         | What closes it                                                                                |
-| ------------- | ----------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Pools         | One Insight number                        | 16 request kind pools and a Failure pool                            | `insight` becomes a record per pool; save migration splits the old balance by the request mix |
-| Yield         | 0.5 × sampled × (2 − Apdex)               | 1 × Σ √sampled per Component type and kind                          | Per-kind flow per Node in the solve                                                           |
-| Failure       | The (2 − Apdex) factor                    | A Failure pool from failed and frustrated samples                   | Per-Node failed share by kind                                                                 |
-| Sampling cost | +0.1% to +5% CPU; Burn                    | +0.2% to +15% CPU and up to +5 ms per tapped hop                    | `SAMPLE_OVERHEAD` and a latency term                                                          |
-| Retention     | None                                      | 15 min, 1 h, or 6 h; pool cap from the live rate                    | An Analytics setting and its Burn                                                             |
-| Recipes       | One cost                                  | Era default recipe, overrides, the Reliability rule, breadth        | A recipe and breadth per catalog item                                                         |
-| Studies       | Instant; a queue buys when Insight allows | 20 s to 60 min, streamed cost, 8-item queue                         | A Study in the Game and its progress in the Step                                              |
-| Speed         | —                                         | Spike × 2; `trace-search` and `notebooks` +25% each                 | A Spike work item and two research items                                                      |
-| Pacing bot    | Never resizes the tap; buys by priority   | Grows and spreads its tap; queues Studies; spikes the priority item | `pacing.ts`                                                                                   |
+| Topic          | Build                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Yield          | 1 × √(sampled rps) per Component type and kind; Failure × 3                                                               |
+| Default recipe | The Era's own kinds to Seed; from Series A, the kinds of the Era before (a Feature brings the new)                        |
+| Price scale    | ◇ × 2 in Seed and × 1.5 in Series A; the other Eras × 1                                                                   |
+| Pool cap       | Retention × the live rate, never below the pool's share of the costliest open item                                        |
+| Breadth        | `tracing` only (3 Component types); `profiling` and `rum` are not built                                                   |
+| Pacing bot     | Taps every Node, grows the tap with spare Cash, keeps 2 Studies queued, and queues the Feature that brings a missing kind |
 
-**Calibration target.** For the Balanced bot, an Era's priority research completes at 50–70% of the
-Era's live length, from Garage to Series B, on five seeds. The ◇ prices and the cost bands stay as
-the ratios between items. Their scale is set again against the bot once the yield changes, because
-the square root lowers Insight at high traffic.
+**Calibration.** Two bots, five seeds each, 130 minutes. The Balanced bot follows its priority list
+with 2 Studies queued and no Spikes. The Skilled probe (not committed) queues 8 Studies, spikes every
+priority Study, and fills the queue with the cheapest open items. Each cell is when the Era's last
+priority item completes, as a share of the Era, and how much of the Era's catalog was done in it.
+
+| Era      | Balanced: last priority item | Balanced: catalog | Skilled: last priority item | Skilled: catalog |
+| -------- | ---------------------------- | ----------------- | --------------------------- | ---------------- |
+| Garage   | 47%                          | 7/15              | 48%                         | 15/15            |
+| Pre-seed | 42–59%                       | 7–9/21            | 65–81%                      | 11–15/21         |
+| Seed     | 45–81%                       | 9/20              | 53–78% (one seed 146%)      | 11–20/20         |
+| Series A | 94–109%                      | 6–7/21            | 65–149%                     | 10–15/21         |
+
+Before the rework, a larger tap bought all of Series A in about 4 minutes. Now a skilled player who
+spikes every Study finishes about half of Series A's catalog in the Era. Era times barely moved:
+Pre-seed at 10.7 min, Seed at 27–36 min, Series A at 53–75 min, and Series B at 96–116 min.
+
+Open points:
+
+- `tiered-caching` costs `media`, and Video ships late in Series A, so it often completes in Series
+  B. That is the recipe working as designed, but it pushes the Series A tail past 100%.
+- Series B's priority items (`hosted-models`, `data-warehouse`) need `ai` and `report`, which arrive
+  with their Features. The bots stop at 130 minutes before they ship.
+- Postmortems: an action item goes first in the queue, so incidents now slow other research.
 
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.
