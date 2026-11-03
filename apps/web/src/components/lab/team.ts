@@ -1,4 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
+import { Option } from 'effect'
+import { DragAndDrop } from '@foldkit/ui'
 import {
   ArrowDown,
   ArrowLeftRight,
@@ -274,16 +276,9 @@ const languageMark = (language: Engineer['language'], h: HtmlBuilder<Message>): 
     [stackLogo(language, 'size-3', h)],
   )
 
-const engineerSeat = (
-  game: Game,
-  engineer: Engineer,
-  teams: ReadonlyArray<Team>,
-  h: HtmlBuilder<Message>,
-): Html => {
+const engineerSeat = (game: Game, engineer: Engineer, h: HtmlBuilder<Message>): Html => {
   const ramp = (game.time - engineer.hiredAt) / rampSeconds(game)
   const ramping = ramp < 1
-  const index = teams.findIndex((team) => team.id === engineer.team)
-  const next = teams[(index + 1) % teams.length]
   const name = nameOf(engineer.id)
   return seat(
     engineer.id,
@@ -296,36 +291,46 @@ const engineerSeat = (
     ),
     name,
     ramping ? 'Ramping' : `${money(salaryOf(game, engineer.language))}/s`,
-    [
-      teams.length > 1 && next
-        ? corner(
-            'left',
-            iconButton(
-              `Move to ${next.name}`,
-              ArrowLeftRight,
-              Message.EngineerAssigned({ engineerId: engineer.id, teamId: next.id }),
-              true,
-              h,
-            ),
-            h,
-          )
-        : h.empty,
-      corner(
-        'right',
-        iconButton(
-          `Lay off ${name}`,
-          UserMinus,
-          Message.LayoffChosen({ engineerId: engineer.id }),
-          true,
-          h,
-          'hover:text-danger',
-        ),
-        h,
-      ),
-    ],
+    [],
     'bg-raised shadow-raised',
     h,
   )
+}
+
+const engineerControls = (
+  engineer: Engineer,
+  teams: ReadonlyArray<Team>,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> => {
+  const index = teams.findIndex((team) => team.id === engineer.team)
+  const next = teams[(index + 1) % teams.length]
+  return [
+    teams.length > 1 && next
+      ? corner(
+          'left',
+          iconButton(
+            `Move to ${next.name}`,
+            ArrowLeftRight,
+            Message.EngineerAssigned({ engineerId: engineer.id, teamId: next.id }),
+            true,
+            h,
+          ),
+          h,
+        )
+      : h.empty,
+    corner(
+      'right',
+      iconButton(
+        `Lay off ${nameOf(engineer.id)}`,
+        UserMinus,
+        Message.LayoffChosen({ engineerId: engineer.id }),
+        true,
+        h,
+        'hover:text-danger',
+      ),
+      h,
+    ),
+  ]
 }
 
 const founderSeat = (h: HtmlBuilder<Message>): Html =>
@@ -444,8 +449,22 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
   const now = policyNow(game, team)
   const pending = game.hires.filter((entry) => entry.team === team.id)
   const sandbox = game.sandbox
+  const target = DragAndDrop.maybeDropTarget(model.teamDrag)
+  const dropTarget =
+    DragAndDrop.isDragging(model.teamDrag) &&
+    Option.exists(target, (entry) => entry.containerId === team.id)
   return h.section(
-    [h.Key(team.id), h.Class(cn(PANEL, 'flex flex-col gap-3 p-3'))],
+    [
+      h.Key(team.id),
+      ...DragAndDrop.droppable(team.id, team.name),
+      h.Class(
+        cn(
+          PANEL,
+          'flex flex-col gap-3 p-3 transition-shadow',
+          dropTarget && 'ring-2 ring-primary ring-offset-2',
+        ),
+      ),
+    ],
     [
       h.div(
         [h.Class('flex items-start gap-2 px-1')],
@@ -491,7 +510,40 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
         [h.Class('grid grid-cols-3 gap-2')],
         [
           index === 0 ? founderSeat(h) : h.empty,
-          ...membersOf(game, team).map((engineer) => engineerSeat(game, engineer, game.teams, h)),
+          ...membersOf(game, team).map((engineer, memberIndex) =>
+            h.div(
+              [h.Key(engineer.id), h.Class('group relative')],
+              [
+                h.div(
+                  [
+                    ...DragAndDrop.draggable(
+                      {
+                        model: model.teamDrag,
+                        toParentMessage: (message) => Message.TeamDragChanged({ message }),
+                        itemId: engineer.id,
+                        containerId: team.id,
+                        index: memberIndex,
+                      },
+                      h,
+                    ),
+                    ...DragAndDrop.sortable(engineer.id),
+                    h.AriaLabel(`Move ${nameOf(engineer.id)} from ${team.name}`),
+                    h.Class(
+                      cn(
+                        'cursor-grab touch-none rounded-xl focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing',
+                        Option.exists(
+                          DragAndDrop.maybeDraggedItemId(model.teamDrag),
+                          (id) => id === engineer.id,
+                        ) && 'opacity-45',
+                      ),
+                    ),
+                  ],
+                  [engineerSeat(game, engineer, h)],
+                ),
+                ...engineerControls(engineer, game.teams, h),
+              ],
+            ),
+          ),
           ...pending.map((entry) => pendingSeat(game, entry.id, entry.readyAt, h)),
           // Hiring is not shown before its Era (15 "Progressive disclosure").
           index === 0 && !sandbox && game.stage >= 1 ? hireSeat(game, h) : h.empty,
@@ -528,9 +580,34 @@ const working = (item: WorkItem | undefined, h: HtmlBuilder<Message>): Html =>
 const floor = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   return h.div(
-    [h.Class(`flex min-h-0 flex-col gap-3 p-4 ${SCROLL}`)],
     [
+      h.Class(`flex min-h-0 flex-col gap-3 p-4 ${SCROLL}`),
+      h.DataAttribute('team-drag-floor', ''),
+      ...(DragAndDrop.isDragging(model.teamDrag) ? [h.DataAttribute('team-drag-active', '')] : []),
+    ],
+    [
+      game.teams.length > 1 && game.engineers.length > 0
+        ? h.p(
+            [h.Class('px-1 text-[11.5px] text-muted-foreground')],
+            ['Drag an engineer to another team, or use the move button.'],
+          )
+        : h.empty,
       ...game.teams.map((team, index) => pod(model, team, index, h)),
+      Option.match(DragAndDrop.ghostStyle(model.teamDrag), {
+        onNone: () => h.empty,
+        onSome: (style) =>
+          Option.match(DragAndDrop.maybeDraggedItemId(model.teamDrag), {
+            onNone: () => h.empty,
+            onSome: (id) =>
+              h.div(
+                [
+                  h.Style(style),
+                  h.Class(cn(PANEL, 'pointer-events-none z-50 px-4 py-3 text-sm font-medium')),
+                ],
+                [nameOf(id)],
+              ),
+          }),
+      }),
       game.stage >= 1 && game.teams.length < MAX_TEAMS
         ? h.button(
             [

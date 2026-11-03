@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { Option } from 'effect'
+import { DragAndDrop } from '@foldkit/ui'
 import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { Message } from './message.ts'
@@ -18,6 +19,34 @@ const tick = (model: Model, times = 1): Model => {
 const at = (path: string) => Option.getOrThrow(fromString(`https://quorum.test${path}`))
 
 const inLab = (): Model => ({ ...initialModel(), route: AppRoute.Company(), game: newGame() })
+
+test('dropping an engineer on another team moves them', () => {
+  const game = preseedGame()
+  const start: Model = {
+    ...inLab(),
+    panel: 'team',
+    game: {
+      ...game,
+      teams: [
+        ...game.teams,
+        { id: 't2', name: 'Team 2', policy: 'balanced', previous: 'balanced', since: 0 },
+      ],
+      engineers: [{ id: 'e1', team: 'core', language: 'php', hiredAt: 0 }],
+    },
+  }
+  const send = (model: Model, message: DragAndDrop.Message) =>
+    update(model, Message.TeamDragChanged({ message })).model
+  const picked = send(
+    start,
+    DragAndDrop.Message.ActivatedKeyboardDrag({ itemId: 'e1', containerId: 'core', index: 0 }),
+  )
+  const moved = send(
+    picked,
+    DragAndDrop.Message.CompletedResolveKeyboardMove({ targetContainerId: 't2', targetIndex: 0 }),
+  )
+  const dropped = send(moved, DragAndDrop.Message.ConfirmedKeyboardDrop())
+  expect(dropped.game.engineers.find((engineer) => engineer.id === 'e1')?.team).toBe('t2')
+})
 
 describe('the clock', () => {
   test('four ticks at 1× run ten 0.1 s Steps: one sim second', () => {

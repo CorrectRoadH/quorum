@@ -1,5 +1,6 @@
 import { Option, Result, Schema } from 'effect'
-import type { Runtime, Update } from 'foldkit'
+import { Update, type Runtime } from 'foldkit'
+import { DragAndDrop } from '@foldkit/ui'
 import { UrlRequest } from 'foldkit/navigation'
 import { toString as urlToString, type Url } from 'foldkit/url'
 import * as Actions from '@quorum/simulation/actions'
@@ -234,6 +235,7 @@ export const initialModel = (): Model =>
     exited: null,
     region: 'na',
     panel: 'none',
+    teamDrag: DragAndDrop.init({ id: 'team-drag' }),
     researchFocus: null,
     buildGroup: null,
     speed: 1,
@@ -2341,6 +2343,21 @@ const handle = (model: Model, message: Message): Result =>
     TeamRemoved: ({ teamId }) => act(model, 'Removed a team', Work.removeTeam(model.game, teamId)),
     EngineerAssigned: ({ engineerId, teamId }) =>
       act(model, 'Moved an engineer', Work.assign(model.game, engineerId, teamId)),
+    TeamDragChanged: ({ message }) =>
+      Update.foldChild({
+        update: DragAndDrop.update,
+        read: (parent: Model) => Option.some(parent.teamDrag),
+        write: (parent, teamDrag) => ({ ...parent, teamDrag }),
+        toParentMessage: (child) => Message.TeamDragChanged({ message: child }),
+        foldOutMessage: (out) => (parent) =>
+          out._tag === 'Reordered' && out.fromContainerId !== out.toContainerId
+            ? act(
+                parent,
+                'Moved an engineer',
+                Work.assign(parent.game, out.itemId, out.toContainerId),
+              )
+            : { model: parent },
+      })(model, message),
     TeamPolicyChosen: ({ teamId, policy }) =>
       act(
         model,
@@ -2505,6 +2522,7 @@ const handle = (model: Model, message: Message): Result =>
       const opened: Model = {
         ...model,
         panel,
+        teamDrag: DragAndDrop.init({ id: 'team-drag' }),
         placing: null,
         researchFocus: null,
         dashboardHover: null,

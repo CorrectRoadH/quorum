@@ -1,4 +1,5 @@
 import { Schema } from 'effect'
+import { DragAndDrop } from '@foldkit/ui'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
 import { Url } from 'foldkit/url'
@@ -196,6 +197,7 @@ export const Message = defineMessageUnion({
   TeamCreated: {},
   TeamRemoved: { teamId: Schema.String },
   EngineerAssigned: { engineerId: Schema.String, teamId: Schema.String },
+  TeamDragChanged: { message: DragAndDrop.Message },
   TeamPolicyChosen: { teamId: Schema.String, policy: PolicyId },
   FeatureQueued: { id: FeatureId },
   TaskQueued: { id: Schema.Literals(TASK_IDS) },
