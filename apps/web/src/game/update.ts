@@ -2,7 +2,7 @@ import { refusal, stateJson } from './webmcp.ts'
 import { DragAndDrop, Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { moreMenu, type MoreItem } from './more.ts'
 import { languageListbox } from '../i18n/listbox.ts'
-import { Option, Result, Schema } from 'effect'
+import { Cause, Exit, Option, Result, Schema } from 'effect'
 import { Update, type Runtime } from 'foldkit'
 import { UrlRequest } from 'foldkit/navigation'
 import { toString as urlToString, type Url } from 'foldkit/url'
@@ -139,6 +139,7 @@ import {
   FocusInspector,
   CopyText,
   LoadFounder,
+  KeepBrokenSave,
   WriteFounder,
   AppendLog,
   ClearLog,
@@ -789,43 +790,17 @@ const milestones = (
     : { model: next, commands }
 }
 
-const decodePrefs = Schema.decodeUnknownOption(Prefs)
-
-const parsePrefs = (json: string | null): Option.Option<Prefs> => {
-  if (json === null) return Option.none()
-  try {
-    return decodePrefs(JSON.parse(json))
-  } catch {
-    return Option.none()
-  }
-}
-
-const decodeGame = Schema.decodeUnknownOption(Game)
-const decodeStore = Schema.decodeUnknownOption(SandboxStore)
-
-const parseStore = (json: string | null): Option.Option<SandboxStore> => {
-  if (json === null) return Option.none()
-  try {
-    return decodeStore(JSON.parse(json))
-  } catch {
-    return Option.none()
-  }
-}
+// Stored JSON that does not parse or no longer fits its Schema reads as nothing.
+const parsePrefs = Schema.decodeUnknownOption(Schema.fromJsonString(Prefs))
+const parseStore = Schema.decodeUnknownOption(Schema.fromJsonString(SandboxStore))
+const parseJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const decodeGame = Schema.decodeUnknownExit(Game)
 
 /** What the Sandbox store holds for this Model. */
 const storeOf = (model: Model): SandboxStore => ({
   passed: model.passed,
   free: model.freeBoard,
 })
-
-const parseSave = (json: string | null): Option.Option<Game> => {
-  if (json === null) return Option.none()
-  try {
-    return decodeGame(JSON.parse(json))
-  } catch {
-    return Option.none()
-  }
-}
 
 /** What the player hears about a Step event, if anything. */
 type Note = readonly [string, Tone] | null
@@ -1309,16 +1284,7 @@ const afterRound = (model: Model, game: Game): Partial<Model> => ({
 
 /* ---------- the Founder ---------- */
 
-const decodeFounder = Schema.decodeUnknownOption(Founder)
-
-const parseFounder = (json: string | null): Option.Option<Founder> => {
-  if (json === null) return Option.none()
-  try {
-    return decodeFounder(JSON.parse(json))
-  } catch {
-    return Option.none()
-  }
-}
+const parseFounder = Schema.decodeUnknownOption(Schema.fromJsonString(Founder))
 
 /** Applies a change to the Founder record, saves it, or says why not. */
 const changeFounder = (
@@ -1711,34 +1677,46 @@ const route = (model: Model, message: Message): Result => {
 
 const handle = (model: Model, message: Message): Result =>
   Message.match<Result>(message, {
-    SaveLoaded: ({ json, now }) =>
-      Option.match(parseSave(json), {
-        onNone: () => ({ model }),
-        onSome: (saved) => {
-          // Time away plays out at 1×: a real second is a sim second (04 "Offline progress").
-          const away = saved.wall > 0 ? (now - saved.wall) / 1_000 : 0
-          const back = away >= OFFLINE_MIN && !saved.sandbox ? simulateAway(saved, away) : null
-          const game = back?.game ?? saved
-          return {
-            model: {
-              ...model,
-              ...revealsOfSave(JSON.parse(json ?? 'null')),
-              dashboardHistory: historyOfSave(JSON.parse(json ?? 'null')),
-              game,
-              saved: true,
-              savedAt: game.time,
-              sampledAt: game.time,
-              bottleneckAt: -1,
-              away: back?.report ?? null,
-            },
-            commands: back
-              ? [AppendLog({ entries: [line(game.time, 'OfflineReturned', { ...back.report })] })]
-              : [],
-          }
+    SaveLoaded: ({ json, now }) => {
+      if (json === null) return { model }
+      const raw = parseJson(json)
+      const decoded = Option.match(raw, {
+        onNone: () => Exit.fail('The save is not JSON.'),
+        onSome: (value) => Exit.mapError(decodeGame(value), (error) => error.message),
+      })
+      // A save this version cannot read is set aside, not overwritten by the next Company.
+      if (Exit.isFailure(decoded))
+        return withToast(model, 'Your save could not be read. A copy was kept.', 'warn', [
+          KeepBrokenSave({ json, reason: String(Cause.squash(decoded.cause)) }),
+        ])
+      const saved = decoded.value
+      const file = Option.getOrNull(raw)
+      // Time away plays out at 1×: a real second is a sim second (04 "Offline progress").
+      const away = saved.wall > 0 ? (now - saved.wall) / 1_000 : 0
+      const back = away >= OFFLINE_MIN && !saved.sandbox ? simulateAway(saved, away) : null
+      const game = back?.game ?? saved
+      return {
+        model: {
+          ...model,
+          ...revealsOfSave(file),
+          dashboardHistory: historyOfSave(file),
+          game,
+          saved: true,
+          savedAt: game.time,
+          sampledAt: game.time,
+          bottleneckAt: -1,
+          away: back?.report ?? null,
         },
-      }),
+        commands: back
+          ? [AppendLog({ entries: [line(game.time, 'OfflineReturned', { ...back.report })] })]
+          : [],
+      }
+    },
     FounderLoaded: ({ json, deviceId, today }) => {
-      const loaded = Option.getOrElse(parseFounder(json), () => model.founder)
+      const loaded = Option.getOrElse(
+        json === null ? Option.none() : parseFounder(json),
+        () => model.founder,
+      )
       if (loaded.deviceId) return { model: { ...model, founder: loaded, today } }
       const founder = { ...loaded, deviceId }
       return { model: { ...model, founder, today }, commands: [WriteFounder({ founder })] }
@@ -1772,7 +1750,7 @@ const handle = (model: Model, message: Message): Result =>
     Navigated: () => ({ model }),
 
     PrefsLoaded: ({ json }) =>
-      Option.match(parsePrefs(json), {
+      Option.match(json === null ? Option.none() : parsePrefs(json), {
         onNone: () => ({ model }),
         onSome: (prefs) => ({
           model: {
@@ -1841,7 +1819,7 @@ const handle = (model: Model, message: Message): Result =>
     TradeoffClosed: () => ({ model: { ...model, tradeoff: null } }),
 
     SandboxStoreLoaded: ({ json }) =>
-      Option.match(parseStore(json), {
+      Option.match(json === null ? Option.none() : parseStore(json), {
         onNone: () => ({ model }),
         onSome: (store) => ({ model: { ...model, passed: store.passed, freeBoard: store.free } }),
       }),

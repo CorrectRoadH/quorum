@@ -725,3 +725,30 @@ test('pointer-rate Messages stay out of the playtest log, and gestures go in', (
   const opened = update(inLab(), Message.PanelOpened({ panel: 'menu' }))
   expect(names(opened)).toContain('AppendLog')
 })
+
+test('a save this version cannot read is kept aside instead of dropped', () => {
+  const game = newGame()
+  const saved = JSON.stringify({ ...game, wall: 0 })
+  const loaded = update(initialModel(), Message.SaveLoaded({ json: saved, now: 0 }))
+  expect(loaded.model.saved).toBe(true)
+  expect(loaded.model.game.nodes).toEqual(game.nodes)
+
+  const renamed = JSON.stringify({
+    ...game,
+    wall: 0,
+    nodes: game.nodes.map((node) => ({ ...node, type: 'retired-component' })),
+  })
+  for (const json of [renamed, '{not json']) {
+    const broken = update(initialModel(), Message.SaveLoaded({ json, now: 0 }))
+    expect(broken.model.saved).toBe(false)
+    expect(broken.model.toast?.tone).toBe('warn')
+    expect(broken.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'KeepBrokenSave',
+          args: expect.objectContaining({ json }),
+        }),
+      ]),
+    )
+  }
+})

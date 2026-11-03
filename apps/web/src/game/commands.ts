@@ -183,6 +183,24 @@ export const WriteSave = Command.define('WriteSave', {
     }),
 })
 
+export const BROKEN_SAVE_KEY = 'quorum.save.v2.broken'
+
+/** Sets a save this version cannot read aside, so the next Company does not overwrite it. */
+export const KeepBrokenSave = Command.define('KeepBrokenSave', {
+  args: { json: Schema.String, reason: Schema.String },
+  messages: [Message.Synced],
+  execute: ({ json, reason }) =>
+    Effect.sync(() => {
+      console.error('The save could not be read:', reason)
+      try {
+        window.localStorage.setItem(BROKEN_SAVE_KEY, json)
+      } catch {
+        // Storage is full or blocked: the save stays only where it was.
+      }
+      return Message.Synced()
+    }),
+})
+
 export const LoadSandboxStore = Command.define('LoadSandboxStore', {
   args: {},
   messages: [Message.SandboxStoreLoaded],
