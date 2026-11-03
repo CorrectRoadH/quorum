@@ -478,6 +478,26 @@ describe('M9: sound, achievements, glossary, keys', () => {
     expect(sounds(incidentDue({ muted: true }))).toEqual([])
   })
 
+  test('an alarm from before a reset does not sound again on every tick', () => {
+    const opened = update(inLab(), Message.FreeSandboxStarted()).model
+    const alarm = {
+      id: 1,
+      key: 'alarm',
+      sender: 'monitoring',
+      subject: 'Errors are up',
+      time: opened.game.time + 600,
+      entries: [{ time: opened.game.time + 600, text: 'Errors are up.' }],
+      actions: [],
+      answer: null,
+      read: false,
+      trashed: false,
+      spam: false,
+      resolved: null,
+    }
+    const reset = update({ ...opened, inbox: [alarm] }, Message.FreeSandboxReset()).model
+    expect(sounds(tick(reset))).not.toContain('warn')
+  })
+
   test('the first served request earns Hello, World once, in the Founder record', () => {
     const once = update(incidentDue(), Message.Ticked()).model
     expect(once.founder.achievements).toContain('hello-world')

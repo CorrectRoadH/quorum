@@ -125,10 +125,11 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
 const tickCue = (before: Model, after: Model): Cue | null => {
   if (after.panel === 'passed' && before.panel !== 'passed') return event('fanfare')
   if (!before.sandbox && canRaise(after.game) && !canRaise(before.game)) return event('ready')
-  // Mail that wants attention: a provider, an alarm, or an advisory.
+  // Mail that wants attention: a provider, an alarm, or an advisory. It is new when this tick
+  // added it or a line to it; the clock cannot tell, because a reset winds it back under old Mail.
   const urgent = after.inbox.some(
     (mail) =>
-      mail.time > before.game.time &&
+      mail.time > (before.inbox.find((old) => old.id === mail.id)?.time ?? -Infinity) &&
       !mail.read &&
       !mail.spam &&
       ['cloud', 'monitoring', 'security'].includes(senderOf(mail.sender).kind),
