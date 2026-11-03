@@ -104,7 +104,6 @@ import {
   EVENT_EVERY,
   SAMPLES,
   disclosureFact,
-  senderOf,
   needsAction,
   eventFact,
   randomSample,
@@ -113,6 +112,15 @@ import {
   type Fact,
 } from './mail.ts'
 import type { EventMail } from './copy/index.ts'
+import {
+  EMPTY_INBOX,
+  closed,
+  folderList,
+  mailed,
+  reading,
+  resolvedExcept,
+  withMail,
+} from './inbox.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, isFinalEra, nextEra, zoned } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
@@ -187,7 +195,6 @@ import {
   Prefs,
   SandboxStore,
   type SandboxRun,
-  type Mail,
   type Tone,
   type Tradeoff,
   type TradeoffOption,
@@ -283,12 +290,7 @@ export const initialModel = (): Model =>
     moreMenu: UiMenu.init({ id: 'more-menu' }),
     glossary: { focus: null, returnTo: 'none', query: '', category: null },
     insightHelp: false,
-    inbox: [],
-    inboxFocus: null,
-    mailPeek: null,
-    folder: 'action',
-    mailBucket: 0,
-    mailSample: 'random',
+    inbox: EMPTY_INBOX,
     undo: [],
     redo: [],
     bottleneck: null,
@@ -373,119 +375,34 @@ const stampOf = (model: Model) => {
 
 /* ---------- Mail (GDD 18) ---------- */
 
-const MAIL_KEPT = 40
-const THREAD_ENTRIES = 20
-
-/** Senders whose Mail is about the Design now: a Thread resolves when its cause is gone. */
-const ADVISING = new Set(['cloud', 'monitoring', 'vendor', 'investor', 'finance', 'mentor'])
-
-const folderHolds = (mail: Mail, folder: Model['folder']): boolean =>
-  folder === 'trash'
-    ? mail.trashed
-    : !mail.trashed &&
-      (folder === 'spam' ? mail.spam : !mail.spam && needsAction(mail) === (folder === 'action'))
-
-/** A fact joins its Thread, or starts one. The same news twice changes nothing. */
-const mailed = (model: Model, fact: Fact, time: number, repeats = false): Model => {
-  const existing = model.inbox.find((mail) => mail.key === fact.key && !mail.trashed)
-  if (
-    !repeats &&
-    existing &&
-    existing.resolved === null &&
-    existing.entries.at(-1)?.text === fact.text
-  )
-    return model
-  const others = model.inbox.filter((mail) => mail !== existing)
-  const thread: Mail = existing
-    ? {
-        ...existing,
-        time,
-        read: false,
-        answer: null,
-        resolved: null,
-        actions: fact.actions,
-        entries: [...existing.entries, { time, text: fact.text }].slice(-THREAD_ENTRIES),
-      }
-    : {
-        id: Math.max(0, ...model.inbox.map((mail) => mail.id)) + 1,
-        key: fact.key,
-        sender: fact.sender,
-        subject: fact.subject,
-        time,
-        entries: [{ time, text: fact.text }],
-        actions: fact.actions,
-        answer: null,
-        read: false,
-        trashed: false,
-        spam: fact.spam,
-        resolved: null,
-      }
-  // Mail that wants the player (a decision, or a provider, alarm or advisory) previews above the
-  // Inbox button until it is read, so a new letter cannot go unnoticed.
-  const loud =
-    needsAction(thread) ||
-    ['cloud', 'monitoring', 'security'].includes(senderOf(thread.sender).kind)
-  const peek = !thread.spam && loud && model.panel !== 'inbox' ? thread.id : model.mailPeek
-  return { ...model, inbox: [...others, thread].slice(-MAIL_KEPT), mailPeek: peek }
-}
-
-/** Advice about anything but `key` no longer holds. */
-const resolvedExcept = (model: Model, key: string, time: number): Model => ({
+/** A fact joins the Inbox; it needs no preview card while the Inbox panel is open. */
+const mailedTo = (model: Model, fact: Fact, time: number, repeats = false): Model => ({
   ...model,
-  inbox: model.inbox.map((mail) =>
-    ADVISING.has(mail.sender) && mail.key !== key && mail.resolved === null
-      ? { ...mail, resolved: time }
-      : mail,
-  ),
-})
-
-/** A Thread whose cause is over: it records the last line and resolves. */
-const closed = (model: Model, key: string, time: number, text: string): Model => ({
-  ...model,
-  inbox: model.inbox.map((mail) =>
-    mail.key === key && !mail.trashed
-      ? {
-          ...mail,
-          read: false,
-          resolved: time,
-          entries: [...mail.entries, { time, text }].slice(-THREAD_ENTRIES),
-        }
-      : mail,
-  ),
-})
-
-/** The Inbox on one Mail, or the newest in its folder, which counts as read. */
-const reading = (model: Model, focus: number | null = null): Model => {
-  const inFolder = model.inbox.filter((mail) => folderHolds(mail, model.folder))
-  const id = (inFolder.find((mail) => mail.id === focus) ?? inFolder.at(-1))?.id ?? null
-  return {
-    ...model,
-    inboxFocus: id,
-    mailPeek: null,
-    inbox: model.inbox.map((mail) => (mail.id === id ? { ...mail, read: true } : mail)),
-  }
-}
-
-const withMail = (model: Model, id: number, change: Partial<Mail>): Model => ({
-  ...model,
-  inbox: model.inbox.map((mail) => (mail.id === id ? { ...mail, ...change } : mail)),
+  inbox: mailed(model.inbox, fact, time, model.panel === 'inbox', repeats),
 })
 
 /** The Inbox's keys: J and K move, E deletes (or restores), S reports spam, 1 to 3 press a button. */
 const mailKey = (model: Model, key: string): Result | null => {
-  const list = model.inbox.filter((mail) => folderHolds(mail, model.folder)).reverse()
-  const at = list.findIndex((mail) => mail.id === model.inboxFocus)
+  const list = folderList(model.inbox)
+  const at = list.findIndex((mail) => mail.id === model.inbox.focus)
   const current = list[at]
   const neighbour = (list[at + 1] ?? list[at - 1])?.id ?? null
   const apply = (message: Message): Result => {
     const result = handle(model, message)
-    return { ...result, model: reading(result.model, neighbour) }
+    return { ...result, model: { ...result.model, inbox: reading(result.model.inbox, neighbour) } }
   }
   switch (key) {
     case 'j':
-      return { model: reading(model, list[Math.min(at + 1, list.length - 1)]?.id ?? null) }
+      return {
+        model: {
+          ...model,
+          inbox: reading(model.inbox, list[Math.min(at + 1, list.length - 1)]?.id ?? null),
+        },
+      }
     case 'k':
-      return { model: reading(model, list[Math.max(at - 1, 0)]?.id ?? null) }
+      return {
+        model: { ...model, inbox: reading(model.inbox, list[Math.max(at - 1, 0)]?.id ?? null) },
+      }
     case 'e':
       return current
         ? apply(
@@ -1062,23 +979,29 @@ const tick = (model: Model): Result => {
     logs.push(line(game.time, event._tag, eventLog(event)))
     // The Simulation files a CVE as a ticket; Security writes the advisory, and a thread closes with its ticket.
     if (!next.challenge && event._tag === 'CveDisclosed') {
-      next = mailed(next, disclosureFact(event.item, game), game.time)
+      next = mailedTo(next, disclosureFact(event.item, game), game.time)
       continue
     }
     if (event._tag === 'CveExploited')
-      next = closed(
-        next,
-        `security:${event.cve}`,
-        game.time,
-        'Exploited. The ticket expired, and so did the Users who trusted you.',
-      )
+      next = {
+        ...next,
+        inbox: closed(
+          next.inbox,
+          `security:${event.cve}`,
+          game.time,
+          'Exploited. The ticket expired, and so did the Users who trusted you.',
+        ),
+      }
     if (event._tag === 'WorkFinished' && event.item.kind === 'patch')
-      next = closed(
-        next,
-        `security:${event.item.ref}`,
-        game.time,
-        'Patched before the deadline. Nothing happened, which is the point.',
-      )
+      next = {
+        ...next,
+        inbox: closed(
+          next.inbox,
+          `security:${event.item.ref}`,
+          game.time,
+          'Patched before the deadline. Nothing happened, which is the point.',
+        ),
+      }
     const text = eventText(event, game)
     if (!text) continue
     // What happened in the Design is Mail (GDD 18); a Challenge has no Inbox, so it keeps the toast.
@@ -1087,7 +1010,7 @@ const tick = (model: Model): Result => {
       next = raised
       commands.push(clear)
     } else {
-      next = mailed(next, eventFact(event, text[2], game), game.time, true)
+      next = mailedTo(next, eventFact(event, text[2], game), game.time, true)
     }
   }
 
@@ -1129,14 +1052,18 @@ const tick = (model: Model): Result => {
     logs.push(line(game.time, 'GoalChanged', { goal: advice.text }))
     next = { ...next, lastGoal: told }
     if (!offCompany(next))
-      next = mailed(resolvedExcept(next, advice.key, game.time), factOf(advice, game), game.time)
+      next = mailedTo(
+        { ...next, inbox: resolvedExcept(next.inbox, advice.key, game.time) },
+        factOf(advice, game),
+        game.time,
+      )
   }
   // The world writes too: teammates, CVEs, customers, and spam.
   const bucket = Math.floor(game.time / EVENT_EVERY)
-  if (!offCompany(next) && game.stage >= 1 && bucket > next.mailBucket) {
+  if (!offCompany(next) && game.stage >= 1 && bucket > next.inbox.bucket) {
     const event = eventMail(game, bucket)
-    next = { ...next, mailBucket: bucket }
-    if (event) next = mailed(next, event, game.time)
+    next = { ...next, inbox: { ...next.inbox, bucket } }
+    if (event) next = mailedTo(next, event, game.time)
   }
   const marker = bottleneck ? `${bottleneck}:${ledger.nodes[bottleneck]?.limit ?? 'none'}` : ''
   if (marker !== next.lastBottleneck) {
@@ -2932,7 +2859,10 @@ const handle = (model: Model, message: Message): Result =>
         researchFocus: null,
         dashboardHover: null,
       }
-      const next = panel === 'inbox' ? reading({ ...opened, folder: 'action' }) : opened
+      const next =
+        panel === 'inbox'
+          ? { ...opened, inbox: reading({ ...opened.inbox, folder: 'action' }) }
+          : opened
       return { model: next }
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
@@ -2979,41 +2909,66 @@ const handle = (model: Model, message: Message): Result =>
         commands: founder === model.founder ? [] : [WriteFounder({ founder })],
       }
     },
-    MailOpened: ({ id }) => ({ model: reading(model, id) }),
+    MailOpened: ({ id }) => ({ model: { ...model, inbox: reading(model.inbox, id) } }),
     MailPeekOpened: ({ id }) => {
-      const mail = model.inbox.find((entry) => entry.id === id)
+      const mail = model.inbox.mail.find((entry) => entry.id === id)
       const folder = mail?.spam ? 'spam' : mail && needsAction(mail) ? 'action' : 'fyi'
-      return { model: reading({ ...model, panel: 'inbox', tool: null, folder }, id) }
+      return {
+        model: {
+          ...model,
+          panel: 'inbox',
+          tool: null,
+          inbox: reading({ ...model.inbox, folder }, id),
+        },
+      }
     },
-    MailPeekDismissed: () => ({ model: { ...model, mailPeek: null } }),
-    MailTrashed: ({ id }) => ({ model: reading(withMail(model, id, { trashed: true })) }),
-    MailRestored: ({ id }) => ({ model: reading(withMail(model, id, { trashed: false })) }),
+    MailPeekDismissed: () => ({ model: { ...model, inbox: { ...model.inbox, peek: null } } }),
+    MailTrashed: ({ id }) => ({
+      model: { ...model, inbox: reading(withMail(model.inbox, id, { trashed: true })) },
+    }),
+    MailRestored: ({ id }) => ({
+      model: { ...model, inbox: reading(withMail(model.inbox, id, { trashed: false })) },
+    }),
     MailMarkedSpam: ({ id }) => {
-      const mail = model.inbox.find((entry) => entry.id === id)
-      return { model: reading(withMail(model, id, { spam: !mail?.spam })) }
+      const mail = model.inbox.mail.find((entry) => entry.id === id)
+      return {
+        model: { ...model, inbox: reading(withMail(model.inbox, id, { spam: !mail?.spam })) },
+      }
     },
-    MailSampleChosen: ({ id }) => ({ model: { ...model, mailSample: id } }),
+    MailSampleChosen: ({ id }) => ({ model: { ...model, inbox: { ...model.inbox, sample: id } } }),
     MailGenerated: ({ count }) => {
       // Send uses the chosen sample; a burst of 10 or 50 draws a random sample for each Mail.
-      const chosen = SAMPLES.find((entry) => entry.id === model.mailSample) ?? SAMPLES[0]
+      const chosen = SAMPLES.find((entry) => entry.id === model.inbox.sample) ?? SAMPLES[0]
       if (!chosen) return { model }
       let next = model
       for (let sent = 0; sent < count; sent += 1) {
-        const n = Math.max(0, ...next.inbox.map((mail) => mail.id)) + 1
+        const n = Math.max(0, ...next.inbox.mail.map((mail) => mail.id)) + 1
         const sample = count === 1 ? chosen : randomSample(next.game, n)
-        next = mailed(next, sample.make(next.game, n), next.game.time)
+        next = mailedTo(next, sample.make(next.game, n), next.game.time)
       }
-      return { model: reading(next, null) }
+      return { model: { ...next, inbox: reading(next.inbox, null) } }
     },
-    MailResolved: () => ({ model: resolvedExcept(model, '', model.game.time) }),
-    MailCleared: () => ({ model: { ...model, inbox: [], inboxFocus: null, mailPeek: null } }),
-    FolderChosen: ({ folder }) => ({ model: reading({ ...model, folder }) }),
+    MailResolved: () => ({
+      model: { ...model, inbox: resolvedExcept(model.inbox, '', model.game.time) },
+    }),
+    MailCleared: () => ({
+      model: { ...model, inbox: { ...model.inbox, mail: [], focus: null, peek: null } },
+    }),
+    FolderChosen: ({ folder }) => ({
+      model: { ...model, inbox: reading({ ...model.inbox, folder }) },
+    }),
     MailActed: ({ id, action }) => {
-      const mail = model.inbox.find((entry) => entry.id === id)
+      const mail = model.inbox.mail.find((entry) => entry.id === id)
       if (!mail) return { model }
-      model = { ...model, mailPeek: model.mailPeek === id ? null : model.mailPeek }
+      model = {
+        ...model,
+        inbox: { ...model.inbox, peek: model.inbox.peek === id ? null : model.inbox.peek },
+      }
       const [kind, target] = action.split(':')
-      const answered = (answer: string): Model => withMail(model, id, { answer })
+      const answered = (answer: string): Model => ({
+        ...model,
+        inbox: withMail(model.inbox, id, { answer }),
+      })
       switch (kind) {
         case 'raise':
           return route(answered('You raised the round.'), Message.RoundRaised())

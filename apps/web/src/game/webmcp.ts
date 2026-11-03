@@ -77,7 +77,7 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
     postmortems: m.game.postmortems.slice(-(Number(input['limit']) || 5)),
   }),
   get_inbox: (m, input) =>
-    m.inbox
+    m.inbox.mail
       .filter((mail) => {
         const folder = mail.trashed ? 'trash' : mail.spam ? 'spam' : 'inbox'
         return folder === (input['folder'] ?? 'inbox') && (!input['unreadOnly'] || !mail.read)

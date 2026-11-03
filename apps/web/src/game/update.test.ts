@@ -525,7 +525,10 @@ describe('M9: sound, achievements, glossary, keys', () => {
       spam: false,
       resolved: null,
     }
-    const reset = update({ ...opened, inbox: [alarm] }, Message.FreeSandboxReset()).model
+    const reset = update(
+      { ...opened, inbox: { ...opened.inbox, mail: [alarm] } },
+      Message.FreeSandboxReset(),
+    ).model
     expect(sounds(tick(reset))).not.toContain('warn')
   })
 

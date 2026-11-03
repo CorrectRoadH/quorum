@@ -287,6 +287,23 @@ export const Undo = Schema.Struct({
 })
 export type Undo = typeof Undo.Type
 
+/** The Inbox: the Mail the game has sent, and how the panel and its preview card show it. */
+export const Inbox = Schema.Struct({
+  /** Oldest first. */
+  mail: Schema.Array(Mail),
+  /** The Mail the panel shows. */
+  focus: Schema.NullOr(Schema.Finite),
+  /** The Mail whose preview card waits above the Inbox button until the player reads or dismisses it. */
+  peek: Schema.NullOr(Schema.Finite),
+  /** The last event tick the world wrote Mail for. */
+  bucket: Schema.Finite,
+  /** The Sandbox's mail generator: the sample the next send uses. */
+  sample: Schema.String,
+  /** The folder the panel lists. */
+  folder: Folder,
+})
+export type Inbox = typeof Inbox.Type
+
 /** The Glossary panel: its open entry, search, category filter, and the panel it closes back to. */
 export const Glossary = Schema.Struct({
   focus: Schema.NullOr(Schema.String),
@@ -377,17 +394,7 @@ export const Model = Schema.Struct({
   glossary: Glossary,
   /** The Insight card's help section is open. */
   insightHelp: Schema.Boolean,
-  /** Advice the game has sent, oldest first, and the one the Inbox shows. */
-  inbox: Schema.Array(Mail),
-  inboxFocus: Schema.NullOr(Schema.Finite),
-  /** The Mail whose preview card waits above the Inbox button until the player reads or dismisses it. */
-  mailPeek: Schema.NullOr(Schema.Finite),
-  /** The last event tick the world wrote Mail for. */
-  mailBucket: Schema.Finite,
-  /** The Sandbox's mail generator: the sample the next send uses. */
-  mailSample: Schema.String,
-  /** The mail folder the Inbox panel lists. */
-  folder: Folder,
+  inbox: Inbox,
   /** Ticks left to show "Stable" after a change settles. */
   stableTicks: Schema.Finite,
   /** Board actions to undo, newest last, at most 50. */

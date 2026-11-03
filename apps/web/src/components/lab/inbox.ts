@@ -36,6 +36,7 @@ import {
   nativeSelectOptGroup,
   nativeSelectOption,
 } from '@/components/ui/native-select'
+import { folderHolds, folderList } from '@/game/inbox.ts'
 import { Message } from '@/game/message.ts'
 import type { Folder, Mail, Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
@@ -69,19 +70,12 @@ const badge = (sender: Sender, size: string, h: HtmlBuilder<Message>): Html => {
   return groupBadge(group, glyph, size, h, false, sender.color)
 }
 
-/** Mail waits for a decision (Needs action), or only informs (FYI), or the filter caught it (Spam). */
-const inFolder = (mail: Mail, folder: Folder): boolean =>
-  folder === 'trash'
-    ? mail.trashed
-    : !mail.trashed &&
-      (folder === 'spam' ? mail.spam : !mail.spam && needsAction(mail) === (folder === 'action'))
-
 const unreadIn = (model: Model, folder: Folder): number =>
-  model.inbox.filter((mail) => inFolder(mail, folder) && !mail.read).length
+  model.inbox.mail.filter((mail) => folderHolds(mail, folder) && !mail.read).length
 
 /** Threads waiting on the player: it does not fall when they are read, only when they are answered. */
 const openCount = (model: Model): number =>
-  model.inbox.filter((mail) => inFolder(mail, 'action')).length
+  model.inbox.mail.filter((mail) => folderHolds(mail, 'action')).length
 
 /** The first line of a letter that says something, for the preview. */
 const gist = (mail: Mail): string =>
@@ -93,7 +87,7 @@ const gist = (mail: Mail): string =>
  * button here, so a patch is one click away.
  */
 export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const mail = model.inbox.find((entry) => entry.id === model.mailPeek && !entry.trashed)
+  const mail = model.inbox.mail.find((entry) => entry.id === model.inbox.peek && !entry.trashed)
   if (!mail || model.panel === 'inbox') return h.empty
   const sender = senderOf(mail.sender)
   const decision = needsAction(mail)
@@ -191,7 +185,7 @@ export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
 export const inboxButton = (model: Model, h: HtmlBuilder<Message>): Html => {
   const unread = unreadIn(model, 'action') + unreadIn(model, 'fyi')
   // A decision waiting turns the badge red and rings the button; FYI mail keeps the quiet badge.
-  const waiting = model.inbox.some((mail) => inFolder(mail, 'action') && !mail.read)
+  const waiting = model.inbox.mail.some((mail) => folderHolds(mail, 'action') && !mail.read)
   return inboxToggle(model, unread, waiting, h)
 }
 
@@ -480,7 +474,7 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
           label: 'Sample',
           labelClass: 'sr-only',
           size: 'sm',
-          value: model.mailSample,
+          value: model.inbox.sample,
           onChange: (id) => Message.MailSampleChosen({ id }),
           wrapperClass: 'w-64',
           options: [...new Set(SAMPLES.map((sample) => sample.group))].map((group) =>
@@ -524,8 +518,8 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 /** A mail window docked above the corner button: the Board stays in view and clickable. */
 export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const newest = model.inbox.filter((mail) => inFolder(mail, model.folder)).reverse()
-  const open = newest.find((mail) => mail.id === model.inboxFocus) ?? newest[0]
+  const newest = folderList(model.inbox)
+  const open = newest.find((mail) => mail.id === model.inbox.focus) ?? newest[0]
   return h.section(
     [
       h.Key('inbox-panel'),
@@ -542,10 +536,16 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.div(
             [h.Class('flex gap-0.5 rounded-xl bg-well p-0.5 shadow-well')],
             [
-              folderTab('action', 'Needs action', openCount(model), model.folder === 'action', h),
-              folderTab('fyi', 'FYI', unreadIn(model, 'fyi'), model.folder === 'fyi', h),
-              folderTab('spam', 'Spam', unreadIn(model, 'spam'), model.folder === 'spam', h),
-              folderTab('trash', 'Trash', 0, model.folder === 'trash', h),
+              folderTab(
+                'action',
+                'Needs action',
+                openCount(model),
+                model.inbox.folder === 'action',
+                h,
+              ),
+              folderTab('fyi', 'FYI', unreadIn(model, 'fyi'), model.inbox.folder === 'fyi', h),
+              folderTab('spam', 'Spam', unreadIn(model, 'spam'), model.inbox.folder === 'spam', h),
+              folderTab('trash', 'Trash', 0, model.inbox.folder === 'trash', h),
             ],
           ),
           h.span([h.Class('flex-1')], []),
@@ -588,7 +588,7 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
               ? [
                   h.li(
                     [h.Class('px-4 py-4 text-[12.5px] text-muted-foreground')],
-                    [EMPTY[model.folder]],
+                    [EMPTY[model.inbox.folder]],
                   ),
                 ]
               : newest.map((mail) => row(mail, mail.id === open?.id, h)),

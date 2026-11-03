@@ -127,9 +127,9 @@ const tickCue = (before: Model, after: Model): Cue | null => {
   if (!before.sandbox && canRaise(after.game) && !canRaise(before.game)) return event('ready')
   // Mail that wants attention: a provider, an alarm, or an advisory. It is new when this tick
   // added it or a line to it; the clock cannot tell, because a reset winds it back under old Mail.
-  const urgent = after.inbox.some(
+  const urgent = after.inbox.mail.some(
     (mail) =>
-      mail.time > (before.inbox.find((old) => old.id === mail.id)?.time ?? -Infinity) &&
+      mail.time > (before.inbox.mail.find((old) => old.id === mail.id)?.time ?? -Infinity) &&
       !mail.read &&
       !mail.spam &&
       ['cloud', 'monitoring', 'security'].includes(senderOf(mail.sender).kind),
