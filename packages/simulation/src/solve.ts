@@ -173,10 +173,30 @@ export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
 
 /* ---------- the graph ---------- */
 
+/**
+ * A routing Link as the solve sees it: numbered, so per-Link state in a pass lives in
+ * arrays, with its key and policy worked out once per solve instead of on every call.
+ * Two Links with the same ends share one Edge, as they share one key.
+ */
+type Edge = Readonly<{
+  index: number
+  /** `from>to`, the key of the Ledger's Link figures. */
+  key: string
+  from: GameNode
+  to: GameNode
+  /** The last Link with these ends: its kinds and policy are the ones that apply. */
+  link: GameLink
+  policy: Policy
+}>
+
 type Graph = Readonly<{
   byId: ReadonlyMap<string, GameNode>
   /** Each routing Link, by caller, then callee. */
-  linkTo: ReadonlyMap<string, ReadonlyMap<string, GameLink>>
+  edgeTo: ReadonlyMap<string, ReadonlyMap<string, Edge>>
+  /** Each Node's outgoing Edges, one per routing Link, in the Design's order. */
+  out: ReadonlyMap<string, ReadonlyArray<Edge>>
+  /** Every Edge, by index. */
+  edges: ReadonlyArray<Edge>
   routes: ReadonlyMap<string, ReadonlyArray<GameNode>>
   parents: ReadonlyMap<string, ReadonlyArray<GameNode>>
   taps: ReadonlyMap<string, ReadonlyArray<string>>
@@ -187,12 +207,25 @@ type Graph = Readonly<{
   time: number
 }>
 
+/** One Graph per Game: the Bottleneck search re-solves the same Game, and reuses it. */
+const graphs = new WeakMap<Game, Graph>()
+
 const graphOf = (game: Game): Graph => {
+  let graph = graphs.get(game)
+  if (!graph) {
+    graph = buildGraph(game)
+    graphs.set(game, graph)
+  }
+  return graph
+}
+
+const buildGraph = (game: Game): Graph => {
   const byId = new Map(game.nodes.map((node) => [node.id, node]))
   const routes = new Map<string, Array<GameNode>>()
   const parents = new Map<string, Array<GameNode>>()
   const taps = new Map<string, Array<string>>()
-  const linkTo = new Map<string, Map<string, GameLink>>()
+  const routing: Array<readonly [GameNode, GameNode]> = []
+  const last = new Map<string, GameLink>()
   for (const link of game.links) {
     const from = byId.get(link.from)
     const to = byId.get(link.to)
@@ -202,12 +235,29 @@ const graphOf = (game: Game): Graph => {
     if (COMPONENTS[to.type].tap) {
       taps.set(to.id, [...(taps.get(to.id) ?? []), from.id])
     } else {
-      const out = linkTo.get(from.id) ?? new Map<string, GameLink>()
-      out.set(to.id, link)
-      linkTo.set(from.id, out)
+      routing.push([from, to])
+      last.set(`${from.id}>${to.id}`, link)
       routes.set(from.id, [...(routes.get(from.id) ?? []), to])
       parents.set(to.id, [...(parents.get(to.id) ?? []), from])
     }
+  }
+  const edgeTo = new Map<string, Map<string, Edge>>()
+  const out = new Map<string, Array<Edge>>()
+  const edges: Array<Edge> = []
+  for (const [from, to] of routing) {
+    const byTo = edgeTo.get(from.id) ?? new Map<string, Edge>()
+    edgeTo.set(from.id, byTo)
+    let edge = byTo.get(to.id)
+    if (!edge) {
+      const key = `${from.id}>${to.id}`
+      const link = last.get(key) as GameLink
+      edge = { index: edges.length, key, from, to, link, policy: policyOf(game, link) }
+      byTo.set(to.id, edge)
+      edges.push(edge)
+    }
+    const list = out.get(from.id) ?? []
+    list.push(edge)
+    out.set(from.id, list)
   }
   // Kahn's order over routing links. A Node caught in a cycle never runs.
   const indegree = new Map(game.nodes.map((node) => [node.id, parents.get(node.id)?.length ?? 0]))
@@ -224,7 +274,9 @@ const graphOf = (game: Game): Graph => {
   }
   return {
     byId,
-    linkTo,
+    edgeTo,
+    out,
+    edges,
     routes,
     parents,
     taps,
@@ -259,26 +311,16 @@ export const policyOf = (game: Game, link: GameLink | undefined): Policy => {
   }
 }
 
-/** Policies by caller and callee, per solve: a solve asks for each Link's policy many times. */
-const policies = new WeakMap<Graph, Map<string, Map<string, Policy>>>()
+/** The Edge from one Node to another, if a routing Link joins them. */
+const edgeOf = (graph: Graph, from: string, to: string): Edge | undefined =>
+  graph.edgeTo.get(from)?.get(to)
 
-const linkPolicy = (game: Game, graph: Graph, from: string, to: string): Policy => {
-  let byFrom = policies.get(graph)
-  if (!byFrom) {
-    byFrom = new Map()
-    policies.set(graph, byFrom)
-  }
-  let byTo = byFrom.get(from)
-  if (!byTo) {
-    byTo = new Map()
-    byFrom.set(from, byTo)
-  }
-  let policy = byTo.get(to)
-  if (!policy) {
-    policy = policyOf(game, graph.linkTo.get(from)?.get(to))
-    byTo.set(to, policy)
-  }
-  return policy
+const NO_RATES: Rates = {}
+
+/** What a pass sent from one Node to another, by kind. */
+const carriedOn = (graph: Graph, pass: Pass, from: string, to: string): Rates => {
+  const edge = edgeOf(graph, from, to)
+  return (edge && pass.links[edge.index]) ?? NO_RATES
 }
 
 /** Calls per call a retrying Link sends when a share `failure` fails. */
@@ -345,7 +387,7 @@ const originsOf = (
       if (rate > 0) mix.set(kind, rate)
     }
     for (const parent of graph.parents.get(node.id) ?? []) {
-      const carried = pass.links.get(`${parent.id}>${node.id}`) ?? {}
+      const carried = carriedOn(graph, pass, parent.id, node.id)
       let backend = 0
       for (const kind of BACKEND_KINDS) backend += carried[kind] ?? 0
       if (backend <= 0) continue
@@ -373,7 +415,7 @@ type Inputs = Readonly<{
   inflight: ReadonlyMap<string, number>
   weights: ReadonlyMap<string, number>
   /** Share of calls that fail on each retrying Link, by `from>to:kind`, from the last pass. */
-  failures: ReadonlyMap<string, number>
+  failures: ReadonlyArray<Partial<Record<Kind, number>> | undefined>
   /** Capacity each Node had on paper at the start of the solve: what a weighted split sees. */
   nominal: ReadonlyMap<string, number>
   /** App Servers whose database is down or overloaded: a deep health check takes them out. */
@@ -438,7 +480,8 @@ const forward = (inputs: Inputs): Pass => {
   const hits = new Map<string, number>()
   const staleHits = new Map<string, number>()
   const stranded = new Map<string, { rate: number; kinds: Set<Kind> }>()
-  const links = new Map<string, Rates>()
+  const links: Array<Rates | undefined> = []
+  const linkOrder: Array<number> = []
 
   const route = (node: GameNode, kind: Kind, rate: number) => {
     // A webhook's call goes to a customer's server, outside the Design.
@@ -451,20 +494,21 @@ const forward = (inputs: Inputs): Pass => {
       stranded.set(node.id, entry)
       return
     }
-    for (const [child, weight] of targets) {
-      const key = `${node.id}>${child.id}`
+    for (const [edge, weight] of targets) {
+      const child = edge.to
       // Retries resend what failed: the callee sees more. An open breaker sends nothing.
-      const amplified = amplification(
-        linkPolicy(game, graph, node.id, child.id),
-        inputs.failures.size > 0 ? (inputs.failures.get(`${key}:${kind}`) ?? 0) : 0,
-      )
+      const amplified = amplification(edge.policy, inputs.failures[edge.index]?.[kind] ?? 0)
       const sent = rate * weight * amplified
       const into = arriving.get(child.id) ?? {}
       into[kind] = (into[kind] ?? 0) + sent
       arriving.set(child.id, into)
-      const carried = links.get(key) ?? {}
+      let carried = links[edge.index]
+      if (!carried) {
+        carried = {}
+        links[edge.index] = carried
+        linkOrder.push(edge.index)
+      }
       carried[kind] = (carried[kind] ?? 0) + sent
-      links.set(key, carried)
     }
   }
 
@@ -535,6 +579,7 @@ const forward = (inputs: Inputs): Pass => {
     staleHits,
     stranded,
     links,
+    linkOrder,
     connections,
     lag: surge ? lag * LAG_SURGE : lag,
     staleShare: surge ? Math.min(0.5, (lag * LAG_SURGE) / 1000) : Math.min(0.15, lag / 1000),
@@ -546,13 +591,13 @@ const noticed = (graph: Graph, child: GameNode, after: number): boolean =>
   isDown(child) && (child.downCause === 'restart' || graph.time - child.downAt >= after)
 
 /** The kinds a Link carries: an L7 Load Balancer Link can carry only some. */
-const carries = (graph: Graph, node: GameNode, child: GameNode, kind: Kind): boolean => {
+const carries = (node: GameNode, edge: Edge, kind: Kind): boolean => {
   if (node.type !== 'lb') return true
-  const kinds = graph.linkTo.get(node.id)?.get(child.id)?.kinds
+  const kinds = edge.link.kinds
   return !kinds || (kinds as ReadonlyArray<Kind>).includes(kind)
 }
 
-type Split = ReadonlyArray<readonly [GameNode, number]>
+type Split = ReadonlyArray<readonly [Edge, number]>
 
 /** Splits by Node and kind, per pass: routing, outcomes and held time all ask for the same ones. */
 const splits = new WeakMap<Inputs, Map<GameNode, Map<Kind, Split>>>()
@@ -576,32 +621,54 @@ const splitOf = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
   return split
 }
 
+/** The Edges out of a Node that can take a kind, per Graph: they do not change during a solve. */
+const takersByGraph = new WeakMap<Graph, Map<GameNode, Map<Kind, ReadonlyArray<Edge>>>>()
+
+const takersOf = (graph: Graph, node: GameNode, kind: Kind): ReadonlyArray<Edge> => {
+  let byNode = takersByGraph.get(graph)
+  if (!byNode) {
+    byNode = new Map()
+    takersByGraph.set(graph, byNode)
+  }
+  let byKind = byNode.get(node)
+  if (!byKind) {
+    byKind = new Map()
+    byNode.set(node, byKind)
+  }
+  let takers = byKind.get(kind)
+  if (!takers) {
+    const linked = (graph.out.get(node.id) ?? []).filter(
+      (edge) => accepts(edge.to, kind) && carries(node, edge, kind),
+    )
+    // A Node built for the kind takes it from one that only falls back to it.
+    const own = linked.filter((edge) => !COMPONENTS[edge.to.type].fallback.includes(kind))
+    takers = own.length > 0 ? own : linked
+    byKind.set(kind, takers)
+  }
+  return takers
+}
+
+/** The share of `kind` each Edge out of `node` takes in this pass. */
 const splitFor = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
   const { game, graph } = inputs
-  const linked = (graph.routes.get(node.id) ?? []).filter(
-    (child) => accepts(child, kind) && carries(graph, node, child, kind),
-  )
-  // A Node built for the kind takes it from one that only falls back to it.
-  const own = linked.filter((child) => !COMPONENTS[child.type].fallback.includes(kind))
-  const takers = own.length > 0 ? own : linked
+  const takers = takersOf(graph, node, kind)
   if (takers.length === 0) return []
-  const even = (live: ReadonlyArray<GameNode>) =>
-    live.map((child) => [child, 1 / live.length] as const)
+  const even = (live: ReadonlyArray<Edge>) => live.map((edge) => [edge, 1 / live.length] as const)
   if (node.type === 'dns') {
     // DNS round robin splits evenly. With health checks, a dead host leaves once its TTL runs out.
     const live = graph.healthChecked
-      ? takers.filter((child) => !noticed(graph, child, node.ttl))
+      ? takers.filter((edge) => !noticed(graph, edge.to, node.ttl))
       : takers
     return even(live.length > 0 ? live : takers)
   }
   if (node.type !== 'lb') return weighted(takers, (child) => inputs.weights.get(child.id))
   // A Load Balancer notices a dead host at its next health check. A deep check also takes out
   // servers whose database is down or overloaded, even when that leaves none.
-  const up = takers.filter((child) => !noticed(graph, child, node.checkEvery))
+  const up = takers.filter((edge) => !noticed(graph, edge.to, node.checkEvery))
   const checked = up.length > 0 ? up : takers
   const healthy =
     node.deepCheck && graph.healthChecked
-      ? checked.filter((child) => !inputs.sick.has(child.id))
+      ? checked.filter((edge) => !inputs.sick.has(edge.to.id))
       : checked
   if (healthy.length === 0) return []
   // A dead host the checks have not caught yet still looks as big as it was.
@@ -619,7 +686,7 @@ const splitFor = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
     case 'p2c': {
       const spread = 1 / healthy.length
       return weighted(healthy, live).map(
-        ([child, share]) => [child, (1 - P2C_IMBALANCE) * share + P2C_IMBALANCE * spread] as const,
+        ([edge, share]) => [edge, (1 - P2C_IMBALANCE) * share + P2C_IMBALANCE * spread] as const,
       )
     }
   }
@@ -627,15 +694,15 @@ const splitFor = (inputs: Inputs, node: GameNode, kind: Kind): Split => {
 
 /** Shares proportional to each target's capacity. */
 const weighted = (
-  targets: ReadonlyArray<GameNode>,
+  targets: ReadonlyArray<Edge>,
   weightOf: (child: GameNode) => number | undefined,
-): ReadonlyArray<readonly [GameNode, number]> => {
-  const raw = targets.map((child) => {
-    const weight = weightOf(child) ?? 1
+): Split => {
+  const raw = targets.map((edge) => {
+    const weight = weightOf(edge.to) ?? 1
     return Number.isFinite(weight) ? Math.max(weight, 1e-6) : 1e9
   })
   const sum = raw.reduce((total, weight) => total + weight, 0)
-  return targets.map((child, index) => [child, (raw[index] ?? 0) / sum] as const)
+  return targets.map((edge, index) => [edge, (raw[index] ?? 0) / sum] as const)
 }
 
 /* ---------- outcomes ---------- */
@@ -658,18 +725,18 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   }
 
   /** One attempt on a Link: the callee's outcome cut at the Link's timeout. */
-  const attempt = (node: GameNode, child: GameNode, kind: Kind): Outcome =>
-    timedOut(outcome(child, kind), linkPolicy(game, graph, node.id, child.id).timeout)
+  const attempt = (edge: Edge, kind: Kind): Outcome =>
+    timedOut(outcome(edge.to, kind), edge.policy.timeout)
 
   /**
    * A call on a Link: one attempt, and the retries if the Link retries. An open
    * breaker fails fast. A retried charge that timed out may already have charged:
    * without idempotency keys, those fail as `duplicate`.
    */
-  const call = (node: GameNode, child: GameNode, kind: Kind): Outcome => {
-    const policy = linkPolicy(game, graph, node.id, child.id)
+  const call = (edge: Edge, kind: Kind): Outcome => {
+    const policy = edge.policy
     if (policy.open) return failed('refused')
-    const once = attempt(node, child, kind)
+    const once = attempt(edge, kind)
     if (policy.retry === 'none') return once
     const again =
       policy.retry === 'naive'
@@ -687,11 +754,12 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   }
 
   /** Share of attempts that fail on a Link, which drives naive retries. */
-  const failureOn = (node: GameNode, child: GameNode, kind: Kind): number =>
-    1 - attempt(node, child, kind).success
+  const failureOn = (edge: Edge, kind: Kind): number => 1 - attempt(edge, kind).success
 
   /** A call that leaves its zone or region pays the hop on top. */
-  const placed = (node: GameNode, child: GameNode, kind: Kind): Outcome => {
+  const placed = (edge: Edge, kind: Kind): Outcome => {
+    const node = edge.from
+    const child = edge.to
     // A partition cuts calls between regions until it heals.
     if (
       game.incident?.kind === 'partition' &&
@@ -702,7 +770,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     )
       return failed('timeout')
     const extra = placeMs(game, node, child)
-    const answer = call(node, child, kind)
+    const answer = call(edge, kind)
     return extra > 0 ? through(hop({ fixed: extra }), [[answer, 1]]) : answer
   }
 
@@ -710,7 +778,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
   const downstream = (node: GameNode, kind: Kind, extraHop = 0): Outcome => {
     if (kind === 'callout') return CALLOUT
     const mixed = blend(
-      splitOf(inputs, node, kind).map(([child, weight]) => [placed(node, child, kind), weight]),
+      splitOf(inputs, node, kind).map(([edge, weight]) => [placed(edge, kind), weight]),
     )
     if (!mixed) return failed('stranded')
     return extraHop > 0 ? through(hop({ fixed: extraHop }), [[mixed, 1]]) : mixed
@@ -718,13 +786,12 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
 
   /** Milliseconds a caller holds its slot for one call: E[min(X, T)] per attempt, times the attempts. */
   const held = (node: GameNode, kind: Kind, extraHop = 0): number =>
-    splitOf(inputs, node, kind).reduce((total, [child, weight]) => {
-      const policy = linkPolicy(game, graph, node.id, child.id)
+    splitOf(inputs, node, kind).reduce((total, [edge, weight]) => {
+      const policy = edge.policy
       if (policy.open) return total
-      const attempts =
-        policy.retry === 'none' ? 1 : amplification(policy, failureOn(node, child, kind))
+      const attempts = policy.retry === 'none' ? 1 : amplification(policy, failureOn(edge, kind))
       const each =
-        heldFor(outcome(child, kind), policy.timeout) + extraHop + placeMs(game, node, child)
+        heldFor(outcome(edge.to, kind), policy.timeout) + extraHop + placeMs(game, node, edge.to)
       return total + weight * attempts * Math.min(policy.timeout, each)
     }, 0)
 
@@ -806,11 +873,14 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
   let inflight = new Map<string, number>()
   let weights = new Map<string, number>()
   // Retrying Links start from the failure share they saw last Step: retries carry a storm forward.
-  let failures = new Map<string, number>()
-  for (const link of game.links)
-    if (link.failure > 0 && linkPolicy(game, graph, link.from, link.to).retry !== 'none')
-      for (const kind of COMPONENTS[graph.byId.get(link.to)?.type ?? 'users'].accepts)
-        failures.set(`${link.from}>${link.to}:${kind}`, link.failure)
+  let failures: Array<Partial<Record<Kind, number>> | undefined> = []
+  for (const link of game.links) {
+    const edge = edgeOf(graph, link.from, link.to)
+    if (link.failure <= 0 || !edge || edge.policy.retry === 'none') continue
+    const byKind: Partial<Record<Kind, number>> = {}
+    for (const kind of COMPONENTS[edge.to.type].accepts) byKind[kind] = link.failure
+    failures[edge.index] = byKind
+  }
   const nominal = new Map<string, number>()
   const sick = new Set<string>()
   const routes = userRoutes(game, (node) => (graph.routes.get(node.id)?.length ?? 0) > 0)
@@ -875,18 +945,18 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       nextLatency.set(node.id, blended)
     }
     // Failure shares on retrying Links, blended like the call latencies.
-    const nextFailures = new Map<string, number>()
-    for (const [key, carried] of pass.links) {
-      const [from, to] = key.split('>')
-      const source = graph.byId.get(from ?? '')
-      const target = graph.byId.get(to ?? '')
-      if (!source || !target || linkPolicy(game, graph, source.id, target.id).retry === 'none')
-        continue
+    const nextFailures: Array<Partial<Record<Kind, number>> | undefined> = []
+    for (const index of pass.linkOrder) {
+      const edge = graph.edges[index] as Edge
+      const carried = pass.links[index] as Rates
+      if (edge.policy.retry === 'none') continue
+      const byKind: Partial<Record<Kind, number>> = {}
       for (const kind of Object.keys(carried) as Array<Kind>) {
-        const fresh = outcomes.failureOn(source, target, kind)
-        const previous = failures.get(`${key}:${kind}`)
-        nextFailures.set(`${key}:${kind}`, previous === undefined ? fresh : (previous + fresh) / 2)
+        const fresh = outcomes.failureOn(edge, kind)
+        const previous = failures[index]?.[kind]
+        byKind[kind] = previous === undefined ? fresh : (previous + fresh) / 2
       }
+      nextFailures[index] = byKind
     }
     // Once a deep check fails a server in a pass, it stays out for the solve: no flapping.
     for (const node of game.nodes)
@@ -975,7 +1045,7 @@ const ledgerOf = (
     const strand = pass.stranded.get(node.id)
     const out: Rates = {}
     for (const child of graph.routes.get(node.id) ?? []) {
-      const carried = pass.links.get(`${node.id}>${child.id}`) ?? {}
+      const carried = carriedOn(graph, pass, node.id, child.id)
       for (const [kind, rate] of Object.entries(carried) as Array<[Kind, number]>)
         out[kind] = (out[kind] ?? 0) + rate
     }
@@ -1102,7 +1172,7 @@ const ledgerOf = (
         failure: 0,
       }
     }
-    const carried = pass.links.get(`${link.from}>${link.to}`) ?? {}
+    const carried = carriedOn(graph, pass, link.from, link.to)
     const entries = Object.entries(carried) as Array<[Kind, number]>
     const top = entries.reduce<[Kind, number]>(
       (best, entry) => (entry[1] > best[1] ? entry : best),
@@ -1151,11 +1221,9 @@ const ledgerOf = (
       }
     }
     // Traffic between zones bills both ways: requests at their payload, backend calls at 4 KB.
-    for (const [key, carried] of pass.links) {
-      const [from, to] = key.split('>')
-      const source = graph.byId.get(from ?? '')
-      const target = graph.byId.get(to ?? '')
-      if (!source || !target) continue
+    for (const index of pass.linkOrder) {
+      const { from: source, to: target } = graph.edges[index] as Edge
+      const carried = pass.links[index] as Rates
       // Between regions (09 "Egress": $0.02/GB); global Components are reached at no charge.
       const crossRegion = source.region !== target.region && !isGlobal(source) && !isGlobal(target)
       if (!crossRegion && zoneMs(source, target) === 0) continue
@@ -1237,13 +1305,12 @@ const linkFailure = (
   entries: ReadonlyArray<readonly [Kind, number]>,
   rate: number,
 ): number => {
-  const policy = linkPolicy(game, graph, link.from, link.to)
+  const edge = edgeOf(graph, link.from, link.to)
+  const policy = edge?.policy ?? NO_POLICY
   const watched = policy.retry !== 'none' || (link.breaker && has(game, 'circuit-breakers'))
-  const source = graph.byId.get(link.from)
-  const target = graph.byId.get(link.to)
-  if (!watched || policy.open || rate <= 0 || !source || !target) return 0
+  if (!watched || policy.open || rate <= 0 || !edge) return 0
   return entries.reduce(
-    (total, [kind, carried]) => total + (carried / rate) * outcomes.failureOn(source, target, kind),
+    (total, [kind, carried]) => total + (carried / rate) * outcomes.failureOn(edge, kind),
     0,
   )
 }

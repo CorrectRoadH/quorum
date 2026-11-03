@@ -95,6 +95,22 @@ const addFailures = (a: Failures, b: Failures): Failures => ({
   duplicate: a.duplicate + b.duplicate,
 })
 
+/** Adds `fail` × `by` into `into`, in place: the loops below build one record each, not two per term. */
+const addScaledInto = (into: Record<ErrorCause, number>, fail: Failures, by: number): void => {
+  into.stranded += fail.stranded * by
+  into.dropped += fail.dropped * by
+  into.refused += fail.refused * by
+  into.down += fail.down * by
+  into.stale += fail.stale * by
+  into.oom += fail.oom * by
+  into.timeout += fail.timeout * by
+  into.crash += fail.crash * by
+  into.blocked += fail.blocked * by
+  into.upstream += fail.upstream * by
+  into.throttled += fail.throttled * by
+  into.duplicate += fail.duplicate * by
+}
+
 /** Every request fails for one cause. */
 export const failed = (cause: ErrorCause): Outcome => ({
   success: 0,
@@ -168,7 +184,7 @@ export const through = (
   let fixed = own.fixed
   let variable = own.variable
   let tail = { tailP: own.tailP, tailMs: own.tailMs }
-  let causes = NO_FAILURES
+  const causes = { ...NO_FAILURES }
   let causeWeight = 0
   let stale = 0
   for (const [call, count] of calls) {
@@ -179,7 +195,7 @@ export const through = (
     fixed += call.fixed * count
     variable += call.variable * count
     tail = combineTail(tail.tailP, tail.tailMs, call.tailP, call.tailMs)
-    causes = addFailures(causes, scaleFailures(call.fail, count))
+    addScaledInto(causes, call.fail, count)
     causeWeight += (1 - call.success) * count
     stale = Math.max(stale, call.stale)
   }
@@ -207,32 +223,35 @@ export const through = (
 export const blend = (entries: ReadonlyArray<readonly [Outcome, number]>): Outcome | undefined => {
   const total = entries.reduce((sum, [, weight]) => sum + weight, 0)
   if (entries.length === 0 || total <= 0) return undefined
-  let result: Outcome = {
-    success: 0,
-    fixed: 0,
-    variable: 0,
-    tailP: 0,
-    tailMs: 0,
-    stale: 0,
-    value: 0,
-    fail: NO_FAILURES,
-  }
+  let success = 0
+  let fixed = 0
+  let variable = 0
+  let tailP = 0
+  let stale = 0
+  let value = 0
+  const fail = { ...NO_FAILURES }
   let tailWeight = 0
   for (const [entry, weight] of entries) {
     const w = weight / total
     tailWeight += entry.tailP * w * entry.tailMs
-    result = {
-      success: result.success + entry.success * w,
-      fixed: result.fixed + entry.fixed * w,
-      variable: result.variable + entry.variable * w,
-      tailP: result.tailP + entry.tailP * w,
-      tailMs: 0,
-      stale: result.stale + entry.stale * w,
-      value: result.value + entry.value * w,
-      fail: addFailures(result.fail, scaleFailures(entry.fail, w)),
-    }
+    success += entry.success * w
+    fixed += entry.fixed * w
+    variable += entry.variable * w
+    tailP += entry.tailP * w
+    stale += entry.stale * w
+    value += entry.value * w
+    addScaledInto(fail, entry.fail, w)
   }
-  return { ...result, tailMs: result.tailP > 0 ? tailWeight / result.tailP : 0 }
+  return {
+    success,
+    fixed,
+    variable,
+    tailP,
+    tailMs: tailP > 0 ? tailWeight / tailP : 0,
+    stale,
+    value,
+    fail,
+  }
 }
 
 /* ---------- reading a distribution ---------- */

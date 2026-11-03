@@ -122,7 +122,10 @@ export type Pass = Readonly<{
   /** Share of each Cache's hits that are stale. */
   staleHits: ReadonlyMap<string, number>
   stranded: ReadonlyMap<string, Readonly<{ rate: number; kinds: ReadonlySet<Kind> }>>
-  links: ReadonlyMap<string, Rates>
+  /** What each routing Link carried, by kind, indexed by the solve's Edge numbers. */
+  links: ReadonlyArray<Rates | undefined>
+  /** The Edges that carried anything, in the order they first did: sums over Links run in it. */
+  linkOrder: ReadonlyArray<number>
   connections: ReadonlyMap<string, Readonly<{ used: number; max: number }>>
   /** Milliseconds replicas lag behind the primary. */
   lag: number
