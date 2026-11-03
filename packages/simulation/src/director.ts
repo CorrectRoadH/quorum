@@ -307,6 +307,8 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number => {
     audit: () => (game.drill?.passed && !has(game, 'security-team') ? 1.5 : 0),
     // Only the player starts a drill.
     'dr-drill': () => 0,
+    // Only an expired patch ticket starts one.
+    breach: () => 0,
   }
   return weakness[kind]()
 }

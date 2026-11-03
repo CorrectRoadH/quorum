@@ -9,37 +9,31 @@ import type { Cve, CveVars, Letters, Rewrite } from './letter.ts'
 export const CVES: ReadonlyArray<Cve> = [
   {
     id: 'CVE-2026-1337',
-    score: 9.8,
     title: 'HTTP proxy request smuggling',
     what: 'A crafted request hides a second request inside the first, and the proxy forwards both. Your server then answers a question nobody at the front door saw anyone ask.',
   },
   {
     id: 'CVE-2026-0451',
-    score: 7.5,
     title: 'Framework deserializes any cookie',
     what: 'The framework turns any cookie it receives back into live objects, no questions asked. A visitor can bake one that runs code on the way in.',
   },
   {
     id: 'CVE-2026-2718',
-    score: 8.1,
     title: 'Database remote code before auth',
     what: 'The database engine runs code sent during the handshake, before it checks the password. It is very polite: it lets strangers in before asking who they are.',
   },
   {
     id: 'CVE-2026-0042',
-    score: 5.3,
     title: 'Deep package leaks heap in errors',
     what: 'A package seven dependencies deep pastes chunks of heap memory into its error messages. Nobody chose this package. Nobody knew it was there.',
   },
   {
     id: 'CVE-2026-3141',
-    score: 7.5,
     title: 'Regex denial of service in a validator',
     what: 'An email validator backtracks forever on one long, carefully chosen address. A single sign-up form can keep a CPU busy until the heat death of the universe or the next deploy, whichever comes first.',
   },
   {
     id: 'CVE-2026-1024',
-    score: 9.9,
     title: 'Logging library runs what it logs',
     what: 'The logger treats some strings as instructions and helpfully runs them. Anyone who can get text into a log line, such as a username, can run code on your server.',
   },

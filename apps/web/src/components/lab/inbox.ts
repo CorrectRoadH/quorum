@@ -18,9 +18,17 @@ import {
   type IconNode,
   Dices,
 } from 'lucide'
+import { badge as chip } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
 import { clock } from '@/game/format.ts'
-import { KIND_LABEL, SAMPLES, senderOf, type Sender, type SenderKind } from '@/game/mail.ts'
+import {
+  KIND_LABEL,
+  SAMPLES,
+  needsAction,
+  senderOf,
+  type Sender,
+  type SenderKind,
+} from '@/game/mail.ts'
 import type { BuildGroup } from '@quorum/simulation/catalog'
 import { Kbd } from '@/components/ui/kbd'
 import {
@@ -32,7 +40,7 @@ import { Message } from '@/game/message.ts'
 import type { Folder, Mail, Model } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, groupBadge } from './bits.ts'
+import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, WELL, groupBadge } from './bits.ts'
 
 /* ==========================================================================
    The Inbox (GDD 18): the game's voice, as a mail window docked above its
@@ -61,14 +69,141 @@ const badge = (sender: Sender, size: string, h: HtmlBuilder<Message>): Html => {
   return groupBadge(group, glyph, size, h, false, sender.color)
 }
 
+/** Mail waits for a decision (Needs action), or only informs (FYI), or the filter caught it (Spam). */
 const inFolder = (mail: Mail, folder: Folder): boolean =>
-  folder === 'trash' ? mail.trashed : !mail.trashed && mail.spam === (folder === 'spam')
+  folder === 'trash'
+    ? mail.trashed
+    : !mail.trashed &&
+      (folder === 'spam' ? mail.spam : !mail.spam && needsAction(mail) === (folder === 'action'))
 
 const unreadIn = (model: Model, folder: Folder): number =>
   model.inbox.filter((mail) => inFolder(mail, folder) && !mail.read).length
 
+/** Threads waiting on the player: it does not fall when they are read, only when they are answered. */
+const openCount = (model: Model): number =>
+  model.inbox.filter((mail) => inFolder(mail, 'action')).length
+
+/** The first line of a letter that says something, for the preview. */
+const gist = (mail: Mail): string =>
+  (mail.entries.at(-1)?.text ?? '').split('\n\n').find((paragraph) => paragraph.trim() !== '') ?? ''
+
+/**
+ * The newest letter that wants the player, as a card above the Inbox button. It stays until the
+ * player reads, answers or dismisses it, so new mail cannot slip past. A decision shows its first
+ * button here, so a patch is one click away.
+ */
+const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const mail = model.inbox.find((entry) => entry.id === model.mailPeek && !entry.trashed)
+  if (!mail || model.panel === 'inbox') return h.empty
+  const sender = senderOf(mail.sender)
+  const decision = needsAction(mail)
+  const act = decision ? mail.actions.find((action) => !action.id.startsWith('show')) : undefined
+  return h.div(
+    [
+      h.Key(`peek-${mail.id}-${mail.entries.length}`),
+      h.Role('status'),
+      h.AriaLabel(`New mail from ${sender.name}: ${mail.subject}`),
+      h.Class(
+        `enter-pop absolute right-3 bottom-[68px] z-20 flex w-[min(380px,calc(100%-24px))] flex-col gap-2.5 p-3 ${FLOAT} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+136px)] compact:w-[calc(100%-16px)]`,
+      ),
+    ],
+    [
+      h.div(
+        [h.Class('flex items-start gap-3')],
+        [
+          badge(sender, 'size-8', h),
+          h.div(
+            [h.Class('flex min-w-0 flex-1 flex-col gap-0.5')],
+            [
+              h.span(
+                [h.Class(cn(EYEBROW, 'flex items-center gap-1.5'))],
+                [
+                  h.span([h.Class('truncate')], [sender.name]),
+                  h.span([], ['·']),
+                  h.span([h.Class(FIGURE)], [clock(mail.time)]),
+                ],
+              ),
+              h.span(
+                [
+                  h.Class(
+                    'line-clamp-2 text-[14.5px] leading-snug font-semibold tracking-[-0.01em]',
+                  ),
+                ],
+                [mail.subject],
+              ),
+            ],
+          ),
+          button(
+            {
+              onClick: Message.MailPeekDismissed(),
+              variant: 'ghost',
+              size: 'icon-sm',
+              className: '-mt-1 -mr-1.5 text-muted-foreground',
+              attributes: [h.AriaLabel('Dismiss'), h.Title('Dismiss')],
+            },
+            icon(h, X, 'size-3.5'),
+            h,
+          ),
+        ],
+      ),
+      // The clamp sits on the inner line, so the well's padding cannot show a third line.
+      h.div(
+        [h.Class(cn(WELL, 'px-3 py-2'))],
+        [
+          h.p(
+            [h.Class('line-clamp-2 text-[12px] leading-snug text-muted-foreground')],
+            [gist(mail)],
+          ),
+        ],
+      ),
+      h.div(
+        [h.Class('flex items-center gap-2')],
+        [
+          decision ? chip({ variant: 'destructive' }, ['Needs action'], h) : h.empty,
+          h.span([h.Class('flex-1')], []),
+          act
+            ? button(
+                {
+                  onClick: Message.MailActed({ id: mail.id, action: act.id }),
+                  size: 'sm',
+                  attributes: [h.Key(act.id)],
+                },
+                act.label,
+                h,
+              )
+            : h.empty,
+          button(
+            {
+              onClick: Message.MailPeekOpened({ id: mail.id }),
+              variant: act ? 'outline' : 'default',
+              size: 'sm',
+              attributes: [h.Key('open')],
+            },
+            ['Open', Kbd({ className: 'ml-1 opacity-80' }, ['I'], h)],
+            h,
+          ),
+        ],
+      ),
+    ],
+  )
+}
+
 export const inboxButton = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const unread = unreadIn(model, 'inbox')
+  const unread = unreadIn(model, 'action') + unreadIn(model, 'fyi')
+  // A decision waiting turns the badge red and rings the button; FYI mail keeps the quiet badge.
+  const waiting = model.inbox.some((mail) => inFolder(mail, 'action') && !mail.read)
+  return h.div(
+    [h.Key('inbox-corner'), h.Class('contents')],
+    [peek(model, h), inboxToggle(model, unread, waiting, h)],
+  )
+}
+
+const inboxToggle = (
+  model: Model,
+  unread: number,
+  waiting: boolean,
+  h: HtmlBuilder<Message>,
+): Html => {
   return h.button(
     [
       h.Key('inbox'),
@@ -77,7 +212,7 @@ export const inboxButton = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.AriaLabel(unread > 0 ? `Inbox, ${unread} unread` : 'Inbox'),
       h.OnClick(Message.PanelOpened({ panel: 'inbox' })),
       h.Class(
-        `absolute right-3 bottom-3 z-20 grid size-11 place-items-center ${PANEL} text-muted-foreground hover:text-foreground compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+84px)]`,
+        `${waiting ? 'mail-ping text-foreground ' : 'text-muted-foreground '}absolute right-3 bottom-3 z-20 grid size-11 place-items-center ${PANEL} hover:text-foreground compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+84px)]`,
       ),
     ],
     [
@@ -89,7 +224,8 @@ export const inboxButton = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.Class(
                 cn(
                   FIGURE,
-                  'enter-badge absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary-fill px-1 text-[10.5px] font-medium text-on-primary-fill shadow-raised',
+                  'enter-badge absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-medium shadow-raised',
+                  waiting ? 'bg-danger text-white' : 'bg-primary-fill text-on-primary-fill',
                 ),
               ),
             ],
@@ -325,7 +461,12 @@ const letter = (mail: Mail, h: HtmlBuilder<Message>): Html => {
   )
 }
 
-const KIND_FOLDER: Record<Folder, string> = { inbox: 'Inbox', spam: 'Spam', trash: 'Trash' }
+const EMPTY: Record<Folder, string> = {
+  action: 'Nothing needs you.',
+  fyi: 'No updates.',
+  spam: 'Spam is empty.',
+  trash: 'Trash is empty.',
+}
 
 /** The Sandbox's stress bench: send any kind of Mail, one or many, without waiting for it. */
 const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
@@ -404,7 +545,8 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.div(
             [h.Class('flex gap-0.5 rounded-xl bg-well p-0.5 shadow-well')],
             [
-              folderTab('inbox', 'Inbox', unreadIn(model, 'inbox'), model.folder === 'inbox', h),
+              folderTab('action', 'Needs action', openCount(model), model.folder === 'action', h),
+              folderTab('fyi', 'FYI', unreadIn(model, 'fyi'), model.folder === 'fyi', h),
               folderTab('spam', 'Spam', unreadIn(model, 'spam'), model.folder === 'spam', h),
               folderTab('trash', 'Trash', 0, model.folder === 'trash', h),
             ],
@@ -449,11 +591,7 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
               ? [
                   h.li(
                     [h.Class('px-4 py-4 text-[12.5px] text-muted-foreground')],
-                    [
-                      model.folder === 'inbox'
-                        ? 'No mail.'
-                        : `${KIND_FOLDER[model.folder]} is empty.`,
-                    ],
+                    [EMPTY[model.folder]],
                   ),
                 ]
               : newest.map((mail) => row(mail, mail.id === open?.id, h)),

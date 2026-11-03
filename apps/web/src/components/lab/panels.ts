@@ -228,6 +228,15 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
           switch_(
             {
+              id: 'setting-auto-pause',
+              label: 'Pause on SEV1 and SEV2',
+              isChecked: model.autoPause,
+              onToggle: () => Message.AutoPauseToggled(),
+            },
+            h,
+          ),
+          switch_(
+            {
               id: 'setting-motion',
               label: 'Reduce motion',
               isChecked: model.motion === 'reduce',

@@ -61,7 +61,8 @@ A compact two-pane email window, after Proton Mail, Superhuman, and Gmail.
 └───────────────────────┴───────────────────────────────────────────────┘
 ```
 
-- **Folders:** Inbox, Spam, Trash. The count beside Inbox is the unread count. Spam shows its own
+- **Folders:** Needs action, FYI, Spam, Trash. Needs action holds Mail with a button that does something
+  and no answer yet; its count is the open threads. FYI holds the rest and shows its unread count. Spam shows its own
   count so the player knows something is there.
 - **List:** newest first, grouped by thread ([Threads](#threads)). Each row shows the sender's colour
   chip, the sender, the time, and the subject. Unread Mail has a dot and a bold subject.
@@ -188,7 +189,13 @@ a Security sender and a spam folder together.
 - **The patch** is an engineering task with a DH cost ([Team and velocity](./08-team-and-velocity.md#engineering-tasks)),
   often followed by a deploy. A **Patch now** button queues it at the top of the backlog. **Queue the
   patch** puts it at normal priority.
-- **The clock.** While an exposed CVE is unpatched, its exploit chance rises each calendar day. When
+- **The ticket.** The Simulation files each disclosure as a **patch ticket** at the end of the Team
+  backlog, so a team does not build it until the player moves it up ("Patch now") or rushes it: "Patch App Server, 5 DH, due in 3 min". A higher score means a bigger patch and a shorter
+  deadline. The ticket turns red on the backlog and the HUD when it is overdue. A grace of 60 sim
+  seconds later it expires: the ticket is gone and a SEV1 **Data breach** starts, which costs 15% of
+  the Users. A breach waits while another incident runs. The ticket can be rushed but not cancelled.
+  The advisory thread closes with the ticket, patched or exploited.
+- **The clock (design).** While an exposed CVE is unpatched, its exploit chance rises each calendar day. When
   it fires, the **Data breach** incident starts: data loss, users lost, a Reputation hit, and a
   postmortem. Patching before the clock runs out removes the risk.
 - **The cost of speed.** Patching in a hurry steals DH from features and risks a **Bad deploy**.
@@ -388,14 +395,18 @@ Teammates draw a name from a pool and keep it for life.
   with its own subject, greeting, and close. The Simulation names the topic and its values; the
   Inbox picks a letter by the Company's seed, the Thread, and the time, so a Company reads the same
   on every device and a Thread rarely repeats itself. Each teammate has their own footer.
-- **Folders:** Inbox, Spam, Trash, with "Report spam" and "Not spam".
+- **Folders:** Needs action, FYI, Spam, Trash, with "Report spam" and "Not spam".
 - **Actions:** Raise and Decline (investor), Approve hire (teammate), Open Team, Show on Board, and
   the phishing traps. Raise, Decline, and Approve hire send the real Messages.
-- **World events:** every 45 sim seconds from Pre-seed, the Company's seed draws spam, a CVE, a
+- **World events:** every 45 sim seconds from Pre-seed, the Company's seed draws spam, a
   teammate (hire request or rewrite proposal), or a slow-page customer ticket.
+- **CVEs:** every 420 sim seconds the Simulation discloses one CVE that affects a Component the
+  Design runs, as a patch ticket. Security writes the advisory; "Rush patch" sends the rush Action.
+- **Pause on SEV1 and SEV2:** an optional setting stops the clock when such an incident starts.
+  The Company also has a 0.5× speed.
 
-Not built yet: the CVE exploit clock, patch tasks, and the Data breach and Credential leak
-incidents (a trap only raises a toast); Approve rewrite (it opens Team); Postmortem and Away mail;
+Not built yet: the Credential leak incident (a trap only raises a toast); the Security team's
+full exposure list; Approve rewrite (it opens Team); Postmortem and Away mail;
 the spam filter research; saving the Inbox; and the keyboard shortcuts in the reader. The funding
 offer panel still exists beside the investor Mail.
 

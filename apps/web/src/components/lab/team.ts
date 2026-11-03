@@ -39,6 +39,7 @@ import {
   type PolicyId,
   type RuntimeId,
   type TaskId,
+  PATCH_GRACE,
 } from '@quorum/simulation/catalog'
 import { has } from '@quorum/simulation/lookups'
 import type { Engineer, Game, Team, WorkItem, WorkKind } from '@quorum/simulation/state'
@@ -56,6 +57,7 @@ import {
   signingOf,
   teamOutputs,
 } from '@quorum/simulation/team'
+import { overdueBy } from '@quorum/simulation/cve'
 import { featureRefusal, itemName, MAX_TEAMS, taskRefusal } from '@quorum/simulation/work'
 import { describeRefusal } from '@quorum/simulation/actions'
 import { money } from '@/game/format.ts'
@@ -131,6 +133,7 @@ const KIND: Record<WorkKind, Readonly<{ label: string; fill: string }>> = {
   task: { label: 'Engineering', fill: 'bg-group-data' },
   migration: { label: 'Migration', fill: 'bg-group-compute' },
   spike: { label: 'Spike', fill: 'bg-group-ops' },
+  patch: { label: 'Security', fill: 'bg-danger' },
 }
 
 const STRIPES = 'repeating-linear-gradient(-45deg, oklch(1 0 0 / 0.28) 0 6px, transparent 6px 12px)'
@@ -844,6 +847,7 @@ const statusMark = (status: Status, share: number, h: HtmlBuilder<Message>): Htm
 const codeOf = (kind: WorkKind, ref: string): string => {
   if (kind === 'feature') return `FEAT-${FEATURE_IDS.indexOf(ref as FeatureId) + 1}`
   if (kind === 'task') return `ENG-${TASK_IDS.indexOf(ref as TaskId) + 1}`
+  if (kind === 'patch') return `SEC-${ref.slice(-4)}`
   return `MIG-${ref.replace(/\D/g, '') || '1'}`
 }
 
@@ -856,6 +860,26 @@ const label = (kind: WorkKind, h: HtmlBuilder<Message>): Html =>
     ],
     [h.span([h.Class(cn('size-1.5 rounded-full', KIND[kind].fill))], []), KIND[kind].label],
   )
+
+/** A patch's clock: the time left, then red and counting how long it is overdue until it is exploited. */
+const deadline = (game: Game, item: WorkItem, h: HtmlBuilder<Message>): Html => {
+  if (item.due === undefined) return h.empty
+  const late = overdueBy(game, item)
+  return h.span(
+    [
+      h.Class(
+        cn(
+          FIGURE,
+          'inline-flex h-5 items-center rounded-full px-1.5 text-[10.5px] font-medium whitespace-nowrap',
+          late > 0
+            ? 'bg-danger text-white'
+            : 'text-muted-foreground shadow-[inset_0_0_0_1px_var(--hairline-soft)]',
+        ),
+      ),
+    ],
+    [late > 0 ? `Exploit in ${wait(PATCH_GRACE - late)}` : `Due in ${wait(item.due - game.time)}`],
+  )
+}
 
 const estimate = (text: string, h: HtmlBuilder<Message>): Html =>
   h.span(
@@ -925,6 +949,7 @@ const card = (
   owner: Html,
   chips: ReadonlyArray<Html>,
   actions: ReadonlyArray<Html>,
+  late: boolean,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
@@ -932,6 +957,7 @@ const card = (
       h.Key(key),
       h.Class(
         cn(
+          late && 'ring-[1.5px] ring-danger',
           'group relative flex flex-col gap-2 rounded-[10px] bg-surface px-3 py-2.5 shadow-[0_0_0_1px_var(--hairline-soft),0_1px_2px_oklch(0_0_0/0.05)] transition-shadow duration-150 hover:shadow-[0_0_0_1px_var(--hairline),0_2px_6px_oklch(0_0_0/0.07)]',
           status === 'live' && 'bg-transparent shadow-[0_0_0_1px_var(--hairline-soft)]',
         ),
@@ -997,6 +1023,7 @@ const backlogCard = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const share = clamp(item.spent / item.cost)
+  const late = overdueBy(game, item) > 0
   return card(
     `item-${item.id}`,
     codeOf(item.kind, item.ref),
@@ -1010,6 +1037,7 @@ const backlogCard = (
         team || item.spent > 0 ? `${amount(item.spent)}/${dh(item.cost)}` : dh(item.cost),
         h,
       ),
+      deadline(game, item, h),
     ],
     [
       team
@@ -1033,6 +1061,7 @@ const backlogCard = (
       rush(game, item, h),
       cancel(item, h),
     ],
+    late,
     h,
   )
 }
@@ -1192,6 +1221,7 @@ const board = (game: Game, h: HtmlBuilder<Message>): Html => {
             h.empty,
             [label('feature', h)],
             [],
+            false,
             h,
           ),
         ),
@@ -1216,6 +1246,7 @@ const board = (game: Game, h: HtmlBuilder<Message>): Html => {
                 h.empty,
                 [],
                 [],
+                false,
                 h,
               ),
             ),

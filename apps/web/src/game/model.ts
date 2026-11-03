@@ -170,7 +170,7 @@ export const Mail = Schema.Struct({
 })
 export type Mail = typeof Mail.Type
 
-export const Folder = Schema.Literals(['inbox', 'spam', 'trash'])
+export const Folder = Schema.Literals(['action', 'fyi', 'spam', 'trash'])
 export type Folder = typeof Folder.Type
 
 /** The figures a change is measured by. */
@@ -256,6 +256,7 @@ export const Prefs = Schema.Struct({
   locale: Locale.pipe(Schema.withDecodingDefaultKey(Effect.succeed('en' as const))),
   seenTradeoffs: Schema.Array(TradeoffKind).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   muted: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  autoPause: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   motion: Motion.pipe(Schema.withDecodingDefaultKey(Effect.succeed('system' as const))),
 })
 export type Prefs = typeof Prefs.Type
@@ -350,6 +351,8 @@ export const Model = Schema.Struct({
   pending: Schema.Array(Reveal),
   cue: Schema.NullOr(RevealCue),
   muted: Schema.Boolean,
+  /** Pause the clock when a SEV1 or SEV2 incident starts. */
+  autoPause: Schema.Boolean,
   motion: Motion,
   locale: Locale,
   languagePicker: Listbox.Model,
@@ -364,6 +367,8 @@ export const Model = Schema.Struct({
   /** Advice the game has sent, oldest first, and the one the Inbox shows. */
   inbox: Schema.Array(Mail),
   inboxFocus: Schema.NullOr(Schema.Finite),
+  /** The Mail whose preview card waits above the Inbox button until the player reads or dismisses it. */
+  mailPeek: Schema.NullOr(Schema.Finite),
   /** The last event tick the world wrote Mail for. */
   mailBucket: Schema.Finite,
   /** The Sandbox's mail generator: the sample the next send uses. */

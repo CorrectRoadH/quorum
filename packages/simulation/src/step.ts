@@ -22,6 +22,7 @@ import {
   WARMUP_SECONDS,
   type Tuning,
 } from './catalog.ts'
+import { advanceCves } from './cve.ts'
 import { advanceIncident, directIncidents } from './director.ts'
 import { StepEvent, type AlertRule } from './events.ts'
 import { churnFactor, growthFactor } from './features.ts'
@@ -404,6 +405,7 @@ export const step = (
   const team = advanceTeam(next, ledger, seconds, tuning, offline)
   next = team.game
   events.push(...team.events)
+  if (!offline) next = advanceCves(next, ledger, seconds, events)
   if (!offline) {
     const directed = directIncidents(next, ledger, tuning.incidentGap)
     next = directed.game

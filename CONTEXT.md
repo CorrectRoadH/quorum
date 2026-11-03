@@ -240,7 +240,7 @@ Mail about one thing from one Sender. A repeat joins the thread; the thread reso
 _Avoid_: conversation, chain
 
 **CVE**:
-A vulnerability disclosed in software the Design runs. It starts an exploit clock until the player patches it.
+A vulnerability disclosed in software the Design runs. It files a patch ticket with a deadline; an expired ticket starts a Data breach.
 _Avoid_: bug, exploit, vulnerability (alone)
 
 **Spam**:
@@ -248,7 +248,7 @@ Mail that no Sender in the game would really send: pitches, fake invoices, phish
 _Avoid_: junk, noise
 
 **Inbox**:
-The panel that lists Mail, like an email app, with an Inbox folder and a Trash folder.
+The panel that lists Mail, like an email app, with Needs action, FYI, Spam, and Trash folders.
 _Avoid_: notification center, feed, log
 
 **Postmortem**:

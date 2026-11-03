@@ -362,12 +362,12 @@ export const Service = Schema.Struct({
 })
 export type Service = typeof Service.Type
 
-export const WorkKind = Schema.Literals(['feature', 'task', 'migration', 'spike'])
+export const WorkKind = Schema.Literals(['feature', 'task', 'migration', 'spike', 'patch'])
 export type WorkKind = typeof WorkKind.Type
 
 /**
  * One backlog item. `ref` is a Feature or task id; a migration item names its
- * step; a Spike names the research of the Study it speeds.
+ * step; a Spike names the research of the Study it speeds; a patch names its CVE.
  */
 export const WorkItem = Schema.Struct({
   id: Schema.Finite,
@@ -375,6 +375,10 @@ export const WorkItem = Schema.Struct({
   ref: Schema.String,
   cost: Schema.Finite,
   spent: Schema.Finite,
+  /** A patch's deadline, in Company seconds. It turns overdue after it and is exploited a grace later. */
+  due: Schema.optionalKey(Schema.Finite),
+  /** The Component id a patch is for. */
+  target: Schema.optionalKey(Schema.String),
 })
 export type WorkItem = typeof WorkItem.Type
 
@@ -534,6 +538,8 @@ export const Game = Schema.Struct({
   /** Work in priority order: each team takes the first item no team ahead of it has. */
   backlog: Schema.Array(WorkItem).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   workSeq: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** The CVEs already disclosed, so each one comes once. */
+  cves: Schema.Array(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   shipped: Schema.Array(FeatureId).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   /** Features built and waiting for the next deploy. */
   awaiting: Schema.Array(FeatureId).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),

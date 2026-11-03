@@ -7,6 +7,7 @@
 
 export * from './catalog/achievements.ts'
 export * from './catalog/components.ts'
+export * from './catalog/cves.ts'
 export * from './catalog/economy.ts'
 export * from './catalog/eras.ts'
 export * from './catalog/glossary.ts'

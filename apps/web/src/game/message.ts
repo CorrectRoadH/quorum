@@ -224,6 +224,7 @@ export const Message = defineMessageUnion({
   WorkMoved: { id: Schema.Finite, direction: Schema.Literals([1, -1]) },
   WorkCancelled: { id: Schema.Finite },
   WorkRushed: { id: Schema.Finite },
+  WorkPrioritized: { id: Schema.Finite },
   AutopilotToggled: {},
   MigrationShifted: {},
   MigrationCancelled: {},
@@ -255,6 +256,7 @@ export const Message = defineMessageUnion({
 
   /** Settings and the Glossary (15). */
   MuteToggled: {},
+  AutoPauseToggled: {},
   MotionToggled: {},
   LocaleChosen: { locale: Locale },
   LanguagePickerChanged: { message: Listbox.Message },
@@ -265,6 +267,8 @@ export const Message = defineMessageUnion({
   DashboardHovered: { index: Schema.NullOr(Schema.Finite) },
   GlossaryFiltered: { category: Schema.NullOr(Schema.String) },
   MailOpened: { id: Schema.Finite },
+  MailPeekOpened: { id: Schema.Finite },
+  MailPeekDismissed: {},
   MailTrashed: { id: Schema.Finite },
   MailRestored: { id: Schema.Finite },
   FolderChosen: { folder: Folder },

@@ -32,6 +32,7 @@ export const INCIDENT_IDS = [
   'bgp',
   'audit',
   'dr-drill',
+  'breach',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -374,6 +375,17 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     duration: 60,
     cause: 'A scripted failure of the home region, to measure recovery.',
     prevention: 'Serve every kind from another region within the hour, without losing writes.',
+    actions: [],
+  },
+  breach: {
+    id: 'breach',
+    name: 'Data breach',
+    era: 1,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 120,
+    cause: 'A disclosed vulnerability stayed unpatched past its deadline, and someone used it.',
+    prevention: 'Patch the ticket before it expires. The Team backlog shows the deadline.',
     actions: [],
   },
 }

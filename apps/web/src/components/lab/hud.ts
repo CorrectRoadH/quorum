@@ -56,9 +56,10 @@ import { budgetOf, budgeted } from '@quorum/simulation/slo'
 import { marginOf, valuationOf } from '@quorum/simulation/valuation'
 import { clockOf } from '@quorum/simulation/solve'
 import { devHoursRate } from '@quorum/simulation/team'
+import { overdueBy } from '@quorum/simulation/cve'
 import { itemName } from '@quorum/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
-import { compact, money, ms, rate } from '@/game/format.ts'
+import { clock as mmss, compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { offCompany, type Model } from '@/game/model.ts'
 import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
@@ -456,6 +457,9 @@ const building = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =
   const item = game.backlog[0]
   const rate = devHoursRate(game, ledger) * 60
   const ready = game.awaiting.length
+  // A patch ticket has a deadline: its clock replaces the pace, and turns red when it is overdue.
+  const late = item ? overdueBy(game, item) : 0
+  const due = item?.due === undefined ? null : item.due - game.time
   return h.button(
     [
       h.Key('building'),
@@ -476,20 +480,37 @@ const building = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =
           h.span(
             [
               h.Class(
-                cn('min-w-0 flex-1 truncate', item ? 'font-medium' : 'text-muted-foreground'),
+                cn(
+                  'min-w-0 flex-1 truncate',
+                  item ? 'font-medium' : 'text-muted-foreground',
+                  late > 0 && 'text-danger',
+                ),
               ),
             ],
             [item ? itemName(item) : 'Idle'],
           ),
-          ready > 0
+          due !== null
             ? h.span(
-                [h.Class(cn(FIGURE, 'text-[10.5px] text-primary-strong'))],
-                [`${ready} to deploy`],
+                [
+                  h.Class(
+                    cn(
+                      FIGURE,
+                      'text-[10.5px]',
+                      late > 0 ? 'font-medium text-danger' : 'text-muted-foreground',
+                    ),
+                  ),
+                ],
+                [late > 0 ? 'Overdue' : `Due ${mmss(due)}`],
               )
-            : h.span(
-                [h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))],
-                [`${rate < 10 ? rate.toFixed(1) : Math.round(rate)} DH/min`],
-              ),
+            : ready > 0
+              ? h.span(
+                  [h.Class(cn(FIGURE, 'text-[10.5px] text-primary-strong'))],
+                  [`${ready} to deploy`],
+                )
+              : h.span(
+                  [h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))],
+                  [`${rate < 10 ? rate.toFixed(1) : Math.round(rate)} DH/min`],
+                ),
         ],
       ),
       item ? meter(item.spent / item.cost, 'bg-ok', h) : h.empty,

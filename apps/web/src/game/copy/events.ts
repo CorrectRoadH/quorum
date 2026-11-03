@@ -149,6 +149,21 @@ export const EVENTS: EventLetters = {
     }),
   ],
 
+  'incident-breach': [
+    ({ from }) => ({
+      subject: `[SEV1] Data breach: an advisory you did not patch`,
+      body: `Incident: data breach\nUrgency: Critical\n\nSomeone used a vulnerability that was disclosed to you, with a deadline, and the deadline passed. Customer data left the building. Users are leaving after it.\n\nThe ticket is gone from the backlog. The consequence is not.\n\n${from}`,
+    }),
+    ({ from }) => ({
+      subject: `We told you so (it was in the backlog)`,
+      body: `Hi,\n\nThe advisory that was on your backlog, in red, got exploited. Data is out. A share of your Users have read the news and are going elsewhere.\n\nThere is no button for this one. It will pass. Patch the next one on time.\n\nSincerely,\nThe ${from} team`,
+    }),
+    ({ from }) => ({
+      subject: `Breach confirmed`,
+      body: `Confirmed: the vulnerability on your overdue ticket was exploited.\n\nImpact: customer data, Users, and trust, in that order.\nStatus: ongoing\nRoot cause: a ticket that was not built before its deadline\n\n${from}`,
+    }),
+  ],
+
   'incident-psp': [
     ({ from }) => ({
       subject: `[TRIGGERED] Payment Provider down`,

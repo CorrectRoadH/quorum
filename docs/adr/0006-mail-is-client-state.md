@@ -5,7 +5,7 @@ an email app ([GDD 18](../gdd/18-mail.md)). Mail lives in the web app's `Model` 
 Simulation.
 
 The Simulation decides when something is worth saying and emits it as a **fact** (`nextGoal` today;
-the open funding round, a finished task, a CVE later). The web app turns each new fact into one Mail
+the open funding round, a finished task, a CVE). The web app turns each new fact into one Mail
 and stores it. A fact that changes the game, such as a CVE and its exploit clock or a rewrite
 proposal, is Simulation state, and its answer is an Action; the Mail text, Sender, colour, spam,
 and phishing copy stay in the web app. An action button
@@ -25,6 +25,10 @@ Considered options:
 - Copy for Mail lives in the web app or in the Simulation's text helpers, like `nextGoal`.
 - The Inbox is not saved yet. Saving it means an optional `inbox` field in the Company save, capped
   at 40 Mail.
+- A CVE is a patch ticket in the backlog (`WorkItem` with a `due`), disclosed on a fixed interval from the
+  Company's seed. Its overdue state and the Data breach it causes are Simulation state, so replays and
+  the server's check see them ([SIM_VERSION](../../packages/simulation/src/version.ts) 11). Only the
+  advisory text, the Needs action / FYI split, and the pause setting are web state.
 - Sandboxes and Challenges send no Mail.
 - What would change it: a need for the server to know what the player read, such as a daily drill
   that scores on advice taken.

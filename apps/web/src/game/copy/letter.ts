@@ -36,6 +36,7 @@ export type EventVars = {
   readonly 'incident-stampede': Nothing
   readonly 'incident-zone': { readonly zone: string }
   readonly 'incident-psp': Nothing
+  readonly 'incident-breach': Nothing
   readonly resolved: { readonly incident: string }
   readonly 'resolved-action': { readonly incident: string; readonly action: string }
   readonly drawer: Nothing
@@ -69,13 +70,13 @@ export interface Pitch {
 /** A vulnerability the Simulation can disclose. All fictional. */
 export interface Cve {
   readonly id: string
-  readonly score: number
   readonly title: string
   /** One or two sentences: what the bug is, in plain words. */
   readonly what: string
 }
 
 export type CveVars = Cve & {
+  readonly score: number
   readonly severity: 'critical' | 'high' | 'medium' | 'low'
   /** The Component the player runs that this affects, or null when it is not known. */
   readonly exposed: string | null

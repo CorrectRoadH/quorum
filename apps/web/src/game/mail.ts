@@ -6,7 +6,10 @@ import type {
   AdviceVars,
 } from '@quorum/simulation/goals'
 import type { Game } from '@quorum/simulation/state'
-import { COMPONENTS } from '@quorum/simulation/catalog'
+import type { Mail } from './model.ts'
+import { COMPONENTS, CVE_DEFS, patchCost, patchWindow } from '@quorum/simulation/catalog'
+import type { WorkItem } from '@quorum/simulation/state'
+import { itemName } from '@quorum/simulation/work'
 import {
   ADVICE,
   CVE_LETTERS,
@@ -35,6 +38,12 @@ import {
    ========================================================================== */
 
 export type { SenderKind } from './copy/index.ts'
+
+/** Mail that waits for a decision: not answered, not resolved, and a button that does something. */
+export const needsAction = (mail: Mail): boolean =>
+  mail.answer === null &&
+  mail.resolved === null &&
+  mail.actions.some((action) => !action.id.startsWith('show'))
 
 export interface Sender {
   readonly name: string
@@ -161,23 +170,50 @@ export const EVENT_EVERY = 45
 const severity = (score: number): CveVars['severity'] =>
   score >= 9 ? 'critical' : score >= 7 ? 'high' : score >= 4 ? 'medium' : 'low'
 
-const cveFact = (cve: Cve, game: Game, spam: boolean, at: number): Fact => {
-  const node = game.nodes[at % Math.max(1, game.nodes.length)]
+const minutes = (seconds: number): string => `${Math.max(1, Math.round(seconds / 60))} min`
+
+/** The advisory for a patch ticket the Simulation filed, which quotes the ticket and its deadline. */
+export const disclosureFact = (item: WorkItem, game: Game, spam = false, at = 0): Fact => {
+  const cve = CVES.find((entry) => entry.id === item.ref) ?? CVES[0]!
+  const score = CVE_DEFS.find((def) => def.id === cve.id)?.score ?? 5
   const key = `security:${cve.id}`
   const sender = senderFor('security', game, cve.id)
+  const node = game.nodes.find((entry) => entry.type === item.target)
   const vars: CveVars = {
     ...cve,
-    severity: severity(cve.score),
-    exposed: node ? COMPONENTS[node.type].name : null,
+    score,
+    severity: severity(score),
+    exposed: item.target ? COMPONENTS[item.target as keyof typeof COMPONENTS].name : null,
   }
+  const written = write(CVE_LETTERS, vars, sender, game, key, at)
+  const ticket = `${itemName(item)}, ${item.cost} DH, due in ${minutes((item.due ?? game.time) - game.time)}. Overdue, it turns red on the Team backlog; a minute later it is exploited.`
   return fact(
     key,
     sender,
-    write(CVE_LETTERS, vars, sender, game, key, at),
-    node ? [{ id: `show:${node.id}`, label: 'Show on Board' }] : [],
+    { ...written, body: `Ticket filed: ${ticket}\n\n${written.body}` },
+    [
+      { id: `first:${item.id}`, label: 'Patch now' },
+      { id: `rush:${item.id}`, label: 'Rush patch' },
+      ...(node ? [{ id: `show:${node.id}`, label: 'Show on Board' }] : []),
+      { id: 'team', label: 'Open Team' },
+    ],
     // A real advisory can land in Spam, where the filter put it.
     spam,
   )
+}
+
+/** A made-up ticket for the Sandbox's bench. */
+const sampleTicket = (cve: Cve, game: Game, id: number): WorkItem => {
+  const def = CVE_DEFS.find((entry) => entry.id === cve.id)
+  return {
+    id,
+    kind: 'patch',
+    ref: cve.id,
+    cost: patchCost(def?.score ?? 5),
+    spent: 0,
+    due: game.time + patchWindow(def?.score ?? 5),
+    ...(def?.affects[0] ? { target: def.affects[0] } : {}),
+  }
 }
 
 const mateOf = (game: Game, at: number): string =>
@@ -220,8 +256,8 @@ const spamFact = (pitch: Pitch, game: Game, salt: number): Fact => {
 }
 
 /**
- * What the world writes at one event tick: a CVE, a teammate, a customer, or
- * spam. Drawn from the Company's seed, so it is the same on every device.
+ * What the world writes at one event tick: a teammate, a customer, or spam. A CVE
+ * is not drawn here: the Simulation discloses it as a patch ticket. Drawn from the Company's seed, so it is the same on every device.
  * Mail changes nothing in the Simulation until the player presses a button.
  */
 export const eventMail = (game: Game, bucket: number): Fact | null => {
@@ -230,7 +266,6 @@ export const eventMail = (game: Game, bucket: number): Fact | null => {
   const at = draw >>> 8
   const mate = game.engineers.length > 0 ? mateOf(game, at) : null
 
-  if (roll < 15 && game.nodes.length > 0) return cveFact(pick(CVES, at), game, draw % 10 === 0, at)
   if (roll < 30 && mate)
     return game.backlog.length >= 3 && game.hires.length === 0
       ? hireFact(game, mate, at)
@@ -326,6 +361,7 @@ const EVENT_SAMPLES: {
   'incident-ddos': { label: 'DDoS (Cloudscare)', tag: 'IncidentStarted', vars: {} },
   'incident-stampede': { label: 'Cache stampede', tag: 'IncidentStarted', vars: {} },
   'incident-zone': { label: 'Zone outage', tag: 'IncidentStarted', vars: { zone: 'B' } },
+  'incident-breach': { label: 'Data breach', tag: 'IncidentStarted', vars: {} },
   'incident-psp': { label: 'Payment provider outage', tag: 'IncidentStarted', vars: {} },
   resolved: {
     label: 'Incident over',
@@ -427,13 +463,13 @@ export const SAMPLES: ReadonlyArray<Sample> = [
     id: `cve-${cve.id}`,
     group: 'World',
     label: `CVE: ${cve.id}, ${cve.title}`,
-    make: (game, n) => own(cveFact(cve, game, false, n), n),
+    make: (game, n) => own(disclosureFact(sampleTicket(cve, game, -n), game, false, n), n),
   })),
   {
     id: 'cve-spam',
     group: 'World',
     label: 'CVE misfiled in Spam',
-    make: (game, n) => own(cveFact(CVES[0]!, game, true, n), n),
+    make: (game, n) => own(disclosureFact(sampleTicket(CVES[0]!, game, -n), game, true, n), n),
   },
   {
     id: 'hire',

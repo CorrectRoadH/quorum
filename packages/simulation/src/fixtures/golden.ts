@@ -44,16 +44,19 @@ export const GOLDEN_STEPS = 10_000
 // SIM_VERSION 10: Insight has a pool per request kind and a Failure pool, grows
 // with the square root of samples per Component type, and research runs as
 // Studies that take Insight over time; sampling adds CPU and latency.
-export const GOLDEN_HASH = '92286274'
+// SIM_VERSION 11: a CVE is disclosed every few minutes as a patch ticket with a
+// deadline; an overdue one is exploited and starts a Data breach. The save gains
+// the disclosed CVEs, and a backlog item gains its deadline.
+export const GOLDEN_HASH = '90ba0bf8'
 
 /**
  * The hash of the Game each Challenge's reference solution ends on
  * (`fixtures/challenges.ts`). Node, the browsers and workerd must agree.
  */
 export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
-  'hello-world': 'c511bccc',
-  'split-the-box': '178f2382',
-  slashdotted: '064ca838',
-  'event-loop': 'fbc0863f',
-  'too-many-connections': 'acf29962',
+  'hello-world': 'c90d1a1b',
+  'split-the-box': '5d7e9d65',
+  slashdotted: '9caa7bfd',
+  'event-loop': '546f8990',
+  'too-many-connections': '140a8993',
 }

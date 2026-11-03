@@ -138,6 +138,7 @@ export const company = (seed: number): Omit<Game, 'nodes' | 'links'> => ({
   services: [monolith([])],
   backlog: [],
   workSeq: 0,
+  cves: [],
   shipped: [],
   awaiting: [],
   autopilot: true,

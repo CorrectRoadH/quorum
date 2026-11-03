@@ -1,6 +1,8 @@
 import { Result } from 'effect'
 import {
+  COMPONENTS,
   ERAS,
+  type ComponentId,
   FEATURES,
   FEATURE_IDS,
   FIXES,
@@ -75,6 +77,8 @@ const AUTO_REFACTOR = 0.3
 export const itemName = (item: WorkItem): string => {
   if (item.kind === 'feature') return FEATURES[item.ref as FeatureId]?.name ?? item.ref
   if (item.kind === 'task') return TASKS[item.ref as TaskId]?.name ?? item.ref
+  if (item.kind === 'patch')
+    return `Patch ${COMPONENTS[item.target as ComponentId]?.name ?? 'Design'}`
   if (item.kind === 'spike') return `Spike: ${RESEARCH[item.ref as ResearchId]?.name ?? item.ref}`
   return `Migration step ${item.ref.slice(5)}`
 }
@@ -160,12 +164,21 @@ export const moveItem = (game: Game, id: number, direction: 1 | -1): Action =>
     return ok({ ...game, backlog })
   })
 
+/** Moves an item to the top of the backlog, so the next free team builds it. */
+export const prioritizeItem = (game: Game, id: number): Action =>
+  withItem(game, id, (index) => {
+    const item = game.backlog[index]
+    if (!item) return no(Refusal.Missing())
+    return ok({ ...game, backlog: [item, ...game.backlog.filter((entry) => entry.id !== id)] })
+  })
+
 /** Takes an item off the backlog. Dev Hours spent on it are lost. */
 export const cancelItem = (game: Game, id: number): Action =>
   withItem(game, id, (index) => {
     const item = game.backlog[index]
     if (item?.kind === 'migration') return notAllowed('Cancel the migration instead.')
     if (item?.ref === 'fix-bugs') return notAllowed('The migration needs its bugs fixed.')
+    if (item?.kind === 'patch') return notAllowed('A patch stays until it is built or it expires.')
     return ok({ ...game, backlog: game.backlog.filter((entry) => entry.id !== id) })
   })
 
@@ -401,7 +414,8 @@ const autopilot = (game: Game, events: Array<StepEvent>): Game => {
 
 /** What a finished item does. */
 const complete = (game: Game, item: WorkItem): Game => {
-  if (item.kind === 'spike') return game
+  // A patch has no effect to apply: finishing it before it is exploited is the effect.
+  if (item.kind === 'spike' || item.kind === 'patch') return game
   const service = serviceOf(game)
   if (item.kind === 'migration') {
     const migration = service.migration

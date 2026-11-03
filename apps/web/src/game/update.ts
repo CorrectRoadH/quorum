@@ -101,6 +101,9 @@ import { nextAdvice } from '@quorum/simulation/goals'
 import {
   EVENT_EVERY,
   SAMPLES,
+  disclosureFact,
+  senderOf,
+  needsAction,
   eventFact,
   randomSample,
   eventMail,
@@ -209,7 +212,7 @@ const SAMPLE_EVERY = 10
 /** One calendar day of load: a point every 10 sim seconds. */
 const HISTORY_POINTS = 144
 const HISTORY_EVERY = 10
-export const SPEEDS = [1, 3, 10] as const
+export const SPEEDS = [0.5, 1, 3, 10] as const
 
 /** The Company speeds: Time dilation adds 20× and 40× (plan M7.3). */
 export const speedsOf = (game: Game): ReadonlyArray<number> => [
@@ -262,6 +265,7 @@ export const initialModel = (): Model =>
     pending: [],
     cue: null,
     muted: false,
+    autoPause: false,
     motion: 'system',
     locale: 'en',
     languagePicker: Listbox.init({ id: 'interface-language' }),
@@ -272,7 +276,8 @@ export const initialModel = (): Model =>
     glossaryCategory: null,
     inbox: [],
     inboxFocus: null,
-    folder: 'inbox',
+    mailPeek: null,
+    folder: 'action',
     mailBucket: 0,
     mailSample: 'random',
     undo: [],
@@ -353,7 +358,10 @@ const THREAD_ENTRIES = 20
 const ADVISING = new Set(['cloud', 'monitoring', 'vendor', 'investor', 'finance', 'mentor'])
 
 const folderHolds = (mail: Mail, folder: Model['folder']): boolean =>
-  folder === 'trash' ? mail.trashed : !mail.trashed && mail.spam === (folder === 'spam')
+  folder === 'trash'
+    ? mail.trashed
+    : !mail.trashed &&
+      (folder === 'spam' ? mail.spam : !mail.spam && needsAction(mail) === (folder === 'action'))
 
 /** A fact joins its Thread, or starts one. The same news twice changes nothing. */
 const mailed = (model: Model, fact: Fact, time: number, repeats = false): Model => {
@@ -390,7 +398,13 @@ const mailed = (model: Model, fact: Fact, time: number, repeats = false): Model 
         spam: fact.spam,
         resolved: null,
       }
-  return { ...model, inbox: [...others, thread].slice(-MAIL_KEPT) }
+  // Mail that wants the player (a decision, or a provider, alarm or advisory) previews above the
+  // Inbox button until it is read, so a new letter cannot go unnoticed.
+  const loud =
+    needsAction(thread) ||
+    ['cloud', 'monitoring', 'security'].includes(senderOf(thread.sender).kind)
+  const peek = !thread.spam && loud && model.panel !== 'inbox' ? thread.id : model.mailPeek
+  return { ...model, inbox: [...others, thread].slice(-MAIL_KEPT), mailPeek: peek }
 }
 
 /** Advice about anything but `key` no longer holds. */
@@ -403,6 +417,21 @@ const resolvedExcept = (model: Model, key: string, time: number): Model => ({
   ),
 })
 
+/** A Thread whose cause is over: it records the last line and resolves. */
+const closed = (model: Model, key: string, time: number, text: string): Model => ({
+  ...model,
+  inbox: model.inbox.map((mail) =>
+    mail.key === key && !mail.trashed
+      ? {
+          ...mail,
+          read: false,
+          resolved: time,
+          entries: [...mail.entries, { time, text }].slice(-THREAD_ENTRIES),
+        }
+      : mail,
+  ),
+})
+
 /** The Inbox on one Mail, or the newest in its folder, which counts as read. */
 const reading = (model: Model, focus: number | null = null): Model => {
   const inFolder = model.inbox.filter((mail) => folderHolds(mail, model.folder))
@@ -410,6 +439,7 @@ const reading = (model: Model, focus: number | null = null): Model => {
   return {
     ...model,
     inboxFocus: id,
+    mailPeek: null,
     inbox: model.inbox.map((mail) => (mail.id === id ? { ...mail, read: true } : mail)),
   }
 }
@@ -655,6 +685,7 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
 const prefsOf = (model: Model): Prefs => ({
   seenTradeoffs: model.seenTradeoffs,
   muted: model.muted,
+  autoPause: model.autoPause,
   motion: model.motion,
   locale: model.locale,
 })
@@ -791,49 +822,55 @@ const eventText = (event: StepEvent, game: Game): EventNote =>
     IncidentStarted: ({ incident }): EventNote =>
       incident.kind === 'bad-deploy'
         ? null
-        : incident.kind === 'instance' && incident.nodeId
+        : incident.kind === 'breach'
           ? [
-              `${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`,
+              'Data breach: an unpatched CVE was exploited. Users are leaving.',
               'danger',
-              { topic: 'incident-instance', vars: { node: nodeName(game, incident.nodeId) } },
+              { topic: 'incident-breach', vars: {} },
             ]
-          : incident.kind === 'slow-query'
+          : incident.kind === 'instance' && incident.nodeId
             ? [
-                'A new query has no index. Every read scans the table.',
+                `${nodeName(game, incident.nodeId)} failed. Select it and click Replace.`,
                 'danger',
-                { topic: 'incident-slow-query', vars: {} },
+                { topic: 'incident-instance', vars: { node: nodeName(game, incident.nodeId) } },
               ]
-            : incident.kind === 'poison'
+            : incident.kind === 'slow-query'
               ? [
-                  'A task keeps failing. Workers retry it instead of the queue.',
+                  'A new query has no index. Every read scans the table.',
                   'danger',
-                  { topic: 'incident-poison', vars: {} },
+                  { topic: 'incident-slow-query', vars: {} },
                 ]
-              : incident.kind === 'ddos'
+              : incident.kind === 'poison'
                 ? [
-                    'A flood of junk traffic hits the edge.',
+                    'A task keeps failing. Workers retry it instead of the queue.',
                     'danger',
-                    { topic: 'incident-ddos', vars: {} },
+                    { topic: 'incident-poison', vars: {} },
                   ]
-                : incident.kind === 'stampede'
+                : incident.kind === 'ddos'
                   ? [
-                      'The Cache restarted empty. Every miss goes to the database.',
+                      'A flood of junk traffic hits the edge.',
                       'danger',
-                      { topic: 'incident-stampede', vars: {} },
+                      { topic: 'incident-ddos', vars: {} },
                     ]
-                  : incident.kind === 'zone' && incident.zone
+                  : incident.kind === 'stampede'
                     ? [
-                        `Zone ${incident.zone.toUpperCase()} is down.`,
+                        'The Cache restarted empty. Every miss goes to the database.',
                         'danger',
-                        { topic: 'incident-zone', vars: { zone: incident.zone.toUpperCase() } },
+                        { topic: 'incident-stampede', vars: {} },
                       ]
-                    : incident.kind === 'psp-outage'
+                    : incident.kind === 'zone' && incident.zone
                       ? [
-                          'The Payment Provider is down. Checkouts fail.',
+                          `Zone ${incident.zone.toUpperCase()} is down.`,
                           'danger',
-                          { topic: 'incident-psp', vars: {} },
+                          { topic: 'incident-zone', vars: { zone: incident.zone.toUpperCase() } },
                         ]
-                      : null,
+                      : incident.kind === 'psp-outage'
+                        ? [
+                            'The Payment Provider is down. Checkouts fail.',
+                            'danger',
+                            { topic: 'incident-psp', vars: {} },
+                          ]
+                        : null,
     IncidentResolved: ({ postmortem }): EventNote =>
       postmortem.action
         ? [
@@ -884,6 +921,9 @@ const eventText = (event: StepEvent, game: Game): EventNote =>
       { topic: 'alert-ignored', vars: { alert: alertText(rule, game.alertRules[rule]) } },
     ],
     Hired: (): EventNote => ['An engineer joined the team.', 'ok', { topic: 'hired', vars: {} }],
+    // A disclosure and its exploit are written by `security`, not by the event table.
+    CveDisclosed: (): EventNote => null,
+    CveExploited: (): EventNote => null,
     WorkFinished: ({ item }): EventNote =>
       item.kind === 'task'
         ? [
@@ -924,6 +964,8 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
     AlertFired: ({ rule }) => ({ rule }),
     AlertIgnored: ({ rule }) => ({ rule }),
     Hired: ({ engineerId }) => ({ engineer: engineerId }),
+    CveDisclosed: ({ item }) => ({ cve: item.ref, due: item.due }),
+    CveExploited: ({ cve, target }) => ({ cve, target }),
     WorkFinished: ({ item }) => ({ kind: item.kind, ref: item.ref, cost: item.cost }),
     Deployed: ({ features, bad }) => ({ features, bad }),
     MigrationShifted: ({ step }) => ({ step }),
@@ -969,11 +1011,17 @@ const tick = (model: Model): Result => {
   const ledger: Ledger = { ...flow, bottleneck }
   // An incident drops the clock to 1×, so the player has time to respond.
   const incident = events.some((event) => event._tag === 'IncidentStarted')
+  // With auto-pause on, a SEV1 or SEV2 stops the clock until the player resumes it.
+  const severe = events.find(
+    (event) => event._tag === 'IncidentStarted' && event.incident.severity <= 2,
+  )
+  const autoPaused = model.autoPause && severe !== undefined && !model.paused
   let next: Model = {
     ...model,
     game,
     sandbox: run,
-    speed: incident ? 1 : model.speed,
+    paused: model.paused || autoPaused,
+    speed: incident ? Math.min(model.speed, 1) : model.speed,
     carry: owed - steps,
     bottleneck,
     bottleneckAt: search ? second : model.bottleneckAt,
@@ -1002,8 +1050,37 @@ const tick = (model: Model): Result => {
     }
   }
 
+  if (autoPaused && severe?._tag === 'IncidentStarted') {
+    const [raised, clear] = toasted(
+      next,
+      `Paused: SEV${severe.incident.severity} ${INCIDENTS[severe.incident.kind].name}. Space resumes.`,
+      'danger',
+    )
+    next = raised
+    commands.push(clear)
+  }
+
   for (const event of events) {
     logs.push(line(game.time, event._tag, eventLog(event)))
+    // The Simulation files a CVE as a ticket; Security writes the advisory, and a thread closes with its ticket.
+    if (!next.challenge && event._tag === 'CveDisclosed') {
+      next = mailed(next, disclosureFact(event.item, game), game.time)
+      continue
+    }
+    if (event._tag === 'CveExploited')
+      next = closed(
+        next,
+        `security:${event.cve}`,
+        game.time,
+        'Exploited. The ticket expired, and so did the Users who trusted you.',
+      )
+    if (event._tag === 'WorkFinished' && event.item.kind === 'patch')
+      next = closed(
+        next,
+        `security:${event.item.ref}`,
+        game.time,
+        'Patched before the deadline. Nothing happened, which is the point.',
+      )
     const text = eventText(event, game)
     if (!text) continue
     // What happened in the Design is Mail (GDD 18); a Challenge has no Inbox, so it keeps the toast.
@@ -1631,6 +1708,7 @@ const handle = (model: Model, message: Message): Result =>
             ...model,
             seenTradeoffs: prefs.seenTradeoffs,
             muted: prefs.muted,
+            autoPause: prefs.autoPause,
             motion: prefs.motion,
             locale: prefs.locale,
           },
@@ -2608,6 +2686,8 @@ const handle = (model: Model, message: Message): Result =>
     WorkMoved: ({ id, direction }) =>
       act(model, 'Reordered the backlog', Work.moveItem(model.game, id, direction)),
     WorkCancelled: ({ id }) => act(model, 'Cancelled work', Work.cancelItem(model.game, id)),
+    WorkPrioritized: ({ id }) =>
+      act(model, 'Moved work to the top', Work.prioritizeItem(model.game, id)),
     WorkRushed: ({ id }) => act(model, 'Rushed work', Work.rushItem(model.game, id)),
     AutopilotToggled: () => {
       const game = Work.setAutopilot(model.game, !model.game.autopilot)
@@ -2765,7 +2845,7 @@ const handle = (model: Model, message: Message): Result =>
         researchFocus: null,
         dashboardHover: null,
       }
-      return { model: panel === 'inbox' ? reading({ ...opened, folder: 'inbox' }) : opened }
+      return { model: panel === 'inbox' ? reading({ ...opened, folder: 'action' }) : opened }
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () =>
@@ -2786,6 +2866,7 @@ const handle = (model: Model, message: Message): Result =>
       return { ...result, commands: [...(result.commands ?? []), sync(next)] }
     },
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
+    AutoPauseToggled: () => settled({ ...model, autoPause: !model.autoPause }),
     InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
@@ -2810,6 +2891,12 @@ const handle = (model: Model, message: Message): Result =>
       }
     },
     MailOpened: ({ id }) => ({ model: reading(model, id) }),
+    MailPeekOpened: ({ id }) => {
+      const mail = model.inbox.find((entry) => entry.id === id)
+      const folder = mail?.spam ? 'spam' : mail && needsAction(mail) ? 'action' : 'fyi'
+      return { model: reading({ ...model, panel: 'inbox', placing: null, folder }, id) }
+    },
+    MailPeekDismissed: () => ({ model: { ...model, mailPeek: null } }),
     MailTrashed: ({ id }) => ({ model: reading(withMail(model, id, { trashed: true })) }),
     MailRestored: ({ id }) => ({ model: reading(withMail(model, id, { trashed: false })) }),
     MailMarkedSpam: ({ id }) => {
@@ -2830,11 +2917,12 @@ const handle = (model: Model, message: Message): Result =>
       return { model: reading(next, null) }
     },
     MailResolved: () => ({ model: resolvedExcept(model, '', model.game.time) }),
-    MailCleared: () => ({ model: { ...model, inbox: [], inboxFocus: null } }),
+    MailCleared: () => ({ model: { ...model, inbox: [], inboxFocus: null, mailPeek: null } }),
     FolderChosen: ({ folder }) => ({ model: reading({ ...model, folder }) }),
     MailActed: ({ id, action }) => {
       const mail = model.inbox.find((entry) => entry.id === id)
       if (!mail) return { model }
+      model = { ...model, mailPeek: model.mailPeek === id ? null : model.mailPeek }
       const [kind, target] = action.split(':')
       const answered = (answer: string): Model => withMail(model, id, { answer })
       switch (kind) {
@@ -2850,6 +2938,16 @@ const handle = (model: Model, message: Message): Result =>
           return route(answered('You opened Team.'), Message.PanelOpened({ panel: 'team' }))
         case 'later':
           return { model: answered('Later. They will ask again.') }
+        case 'first':
+          return route(
+            answered('You moved the patch to the top.'),
+            Message.WorkPrioritized({ id: Number(target) }),
+          )
+        case 'rush':
+          return route(
+            answered('You rushed the patch.'),
+            Message.WorkRushed({ id: Number(target) }),
+          )
         case 'show':
           return { model: { ...model, selected: target ?? null } }
         case 'trap':

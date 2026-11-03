@@ -1328,3 +1328,22 @@ details.fold[open]::details-content {
     animation: none;
   }
 }
+
+/* A decision waits in the Inbox: a ring sweeps out of the button until it is read. */
+.mail-ping::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 0 var(--danger);
+  animation: mail-ping 1.8s var(--ease-out) infinite;
+  pointer-events: none;
+}
+@keyframes mail-ping {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--danger) 55%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 12px transparent;
+  }
+}
