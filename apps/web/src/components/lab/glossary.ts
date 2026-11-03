@@ -22,6 +22,7 @@ import { shell } from './panels.ts'
 const CATEGORY_NAMES: Record<GlossaryCategory, string> = {
   performance: 'Performance',
   reliability: 'Reliability',
+  observability: 'Observability',
   data: 'Data',
   runtimes: 'Runtimes',
   network: 'Network',

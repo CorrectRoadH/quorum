@@ -13,6 +13,18 @@ file. A term is "discovered" the first time it affects the player's design
 
 Game terms, such as Node, Era, and Insight, are in [CONTEXT.md](../../CONTEXT.md), not here.
 
+## Annotation
+
+A marker on a time series chart for an event, such as a deploy, a configuration change, or an incident. It gives a change in a graph a visible cause.
+
+**In the game:** Each time series on the Dashboard draws a dashed blue line, with a label, for each Design change that you can still undo. A red line marks the start of the open Incident. Use them to check that a line moved after your fix, and not before it.
+
+**Design:** [The Dashboard](./12-observability.md#the-dashboard).
+
+**Related:** [Four golden signals](#four-golden-signals), [Observability](#observability), [MTTR](#mttr)
+
+**Learn more:** [Grafana docs: Annotate visualizations](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/annotate-visualizations/)
+
 ## Anycast
 
 A routing method where many servers in different places announce the same IP address. Internet routing (BGP) sends each user to the nearest of them, so users connect to a close server and a flood spreads across all of them.
@@ -169,7 +181,7 @@ How fast a service spends its error budget, relative to the SLO. A burn rate of 
 
 **Design:** [The Dashboard](./12-observability.md#the-dashboard).
 
-**Related:** [Error budget](#error-budget), [SLO, SLA, SLI](#slo-sla-sli), [Observability](#observability)
+**Related:** [Error budget](#error-budget), [SLO, SLA, SLI](#slo-sla-sli), [Observability](#observability), [Four golden signals](#four-golden-signals)
 
 **Learn more:** [Google SRE workbook: Alerting on SLOs](https://sre.google/workbook/alerting-on-slos/)
 
@@ -453,6 +465,18 @@ Five measures of software delivery from the DORA research program: change lead t
 
 **Learn more:** [DORA: Software delivery performance metrics](https://dora.dev/guides/dora-metrics/) · [DORA: A history of DORA's metrics](https://dora.dev/insights/dora-metrics-history/)
 
+## Downsampling
+
+Storing old metrics at a coarser resolution, such as one point per 5 minutes or per hour instead of per second. Long ranges stay cheap to keep and fast to draw. Each coarse point keeps the min, max, sum, and count of the points it replaces.
+
+**In the game:** The Dashboard reads one-minute samples for the 1 h and 6 h ranges, 15-minute blocks (kept for 7 days) for 1 d and 7 d, and 1-hour blocks (kept for 30 days) for 30 d. Each chart draws a block as its mean. The p99 line draws the worst minute in each block instead, because an average would hide the spike.
+
+**Design:** [The Dashboard](./12-observability.md#the-dashboard).
+
+**Related:** [Percentile (p50, p95, p99)](#percentile-p50-p95-p99), [Four golden signals](#four-golden-signals), [Observability](#observability)
+
+**Learn more:** [Thanos docs: Compactor and downsampling](https://thanos.io/tip/components/compact.md/) · [Prometheus docs: Storage](https://prometheus.io/docs/prometheus/latest/storage/) · [Wikipedia: Downsampling](<https://en.wikipedia.org/wiki/Downsampling_(signal_processing)>)
+
 ## Egress
 
 Data that leaves a cloud provider's network, to the internet or to another zone or region. Providers charge per GB for it, while data coming in is usually free.
@@ -479,7 +503,7 @@ Encrypting stored data, such as disks, database files, and backups, so that some
 
 The amount of failure an SLO allows over a window: with a 99.9% SLO, 0.1% of requests may fail. Teams spend it on risk, such as faster releases, and slow down and fix reliability when it runs out.
 
-**In the game:** From Series A, the game counts failed requests over the last calendar week against the Era's SLO, 99.9% in Series A and up to 99.99% when Public. Bots and WAF blocks do not count. After the Error budgets research, more than half the budget left speeds your Teams up 10%, and a spent budget halves their speed. SLO dashboards put the budget on the HUD.
+**In the game:** From Series A, the game counts failed requests over the last calendar week against the Era's SLO, 99.9% in Series A and up to 99.99% when Public. Bots and WAF blocks do not count. After the Error budgets research, more than half the budget left speeds your Teams up 10%, and a spent budget halves their speed. SLO dashboards put the budget on the HUD. SLO dashboards also chart the budget burn rate on the Dashboard.
 
 **Design:** [SLOs and error budgets](./11-incidents.md#slos-and-error-budgets).
 
@@ -556,6 +580,18 @@ A switch in the code, controlled at runtime, that turns a feature on or off with
 **Related:** [Canary deployment](#canary-deployment), [Blue-green deployment](#blue-green-deployment), [Continuous delivery](#continuous-delivery)
 
 **Learn more:** [Martin Fowler's site: Feature Toggles (Pete Hodgson)](https://martinfowler.com/articles/feature-toggles.html) · [OpenFeature: What are feature flags?](https://openfeature.dev/docs/reference/intro) · [Wikipedia](https://en.wikipedia.org/wiki/Feature_toggle)
+
+## Four golden signals
+
+Latency, traffic, errors, and saturation: the four measures that the Google SRE book says to watch first on a user-facing system. If you can measure only four things, measure these.
+
+**In the game:** The Dashboard (D) opens after Metrics research. Its Golden signals row charts traffic (served against demand), latency (the mean, plus the p99 with Percentiles), and errors (with Structured logs). The Saturation row below shows how full each Node is, and the stats at the top name the Hottest Node.
+
+**Design:** [The Dashboard](./12-observability.md#the-dashboard).
+
+**Related:** [RED method](#red-method), [USE method](#use-method), [Utilization](#utilization), [Percentile (p50, p95, p99)](#percentile-p50-p95-p99)
+
+**Learn more:** [Google SRE book: Monitoring distributed systems](https://sre.google/sre-book/monitoring-distributed-systems/) · [Grafana docs: Dashboard best practices](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/best-practices/)
 
 ## GC pause
 
@@ -819,7 +855,7 @@ Storage that keeps files as objects in a flat namespace, each with a key, the da
 
 How well you can understand what a system is doing from the data it emits, usually logs, metrics, and traces. Good observability lets you answer new questions about a failure without shipping new code.
 
-**In the game:** Observability Research shows you more of the Ledger. Structured logs split errors by cause, Metrics adds history graphs to every Node, Percentiles shows p50, p95, and p99, and Alerting raises a pager banner when errors, p99, or saturation cross a threshold. The Analytics Node samples the traffic of Nodes that you link into it, from 1% to 100%, and turns it into Insight. Each sample teaches more as Apdex falls, up to twice as much, and a higher sample rate costs more CPU and Burn.
+**In the game:** Observability Research shows you more of the Ledger. Structured logs split errors by cause, Metrics adds history graphs to every Node, Percentiles shows p50, p95, and p99, and Alerting raises a pager banner when errors, p99, or saturation cross a threshold. The Analytics Node samples the traffic of Nodes that you link into it, from 1% to 100%, and turns it into Insight. Each sample teaches more as Apdex falls, up to twice as much, and a higher sample rate costs more CPU and Burn. Metrics also opens the Dashboard (D), which charts your Design over time.
 
 **Related:** [Distributed tracing](#distributed-tracing), [Percentile (p50, p95, p99)](#percentile-p50-p95-p99), [SLO, SLA, SLI](#slo-sla-sli), [MTTR](#mttr)
 
@@ -851,7 +887,7 @@ Operating profit as a share of revenue: (revenue − operating costs) / revenue.
 
 The value below which a given share of measurements fall. The p50 (median) latency is what a typical request sees; the p99 is the latency that 99% of requests beat, so 1 request in 100 is slower. Averages hide slow outliers, so SLOs and alerts usually use high percentiles.
 
-**In the game:** Before Percentiles research the HUD shows mean latency; after it, the HUD shows the p99 and each request kind shows its p50, p95, and p99. Event-loop stalls and GC pauses hit about 2% of requests, so they raise the p99 while the mean and the p95 barely move. With Alerting, the latency rule pages you when a kind's p99 stays above 4 times its Apdex target for 30 s.
+**In the game:** Before Percentiles research the HUD shows mean latency; after it, the HUD shows the p99 and each request kind shows its p50, p95, and p99. Event-loop stalls and GC pauses hit about 2% of requests, so they raise the p99 while the mean and the p95 barely move. With Alerting, the latency rule pages you when a kind's p99 stays above 4 times its Apdex target for 30 s. The Latency chart on the Dashboard draws the p99 next to the mean, so you can see how much the mean hides.
 
 **Design:** [Percentiles](./04-simulation.md#percentiles).
 
@@ -1227,7 +1263,7 @@ Utilization, Saturation, and Errors for each resource, such as CPU, memory, or a
 
 The share of a resource's capacity in use over a period: offered work divided by capacity. Queueing delay grows sharply as utilization nears 100%: in a simple M/M/1 queue the wait is proportional to ρ / (1 − ρ), so going from 50% to 90% busy multiplies the wait by 9.
 
-**In the game:** Each Node shows its utilization: offered work over the capacity of its tightest limit, whether CPU, slots, memory, connections, or network. Queueing delay grows as ρ / (1 − ρ), the Node warns at 70% and shows danger at 90%, and above 100% it drops the excess. The Bottleneck search weighs only Nodes above 60%, and an Autoscaler targets 40%, 60%, or 80%.
+**In the game:** Each Node shows its utilization: offered work over the capacity of its tightest limit, whether CPU, slots, memory, connections, or network. Queueing delay grows as ρ / (1 − ρ), the Node warns at 70% and shows danger at 90%, and above 100% it drops the excess. The Bottleneck search weighs only Nodes above 60%, and an Autoscaler targets 40%, 60%, or 80%. The Saturation row on the Dashboard shows each Node as a gauge and as a 24-hour timeline, with the same 70% and 90% lines.
 
 **Design:** [Capacity, utilization, and queues](./04-simulation.md#capacity-utilization-and-queues).
 

@@ -3,6 +3,7 @@
 export const GLOSSARY_CATEGORIES = [
   'performance',
   'reliability',
+  'observability',
   'data',
   'runtimes',
   'network',
@@ -29,6 +30,22 @@ export type GlossaryEntry = Readonly<{
 }>
 
 export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
+  {
+    id: 'annotation',
+    term: 'Annotation',
+    category: 'observability',
+    definition:
+      'A marker on a time series chart for an event, such as a deploy, a configuration change, or an incident. It gives a change in a graph a visible cause.',
+    inGame:
+      'Each time series on the Dashboard draws a dashed blue line, with a label, for each Design change that you can still undo. A red line marks the start of the open Incident. Use them to check that a line moved after your fix, and not before it.',
+    related: ['four-golden-signals', 'observability', 'mttr'],
+    links: [
+      {
+        label: 'Grafana docs: Annotate visualizations',
+        url: 'https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/annotate-visualizations/',
+      },
+    ],
+  },
   {
     id: 'anycast',
     term: 'Anycast',
@@ -310,12 +327,12 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
   {
     id: 'burn-rate',
     term: 'Burn rate',
-    category: 'reliability',
+    category: 'observability',
     definition:
       'How fast a service spends its error budget, relative to the SLO. A burn rate of 1 spends exactly the whole budget in the SLO window; a burn rate of 10 spends it in a tenth of the window. Teams page on a high burn rate instead of on single errors.',
     inGame:
       'With SLO dashboards researched, the Dashboard (D) charts the error budget burn rate over time: your failure rate divided by the share of failures the SLO allows. Lines mark 1× and 10×; above 10×, the budget is gone long before the week ends. Fix the cause or slow your deploys until the line drops below 1×.',
-    related: ['error-budget', 'slo-sla-sli', 'observability'],
+    related: ['error-budget', 'slo-sla-sli', 'observability', 'four-golden-signals'],
     links: [
       {
         label: 'Google SRE workbook: Alerting on SLOs',
@@ -333,10 +350,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
       'Without a bytecode cache, PHP compiles every script on every request. The OPcache Research (after PHP-FPM) multiplies the CPU speed of PHP App Servers by 2.5. A PHP box that restarts runs without OPcache at first and reaches the full 2.5× as it warms up.',
     related: ['process-per-request', 'jit-warmup', 'cold-start', 'pre-fork-worker-model'],
     links: [
-      {
-        label: 'PHP manual: OPcache',
-        url: 'https://www.php.net/manual/en/book.opcache.php',
-      },
+      { label: 'PHP manual: OPcache', url: 'https://www.php.net/manual/en/book.opcache.php' },
       { label: 'PEP 3147: PYC repository directories', url: 'https://peps.python.org/pep-3147/' },
     ],
   },
@@ -775,7 +789,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
   {
     id: 'distributed-tracing',
     term: 'Distributed tracing',
-    category: 'reliability',
+    category: 'observability',
     definition:
       'Following one request across every service it touches. Each hop records a span with its start and end time, and spans that share a trace ID join into one trace. Traces show where time goes and which dependency is slow.',
     inGame:
@@ -854,6 +868,30 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     ],
   },
   {
+    id: 'downsampling',
+    term: 'Downsampling',
+    category: 'observability',
+    definition:
+      'Storing old metrics at a coarser resolution, such as one point per 5 minutes or per hour instead of per second. Long ranges stay cheap to keep and fast to draw. Each coarse point keeps the min, max, sum, and count of the points it replaces.',
+    inGame:
+      'The Dashboard reads one-minute samples for the 1 h and 6 h ranges, 15-minute blocks (kept for 7 days) for 1 d and 7 d, and 1-hour blocks (kept for 30 days) for 30 d. Each chart draws a block as its mean. The p99 line draws the worst minute in each block instead, because an average would hide the spike.',
+    related: ['percentile-p50-p95-p99', 'four-golden-signals', 'observability'],
+    links: [
+      {
+        label: 'Thanos docs: Compactor and downsampling',
+        url: 'https://thanos.io/tip/components/compact.md/',
+      },
+      {
+        label: 'Prometheus docs: Storage',
+        url: 'https://prometheus.io/docs/prometheus/latest/storage/',
+      },
+      {
+        label: 'Wikipedia: Downsampling',
+        url: 'https://en.wikipedia.org/wiki/Downsampling_(signal_processing)',
+      },
+    ],
+  },
+  {
     id: 'egress',
     term: 'Egress',
     category: 'network',
@@ -909,7 +947,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     definition:
       'The amount of failure an SLO allows over a window: with a 99.9% SLO, 0.1% of requests may fail. Teams spend it on risk, such as faster releases, and slow down and fix reliability when it runs out.',
     inGame:
-      "From Series A, the game counts failed requests over the last calendar week against the Era's SLO, 99.9% in Series A and up to 99.99% when Public. Bots and WAF blocks do not count. After the Error budgets research, more than half the budget left speeds your Teams up 10%, and a spent budget halves their speed. SLO dashboards put the budget on the HUD.",
+      "From Series A, the game counts failed requests over the last calendar week against the Era's SLO, 99.9% in Series A and up to 99.99% when Public. Bots and WAF blocks do not count. After the Error budgets research, more than half the budget left speeds your Teams up 10%, and a spent budget halves their speed. SLO dashboards put the budget on the HUD. SLO dashboards also chart the budget burn rate on the Dashboard.",
     related: ['slo-sla-sli', 'dora-metrics', 'mttr'],
     links: [
       {
@@ -1047,6 +1085,26 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
         url: 'https://openfeature.dev/docs/reference/intro',
       },
       { label: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Feature_toggle' },
+    ],
+  },
+  {
+    id: 'four-golden-signals',
+    term: 'Four golden signals',
+    category: 'observability',
+    definition:
+      'Latency, traffic, errors, and saturation: the four measures that the Google SRE book says to watch first on a user-facing system. If you can measure only four things, measure these.',
+    inGame:
+      'The Dashboard (D) opens after Metrics research. Its Golden signals row charts traffic (served against demand), latency (the mean, plus the p99 with Percentiles), and errors (with Structured logs). The Saturation row below shows how full each Node is, and the stats at the top name the Hottest Node.',
+    related: ['red-method', 'use-method', 'utilization', 'percentile-p50-p95-p99'],
+    links: [
+      {
+        label: 'Google SRE book: Monitoring distributed systems',
+        url: 'https://sre.google/sre-book/monitoring-distributed-systems/',
+      },
+      {
+        label: 'Grafana docs: Dashboard best practices',
+        url: 'https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/best-practices/',
+      },
     ],
   },
   {
@@ -1550,11 +1608,11 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
   {
     id: 'observability',
     term: 'Observability',
-    category: 'reliability',
+    category: 'observability',
     definition:
       'How well you can understand what a system is doing from the data it emits, usually logs, metrics, and traces. Good observability lets you answer new questions about a failure without shipping new code.',
     inGame:
-      'Observability Research shows you more of the Ledger. Structured logs split errors by cause, Metrics adds history graphs to every Node, Percentiles shows p50, p95, and p99, and Alerting raises a pager banner when errors, p99, or saturation cross a threshold. The Analytics Node samples the traffic of Nodes that you link into it, from 1% to 100%, and turns it into Insight. Each sample teaches more as Apdex falls, up to twice as much, and a higher sample rate costs more CPU and Burn.',
+      'Observability Research shows you more of the Ledger. Structured logs split errors by cause, Metrics adds history graphs to every Node, Percentiles shows p50, p95, and p99, and Alerting raises a pager banner when errors, p99, or saturation cross a threshold. The Analytics Node samples the traffic of Nodes that you link into it, from 1% to 100%, and turns it into Insight. Each sample teaches more as Apdex falls, up to twice as much, and a higher sample rate costs more CPU and Burn. Metrics also opens the Dashboard (D), which charts your Design over time.',
     related: ['distributed-tracing', 'percentile-p50-p95-p99', 'slo-sla-sli', 'mttr'],
     links: [
       {
@@ -1612,11 +1670,11 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
   {
     id: 'percentile-p50-p95-p99',
     term: 'Percentile (p50, p95, p99)',
-    category: 'performance',
+    category: 'observability',
     definition:
       'The value below which a given share of measurements fall. The p50 (median) latency is what a typical request sees; the p99 is the latency that 99% of requests beat, so 1 request in 100 is slower. Averages hide slow outliers, so SLOs and alerts usually use high percentiles.',
     inGame:
-      "Before Percentiles research the HUD shows mean latency; after it, the HUD shows the p99 and each request kind shows its p50, p95, and p99. Event-loop stalls and GC pauses hit about 2% of requests, so they raise the p99 while the mean and the p95 barely move. With Alerting, the latency rule pages you when a kind's p99 stays above 4 times its Apdex target for 30 s.",
+      "Before Percentiles research the HUD shows mean latency; after it, the HUD shows the p99 and each request kind shows its p50, p95, and p99. Event-loop stalls and GC pauses hit about 2% of requests, so they raise the p99 while the mean and the p95 barely move. With Alerting, the latency rule pages you when a kind's p99 stays above 4 times its Apdex target for 30 s. The Latency chart on the Dashboard draws the p99 next to the mean, so you can see how much the mean hides.",
     related: ['tail-at-scale', 'apdex', 'slo-sla-sli', 'gc-pause'],
     links: [
       {
@@ -1825,7 +1883,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
   {
     id: 'red-method',
     term: 'RED method',
-    category: 'reliability',
+    category: 'observability',
     definition:
       "Rate, Errors, and Duration for each service: how many requests it gets, how many fail, and how long they take. It measures what users feel, so alerts watch it. Tom Wilkie named it as a service-level version of Google's four golden signals.",
     inGame:
@@ -2300,7 +2358,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
   {
     id: 'use-method',
     term: 'USE method',
-    category: 'performance',
+    category: 'observability',
     definition:
       'Utilization, Saturation, and Errors for each resource, such as CPU, memory, or a connection pool. It measures causes, not symptoms: a resource at 100% with work waiting is the likely bottleneck. Brendan Gregg described it as a checklist for performance analysis.',
     inGame:
@@ -2320,7 +2378,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     definition:
       "The share of a resource's capacity in use over a period: offered work divided by capacity. Queueing delay grows sharply as utilization nears 100%: in a simple M/M/1 queue the wait is proportional to ρ / (1 − ρ), so going from 50% to 90% busy multiplies the wait by 9.",
     inGame:
-      'Each Node shows its utilization: offered work over the capacity of its tightest limit, whether CPU, slots, memory, connections, or network. Queueing delay grows as ρ / (1 − ρ), the Node warns at 70% and shows danger at 90%, and above 100% it drops the excess. The Bottleneck search weighs only Nodes above 60%, and an Autoscaler targets 40%, 60%, or 80%.',
+      'Each Node shows its utilization: offered work over the capacity of its tightest limit, whether CPU, slots, memory, connections, or network. Queueing delay grows as ρ / (1 − ρ), the Node warns at 70% and shows danger at 90%, and above 100% it drops the excess. The Bottleneck search weighs only Nodes above 60%, and an Autoscaler targets 40%, 60%, or 80%. The Saturation row on the Dashboard shows each Node as a gauge and as a 24-hour timeline, with the same 70% and 90% lines.',
     related: ['littles-law', 'backpressure', 'autoscaling', 'load-shedding'],
     links: [
       {
