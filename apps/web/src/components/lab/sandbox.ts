@@ -1,3 +1,4 @@
+import { Schema } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Cable,
@@ -19,6 +20,7 @@ import {
 import { ERAS, INCIDENTS, INCIDENT_IDS } from '@quorum/simulation/catalog'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { has } from '@quorum/simulation/lookups'
+import { IncidentId } from '@quorum/simulation/state'
 import { GUIDED, TRACKS, type SandboxId } from '@quorum/simulation/sandbox'
 import { clock, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
@@ -26,6 +28,7 @@ import { isPhone } from '@/game/viewport.ts'
 import type { Model, SandboxRun } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
+import { nativeSelect, nativeSelectOption } from '@/components/ui/native-select'
 import { cn } from '@/lib/utils'
 import { CHIPS, EYEBROW, FIGURE, PANEL, WELL, meter, toneText, type Tone } from './bits.ts'
 import { shell } from './panels.ts'
@@ -269,44 +272,53 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
         ],
       ),
-      h.div(
-        [h.Class('flex flex-col gap-1.5')],
-        [
-          h.span([h.Class(EYEBROW)], ['Incident']),
-          h.div(
-            [h.Class('grid grid-cols-2 gap-1')],
-            INCIDENT_IDS.map((kind) =>
-              tiny(
-                INCIDENTS[kind].name,
-                Message.IncidentForced({ kind }),
-                h,
-                model.game.incident?.kind === kind,
-              ),
+      nativeSelect(
+        {
+          id: 'sandbox-incident',
+          label: 'Incident',
+          size: 'sm',
+          value: model.game.incident?.kind ?? '',
+          isDisabled: model.game.incident !== null,
+          onChange: (kind) =>
+            Schema.is(IncidentId)(kind) ? Message.IncidentForced({ kind }) : Message.Synced(),
+          wrapperClass: 'flex-row items-center gap-1.5 [&>div]:flex-1',
+          labelClass: cn(EYEBROW, 'mr-auto p-0'),
+          className: 'text-[11.5px]',
+          options: [
+            nativeSelectOption({ value: '', label: 'None' }, h),
+            ...INCIDENT_IDS.map((kind) =>
+              nativeSelectOption({ value: kind, label: INCIDENTS[kind].name }, h),
             ),
+          ],
+        },
+        h,
+      ),
+      h.div(
+        [h.Class('flex gap-1.5')],
+        [
+          button(
+            {
+              onClick: Message.StressBoardLoaded({ big: false }),
+              variant: 'ghost',
+              size: 'sm',
+              className: 'flex-1 text-muted-foreground',
+              attributes: [h.Title('Load a crowded Design to test card placement and link lanes')],
+            },
+            [icon(h, Cable, 'size-3.5'), 'Stress board'],
+            h,
+          ),
+          button(
+            {
+              onClick: Message.StressBoardLoaded({ big: true }),
+              variant: 'ghost',
+              size: 'sm',
+              className: 'flex-1 text-muted-foreground',
+              attributes: [h.Title('Load a 61-Node Design to test performance')],
+            },
+            [icon(h, Cable, 'size-3.5'), 'Big board'],
+            h,
           ),
         ],
-      ),
-      button(
-        {
-          onClick: Message.StressBoardLoaded({ big: false }),
-          variant: 'ghost',
-          size: 'sm',
-          className: 'text-muted-foreground',
-          attributes: [h.Title('Load a crowded Design to test card placement and link lanes')],
-        },
-        [icon(h, Cable, 'size-3.5'), 'Stress board'],
-        h,
-      ),
-      button(
-        {
-          onClick: Message.StressBoardLoaded({ big: true }),
-          variant: 'ghost',
-          size: 'sm',
-          className: 'text-muted-foreground',
-          attributes: [h.Title('Load a 61-Node Design to test performance')],
-        },
-        [icon(h, Cable, 'size-3.5'), 'Big board'],
-        h,
       ),
       h.div(
         [h.Class('flex gap-1.5')],
