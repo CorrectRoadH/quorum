@@ -1,3 +1,4 @@
+import { stateJson } from './webmcp.ts'
 import { DragAndDrop, Listbox } from '@foldkit/ui'
 import { languageListbox } from '../i18n/listbox.ts'
 import { Option, Result, Schema } from 'effect'
@@ -2934,6 +2935,10 @@ const handle = (model: Model, message: Message): Result =>
       return { model: next, commands: [sync(next)] }
     },
     LogExported: () => ({ model, commands: [ExportLog({})] }),
+    StateCopied: () => ({
+      model,
+      commands: [CopyText({ text: stateJson(model), done: 'Copied the game state as JSON.' })],
+    }),
     LogCleared: () => withToast(model, 'Playtest log cleared.', 'plain', [ClearLog({})]),
 
     ToastRaised: ({ message: text, tone }) => withToast(model, text, tone),

@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Download, Trash2, X } from 'lucide'
+import { Copy, Download, Trash2, X } from 'lucide'
 import { offer } from '@quorum/simulation/actions'
 import { PRE_IPO_STAGE } from '@quorum/simulation/ipo'
 import { INCIDENTS, INCIDENT_IDS } from '@quorum/simulation/catalog'
@@ -235,6 +235,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             },
             h,
           ),
+          secondaryButton('Copy state as JSON', Message.StateCopied(), h, Copy),
         ],
       ),
     ],

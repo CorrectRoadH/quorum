@@ -283,6 +283,7 @@ export const Message = defineMessageUnion({
   CheatLegacy: {},
   IncidentForced: { kind: IncidentId },
   LogExported: {},
+  StateCopied: {},
   LogCleared: {},
 
   ToastRaised: { message: Schema.String, tone: Tone },

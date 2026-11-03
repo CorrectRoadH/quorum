@@ -31,18 +31,23 @@ const NONE = { error: 'No Company is open. Ask the player to open one.' }
 
 const round = (n: number): number => Math.round(n * 1000) / 1000
 
+const readers = new Map<string, (model: Model, input: Record<string, unknown>) => unknown>()
+
 const tool = (
   name: string,
   description: string,
   properties: Record<string, object>,
   run: (model: Model, input: Record<string, unknown>) => unknown,
-): Tool => ({
-  name,
-  description,
-  inputSchema: { type: 'object', properties },
-  annotations: { readOnlyHint: true },
-  execute: (input) => (latest ? json(run(latest, input ?? {})) : json(NONE)),
-})
+): Tool => {
+  readers.set(name, run)
+  return {
+    name,
+    description,
+    inputSchema: { type: 'object', properties },
+    annotations: { readOnlyHint: true },
+    execute: (input) => (latest ? json(run(latest, input ?? {})) : json(NONE)),
+  }
+}
 
 const tools: ReadonlyArray<Tool> = [
   tool(
@@ -152,6 +157,22 @@ const tools: ReadonlyArray<Tool> = [
     (m) => ({ ...m.game, history: undefined }),
   ),
 ]
+
+/** What the "Copy state as JSON" button copies: the same views the tools return, in one document. */
+export const stateJson = (model: Model): string => {
+  const read = (name: string) => readers.get(name)?.(model, {})
+  return JSON.stringify(
+    {
+      company: read('get_company'),
+      design: read('get_design'),
+      incidents: read('get_incidents'),
+      inbox: read('get_inbox'),
+      history: read('get_history'),
+    },
+    null,
+    2,
+  )
+}
 
 /** Registers the tools with the browser, when it supports WebMCP. */
 export const registerWebMcp = (): void => {

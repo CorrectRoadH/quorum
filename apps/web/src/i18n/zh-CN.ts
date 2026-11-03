@@ -21,6 +21,8 @@ export const zhCN: Readonly<Record<string, string>> = {
   Help: '帮助',
   'How to play': '玩法指南',
   'Export playtest log': '导出试玩日志',
+  'Copy state as JSON': '复制状态为 JSON',
+  'Copied the game state as JSON.': '已将游戏状态复制为 JSON。',
   'Playtest build': '试玩版本',
   Playtest: '试玩工具',
   Back: '返回',
