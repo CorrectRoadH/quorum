@@ -401,7 +401,7 @@ describe('progressive disclosure', () => {
     expect(start.panel).toBe('none')
     expect(start.revealed).not.toContain('research')
     expect(send(start, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
-    // The cheapest Garage item costs 15 ◆: 14 is not enough, 15 is.
+    // The cheapest Garage item costs 15 Insight: 14 is not enough, 15 is.
     const short = tick({ ...start, game: { ...start.game, insight: 14 } })
     expect(short.revealed).not.toContain('research')
     const enough = tick({ ...start, game: { ...start.game, insight: 15 } })

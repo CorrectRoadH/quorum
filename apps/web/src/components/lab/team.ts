@@ -130,6 +130,7 @@ const KIND: Record<WorkKind, Readonly<{ label: string; fill: string }>> = {
   feature: { label: 'Feature', fill: 'bg-group-edge' },
   task: { label: 'Engineering', fill: 'bg-group-data' },
   migration: { label: 'Migration', fill: 'bg-group-compute' },
+  spike: { label: 'Spike', fill: 'bg-group-ops' },
 }
 
 const STRIPES = 'repeating-linear-gradient(-45deg, oklch(1 0 0 / 0.28) 0 6px, transparent 6px 12px)'

@@ -45,7 +45,6 @@ import {
 import {
   COMPONENTS,
   FRAMEWORKS,
-  INSIGHT_YIELD,
   LB_POLICIES,
   KINDS,
   RUNTIMES,
@@ -53,12 +52,15 @@ import {
   SCAN_PRICE,
   SIZES,
   ZONES,
+  POOLS,
   type BuildGroup,
+  type InsightPool,
   type ComponentId,
   MSGP_PRICE,
   REGION_INFO,
   rttOf,
 } from '@quorum/simulation/catalog'
+import { POOL_ICONS, POOL_ORDER } from './pools'
 import type { Ledger } from '@quorum/simulation/ledger'
 import {
   burnOf,
@@ -763,6 +765,8 @@ type Row = Readonly<{
   value: string
   tone?: RowTone
   bar?: number
+  /** An Insight pool's icon, in its colour, in place of the row glyph. */
+  pool?: InsightPool
   /** A brand mark in place of the row glyph. */
   logo?: StackLogoId
   /** A brand mark just before the value. */
@@ -856,12 +860,17 @@ const rowsOf = (
           tone: own.inbound > own.capacity ? 'warn' : 'plain',
           bar: own.capacity > 0 ? Math.min(1, own.inbound / own.capacity) : 0,
         },
-        {
-          glyph: 'insight',
-          name: 'Insight',
-          value: `+${(sampled * INSIGHT_YIELD * (2 - ledger.apdex)).toFixed(2)}/s`,
-          tone: 'ok',
-        },
+        // The three pools it earns most, each with its own icon.
+        ...POOL_ORDER.filter((pool) => ledger.insight[pool] > 0)
+          .toSorted((a, b) => ledger.insight[b] - ledger.insight[a])
+          .slice(0, 3)
+          .map((pool): Row => ({
+            glyph: 'insight',
+            pool,
+            name: POOLS[pool].label,
+            value: `+${ledger.insight[pool].toFixed(1)}/s`,
+            tone: 'ok',
+          })),
       ]
     }
     case 'server': {
@@ -1537,6 +1546,7 @@ class NodeView {
       const valueMark = this.valueMarks[index]
       if (!mark || !name || !value || !valueMark) return
       if (row.logo) paintLogo(mark, row.logo, colors.ink)
+      else if (row.pool) paint(mark, POOL_ICONS[row.pool], POOLS[row.pool].color)
       else paint(mark, ROW_ICONS[row.glyph], colors.muted)
       name.style.fill = row.logo ? colors.ink : colors.muted
       value.text = row.value

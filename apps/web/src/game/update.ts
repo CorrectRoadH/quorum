@@ -870,6 +870,11 @@ const eventText = (event: StepEvent, game: Game): EventNote =>
           ]
         : [`Deployed ${names}.`, 'primary', { topic: 'deployed', vars: { features: names } }]
     },
+    StudyCompleted: ({ research }): EventNote => [
+      `${RESEARCH[research].name} is researched.`,
+      'ok',
+      { topic: 'finished', vars: { item: RESEARCH[research].name } },
+    ],
     MigrationShifted: ({ step }): EventNote => [
       `${percent(MIGRATION_STEPS[step - 1] ?? 0)} of App Servers moved to the new Stack.`,
       'primary',
@@ -890,6 +895,7 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
     WorkFinished: ({ item }) => ({ kind: item.kind, ref: item.ref, cost: item.cost }),
     Deployed: ({ features, bad }) => ({ features, bad }),
     MigrationShifted: ({ step }) => ({ step }),
+    StudyCompleted: ({ research }) => ({ research }),
   })
 
 /* ---------- the clock ---------- */
@@ -2423,7 +2429,7 @@ const handle = (model: Model, message: Message): Result =>
       const action = model.game.postmortems.find((entry) => entry.id === id)?.action
       return act(model, 'Postmortem', Actions.filePostmortem(model.game, id, take), {
         note: () =>
-          take && action ? [`Action item done: ${RESEARCH[action].name}.`, 'primary'] : null,
+          take && action ? [`Study queued: ${RESEARCH[action].name}.`, 'primary'] : null,
       })
     },
 
@@ -2631,7 +2637,15 @@ const handle = (model: Model, message: Message): Result =>
     CheatInsight: () => ({
       model: {
         ...model,
-        game: { ...model.game, insight: model.game.insight + cheatInsight(model.game) },
+        game: {
+          ...model.game,
+          pools: Object.fromEntries(
+            Object.entries(model.game.pools).map(([pool, held]) => [
+              pool,
+              held + cheatInsight(model.game),
+            ]),
+          ) as Game['pools'],
+        },
       },
     }),
     CheatLegacy: () => {

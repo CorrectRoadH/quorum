@@ -28,11 +28,19 @@ import {
   UsersRound,
   Wallet,
 } from 'lucide'
-import { OPEN_REGION_PRICE, REGIONS, REGION_INFO, researchList } from '@quorum/simulation/catalog'
+import {
+  OPEN_REGION_PRICE,
+  RECIPE,
+  REGIONS,
+  REGION_INFO,
+  RESEARCH,
+  researchList,
+} from '@quorum/simulation/catalog'
 import { openRegions, regional } from '@quorum/simulation/regions'
 import { canRaise } from '@quorum/simulation/actions'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@quorum/simulation/lookups'
+import { limitingPool } from '@quorum/simulation/studies'
 import { PRE_IPO_STAGE, checklistOf } from '@quorum/simulation/ipo'
 import {
   GUIDANCE_GROWTH,
@@ -49,11 +57,23 @@ import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/g
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { offCompany, type Model } from '@/game/model.ts'
+import { POOL_ORDER } from '@/game/pools.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { CHIPS, FIGURE, PANEL, WELL, type Tone, meter, ring, tool, toneText } from './bits.ts'
+import {
+  CHIPS,
+  FIGURE,
+  PANEL,
+  WELL,
+  type Tone,
+  insightChip,
+  meter,
+  ring,
+  tool,
+  toneText,
+} from './bits.ts'
 
 /* ==========================================================================
    The HUD: the company at a glance on the left, the controls on the right,
@@ -127,6 +147,59 @@ const stat = (
         : h.empty,
     ],
   )
+
+/**
+ * Insight: the pools the running Study takes from, or else the three the
+ * Design earns most, each with its icon and what it holds.
+ */
+const insight = (game: Model['game'], ledger: Ledger, h: HtmlBuilder<Message>): Html => {
+  const running = game.studies[0]
+  const pools = running
+    ? POOL_ORDER.filter((pool) => (RECIPE[running.id][pool] ?? 0) > 0)
+    : POOL_ORDER.filter((pool) => ledger.insight[pool] > 0)
+        .toSorted((a, b) => ledger.insight[b] - ledger.insight[a])
+        .slice(0, 3)
+  const limit = running ? limitingPool(game) : null
+  return h.div(
+    [
+      h.Key('Insight'),
+      h.Title(running ? `Insight for ${RESEARCH[running.id].name}` : 'Insight'),
+      h.Class(
+        cn(
+          'enter-pop flex h-8 items-center gap-2.5 px-2.5 compact:shrink-0 compact:gap-1.5 compact:px-3',
+          CHIP_ORDER.Insight,
+        ),
+      ),
+    ],
+    [
+      icon(h, Gem, 'size-3.5 shrink-0 text-muted-foreground'),
+      h.span(
+        [h.Class('w-[46px] shrink-0 text-[11.5px] text-muted-foreground compact:hidden')],
+        ['Insight'],
+      ),
+      h.span(
+        [h.Class('flex min-w-0 items-center gap-1.5 text-[12px] leading-none')],
+        pools.length > 0
+          ? pools.map((pool) =>
+              insightChip(
+                pool,
+                compact(game.pools[pool]),
+                h,
+                false,
+                pool === limit && ledger.insight[pool] <= 0 ? 'danger' : 'plain',
+              ),
+            )
+          : [h.span([h.Class(FIGURE)], ['0'])],
+      ),
+      running
+        ? h.span(
+            [h.Class(cn(FIGURE, 'ml-auto text-[10px] leading-none text-muted-foreground'))],
+            [`${Math.floor(running.progress * 100)}%`],
+          )
+        : h.empty,
+    ],
+  )
+}
 
 const percent = (share: number): string => `${(Math.floor(share * 10_000) / 100).toFixed(2)}%`
 
@@ -302,18 +375,7 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
             trend >= 0 ? 'ok' : 'danger',
             h,
           ),
-          shown(model, 'research')
-            ? stat(
-                'Insight',
-                Gem,
-                compact(game.insight),
-                `+${ledger.insight.toFixed(1)}/s`,
-                'plain',
-                h,
-                'Insight',
-                'enter-pop',
-              )
-            : h.empty,
+          shown(model, 'research') ? insight(game, ledger, h) : h.empty,
           stat(
             'Apdex',
             Smile,
@@ -547,9 +609,10 @@ const divider = (h: HtmlBuilder<Message>): Html =>
 
 export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.game
-  const affordable = researchList.filter(
-    (entry) => !has(game, entry.id) && researchReady(game, entry.id) && game.insight >= entry.cost,
-  ).length
+  const affordable =
+    game.studies.length > 0
+      ? 0
+      : researchList.filter((entry) => !has(game, entry.id) && researchReady(game, entry.id)).length
   return h.nav(
     [
       h.Class(

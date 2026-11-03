@@ -8,6 +8,7 @@ import {
   isUnlocked,
   researchReady,
   resizePrice,
+  insightTotal,
 } from '@quorum/simulation/lookups'
 import type { Game } from '@quorum/simulation/state'
 import type { Message } from './message.ts'
@@ -63,7 +64,7 @@ const triggered = (key: Reveal, model: Model, ledger: Ledger): boolean => {
     case 'resize':
       return resizable(game, ledger.bottleneck) !== null
     case 'research':
-      return game.insight >= cheapestResearch(game)
+      return insightTotal(game.pools) >= cheapestResearch(game)
     case 'errors':
       return ledger.errorShare > 0.001
     case 'team':

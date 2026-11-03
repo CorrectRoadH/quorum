@@ -1,4 +1,5 @@
 import { COMPONENTS } from '@quorum/simulation/catalog'
+import { insightTotal } from '@quorum/simulation/lookups'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { clockOf } from '@quorum/simulation/solve'
 import type { Game, GameNode } from '@quorum/simulation/state'
@@ -44,7 +45,7 @@ export const diffOf = (before: Game, after: Game): Record<string, unknown> => {
   }
   const diff: Record<string, unknown> = {
     cash: round(after.cash - before.cash),
-    insight: round(after.insight - before.insight),
+    insight: round(insightTotal(after.pools) - insightTotal(before.pools)),
     added: after.nodes
       .filter((node) => !ids.has(node.id))
       .map((node) => ({ id: node.id, type: node.type })),
@@ -80,7 +81,7 @@ const nodeBrief = (node: GameNode, ledger: Ledger) => {
 export const contextOf = (model: Model, ledger: Ledger): Record<string, unknown> => ({
   users: Math.round(model.game.users),
   cash: round(model.game.cash),
-  insight: round(model.game.insight, 1),
+  insight: round(insightTotal(model.game.pools), 1),
   stage: model.game.stage,
   revenue: round(ledger.revenue),
   apdex: round(ledger.apdex, 3),
@@ -117,8 +118,8 @@ export const sampleOf = (model: Model, ledger: Ledger): Record<string, unknown> 
     p50: round(ledger.p50, 1),
     p95: round(ledger.p95, 1),
     p99: round(ledger.p99, 1),
-    insight: round(model.game.insight, 1),
-    insightRate: round(ledger.insight, 2),
+    insight: round(insightTotal(model.game.pools), 1),
+    insightRate: round(insightTotal(ledger.insight), 2),
     bottleneck: bottleneck
       ? { id: bottleneck.id, type: bottleneck.type, limit: ledger.nodes[bottleneck.id]?.limit }
       : null,

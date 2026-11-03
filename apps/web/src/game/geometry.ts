@@ -27,7 +27,7 @@ export const layoutOf = (type: ComponentId): Layout => {
     case 'payments':
       return { rows: 2, inRow: null, outRow: null, footer: true }
     case 'analytics':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
+      return { rows: 5, inRow: 0, outRow: null, footer: true }
     case 'server':
       return { rows: 5, inRow: 0, outRow: 4, footer: true }
     case 'database':

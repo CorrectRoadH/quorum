@@ -72,16 +72,19 @@ import {
   type ResearchId,
   type ResearchTrack,
 } from '@quorum/simulation/catalog'
+import type { Ledger } from '@quorum/simulation/ledger'
 import { has, researchReady } from '@quorum/simulation/lookups'
 import type { Game } from '@quorum/simulation/state'
+import { limitingPool, studySeconds, studySpeed } from '@quorum/simulation/studies'
 import { compact } from '@/game/format.ts'
 import { COMPONENT_ICONS, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'
-import type { Model } from '@/game/model.ts'
+import { ledgerOf, type Model } from '@/game/model.ts'
+import { POOL_ORDER, recipeOf } from '@/game/pools.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, groupBadge } from './bits.ts'
+import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, groupBadge, insightChip } from './bits.ts'
 import { NODE_SIZE, eraName, researchLayout, type Layout, type Placed } from './research-layouts.ts'
 
 /* ==========================================================================
@@ -103,9 +106,9 @@ const stateOf = (game: Game, entry: ResearchDef): State =>
     ? 'owned'
     : !researchReady(game, entry.id)
       ? 'locked'
-      : game.insight >= entry.cost
-        ? 'buy'
-        : 'saving'
+      : game.studies.some((item) => item.id === entry.id)
+        ? 'saving'
+        : 'buy'
 
 /** The item the side pane shows: the player's pick, else the most useful next one. */
 const focusOf = (model: Model): ResearchDef => {
@@ -188,6 +191,8 @@ const LOOKS: Record<ResearchId, Look> = {
   'fw-aspnet': { group: 'compute', logo: 'aspnet' },
   'fw-phoenix': { group: 'compute', logo: 'phoenix' },
   tracing: { group: 'ops', glyph: Route, hue: 185 },
+  'trace-search': { group: 'ops', glyph: Route, hue: 200 },
+  notebooks: { group: 'ops', glyph: Route, hue: 215 },
   'cert-automation': { group: 'edge', glyph: FileBadge, hue: 120 },
   checkout: { component: 'psp' },
   'tiered-caching': { group: 'edge', glyph: Layers, hue: 170 },
@@ -284,7 +289,7 @@ const NODE_CLASS: Record<State, string> = {
   locked: 'border border-dashed border-border bg-canvas hover:bg-foreground/[0.03]',
 }
 
-/** The price, or a check once researched. Affordable: a filled pill, the one loud thing on the tree. */
+/** The recipe as pool chips, or a check once researched. */
 const price = (entry: ResearchDef, state: State, grey: boolean, h: HtmlBuilder<Message>): Html =>
   state === 'owned'
     ? h.span(
@@ -294,19 +299,61 @@ const price = (entry: ResearchDef, state: State, grey: boolean, h: HtmlBuilder<M
     : h.span(
         [
           h.Class(
-            cn(
-              FIGURE,
-              'flex w-fit items-center gap-1 text-[11px]',
-              state === 'buy'
-                ? '-ml-0.5 rounded-md bg-primary-fill px-1.5 text-on-primary-fill shadow-primary'
-                : grey
-                  ? 'text-muted-foreground'
-                  : 'text-foreground',
-            ),
+            cn('flex w-fit items-center gap-2 text-[11px]', grey ? 'text-muted-foreground' : ''),
           ),
         ],
-        [state === 'locked' ? icon(h, Lock, 'size-2.5') : h.empty, `${compact(entry.cost)} ◆`],
+        [
+          state === 'locked' ? icon(h, Lock, 'size-2.5') : h.empty,
+          ...recipeOf(entry.id).map(([pool, cost]) => insightChip(pool, compact(cost), h, grey)),
+        ],
       )
+
+/** A Study's duration at the current speed, such as "4 min". */
+const duration = (game: Game, entry: ResearchDef): string => {
+  const seconds = studySeconds(entry.id) / studySpeed(game)
+  return seconds < 90 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`
+}
+
+/** Each pool of the recipe: what it costs, what the pool holds, and what it earns. */
+const costRows = (
+  game: Game,
+  ledger: Ledger,
+  entry: ResearchDef,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const running = game.studies[0]?.id === entry.id
+  const limit = running ? limitingPool(game) : null
+  return h.div(
+    [h.Class('flex flex-col gap-1')],
+    [
+      h.span([h.Class(cn(EYEBROW, 'px-2'))], [`Cost · ${duration(game, entry)}`]),
+      ...recipeOf(entry.id).map(([pool, cost]) =>
+        h.div(
+          [h.Key(pool), h.Class(cn(FIGURE, 'flex items-center gap-2 px-2 text-[12px]'))],
+          [
+            insightChip(pool, compact(cost), h),
+            h.span(
+              [h.Class('ml-auto text-muted-foreground')],
+              [`${compact(game.pools[pool])} held`],
+            ),
+            h.span(
+              [
+                h.Class(
+                  cn(
+                    'w-[64px] text-right',
+                    ledger.insight[pool] > 0 ? 'text-ok' : 'text-warn',
+                    pool === limit ? 'font-semibold' : '',
+                  ),
+                ),
+              ],
+              [`+${ledger.insight[pool].toFixed(1)}/s`],
+            ),
+          ],
+        ),
+      ),
+    ],
+  )
+}
 
 /** A card's icon, name and price or status; `grey` draws it uncoloured. */
 const face = (
@@ -344,7 +391,7 @@ const face = (
 
 /** A card node. Saving up: the card is the progress bar, a coloured copy wiping in from the left. */
 const card = (game: Game, entry: ResearchDef, state: State, h: HtmlBuilder<Message>) => {
-  const share = Math.min(1, game.insight / entry.cost)
+  const share = Math.min(1, game.studies.find((item) => item.id === entry.id)?.progress ?? 0)
   const color = colorOf(LOOKS[entry.id])
   return state === 'saving'
     ? [
@@ -699,6 +746,7 @@ const linkRow = (game: Game, entry: ResearchDef, h: HtmlBuilder<Message>): Html 
 
 const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
   const game = model.game
+  const queued = game.studies.findIndex((item) => item.id === entry.id)
   const state = stateOf(game, entry)
   const open = state !== 'owned' && game.openActions.includes(entry.id)
   const track = RESEARCH_TRACKS.find((item) => item.key === entry.track)?.label ?? ''
@@ -707,12 +755,14 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
     state === 'owned'
       ? 'Researched'
       : state === 'buy'
-        ? `Research · ${compact(entry.cost)} ◆`
+        ? `Start Study · ${duration(game, entry)}`
         : entry.era > game.stage
           ? `Opens in ${eraName(entry.era)}`
           : missing.length > 0
             ? `Needs ${missing.map((id) => RESEARCH[id].name).join(', ')}`
-            : `${compact(entry.cost - game.insight)} ◆ more`
+            : queued > 0
+              ? `Queued · ${queued + 1} of ${game.studies.length}`
+              : `Studying · ${Math.floor((game.studies[0]?.progress ?? 0) * 100)}%`
   const follow = followUps(entry.id)
   return h.aside(
     [
@@ -758,6 +808,7 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
                 ],
               )
             : h.empty,
+          state === 'owned' ? h.empty : costRows(game, ledgerOf(model), entry, h),
           entry.requires.length > 0
             ? h.div(
                 [h.Class('flex flex-col gap-1')],
@@ -850,11 +901,10 @@ export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
             [
               h.span([h.Class('text-[17px] font-semibold tracking-[-0.025em]')], ['Research']),
               h.span(
-                [h.Class(cn(FIGURE, 'flex items-baseline gap-1.5 text-[15px]'))],
-                [
-                  compact(model.game.insight),
-                  h.span([h.Class('text-[11px] text-muted-foreground')], ['Insight ◆']),
-                ],
+                [h.Class('flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]')],
+                POOL_ORDER.filter((pool) => model.game.pools[pool] >= 1).map((pool) =>
+                  insightChip(pool, compact(model.game.pools[pool]), h),
+                ),
               ),
             ],
           ),

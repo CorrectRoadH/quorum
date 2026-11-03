@@ -85,7 +85,7 @@ export const Away = Schema.Struct({
   usersBefore: Schema.Finite,
   usersAfter: Schema.Finite,
   cash: Schema.Finite,
-  insight: Schema.Finite,
+  studied: Schema.Array(ResearchId),
   devHours: Schema.Finite,
   peak: Schema.Finite,
   peakHour: Schema.Finite,
