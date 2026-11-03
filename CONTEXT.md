@@ -270,7 +270,7 @@ A hired person who produces Dev Hours. The founder is the first Engineer.
 _Avoid_: worker, developer, employee
 
 **Dev Hours**:
-The currency of engineering work, spent on Features, tasks, migrations, and debt paydown.
+The currency of engineering work, spent on Features, tasks, migrations, Spikes, and debt paydown.
 _Avoid_: DH points, effort, time
 
 **Feature**:
@@ -292,6 +292,10 @@ _Avoid_: impact, uplift, result
 **Upkeep**:
 The share of a Service's Dev Hours that keeps its live Features running.
 _Avoid_: maintenance tax, KTLO, overhead
+
+**Spike**:
+A Team's work on the running Study. It doubles the Study's speed and takes the Team's Dev Hours until the Study completes.
+_Avoid_: research task, crunch, boost
 
 **Tech debt**:
 A per-Service percentage that slows Dev Hours and raises Incident chances until paid down.
@@ -316,12 +320,20 @@ Where Revenue waits until the player collects it, until research automates colle
 _Avoid_: collector, wallet, pending
 
 **Insight**:
-The research currency, earned from sampled traffic.
+The research currency, earned from sampled traffic. It has a request kind: a sampled `read` gives `read` Insight. The Company holds one pool per request kind and a Failure pool.
 _Avoid_: science, research points, XP
+
+**Failure Insight**:
+Insight from sampled requests that fail or frustrate users, of any request kind. Reliability research costs it.
+_Avoid_: error points, incident Insight
 
 **Analytics**:
 The Component that samples the traffic of linked Nodes and produces Insight.
 _Avoid_: telemetry node, research node
+
+**Retention**:
+How long Analytics keeps traces. It caps each Insight pool at that window of the pool's live rate.
+_Avoid_: storage limit, bank, cap (in UI copy)
 
 **Research**:
 An unlock bought with Insight: a Component, a variant, a technique, or more visibility.
@@ -334,6 +346,14 @@ _Avoid_: monitoring screen, Grafana (in UI copy), stats page
 **Chart**:
 One graph or number on the Dashboard, such as p99 latency or error budget left.
 _Avoid_: panel (that is a side panel such as the Inspector), widget, tile
+
+**Recipe**:
+The Insight pools that pay a Research item's cost, split equally.
+_Avoid_: price list, ingredients, requirements
+
+**Study**:
+The run of one Research item. It takes its Insight over its duration, and its effect starts when it completes. One runs at a time.
+_Avoid_: research job, project, timer
 
 **Tradeoff card**:
 The forced choice shown when the player picks an option, with its six-axis profile and a preview on the player's own Design.
@@ -406,7 +426,7 @@ _Avoid_: leaderboard, ranking, high score
 - A **Node** is a copy of one **Component**. Compute Nodes run a **Stack** and belong to a **Service**.
 - A **Service** is owned by one **Team**. **Engineers** in Teams produce **Dev Hours**.
 - The **Simulation** turns the Design into the **Ledger** each **Step**. Every number on screen comes from the Ledger.
-- **Analytics** turns sampled traffic into **Insight**. Insight buys **Research**.
+- **Analytics** turns sampled traffic into **Insight** of each request kind. A **Study** takes Insight from its **Recipe**'s pools and completes a **Research** item. A **Spike** puts a **Team** on the running Study.
 - An **Exit** turns **Equity** × **Valuation** into **Legacy**.
 - The **Founder** keeps **Legacy**, **Perks**, and **Playbooks** from one **Company** to the next.
 - A **Sandbox track** holds guided **Sandboxes** for one **Era**. **Challenges** form a separate sequence across Eras; completing one opens the next.

@@ -32,7 +32,7 @@ ramp-up, and deploys. The live game runs the Team's calendar 24× faster than th
 | `error_budget_factor` | 1.1 with budget to spare, 1.0 normally, 0.5 during a freeze ([Incidents](./11-incidents.md#slos-and-error-budgets)). |
 | `upkeep_share`        | The share that keeps live Features running ([Upkeep](#upkeep)).                                                      |
 
-Dev Hours are spent on five kinds of work:
+Dev Hours are spent on six kinds of work:
 
 | Work              | Examples                                                         | Section                                 |
 | ----------------- | ---------------------------------------------------------------- | --------------------------------------- |
@@ -41,6 +41,7 @@ Dev Hours are spent on five kinds of work:
 | Migrations        | Change a service's language, split a service, move auth in-house | [Migrations](#migrations)               |
 | Debt paydown      | Refactoring sprints                                              | [Tech debt](#tech-debt)                 |
 | Upkeep            | Bug fixes, dependency updates, support for live Features         | [Upkeep](#upkeep)                       |
+| Spikes            | Make the running Study faster                                    | [Spikes](#spikes)                       |
 
 Work items sit in a **backlog** with a priority order. Engineers work on the top items in parallel,
 up to one item per team at a time.
@@ -286,6 +287,17 @@ Tasks are DH spent on the system instead of the product. Many come from incident
 | Health check endpoint       | 4   | Enables deep health checks.                                                 |
 | Write a runbook             | 10  | Enables automatic mitigation for one incident type (with an SRE team).      |
 | Load test                   | 15  | Shows the capacity of each Node at 2× current demand, for one calendar day. |
+
+## Spikes
+
+A **Spike** is a Team's time-boxed work on the running Study
+([Progression](./10-progression.md#studies)). The player adds it to a Team's backlog like a task.
+While the Team works on it, the Study runs at 2× speed, and the Team's Dev Hours go to the Spike
+instead of to Features or tasks. The Spike ends when its Study completes or the player removes it.
+Only one Team can spike a Study.
+
+So research competes with the product for engineers, as it does at real companies. A player who
+needs `caching` now can buy it with a Team's time instead of waiting.
 
 ## Migrations
 

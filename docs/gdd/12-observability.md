@@ -9,7 +9,7 @@ of war for systems.
 
 Observability does two jobs:
 
-1. It produces **Insight**, the research currency.
+1. It produces **Insight**, the research currency, in one pool per request kind.
 2. It decides what the player can **see**.
 
 ## Earning Insight
@@ -17,40 +17,77 @@ Observability does two jobs:
 **Analytics** is a tap ([Components](./05-components.md#analytics)). Each Node linked into it sends a
 sample of its traffic.
 
+Insight has a request kind. A sampled `read` gives `read` Insight, a sampled `buy` gives `buy`
+Insight, and so on. The Company holds one pool for each of the 16 request kinds and one **Failure**
+pool. Research costs Insight from named pools ([Progression](./10-progression.md#research)), so a
+new Era's research needs that Era's traffic. This is the Factorio science pack pattern, with request
+kinds as the packs ([Influences](./02-influences.md#research-in-factory-games)).
+
 ```text
-sampled_rps(node)  = λ(node) × sample_rate
-insight_per_second = Σ_nodes sampled_rps(node) × yield(kind) × multipliers
+sampled(c, kind)  = Σ tapped Nodes of Component c: λ(node, kind) × sample_rate
+insight(kind)     = yield × Σ Component types c: √sampled(c, kind) × multipliers(c)
+insight(Failure)  = yield × Σ Component types c: √failed(c) × multipliers(c)
 ```
 
-| Term          | Value                                                                                                          |
-| ------------- | -------------------------------------------------------------------------------------------------------------- |
-| `sample_rate` | A setting: 1%, 5%, 10% (default), 50%, or 100%.                                                                |
-| `yield(kind)` | 0.5 Insight per sampled request, × 2 for failed or slow requests (they teach more), × 0 for `bot`.             |
-| Multipliers   | JVM services +25% ([Runtimes](./06-runtimes.md#java)), Service Mesh +20%, `tail-sampling` × 2 for kept traces. |
+| Term             | Value                                                                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sample_rate`    | A setting: 1%, 5%, 10% (default), 50%, or 100%.                                                                                                                                      |
+| `λ(node, kind)`  | The requests of that request kind that reach the Node. A request keeps its request kind on every hop: the `q-read` a `read` sends counts as `read`.                                  |
+| `failed(c)`      | The sampled requests at Component c that fail or frustrate the user, plus half of those that only tolerate it ([Apdex](./04-simulation.md#apdex-and-revenue)). `bot` is not counted. |
+| `yield`          | 1 ([Balancing](./16-balancing.md#constants)).                                                                                                                                        |
+| `multipliers(c)` | JVM services +25% ([Runtimes](./06-runtimes.md#java)), Service Mesh +20%, the Pattern recognition Perk +20% per level, `tail-sampling` × 2 on Failure.                               |
 
 Analytics has a capacity in samples per second. Samples beyond it are dropped.
+
+The rules behind the formula:
+
+- **The square root rewards a broad Design.** Insight grows with the square root of the traffic, so
+  four times the traffic gives two times the Insight. Each Component type and each request kind is
+  its own term, so a Design that samples a `read` at the Load Balancer, the App Server, the Cache,
+  and the Database learns four times as much as one that samples it at one Node.
+- **The sum is per Component type, not per Node.** Ten App Servers make one term. Splitting a Node
+  into many Nodes teaches nothing new.
+- **`bot` Insight is real.** Bots teach how bots behave. Only security research asks for it.
+- **Failure Insight comes from failures.** Reliability research asks for it, so the player learns
+  reliability by seeing failures, as real teams do. Failures also cost users, revenue, and error
+  budget, so failing on purpose is a bad trade. Postmortems still pay no Insight
+  ([Incidents](./11-incidents.md#postmortems)).
 
 ### The cost of seeing
 
 Sampling is not free. That is real, and observability bills are a common surprise.
 
-| Sample rate | CPU overhead on tapped Nodes | Storage Burn | Insight |
-| ----------- | ---------------------------- | ------------ | ------- |
-| 1%          | +0.1%                        | 0.1×         | 0.1×    |
-| 10%         | +1%                          | 1×           | 1×      |
-| 50%         | +3%                          | 5×           | 5×      |
-| 100%        | +5%                          | 10×          | 10×     |
+| Sample rate | CPU overhead on tapped Nodes | Latency per tapped hop | Storage Burn | Insight |
+| ----------- | ---------------------------- | ---------------------- | ------------ | ------- |
+| 1%          | +0.2%                        | +0 ms                  | 0.1×         | 0.32×   |
+| 5%          | +1%                          | +0.5 ms                | 0.5×         | 0.71×   |
+| 10%         | +2%                          | +1 ms                  | 1×           | 1×      |
+| 50%         | +8%                          | +3 ms                  | 5×           | 2.24×   |
+| 100%        | +15%                         | +5 ms                  | 10×          | 3.16×   |
 
-So the player chooses: more Insight now, or more capacity and less Burn. Research `tail-sampling`
-improves the deal by keeping the interesting traces.
+Ten times the samples gives about three times the Insight, and it costs capacity and Apdex while it
+is on. A high sample rate is a choice to learn faster at a known price, not free Insight.
+
+### Retention
+
+Analytics keeps traces for a window: 15 minutes (default), 1 hour, or 6 hours of sim time. A
+longer window multiplies the tap's Storage Burn by 1, 2, or 4.
+
+```text
+cap(pool) = max(100, retention_window × insight(pool))
+```
+
+Insight above a pool's cap is not added. The cap follows the live rate, so the player cannot save
+up a large balance and buy a whole Era when it opens. Grants ignore the cap.
 
 ### Other Insight sources
 
-| Source              | Amount                                                       |
-| ------------------- | ------------------------------------------------------------ |
-| Load tests          | A one-time grant per test                                    |
-| Chaos experiments   | A grant per experiment that finds a weakness                 |
-| First time per kind | A one-time grant the first time the design serves a new kind |
+| Source              | Amount                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| Load tests          | A one-time grant per test, to the pools of the kinds the test sends                        |
+| Chaos experiments   | A Failure grant per experiment that finds a weakness                                       |
+| DR drill            | A Failure grant when the drill passes                                                      |
+| First time per kind | 20 Insight of that kind, the first time the Design serves more than 50% of it successfully |
 
 ## The visibility ladder
 
@@ -64,7 +101,7 @@ improves the deal by keeping the interesting traces.
 | 5    | `tracing`           | Seed     | Click a request kind to see a waterfall of its path: time per hop, waiting versus working. The bottleneck marker works per kind.                                 |
 | 6    | `slo-dashboards`    | Series A | The error budget panel and burn rate.                                                                                                                            |
 | 7    | `profiling`         | Series A | Each card names its limiting resource: CPU, workers, memory, connections, network, GC, or event-loop blocking ([Runtimes](./06-runtimes.md#the-capacity-model)). |
-| 8    | `tail-sampling`     | Series B | Slow and failed traces are kept; Insight doubles for them.                                                                                                       |
+| 8    | `tail-sampling`     | Series B | Slow and failed traces are kept; Failure Insight doubles.                                                                                                        |
 | 9    | `rum`               | Series C | Latency per region and device, from the user's side, including the internet hop.                                                                                 |
 | 10   | `anomaly-detection` | Series C | Warnings before an incident peaks, and a forecast of tomorrow's peak.                                                                                            |
 
