@@ -1188,6 +1188,8 @@ class NodeView {
   held = false
   private hold = 0
   private selected = false
+  /** Off the focused path: the card fades back. */
+  dim = false
   private selection = 0
   private accent = 0
 
@@ -1264,6 +1266,8 @@ class NodeView {
       this.root.alpha = t
       scale = 0.96 + 0.04 * t
     }
+    if (this.leaving < 0 && this.age >= ENTER_S)
+      this.root.alpha += ((this.dim ? DIM : 1) - this.root.alpha) * follow(seconds, 16, still)
     // A held card stays under the pointer; a released one eases into its grid cell.
     const at = this.at ?? this.target
     const k = follow(seconds, this.lifted ? 38 : 16, still)
@@ -1612,6 +1616,9 @@ class NodeView {
  * covers an earlier one's chevrons where they share a trunk. The body and the mouths
  * are redrawn only when their path or colours change; the chevrons only while they move.
  */
+/** How far a card or belt off the focused path fades. */
+const DIM = 0.3
+
 class BeltView {
   readonly root = new Container()
   private readonly body = new Graphics()
@@ -1729,6 +1736,8 @@ class BoardController {
   private hoverLink: Readonly<{ from: string; to: string }> | null = null
   /** The link a click picked: Delete or its × badge cuts it. A click never cuts by itself. */
   private selectedLink: Readonly<{ from: string; to: string }> | null = null
+  /** The Node under the pointer: with the selected one, it lights its whole path. */
+  private hoverNode: string | null = null
   private pointer: Pt = { x: 0, y: 0 }
   /** Fingers and pens on the board, in client coordinates. Two of them pinch. */
   private readonly touches = new Map<number, Pt>()
@@ -2277,6 +2286,7 @@ class BoardController {
         }
         // A port wins over the link leaving it: pulling a wire is not a cut.
         this.hoverLink = this.nodeAt(point) || this.outPortAt(point) ? null : this.linkAt(point)
+        this.hoverNode = this.nodeAt(point)?.id ?? null
         canvas.style.cursor = this.outPortAt(point)
           ? 'crosshair'
           : this.nodeAt(point)
@@ -2367,7 +2377,14 @@ class BoardController {
     }
     canvas.addEventListener('pointerup', (event) => finish(event, false), { signal })
     canvas.addEventListener('pointercancel', (event) => finish(event, true), { signal })
-    canvas.addEventListener('pointerleave', () => (this.hoverLink = null), { signal })
+    canvas.addEventListener(
+      'pointerleave',
+      () => {
+        this.hoverLink = null
+        this.hoverNode = null
+      },
+      { signal },
+    )
     window.addEventListener(
       'keydown',
       (event) => {
@@ -2429,6 +2446,7 @@ class BoardController {
     if (!state) return
     const colors = palette()
     const live = new Set<string>()
+    const path = this.pathOf(state)
     for (const node of this.nodes()) {
       live.add(node.id)
       let view = this.views.get(node.id)
@@ -2448,6 +2466,7 @@ class BoardController {
         state.history[node.id] ?? [],
         state.region,
       )
+      view.dim = path !== null && !path.has(node.id)
     }
     for (const [id, view] of this.views) {
       if (live.has(id)) continue
@@ -2456,6 +2475,29 @@ class BoardController {
       this.views.delete(id)
     }
     this.seeded = true
+  }
+
+  /** The Nodes upstream and downstream of the hovered or selected Node, itself included;
+   *  null when none is in focus, so nothing is dimmed. */
+  private pathOf(state: BoardState): ReadonlySet<string> | null {
+    const focus = this.hoverNode ?? state.selected
+    if (!focus || !state.game.nodes.some((node) => node.id === focus)) return null
+    const reach = (next: (link: { from: string; to: string }) => readonly [string, string]) => {
+      const seen = new Set([focus])
+      const queue = [focus]
+      for (let id = queue.pop(); id !== undefined; id = queue.pop())
+        for (const link of state.game.links) {
+          const [at, to] = next(link)
+          if (at === id && !seen.has(to)) {
+            seen.add(to)
+            queue.push(to)
+          }
+        }
+      return seen
+    }
+    const down = reach((link) => [link.from, link.to])
+    const up = reach((link) => [link.to, link.from])
+    return new Set([...down, ...up])
   }
 
   /** One belt per link, stacked in the Model's link order, with the splitters on top. */
@@ -2531,6 +2573,7 @@ class BoardController {
       else this.fresh.set(key, age + seconds)
     const rates = new Map(state.ledger.links.map((link) => [`${link.from}>${link.to}`, link]))
 
+    const focus = this.pathOf(state)
     this.packets.clear()
     this.overlay.clear()
     this.syncBelts(state.game.links)
@@ -2543,6 +2586,9 @@ class BoardController {
       const to = byId.get(link.to)
       if (belt) belt.root.visible = from !== undefined && to !== undefined
       if (!belt || !from || !to) continue
+      // Off the focused path, a belt fades back.
+      const off = focus !== null && !(focus.has(link.from) && focus.has(link.to))
+      belt.root.alpha = off ? DIM : 1
       const age = this.fresh.get(`${link.from}>${link.to}`)
       const wire = this.wireOf(from, to)
       // A new link draws out of its port before anything flows along it.
@@ -2609,7 +2655,7 @@ class BoardController {
           continue
         }
       }
-      if (!flow || !busy) continue
+      if (!flow || !busy || off) continue
       const length = lengthOf(path)
       const count = Math.max(
         1,
