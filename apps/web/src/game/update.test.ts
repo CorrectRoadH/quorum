@@ -444,3 +444,24 @@ describe('progressive disclosure', () => {
     expect(kept.pending).toEqual(['team'])
   })
 })
+
+test('tidying the board groups nodes into a band per zone, in flow order', () => {
+  const game = newGame()
+  const [first, second, third] = game.nodes
+  const model: Model = {
+    ...inLab(),
+    game: {
+      ...game,
+      links: [{ ...game.links[0]!, from: 'p', to: 'q' }],
+      nodes: [
+        { ...first!, id: 'q', type: 'server', zone: 'a', x: 40, y: 500 },
+        { ...second!, id: 'p', type: 'server', zone: 'a', x: 400, y: 300 },
+        { ...third!, id: 'r', type: 'server', zone: 'b', x: 10, y: 50 },
+      ],
+    },
+  }
+  const [q, p, r] = update(model, Message.BoardTidied()).model.game.nodes
+  expect(p!.x).toBeLessThan(q!.x)
+  expect(p!.y).toBe(q!.y)
+  expect(r!.y).toBeGreaterThan(q!.y)
+})

@@ -88,6 +88,7 @@ export const Message = defineMessageUnion({
   KeyPressed: { key: Schema.String },
   FullscreenToggled: {},
   BoardFitted: {},
+  BoardTidied: {},
 
   BuildGroupChosen: { group: BuildGroupKey },
   PlacingChosen: { type: Schema.NullOr(ComponentId) },

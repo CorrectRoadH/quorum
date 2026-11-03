@@ -15,6 +15,7 @@ import {
   Pause,
   Play,
   Rocket,
+  LayoutGrid,
   Scan,
   ShieldCheck,
   Smile,
@@ -941,6 +942,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
         [`${model.speed}×`],
       ),
       divider(h),
+      toolButton('Tidy by zone', LayoutGrid, Message.BoardTidied(), false, h),
       toolButton('Fit the board', Scan, Message.BoardFitted(), false, h),
       h.div(
         [h.Class('contents narrow:hidden')],

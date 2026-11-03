@@ -106,7 +106,7 @@ import {
 } from './mail.ts'
 import type { EventMail } from './copy/index.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
-import { eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
+import { eraOf, has, isFinalEra, nextEra, zoned } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
 import {
   advanceSandbox,
@@ -166,7 +166,7 @@ import {
 } from './feedback.ts'
 import { cueOf } from './cues.ts'
 import { stressBoard } from './stress.ts'
-import { CARD_W, boxOf, freeSpot, heightOf } from './geometry.ts'
+import { CARD_W, boxOf, freeSpot, heightOf, tidy } from './geometry.ts'
 import { alertText, duration } from './format.ts'
 import { Message } from './message.ts'
 import {
@@ -1694,6 +1694,22 @@ const handle = (model: Model, message: Message): Result =>
     },
     FullscreenToggled: () => ({ model, commands: [ToggleFullscreen({})] }),
     BoardFitted: () => ({ model, commands: [FitBoard({})] }),
+    BoardTidied: () => {
+      const view = regionView(model.game, model.region)
+      const nodes = view.nodes.map((node) => ({
+        ...node,
+        group: zoned(node) ? node.zone : 'all',
+      }))
+      const spots = tidy(nodes, view.links, ['all', 'a', 'b', 'c'])
+      const game = [...spots].reduce(
+        (game, [id, spot]) => Actions.move(game, id, spot.x, spot.y),
+        model.game,
+      )
+      const tidied = act(model, 'Tidied the board by zone', Result.succeed(game), {
+        undoable: true,
+      })
+      return { ...tidied, commands: [...(tidied.commands ?? []), FitBoard({})] }
+    },
 
     KeyPressed: ({ key }) => {
       if (!onBoard(model.route)) return key === 'Escape' ? { model } : clockIn(model)
