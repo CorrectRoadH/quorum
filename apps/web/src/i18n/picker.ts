@@ -1,29 +1,34 @@
 import type { HtmlBuilder } from 'foldkit/html'
+import { nativeSelect } from '../components/ui/native-select.ts'
 import { Message } from '../game/message.ts'
-import type { Locale } from './index.ts'
+import { supportedLocales, type Locale } from './index.ts'
 
 /** Always reachable, including before clock-in and while a company is paused. */
 export const languagePicker = (locale: Locale, onBoard: boolean, h: HtmlBuilder<Message>) =>
   h.div(
     [
+      // The title owns a local dark palette; this sibling needs the same scope.
       h.Class(
-        `fixed z-50 flex gap-1 rounded-lg border border-hairline bg-background/95 p-1 text-xs shadow-sm ${onBoard ? 'bottom-2 left-3 compact:bottom-20' : 'top-8 right-8'}`,
+        `fixed z-50 text-foreground ${onBoard ? 'bottom-2 left-3 compact:bottom-20' : 'dark scheme-dark top-8 right-8 compact:top-4 compact:right-4'}`,
       ),
-      h.Role('group'),
-      h.AriaLabel('Language'),
     ],
-    (['en', 'zh-CN'] as const).map((choice) =>
-      h.button(
-        [
-          h.Type('button'),
-          h.AriaPressed(locale === choice ? 'true' : 'false'),
-          h.Attribute('lang', choice),
-          h.OnClick(Message.LocaleChosen({ locale: choice })),
-          h.Class(
-            `rounded-md px-2 py-1 focus-visible:outline-2 ${locale === choice ? 'bg-muted font-semibold' : 'text-muted-foreground hover:bg-muted'}`,
+    [
+      nativeSelect(
+        {
+          id: 'interface-language',
+          label: 'Language',
+          labelClass: 'sr-only',
+          value: locale,
+          className: 'min-w-32 cursor-pointer',
+          onChange: (value) =>
+            Message.LocaleChosen({
+              locale: supportedLocales.find((choice) => choice.value === value)?.value ?? locale,
+            }),
+          options: supportedLocales.map((choice) =>
+            h.option([h.Value(choice.value), h.Attribute('lang', choice.value)], [choice.label]),
           ),
-        ],
-        [choice === 'en' ? 'English' : '简体中文'],
+        },
+        h,
       ),
-    ),
+    ],
   )

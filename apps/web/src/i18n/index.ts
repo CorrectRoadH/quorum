@@ -2,7 +2,12 @@ import { Schema } from 'effect'
 import type { Html } from 'foldkit/html'
 import { zhCN } from './zh-CN.ts'
 
-export const Locale = Schema.Literals(['en', 'zh-CN'])
+export const supportedLocales = [
+  { value: 'en', label: 'English' },
+  { value: 'zh-CN', label: '简体中文' },
+] as const
+
+export const Locale = Schema.Literals(supportedLocales.map(({ value }) => value))
 export type Locale = typeof Locale.Type
 
 const patterns = Object.entries(zhCN)

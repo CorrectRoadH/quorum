@@ -73,7 +73,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Users grow while Apdex beats the Era target, and leave fast when it does not.':
     'Apdex 超过当前阶段的目标时，用户会增长；达不到目标时，用户会迅速流失。',
   'At the user target, take or decline the round. Pre-seed brings writes, logins and incidents.':
-    '达到用户目标后，可接受或拒绝融资。进入种子前轮后，将出现写入、登录和故障。',
+    '达到用户目标后，可接受或拒绝融资。进入天使轮后，将出现写入、登录和故障。',
   Company: '公司',
   Venture: '创业方向',
   Mutators: '变体规则',
@@ -82,7 +82,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   Found: '创办',
   Bootstrapped: '自力更生',
   Garage: '车库创业',
-  'Pre-seed': '种子前轮',
+  'Pre-seed': '天使轮',
   Seed: '种子轮',
   'Series A': 'A 轮',
   'Series B': 'B 轮',
@@ -323,7 +323,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'No Exits yet': '尚无退出记录',
   'Not yet': '尚未达成',
   'Start a company': '创办公司',
-  'Start in Pre-seed': '从种子前轮开始',
+  'Start in Pre-seed': '从天使轮起步',
   'Insert badge': '插入工牌',
   'Clocked in': '已打卡',
   'Title screen': '返回标题页',
