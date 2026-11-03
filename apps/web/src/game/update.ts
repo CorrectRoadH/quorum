@@ -155,6 +155,7 @@ import {
 } from './commands.ts'
 import {
   STABLE_TICKS,
+  UNDO_SECONDS,
   advanceChange,
   beginChange,
   deltaExpired,
@@ -165,10 +166,10 @@ import {
   undoGame,
   type Reversal,
 } from './feedback.ts'
-import { cueOf } from './cues.ts'
+import { BIG_PURCHASE, cueOf } from './cues.ts'
 import { stressBoard } from './stress.ts'
 import { CARD_W, boxOf, freeSpot, heightOf, tidy } from './geometry.ts'
-import { alertText, duration } from './format.ts'
+import { alertText, duration, money } from './format.ts'
 import { Message } from './message.ts'
 import {
   ledgerOf,
@@ -2025,12 +2026,18 @@ const handle = (model: Model, message: Message): Result =>
         Actions.resize(model.game, nodeId, direction),
         {
           undoable: true,
-          note: () => [
-            sized
-              ? `${COMPONENTS[node.type].name} is ${SIZES[size]?.name ?? size}. It restarts cold.`
-              : `${COMPONENTS[node.type].name} is size ${size}.`,
-            'ok',
-          ],
+          note: (game) => {
+            const spent = model.game.cash - game.cash
+            return [
+              (spent >= BIG_PURCHASE ? 'Upgrade complete! ' : '') +
+                (sized
+                  ? `${COMPONENTS[node.type].name} is ${SIZES[size]?.name ?? size}. It restarts cold.`
+                  : `${COMPONENTS[node.type].name} is size ${size}.`) +
+                // A one-click purchase says how to take it back (16 D17).
+                (spent > 0 ? ` Undo (Z) refunds ${money(spent)} for ${UNDO_SECONDS} s.` : ''),
+              'ok',
+            ]
+          },
         },
       )
     },

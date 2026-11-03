@@ -48,6 +48,38 @@ describe('undo', () => {
     expect(undone.game.cash).toBe(start.game.cash)
     expect(undone.game.nodes.find((node) => node.id === 'server')?.size).toBe(1)
   })
+
+  test('a paid resize tells the player Undo refunds it', () => {
+    const start = inLab()
+    const resized = send(start, Message.ResizeChosen({ nodeId: 'server', direction: 1 }))
+    expect(resized.toast?.message).toContain('Undo (Z) refunds')
+  })
+
+  test('a big resize plays the purchase fanfare; a small one does not', () => {
+    const resize = (size: number): { spent: number; sound: string } => {
+      const game = newGame()
+      const start = {
+        ...inLab(),
+        game: {
+          ...game,
+          cash: 1_000_000,
+          nodes: game.nodes.map((node) => (node.id === 'server' ? { ...node, size } : node)),
+        },
+      }
+      const { model, commands } = update(
+        start,
+        Message.ResizeChosen({ nodeId: 'server', direction: 1 }),
+      )
+      const play = commands?.find((command) => command.name === 'PlaySound')
+      return { spent: start.game.cash - model.game.cash, sound: JSON.stringify(play) }
+    }
+    const small = resize(1)
+    const big = resize(4)
+    expect(small.spent).toBeLessThan(1_000)
+    expect(small.sound).not.toContain('purchase')
+    expect(big.spent).toBeGreaterThanOrEqual(1_000)
+    expect(big.sound).toContain('purchase')
+  })
 })
 
 const design = (model: Model) => ({ nodes: model.game.nodes, links: model.game.links })

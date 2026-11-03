@@ -10,6 +10,7 @@ import {
   ChevronsUp,
   Coins,
   Copy,
+  Plus,
   Gauge,
   Gem,
   HardDrive,
@@ -20,7 +21,6 @@ import {
   Layers,
   ListOrdered,
   LogIn,
-  Plus,
   RotateCcw,
   ScanLine,
   ShieldBan,
@@ -506,6 +506,17 @@ const inFooter = (node: GameNode, point: Pt): boolean => {
   const x = point.x - node.x
   const y = point.y - node.y
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h
+}
+
+/** Buying a size is held, not clicked: the fill crosses the button, and the buy lands at the end. */
+const HOLD_S = 0.6
+/** Seconds the bought-size burst plays. */
+const CHEER_S = 0.8
+
+/** The footer buys a size, so it asks to be held. */
+const holds = (game: Game, node: GameNode): boolean => {
+  const footer = footerOf(game, node)
+  return !!footer && footer.enabled && (footer.glyph === 'resize' || footer.glyph === 'more')
 }
 
 const lengthOf = (path: Route): number =>
@@ -1133,8 +1144,8 @@ const footerOf = (game: Game, node: GameNode): Footer | null => {
   return {
     glyph: analytics ? 'more' : 'resize',
     text: analytics
-      ? `More samples  ${priceLabel(game.sandbox, price)}`.trim()
-      : `Resize to ${sizeLabel(node, node.size + 1)}  ${priceLabel(game.sandbox, price)}`.trim(),
+      ? `Samples  ${priceLabel(game.sandbox, price)}`.trim()
+      : `${sizeLabel(node, node.size + 1)}  ${priceLabel(game.sandbox, price)}`.trim(),
     enabled: game.cash >= price,
     tone: game.cash >= price ? 'accent' : 'muted',
   }
@@ -1165,6 +1176,16 @@ class NodeView {
   private readonly valueMarks: Array<Sprite> = []
   private readonly foot = label(12, SANS, '600')
   private readonly footMark = glyph(14)
+  /** A ring round the footer icon of a held button; it fills clockwise as the hold does. */
+  private readonly markRing = new Graphics()
+  private ringAt: Readonly<{ x: number; y: number; ink: number }> | null = null
+  private holdShare = 0
+  /** The hold's fill across the footer button. */
+  private readonly holdFill = new Graphics()
+  private holdKey = -1
+  /** The celebration after a bought size: seconds in, or -1 when idle. */
+  private cheer = -1
+  private readonly burst = new Graphics()
   private digest = ''
   /** What each layer was last drawn for. */
   private frameKey = ''
@@ -1214,6 +1235,8 @@ class NodeView {
       this.shadow,
       this.ring,
       this.frame,
+      this.holdFill,
+      this.burst,
       this.bars,
       this.ports,
       this.medal,
@@ -1222,6 +1245,7 @@ class NodeView {
       this.level,
       this.foot,
       this.footMark,
+      this.markRing,
     )
     const glyphSize = badgeGlyph(this.group, BADGE_R)
     this.mark.setSize(glyphSize)
@@ -1253,6 +1277,67 @@ class NodeView {
     this.leaving = 0
   }
 
+  private drawMarkRing(): void {
+    const at = this.ringAt
+    this.markRing.clear()
+    if (!at) return
+    this.markRing.circle(at.x, at.y, 12).stroke({ color: at.ink, width: 1.5, alpha: 0.35 })
+    if (this.holdShare > 0)
+      this.markRing
+        .moveTo(at.x, at.y - 12)
+        .arc(at.x, at.y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * this.holdShare)
+        .stroke({ color: at.ink, width: 2.5 })
+  }
+
+  /** Fills the footer button from the left as the player holds it; 0 clears it. */
+  setHold(share: number): void {
+    const key = Math.round(share * 200)
+    if (key === this.holdKey) return
+    this.holdKey = key
+    this.holdShare = share
+    this.drawMarkRing()
+    this.holdFill.clear()
+    if (share <= 0) return
+    const { x, y, w, h } = footerRect(this.type)
+    this.holdFill
+      .roundRect(x, y + 2, Math.max(16, w * share), h, 8)
+      .fill({ color: 0xffffff, alpha: 0.32 })
+  }
+
+  /** A bought size: a gold ring blooms out of the card and the button flashes. */
+  celebrate(): void {
+    this.cheer = 0
+  }
+
+  private drawCheer(seconds: number, still: boolean): void {
+    if (this.cheer < 0) return
+    this.cheer += seconds
+    const t = Math.min(1, this.cheer / CHEER_S)
+    this.burst.clear()
+    if (t >= 1 || still) {
+      this.cheer = -1
+      return
+    }
+    const out = easeOut(t)
+    const fade = 1 - t
+    const grow = 6 + 34 * out
+    silhouette(
+      this.burst,
+      this.group,
+      -grow,
+      -grow,
+      CARD_W + grow * 2,
+      this.height + grow * 2,
+      4 + grow / 2,
+    ).stroke({
+      color: 0xf5b82e,
+      width: 4 * fade + 0.5,
+      alpha: 0.9 * fade,
+    })
+    const { x, y, w, h } = footerRect(this.type)
+    this.burst.roundRect(x, y + 2, w, h, 8).fill({ color: 0xffe08a, alpha: 0.7 * fade * fade })
+  }
+
   /** Entrance 200ms and exit 150ms on --ease-out, from 0.96 scale; the follow,
    *  lift, press and selection ring on top. False once the exit ends. */
   tick(seconds: number, still: boolean): boolean {
@@ -1280,6 +1365,7 @@ class NodeView {
       y: Math.abs(this.target.y - y) < 0.1 ? this.target.y : y,
     }
     this.root.position.set(this.at.x + CARD_W / 2, this.at.y + this.height / 2)
+    this.drawCheer(seconds, still)
     this.lift += ((this.lifted ? 1 : 0) - this.lift) * follow(seconds, 20, still)
     this.hold += ((this.held ? 1 : 0) - this.hold) * follow(seconds, 32, still)
     this.shadow.alpha = this.lift
@@ -1461,16 +1547,23 @@ class NodeView {
         footer.tone === 'muted' ? colors.muted : footer.tone === 'accent' ? colors.onFill : 0xffffff
       this.foot.text = translate(locale, footer.text)
       // Center the glyph and text together.
-      const start = x + (w - (14 + 6 + this.foot.width)) / 2
+      // A held button's icon sits in a ring that reaches 5px past it on each side.
+      const ringed = footer.enabled && (footer.glyph === 'resize' || footer.glyph === 'more')
+      const pad = ringed ? 5 : 0
+      const start = x + pad + (w - (14 + 6 + this.foot.width + pad * 2)) / 2
       const mid = y + h / 2 + (footer.tone === 'muted' ? 1 : sink)
       paint(this.footMark, FOOT_ICONS[footer.glyph], ink)
       this.footMark.position.set(start, mid - 7)
       this.footMark.visible = true
-      this.foot.position.set(start + 20, mid)
+      this.ringAt = ringed ? { x: start + 7, y: mid, ink } : null
+      this.drawMarkRing()
+      this.foot.position.set(start + 20 + pad, mid)
       this.foot.style.fill = ink
     } else {
       this.foot.text = ''
       this.footMark.visible = false
+      this.ringAt = null
+      this.drawMarkRing()
     }
     // The lifted shadow: drawn once, faded in by the lift.
     if (!this.shadowDrawn) {
@@ -1739,6 +1832,8 @@ class BoardController {
   private seeded = false
   /** The Node whose card button is held down. */
   private pressed: string | null = null
+  /** When the held footer button went down, in ms. */
+  private holdSince = 0
   private state: BoardState | null = null
   private gesture: Gesture = null
   private hoverLink: Readonly<{ from: string; to: string }> | null = null
@@ -2180,6 +2275,7 @@ class BoardController {
         if (node) {
           if (inFooter(node, point)) {
             this.pressed = node.id
+            this.holdSince = this.state && holds(this.state.game, node) ? performance.now() : 0
             this.syncCards()
           } else {
             const view = this.views.get(node.id)
@@ -2320,6 +2416,7 @@ class BoardController {
       const gesture = this.gesture
       this.gesture = null
       this.letGo()
+      this.holdSince = 0
       if (this.pressed) {
         this.pressed = null
         this.syncCards()
@@ -2353,8 +2450,10 @@ class BoardController {
         } else {
           this.dragged = null
           if (event.shiftKey) this.events.onNodeToggle(gesture.id)
-          else if (node && inFooter(node, point)) this.events.onFooter(gesture.id)
-          else this.events.onNodeTap(gesture.id)
+          // A size is bought by holding (see animate), so letting go early buys nothing.
+          else if (node && inFooter(node, point)) {
+            if (!this.state || !holds(this.state.game, node)) this.events.onFooter(gesture.id)
+          } else this.events.onNodeTap(gesture.id)
         }
       }
       if (gesture.kind === 'link') {
@@ -2429,6 +2528,26 @@ class BoardController {
   }
 
   /** Puts down whatever card is held or lifted. */
+  /** Fills the held footer button and fires it at the end; dragging off it cancels. */
+  private advanceHold(): void {
+    const id = this.pressed
+    const gesture = this.gesture
+    if (this.holdSince && (gesture?.kind !== 'node' || gesture.moved || gesture.id !== id))
+      this.holdSince = 0
+    const share = this.holdSince
+      ? Math.min(1, (performance.now() - this.holdSince) / 1000 / HOLD_S)
+      : 0
+    for (const [key, view] of this.views) view.setHold(key === id ? share : 0)
+    if (share < 1 || !id) return
+    this.holdSince = 0
+    this.gesture = null
+    this.pressed = null
+    this.letGo()
+    this.syncCards()
+    this.views.get(id)?.celebrate()
+    this.events.onFooter(id)
+  }
+
   private letGo(): void {
     for (const view of this.views.values()) {
       view.held = false
@@ -2574,6 +2693,7 @@ class BoardController {
     // Reduced motion: packets hold still along the pipe, and the bottleneck does not pulse.
     const still = reducedMotion()
     for (const view of this.views.values()) view.tick(seconds, still)
+    this.advanceHold()
     this.leaving = this.leaving.filter((view) => {
       if (view.tick(seconds, still)) return true
       view.root.destroy({ children: true })

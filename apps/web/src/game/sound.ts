@@ -496,6 +496,34 @@ const SOUNDS = {
       cutoff: 1400,
     },
   ]),
+  /** A big purchase lands: the till slams shut, coins run up a major arpeggio, and a bell rings on. */
+  purchase: hero(3.5, [
+    ...latch(0, 1500, 0.45),
+    thump(0, 150, 45, 260, 1.3),
+    hiss(10, 4000, 2000, 20, 120, 0.08),
+    ...[1047, 1319, 1568, 2093].flatMap((size, step) =>
+      impact({
+        at: 90 + step * 80,
+        size,
+        shape: 'bar',
+        material: 'steel',
+        hardness: 0.9,
+        gain: 0.3,
+      }),
+    ),
+    ...[1047, 1319, 1568, 2093].map((frequency) => ({
+      kind: 'tone' as const,
+      at: 340,
+      wave: 'sine' as const,
+      frequency,
+      to: frequency,
+      attack: 6,
+      hold: 120,
+      decay: 520,
+      gain: 0.09,
+      cutoff: 6000,
+    })),
+  ]),
 
   /* ---- notices: earcons, in order of urgency ---- */
   /** A change settled: one faint, short, high pulse. */

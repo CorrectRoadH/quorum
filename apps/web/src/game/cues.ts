@@ -25,6 +25,9 @@ const TONE_SOUND: Record<Tone, Sound> = {
 /** Speeds step up a fifth at a time, so the faster clock sounds higher. */
 const SPEED_PITCH: Record<number, number> = { 1: 1, 2: 1.5, 4: 2.25 }
 
+/** A purchase at or above this much Cash is celebrated (sound, burst, and a line of praise). */
+export const BIG_PURCHASE = 1_000
+
 const gesture = (sound: Sound, pitch = 1): Cue => ({ sound, pitch, spatial: true })
 const event = (sound: Sound): Cue => ({ sound, pitch: 1, spatial: false })
 
@@ -61,7 +64,9 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
     case 'NodeSold':
       return gesture('remove')
     case 'ResizeChosen':
-      return gesture(message.direction > 0 ? 'upgrade' : 'downgrade')
+      if (message.direction < 0) return gesture('downgrade')
+      // A big purchase gets the celebration; a small one keeps the quick motor-and-beeps.
+      return game.cash - next.cash >= BIG_PURCHASE ? event('purchase') : gesture('upgrade')
     case 'FamilyChosen':
     case 'RuntimeChosen':
     case 'FrameworkChosen':
