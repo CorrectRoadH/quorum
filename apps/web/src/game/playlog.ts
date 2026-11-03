@@ -74,7 +74,21 @@ export const appendLog = (lines: ReadonlyArray<LogEntry>): void => {
     entries.push({ session, seq, wall, t: Math.round(line.t * 100) / 100, type: line.type, data })
   }
   if (entries.length > LIMIT) entries.splice(0, entries.length - LIMIT)
-  persist(entries)
+  schedulePersist()
+}
+
+// Writing the whole log on every gesture blocks the page, so writes wait a moment and batch up.
+const PERSIST_AFTER_MS = 2_000
+let pending: ReturnType<typeof setTimeout> | null = null
+
+const flush = (): void => {
+  if (pending !== null) clearTimeout(pending)
+  pending = null
+  if (cache) persist(cache)
+}
+
+const schedulePersist = (): void => {
+  if (pending === null) pending = setTimeout(flush, PERSIST_AFTER_MS)
 }
 
 export const logSize = (): number => load().length
@@ -98,7 +112,7 @@ export const downloadLog = (): void => {
 export const clearLog = (): void => {
   cache = []
   seq = 0
-  persist(cache)
+  flush()
 }
 
 declare global {
@@ -108,4 +122,11 @@ declare global {
   }
 }
 
-if (typeof window !== 'undefined') window.quorumLog = () => load()
+if (typeof window !== 'undefined') {
+  window.quorumLog = () => load()
+  // A closing or hidden tab writes what is still waiting.
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush()
+  })
+}

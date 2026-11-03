@@ -3196,7 +3196,22 @@ const handle = (model: Model, message: Message): Result =>
 
 /* ---------- the playtest log ---------- */
 
-const QUIET = new Set(['Ticked', 'Synced', 'Navigated', 'ToastCleared', 'Saved', 'SaveLoaded'])
+const QUIET = new Set([
+  'Ticked',
+  'Synced',
+  'Navigated',
+  'ToastCleared',
+  'Saved',
+  'SaveLoaded',
+  // Sent on pointer moves or by the compute worker several times a second.
+  'DashboardHovered',
+  'BottleneckFound',
+  'PreviewComputed',
+])
+
+/** A team drag sends a Message per pointer move; only the drop that moves someone is a gesture. */
+const quiet = (model: Model, message: Message, after: Model): boolean =>
+  QUIET.has(message._tag) || (message._tag === 'TeamDragChanged' && after.game === model.game)
 
 const fieldsOf = (message: Message): Record<string, unknown> =>
   Object.fromEntries(Object.entries(message).filter(([key]) => key !== '_tag'))
@@ -3207,7 +3222,7 @@ const logged = (model: Model, message: Message, result: Result): Result => {
   const after = result.model
   const time = after.game.time
   const raised = after.toast && after.toast.id !== model.toast?.id ? after.toast : null
-  if (!QUIET.has(message._tag)) {
+  if (!quiet(model, message, after)) {
     const ledger: Ledger = ledgerOf(model)
     const refused =
       raised?.tone === 'warn' && after.game === model.game ? raised.message : undefined

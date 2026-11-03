@@ -714,3 +714,14 @@ test('a queued Study can run now, keeping the running one’s progress, and be c
   const cancelled = update(back, Message.StudyCancelled({ id: first.id })).model
   expect(cancelled.game.studies).toEqual([{ id: second.id, progress: 0 }])
 })
+
+test('pointer-rate Messages stay out of the playtest log, and gestures go in', () => {
+  const names = (result: ReturnType<typeof update>) =>
+    (result.commands ?? []).map((command) => command.name)
+  const hovered = update(inLab(), Message.DashboardHovered({ index: 3 }))
+  expect(names(hovered)).not.toContain('AppendLog')
+  const found = update(inLab(), Message.BottleneckFound({ bottleneck: null, at: 0 }))
+  expect(names(found)).not.toContain('AppendLog')
+  const opened = update(inLab(), Message.PanelOpened({ panel: 'menu' }))
+  expect(names(opened)).toContain('AppendLog')
+})
