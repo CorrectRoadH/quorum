@@ -59,7 +59,11 @@ const figureRow = (
     [
       icon(h, glyph, 'size-3.5 shrink-0 text-muted-foreground'),
       h.span(
-        [h.Class('w-[52px] shrink-0 text-[11.5px] text-muted-foreground compact:hidden')],
+        [
+          h.Class(
+            'min-w-[52px] shrink-0 whitespace-nowrap text-[11.5px] text-muted-foreground compact:hidden',
+          ),
+        ],
         [name],
       ),
       h.span(
@@ -80,12 +84,35 @@ const figureRow = (
 const figures = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
   const errors = ledger.errorShare * 100
   const percentiles = has(model.game, 'percentiles')
+  // A guided objective sets the Apdex and Burn it asks for, and may be measured on another figure.
+  const objective = model.sandbox?.id
+    ? GUIDED[model.sandbox.id].objectives[model.sandbox.progress.objective]
+    : undefined
+  const apdex = objective?.apdex ?? 0.85
+  const watch = objective?.watch
+  const watched = watch?.value(ledger) ?? 0
   return h.div(
     [h.Class(`flex flex-col divide-y divide-hairline ${WELL} ${CHIPS}`)],
     [
       figureRow('Demand', Gauge, `${rate(ledger.demand)}/s`, 'plain', h),
-      figureRow('Burn', Wallet, `${money(ledger.burn)}/s`, 'plain', h),
-      figureRow('Apdex', Smile, ledger.apdex.toFixed(2), ledger.apdex >= 0.85 ? 'ok' : 'danger', h),
+      figureRow(
+        'Burn',
+        Wallet,
+        `${money(ledger.burn)}/s`,
+        objective?.burn === undefined
+          ? 'plain'
+          : ledger.burn <= objective.burn + 1e-9
+            ? 'ok'
+            : 'danger',
+        h,
+      ),
+      figureRow(
+        'Apdex',
+        Smile,
+        ledger.apdex.toFixed(2),
+        ledger.apdex >= apdex ? 'ok' : 'danger',
+        h,
+      ),
       figureRow(
         'Errors',
         TriangleAlert,
@@ -100,6 +127,15 @@ const figures = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =>
         'plain',
         h,
       ),
+      watch
+        ? figureRow(
+            watch.label,
+            Flag,
+            watch.unit === 'ms' ? ms(watched) : `${(watched * 100).toFixed(1)}%`,
+            'plain',
+            h,
+          )
+        : h.empty,
     ],
   )
 }

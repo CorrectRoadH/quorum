@@ -152,7 +152,7 @@ export const CHALLENGES: ReadonlyArray<Challenge> = [
     id: 'split-the-box',
     name: 'Split the Box',
     era: 0,
-    brief: 'App and database share a box. Reach 100 rps.',
+    brief: 'App and database share a box. Reach 100 rps with p99 under 300 ms.',
     inspiredBy: 'The first scaling step at most companies',
     legacy: 1,
     start: () =>
@@ -167,11 +167,13 @@ export const CHALLENGES: ReadonlyArray<Challenge> = [
     stepSeconds: 1,
     demand: [{ at: 0, users: 5_000 }],
     incidents: [],
-    targets: { errors: 0.01 },
+    // A bigger box passes too, at a higher Cost: an app box and a database box each sized
+    // and shaped for their own work are the cheapest Design under the tail target.
+    targets: { errors: 0.01, tail: 300 },
     edges: {
-      cost: [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1],
-      tail: [250, 500, 1_000, 1_500, 2_000, 2_500, 3_000, 4_000, 5_000],
-      complexity: [4, 5, 6, 7, 8, 10, 12],
+      cost: [0.26, 0.28, 0.3, 0.32, 0.34, 0.37, 0.4, 0.45, 0.5],
+      tail: [200, 220, 240, 250, 260, 270, 280, 290, 300],
+      complexity: [2, 3, 4, 5, 6, 8, 10],
     },
   },
   {
@@ -290,18 +292,32 @@ const fnv = (text: string): number => {
   return hash
 }
 
+type DrillIncident = Readonly<{ kind: IncidentId; only?: ComponentId; magnitude?: number }>
+
+const LOST_SERVER: DrillIncident = { kind: 'instance', only: 'server' }
+const TRIPLED: DrillIncident = { kind: 'spike', magnitude: 3 }
+const LEAK: DrillIncident = { kind: 'leak' }
+const POOLS: DrillIncident = { kind: 'connections' }
+
+/**
+ * The drill's starting Designs. Each serves its users with no incident, and
+ * lists only incidents that hurt it: a leak needs a persistent runtime, and
+ * doubled pools need enough PHP workers to pass Postgres's limit.
+ */
 const DRILL_BASES: ReadonlyArray<
   Readonly<{
     name: string
     era: number
     users: number
+    incidents: ReadonlyArray<DrillIncident>
     game: (seed: number, users: number) => Game
   }>
 > = [
   {
     name: 'One box',
     era: 0,
-    users: 2_400,
+    users: 1_600,
+    incidents: [LOST_SERVER, TRIPLED],
     game: (seed, users) =>
       board(
         0,
@@ -316,11 +332,12 @@ const DRILL_BASES: ReadonlyArray<
       ),
   },
   {
-    name: 'Two servers',
+    name: 'Two PHP servers',
     era: 1,
-    users: 5_000,
+    users: 3_000,
+    incidents: [LOST_SERVER, TRIPLED, POOLS],
     game: (seed, users) => {
-      const { nodes, links } = fleet(2, { runtime: 'php_fpm', workers: 16 }, 'database')
+      const { nodes, links } = fleet(2, { runtime: 'php_fpm', workers: 30 }, 'database')
       return board(
         1,
         users,
@@ -331,15 +348,23 @@ const DRILL_BASES: ReadonlyArray<
       )
     },
   },
-]
-
-const DRILL_INCIDENTS: ReadonlyArray<
-  Readonly<{ kind: IncidentId; only?: ComponentId; magnitude?: number }>
-> = [
-  { kind: 'instance', only: 'server' },
-  { kind: 'spike', magnitude: 3 },
-  { kind: 'leak' },
-  { kind: 'connections' },
+  {
+    name: 'Two Rails servers',
+    era: 1,
+    users: 4_000,
+    incidents: [LOST_SERVER, TRIPLED, LEAK],
+    game: (seed, users) => {
+      const { nodes, links } = fleet(2, { runtime: 'puma', size: 2 }, 'database')
+      return board(
+        1,
+        users,
+        [...PRESEED_PALETTE, 'lang-ruby'],
+        [...nodes, node('database', 'database', 880, 280, { size: 2 })],
+        links,
+        seed,
+      )
+    },
+  },
 ]
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -351,8 +376,7 @@ export const dailyDrill = (date: string): Challenge => {
   const base =
     DRILL_BASES[Math.floor(base_ * DRILL_BASES.length)] ??
     (DRILL_BASES[0] as (typeof DRILL_BASES)[number])
-  const usable = DRILL_INCIDENTS.filter((entry) => base.era >= 1 || entry.kind !== 'connections')
-  const incident = usable[Math.floor(incident_ * usable.length)] ?? { kind: 'instance' as const }
+  const incident = base.incidents[Math.floor(incident_ * base.incidents.length)] ?? LOST_SERVER
   return {
     id: `daily:${date}`,
     name: `Daily drill ${date}`,
@@ -365,7 +389,8 @@ export const dailyDrill = (date: string): Challenge => {
     stepSeconds: 1,
     demand: [{ at: 0, users: base.users }],
     incidents: [{ at: 120, ...incident }],
-    targets: { errors: 0.02 },
+    // A spare App Server keeps a lost one under 1.5%: the health checks take a few seconds.
+    targets: { errors: 0.015 },
     edges: {
       cost: [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 0.8, 1],
       tail: [50, 100, 150, 200, 300, 400, 600, 800, 1_000],

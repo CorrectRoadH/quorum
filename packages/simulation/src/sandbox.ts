@@ -13,26 +13,26 @@ import type { Game, GameLink, GameNode } from './state.ts'
    the Ledger holds long enough. The free Sandbox is a test bench.
    ========================================================================== */
 
-export type Objective = Readonly<{
-  goal: string
-  /** Users while this objective runs. Unset keeps the demand of the one before. */
-  users?: number
-  /** Sim seconds the condition must hold without a break. */
-  hold: number
-  /**
-   * An incident the objective fires once the condition has held for a while.
-   * With `survive`, the Design must ride it out: a break fires it again.
-   * Without, the player may fix it by hand and then hold the condition.
-   */
-  incident?: Readonly<{
-    kind: IncidentId
-    only?: ComponentId
-    survive: boolean
-    /** A fixed spike multiplier instead of a roll, so the lesson does not depend on luck. */
-    magnitude?: number
+export type Objective = Condition &
+  Readonly<{
+    goal: string
+    /** Users while this objective runs. Unset keeps the demand of the one before. */
+    users?: number
+    /** Sim seconds the condition must hold without a break. */
+    hold: number
+    /**
+     * An incident the objective fires once the condition has held for a while.
+     * With `survive`, the Design must ride it out: a break fires it again.
+     * Without, the player may fix it by hand and then hold the condition.
+     */
+    incident?: Readonly<{
+      kind: IncidentId
+      only?: ComponentId
+      survive: boolean
+      /** A fixed spike multiplier instead of a roll, so the lesson does not depend on luck. */
+      magnitude?: number
+    }>
   }>
-  met: (game: Game, ledger: Ledger) => boolean
-}>
 
 export const SANDBOX_IDS = [
   'out-of-credits',
@@ -70,39 +70,63 @@ export const INCIDENT_AFTER = 20
 
 /* ---------- conditions ---------- */
 
-const serving =
-  (apdex: number) =>
-  (_: Game, ledger: Ledger): boolean =>
-    ledger.errorShare < 0.01 && ledger.apdex >= apdex
+/** A figure the HUD shows next to Demand and Burn, because the objective is measured on it. */
+export type Watch = Readonly<{
+  label: string
+  unit: 'ms' | 'share'
+  value: (ledger: Ledger) => number
+}>
 
-const within =
-  (apdex: number, burn: number) =>
-  (game: Game, ledger: Ledger): boolean =>
-    serving(apdex)(game, ledger) && ledger.burn <= burn + 1e-9
+/**
+ * What an objective checks, and what the HUD needs to show it: the Apdex and
+ * Burn it holds the Design to, and any other figure it is measured on.
+ */
+type Condition = Readonly<{
+  met: (game: Game, ledger: Ledger) => boolean
+  apdex?: number
+  burn?: number
+  watch?: Watch
+}>
+
+const serving = (apdex: number): Condition => ({
+  apdex,
+  met: (_, ledger) => ledger.errorShare < 0.01 && ledger.apdex >= apdex,
+})
+
+const within = (apdex: number, burn: number): Condition => ({
+  apdex,
+  burn,
+  met: (game, ledger) => serving(apdex).met(game, ledger) && ledger.burn <= burn + 1e-9,
+})
 
 /** Serving, with every Queue's backlog under `depth` tasks. */
-const draining =
-  (apdex: number, depth: number) =>
-  (game: Game, ledger: Ledger): boolean =>
-    serving(apdex)(game, ledger) &&
-    game.nodes.every((entry) => entry.type !== 'queue' || entry.depth < depth)
+const draining = (apdex: number, depth: number): Condition => ({
+  apdex,
+  met: (game, ledger) =>
+    serving(apdex).met(game, ledger) &&
+    game.nodes.every((entry) => entry.type !== 'queue' || entry.depth < depth),
+})
 
-const fast =
-  (p99: number) =>
-  (_: Game, ledger: Ledger): boolean =>
-    ledger.errorShare < 0.01 && ledger.p99 <= p99
+const fast = (p99: number): Condition => ({
+  met: (_, ledger) => ledger.errorShare < 0.01 && ledger.p99 <= p99,
+})
 
 /** Every checkout sees its own write, and Apdex holds. */
-const checkingOut =
-  (apdex: number, burn = Number.POSITIVE_INFINITY) =>
-  (_: Game, ledger: Ledger): boolean =>
-    (ledger.kinds.buy?.success ?? 1) >= 0.995 && ledger.apdex >= apdex && ledger.burn <= burn + 1e-9
+const checkingOut = (apdex: number): Condition => ({
+  apdex,
+  watch: { label: 'Checkout', unit: 'share', value: (ledger) => ledger.kinds.buy?.success ?? 1 },
+  met: (_, ledger) => (ledger.kinds.buy?.success ?? 1) >= 0.995 && ledger.apdex >= apdex,
+})
 
 /** API reads come back fast at the p99, with errors under 1% and Burn within the cap. */
-const steadyReads =
-  (p99: number, burn = Number.POSITIVE_INFINITY) =>
-  (_: Game, ledger: Ledger): boolean =>
-    ledger.errorShare < 0.01 && (ledger.kinds.read?.p99 ?? 0) <= p99 && ledger.burn <= burn + 1e-9
+const steadyReads = (p99: number, burn?: number): Condition => ({
+  ...(burn === undefined ? {} : { burn }),
+  watch: { label: 'Read p99', unit: 'ms', value: (ledger) => ledger.kinds.read?.p99 ?? 0 },
+  met: (_, ledger) =>
+    ledger.errorShare < 0.01 &&
+    (ledger.kinds.read?.p99 ?? 0) <= p99 &&
+    ledger.burn <= (burn ?? Number.POSITIVE_INFINITY) + 1e-9,
+})
 
 /* ---------- starting Designs ---------- */
 
@@ -251,14 +275,24 @@ const SERIES_C_RESEARCH: ReadonlyArray<ResearchId> = [
 ]
 
 /** Users served, with Apdex above `apdex`, at every request kind. */
-const answered =
-  (apdex: number) =>
-  (_: Game, ledger: Ledger): boolean =>
-    ledger.errorShare < 0.01 && ledger.apdex >= apdex
+const answered = serving
 
 /** API reads come back fresh: under 0.5% stale or failed. */
-const fresh = (_: Game, ledger: Ledger): boolean =>
-  (ledger.kinds.read?.success ?? 1) >= 0.995 && ledger.errorShare < 0.01
+const fresh: Condition = {
+  watch: {
+    label: 'Fresh reads',
+    unit: 'share',
+    value: (ledger) => ledger.kinds.read?.success ?? 1,
+  },
+  met: (_, ledger) => (ledger.kinds.read?.success ?? 1) >= 0.995 && ledger.errorShare < 0.01,
+}
+
+/** Served with Apdex above `apdex`, and API reads under `mean` ms on average. */
+const nearby = (apdex: number, mean: number): Condition => ({
+  apdex,
+  watch: { label: 'Read mean', unit: 'ms', value: (ledger) => ledger.kinds.read?.mean ?? 0 },
+  met: (game, ledger) => serving(apdex).met(game, ledger) && (ledger.kinds.read?.mean ?? 0) <= mean,
+})
 
 export const GUIDED: Record<SandboxId, GuidedSandbox> = {
   'out-of-credits': {
@@ -280,18 +314,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Serve every request for 90 seconds.', hold: 90, met: serving(0.85) },
+      { goal: 'Serve every request for 90 seconds.', hold: 90, ...serving(0.85) },
       {
         goal: 'Demand is up 4×. Keep Apdex above 0.85 for 2 minutes.',
         users: 2_400,
         hold: 120,
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: 'Night traffic is back to the start. Keep Apdex above 0.85 with Burn at $0.12/s or less.',
         users: 600,
         hold: 120,
-        met: within(0.85, 0.12),
+        ...within(0.85, 0.12),
       },
     ],
   },
@@ -308,18 +342,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [['users', 'server']],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.85 for 90 seconds.', hold: 90, met: serving(0.85) },
+      { goal: 'Keep Apdex above 0.85 for 90 seconds.', hold: 90, ...serving(0.85) },
       {
         goal: 'Demand doubled. Keep Apdex above 0.9 with Burn at $0.16/s or less.',
         users: 2_800,
         hold: 120,
-        met: within(0.9, 0.16),
+        ...within(0.9, 0.16),
       },
       {
         goal: 'Night traffic is back to the start. Keep Apdex above 0.9 with Burn at $0.11/s or less.',
         users: 1_400,
         hold: 90,
-        met: within(0.9, 0.11),
+        ...within(0.9, 0.11),
       },
     ],
   },
@@ -339,19 +373,19 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'A server will fail. Keep Apdex above 0.85 for 2 minutes.',
         hold: 120,
         incident: { kind: 'instance', only: 'server', survive: true },
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: 'Demand doubled. Keep Apdex above 0.9 through another failure.',
         users: 4_800,
         hold: 120,
         incident: { kind: 'instance', only: 'server', survive: true },
-        met: serving(0.9),
+        ...serving(0.9),
       },
     ],
   },
@@ -383,18 +417,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Serve every request for 90 seconds.', hold: 90, met: serving(0.85) },
+      { goal: 'Serve every request for 90 seconds.', hold: 90, ...serving(0.85) },
       {
         goal: 'Demand doubled. Keep Apdex above 0.9 for 2 minutes.',
         users: 6_000,
         hold: 120,
-        met: serving(0.9),
+        ...serving(0.9),
       },
       {
         goal: 'A deploy will double every pool. Keep errors under 1%.',
         hold: 90,
         incident: { kind: 'connections', survive: true },
-        met: serving(0),
+        ...serving(0),
       },
     ],
   },
@@ -417,12 +451,12 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Keep p99 under 300 ms for 2 minutes.', hold: 120, met: fast(300) },
+      { goal: 'Keep p99 under 300 ms for 2 minutes.', hold: 120, ...fast(300) },
       {
         goal: 'Password hashing will get 4× slower. Keep p99 under 600 ms for 2 minutes.',
         hold: 120,
         incident: { kind: 'loop', survive: true },
-        met: fast(600),
+        ...fast(600),
       },
     ],
   },
@@ -463,18 +497,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'Demand doubled. Keep Apdex above 0.9 with Burn at $2.60/s or less.',
         users: 8_000,
         hold: 120,
-        met: within(0.9, 2.6),
+        ...within(0.9, 2.6),
       },
       {
         goal: 'A query will ship with no index. Keep Apdex above 0.85 for 2 minutes after.',
         hold: 120,
         incident: { kind: 'slow-query', survive: false },
-        met: serving(0.85),
+        ...serving(0.85),
       },
     ],
   },
@@ -522,19 +556,19 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'The Cache will restart. Keep Apdex above 0.85 for 2 minutes.',
         hold: 120,
         incident: { kind: 'stampede', survive: true },
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: `Demand is up 50%. The Cache restarts again. Keep Apdex above 0.85 with Burn at $${STAMPEDE_BURN.toFixed(2)}/s or less.`,
         users: STAMPEDE_USERS * 1.5,
         hold: 120,
         incident: { kind: 'stampede', survive: true },
-        met: within(0.85, STAMPEDE_BURN),
+        ...within(0.85, STAMPEDE_BURN),
       },
     ],
   },
@@ -569,18 +603,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'Demand is up 60%. Keep Apdex above 0.9 with Burn at $5.20/s or less.',
         users: 8_000,
         hold: 120,
-        met: within(0.9, 5.2),
+        ...within(0.9, 5.2),
       },
       {
         goal: 'A task will fail forever. Keep the Queue under 500 tasks for 2 minutes.',
         hold: 120,
         incident: { kind: 'poison', survive: true },
-        met: draining(0.9, 500),
+        ...draining(0.9, 500),
       },
     ],
   },
@@ -617,18 +651,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         ],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'Scrapers are coming. Keep Apdex above 0.9 for 2 minutes.',
         hold: 120,
         incident: { kind: 'bot-surge', survive: true },
-        met: serving(0.9),
+        ...serving(0.9),
       },
       {
         goal: `They are back. Keep Apdex above 0.9 with Burn at $${BOTS_BURN.toFixed(2)}/s or less.`,
         hold: 120,
         incident: { kind: 'bot-surge', survive: true },
-        met: within(0.9, BOTS_BURN),
+        ...within(0.9, BOTS_BURN),
       },
     ],
   },
@@ -654,19 +688,19 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [['users', 'lb'], ...seriesALinks(['server1', 'server2'])],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'A zone will fail. Keep Apdex above 0.85 for 2 minutes.',
         hold: 120,
         incident: { kind: 'zone', survive: true },
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: `Demand is up 50%. A zone fails again. Keep Apdex above 0.85 with Burn at $${ZONE_BURN.toFixed(2)}/s or less.`,
         users: ZONE_USERS * 1.5,
         hold: 120,
         incident: { kind: 'zone', survive: true },
-        met: within(0.85, ZONE_BURN),
+        ...within(0.85, ZONE_BURN),
       },
     ],
   },
@@ -687,18 +721,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         [['users', 'lb'], ...seriesALinks(['server1'])],
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: `A ${COLD_SPIKE}× spike is coming. Keep Apdex above 0.85 for 2 minutes.`,
         hold: 120,
         incident: { kind: 'spike', survive: true, magnitude: COLD_SPIKE },
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: `Night traffic. Keep Apdex above 0.9 with Burn at $${COLD_BURN.toFixed(2)}/s or less.`,
         users: COLD_USERS / 2,
         hold: 120,
-        met: within(0.9, COLD_BURN),
+        ...within(0.9, COLD_BURN),
       },
     ],
   },
@@ -733,20 +767,21 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       {
         goal: 'Keep Apdex above 0.9 for 90 seconds.',
         hold: 90,
+        apdex: 0.9,
         met: (_, ledger) => ledger.apdex >= 0.9,
       },
       {
         goal: 'Writes will pile up. Keep every checkout correct for 2 minutes.',
         hold: 120,
         incident: { kind: 'repl-lag', survive: false },
-        met: checkingOut(0.85),
+        ...checkingOut(0.85),
       },
       {
         goal: 'Demand is up 50%, and the writes come back. Keep every checkout correct through it.',
         users: STALE_USERS * 1.5,
         hold: 120,
         incident: { kind: 'repl-lag', survive: true },
-        met: checkingOut(0.85),
+        ...checkingOut(0.85),
       },
     ],
   },
@@ -777,19 +812,19 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       {
         goal: `Keep API reads under ${GC_P99} ms at the p99 for 90 seconds.`,
         hold: 90,
-        met: steadyReads(GC_P99),
+        ...steadyReads(GC_P99),
       },
       {
         goal: `The heap will fill. Keep API reads under ${GC_P99} ms at the p99 for 2 minutes.`,
         hold: 120,
         incident: { kind: 'gc-storm', survive: true },
-        met: steadyReads(GC_P99),
+        ...steadyReads(GC_P99),
       },
       {
         goal: `It fills again. Keep reads under ${GC_P99} ms at the p99 with Burn at $${GC_BURN.toFixed(2)}/s or less.`,
         hold: 120,
         incident: { kind: 'gc-storm', survive: true },
-        met: steadyReads(GC_P99, GC_BURN),
+        ...steadyReads(GC_P99, GC_BURN),
       },
     ],
   },
@@ -826,18 +861,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       }
     },
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'The Database will slow down for 20 s. Get errors back under 1% and hold for 2 minutes.',
         hold: 120,
         incident: { kind: 'retry-storm', survive: false },
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: `It slows again. Get errors under 1% and hold with Burn at $${STORM_BURN.toFixed(2)}/s or less.`,
         hold: 120,
         incident: { kind: 'retry-storm', survive: false },
-        met: within(0.85, STORM_BURN),
+        ...within(0.85, STORM_BURN),
       },
     ],
   },
@@ -864,18 +899,18 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         seriesBLinks(['server1', 'server2'], false),
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, met: serving(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 90 seconds.', hold: 90, ...serving(0.9) },
       {
         goal: 'Quarter end: a report will scan every table. Keep Apdex above 0.85 for 2 minutes.',
         hold: 120,
         incident: { kind: 'report-db', survive: true },
-        met: serving(0.85),
+        ...serving(0.85),
       },
       {
         goal: `Demand is up 50%. Keep Apdex above 0.9 with Burn at $${ANALYTICS_BURN.toFixed(2)}/s or less.`,
         users: ANALYTICS_USERS * 1.5,
         hold: 120,
-        met: within(0.9, ANALYTICS_BURN),
+        ...within(0.9, ANALYTICS_BURN),
       },
     ],
   },
@@ -902,12 +937,11 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         seriesCLinks(['server1', 'server2'], 'wide'),
       ),
     objectives: [
-      { goal: 'Serve every request for 2 minutes.', hold: 120, met: answered(0.5) },
+      { goal: 'Serve every request for 2 minutes.', hold: 120, ...answered(0.5) },
       {
         goal: `Half your users live outside North America. Get API reads under ${FAR_READ_MS} ms on average for 2 minutes.`,
         hold: 120,
-        met: (game, ledger) =>
-          answered(0.5)(game, ledger) && (ledger.kinds.read?.mean ?? 0) <= FAR_READ_MS,
+        ...nearby(0.5, FAR_READ_MS),
       },
     ],
   },
@@ -937,13 +971,13 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
       {
         goal: 'Every API read must see the latest write. Hold it for 2 minutes.',
         hold: 120,
-        met: fresh,
+        ...fresh,
       },
       {
         goal: 'A replica will fail. Keep reads fresh and errors under 1% for 2 minutes.',
         hold: 120,
         incident: { kind: 'instance', only: 'wide', survive: true },
-        met: fresh,
+        ...fresh,
       },
     ],
   },
@@ -971,12 +1005,12 @@ export const GUIDED: Record<SandboxId, GuidedSandbox> = {
         seriesCLinks(['server1', 'server2'], 'wide'),
       ),
     objectives: [
-      { goal: 'Keep Apdex above 0.9 for 2 minutes.', hold: 120, met: answered(0.9) },
+      { goal: 'Keep Apdex above 0.9 for 2 minutes.', hold: 120, ...answered(0.9) },
       {
         goal: 'A celebrity will post. Keep Apdex above 0.85 for 2 minutes.',
         hold: 120,
         incident: { kind: 'hot-key', survive: true },
-        met: answered(0.85),
+        ...answered(0.85),
       },
     ],
   },

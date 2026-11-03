@@ -1487,7 +1487,7 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
                 ),
               ],
               [
-                `p50 ${ms(entry?.p50 ?? 0)} · p95 ${ms(entry?.p95 ?? 0)} · p99 ${ms(entry?.p99 ?? 0)}`,
+                `mean ${ms(entry?.mean ?? 0)} · p50 ${ms(entry?.p50 ?? 0)} · p95 ${ms(entry?.p95 ?? 0)} · p99 ${ms(entry?.p99 ?? 0)}`,
               ],
             ),
           ],

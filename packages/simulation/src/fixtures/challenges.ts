@@ -35,7 +35,16 @@ export const REFERENCE: Record<string, (game: Game) => Game> = {
     const placed = ok(Actions.place(game, 'database', 760, 280))
     const database = lastId(placed)
     const linked = ok(Actions.connect(placed, 'server', database))
-    return ok(Actions.resize(ok(Actions.resize(linked, 'server', 1)), database, 1))
+    const shaped = ok(
+      Actions.setFamily(ok(Actions.setFamily(linked, 'server', 'compute')), database, 'memory'),
+    )
+    return ok(
+      Actions.resize(
+        ok(Actions.resize(ok(Actions.resize(shaped, 'server', 1)), 'server', 1)),
+        database,
+        1,
+      ),
+    )
   },
   slashdotted: (start) => {
     let game = inFront(start, 'pooler', 'database')

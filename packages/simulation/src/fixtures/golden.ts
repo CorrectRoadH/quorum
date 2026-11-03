@@ -47,6 +47,8 @@ export const GOLDEN_STEPS = 10_000
 // SIM_VERSION 11: a CVE is disclosed every few minutes as a patch ticket with a
 // deadline; an overdue one is exploited and starts a Data breach. The save gains
 // the disclosed CVEs, and a backlog item gains its deadline.
+// SIM_VERSION 12: Split the Box asks for p99 under 300 ms, and the daily drill's
+// boards serve their users until the incident. The Company replay is unchanged.
 export const GOLDEN_HASH = '90ba0bf8'
 
 /**
@@ -55,7 +57,7 @@ export const GOLDEN_HASH = '90ba0bf8'
  */
 export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
   'hello-world': 'c90d1a1b',
-  'split-the-box': '5d7e9d65',
+  'split-the-box': 'f08a87fb',
   slashdotted: '9caa7bfd',
   'event-loop': '546f8990',
   'too-many-connections': '140a8993',

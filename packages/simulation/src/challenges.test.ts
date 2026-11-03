@@ -51,6 +51,23 @@ describe('Challenges', () => {
       },
     )
 
+  test('Split the Box: a bigger shared box passes, at a higher Cost than the split', () => {
+    const challenge = byId('split-the-box')
+    const split = run(
+      challenge,
+      REFERENCE['split-the-box']?.(challenge.start()) ?? challenge.start(),
+    )
+    const bigger = run(
+      challenge,
+      [1, 1, 1].reduce(
+        (game) => ok(Actions.resize(game, 'server', 1)),
+        ok(Actions.setFamily(challenge.start(), 'server', 'compute')),
+      ),
+    )
+    expect(bigger.passed).toBe(true)
+    expect(bigger.cost).toBeGreaterThan(split.cost)
+  })
+
   test('the same replay gives the same result, and a run action changes it', () => {
     const challenge = byId('hello-world')
     const game = REFERENCE['hello-world']?.(challenge.start()) ?? challenge.start()
@@ -102,6 +119,20 @@ describe('Challenges', () => {
       runChallenge(loop, replayOf(loop, ok(Actions.setRuntime(loop.start(), 'server', 'php_fpm')))),
     ).toEqual(Result.fail('Every App Server runs Node.js.'))
     expect(Result.isFailure(runChallenge(loop, replayOf(hello, hello.start())))).toBe(true)
+  })
+
+  test('every daily drill serves its users until its incident, which then fails the start', () => {
+    const drills = new Map<string, Challenge>()
+    for (let day = 0; day < 120; day += 1) {
+      const date = new Date(Date.UTC(2027, 0, 1 + day)).toISOString().slice(0, 10)
+      const drill = dailyDrill(date)
+      drills.set(drill.brief, drill)
+    }
+    expect(drills.size).toBe(8)
+    for (const drill of drills.values()) {
+      expect(run({ ...drill, incidents: [] }, drill.start()).passed).toBe(true)
+      expect(run(drill, drill.start()).passed).toBe(false)
+    }
   })
 
   test('the daily drill is the same for a date and differs across dates', () => {
