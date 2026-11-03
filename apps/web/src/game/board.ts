@@ -1321,9 +1321,10 @@ class NodeView {
     this.foot.anchor.set(0, 0.5)
   }
 
-  /** Level of detail: zoomed far out, the rows are a few pixels tall and are left out. */
-  detail(shown: boolean): void {
-    this.rows.visible = shown
+  /** Level of detail: zoomed far out, the rows fade, then are left out. */
+  detail(alpha: number): void {
+    this.rows.visible = alpha > 0
+    this.rows.alpha = alpha
   }
 
   leave(): void {
@@ -1772,8 +1773,11 @@ class NodeView {
  */
 /** How far a card or belt off the focused path fades. */
 const DIM = 0.3
-/** Below this zoom the belts' chevrons and the cards' rows are left out: a few pixels apart or tall. */
-const DETAIL_SCALE = 0.5
+/** Below this zoom the belts' chevrons are left out: they are a few pixels apart. */
+const CHEVRON_SCALE = 0.5
+/** The cards' rows fade out between these zooms; below the first they are a few pixels tall. */
+const ROWS_GONE_SCALE = 0.3
+const ROWS_SCALE = 0.38
 
 class BeltView {
   readonly body = new Graphics()
@@ -2980,10 +2984,12 @@ class BoardController {
     if (!state.paused) this.phase += seconds
     // Reduced motion: packets hold still along the pipe, and the bottleneck does not pulse.
     const still = reducedMotion()
-    const detailed = this.world.scale.x >= DETAIL_SCALE
+    const zoom = this.world.scale.x
+    const detailed = zoom >= CHEVRON_SCALE
+    const rows = Math.min(1, Math.max(0, (zoom - ROWS_GONE_SCALE) / (ROWS_SCALE - ROWS_GONE_SCALE)))
     for (const view of this.views.values()) {
       view.tick(seconds, still)
-      view.detail(detailed)
+      view.detail(rows)
     }
     this.advanceHold()
     this.leaving = this.leaving.filter((view) => {
