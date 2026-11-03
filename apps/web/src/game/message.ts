@@ -1,3 +1,4 @@
+import { Locale } from '../i18n/index.ts'
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
@@ -234,6 +235,7 @@ export const Message = defineMessageUnion({
   /** Settings and the Glossary (15). */
   MuteToggled: {},
   MotionToggled: {},
+  LocaleChosen: { locale: Locale },
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },
   MailOpened: { id: Schema.Finite },

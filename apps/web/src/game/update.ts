@@ -252,6 +252,7 @@ export const initialModel = (): Model =>
     cue: null,
     muted: false,
     motion: 'system',
+    locale: 'en',
     glossaryFocus: null,
     glossaryQuery: '',
     inbox: [],
@@ -292,6 +293,7 @@ type AnyCommand = NonNullable<Result['commands']>[number]
 const sync = (model: Model): AnyCommand =>
   SyncBoard({
     game: model.game,
+    locale: model.locale,
     bottleneck: model.bottleneck,
     selected: model.selected,
     selection: model.selection,
@@ -612,6 +614,7 @@ const prefsOf = (model: Model): Prefs => ({
   seenTradeoffs: model.seenTradeoffs,
   muted: model.muted,
   motion: model.motion,
+  locale: model.locale,
 })
 
 /** Saves and applies a settings change. */
@@ -619,7 +622,7 @@ const settled = (next: Model): Result => ({
   model: next,
   commands: [
     WritePrefs({ prefs: prefsOf(next) }),
-    ApplySettings({ muted: next.muted, motion: next.motion }),
+    ApplySettings({ muted: next.muted, motion: next.motion, locale: next.locale }),
   ],
 })
 
@@ -1038,6 +1041,7 @@ const ARROWS: Record<string, Direction> = {
 const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
   const fresh: Model = {
     ...initialModel(),
+    ...prefsOf(model),
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
@@ -1076,6 +1080,7 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
 const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
   const next: Model = {
     ...initialModel(),
+    ...prefsOf(model),
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
@@ -1221,6 +1226,7 @@ const enterChallenge = (model: Model, id: string): Result => {
   const game = boardOf(challenge)
   const next: Model = {
     ...initialModel(),
+    ...prefsOf(model),
     founder: model.founder,
     histograms: model.histograms,
     today: model.today,
@@ -1542,8 +1548,12 @@ const handle = (model: Model, message: Message): Result =>
             seenTradeoffs: prefs.seenTradeoffs,
             muted: prefs.muted,
             motion: prefs.motion,
+            locale: prefs.locale,
           },
-          commands: [ApplySettings({ muted: prefs.muted, motion: prefs.motion })],
+          commands: [
+            ApplySettings({ muted: prefs.muted, motion: prefs.motion, locale: prefs.locale }),
+            sync({ ...model, locale: prefs.locale }),
+          ],
         }),
       }),
 
@@ -2481,6 +2491,11 @@ const handle = (model: Model, message: Message): Result =>
     PanelClosed: () =>
       model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
 
+    LocaleChosen: ({ locale }) => {
+      const next = { ...model, locale }
+      const result = settled(next)
+      return { ...result, commands: [...(result.commands ?? []), sync(next)] }
+    },
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
     MotionToggled: () =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),

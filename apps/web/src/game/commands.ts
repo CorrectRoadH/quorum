@@ -1,3 +1,4 @@
+import { Locale } from '../i18n/index.ts'
 import * as Effect from 'effect/Effect'
 import { Schema } from 'effect'
 import { Command } from 'foldkit'
@@ -39,6 +40,7 @@ const StampArg = Schema.NullOr(
 export const SyncBoard = Command.define('SyncBoard', {
   args: {
     game: Game,
+    locale: Locale,
     bottleneck: Schema.NullOr(Schema.String),
     selected: Schema.NullOr(Schema.String),
     selection: Schema.Array(Schema.String),
@@ -53,6 +55,7 @@ export const SyncBoard = Command.define('SyncBoard', {
   messages: [Message.Synced],
   execute: ({
     game,
+    locale,
     bottleneck,
     selected,
     selection,
@@ -65,6 +68,7 @@ export const SyncBoard = Command.define('SyncBoard', {
   }) =>
     Effect.sync(() =>
       setBoard('board', {
+        locale,
         game: regionView(game, region),
         ledger: { ...solveFlow(game), bottleneck },
         selected,
@@ -192,11 +196,12 @@ export const WritePrefs = Command.define('WritePrefs', {
 
 /** Applies the settings: mute for every sound, and reduced motion as `data-motion` on the root. */
 export const ApplySettings = Command.define('ApplySettings', {
-  args: { muted: Schema.Boolean, motion: Motion },
+  args: { muted: Schema.Boolean, motion: Motion, locale: Locale },
   messages: [Message.Synced],
-  execute: ({ muted, motion }) =>
+  execute: ({ muted, motion, locale }) =>
     Effect.sync(() => {
       setMuted(muted)
+      document.documentElement.lang = locale
       if (motion === 'reduce') document.documentElement.dataset.motion = 'reduce'
       else delete document.documentElement.dataset.motion
       return Message.Synced()

@@ -1,3 +1,4 @@
+import { Locale } from '../i18n/index.ts'
 import { Effect, Schema } from 'effect'
 import { BUILD_GROUPS, type BuildGroup } from '@quorum/simulation/catalog'
 import { Progress, SANDBOX_IDS } from '@quorum/simulation/sandbox'
@@ -247,6 +248,7 @@ export type Motion = typeof Motion.Type
 
 /** What the player's browser remembers apart from saves: settings, and the option sets confirmed once. */
 export const Prefs = Schema.Struct({
+  locale: Locale.pipe(Schema.withDecodingDefaultKey(Effect.succeed('en' as const))),
   seenTradeoffs: Schema.Array(TradeoffKind).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   muted: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   motion: Motion.pipe(Schema.withDecodingDefaultKey(Effect.succeed('system' as const))),
@@ -338,6 +340,7 @@ export const Model = Schema.Struct({
   cue: Schema.NullOr(RevealCue),
   muted: Schema.Boolean,
   motion: Motion,
+  locale: Locale,
   /** The Glossary panel's open entry and search. */
   glossaryFocus: Schema.NullOr(Schema.String),
   glossaryQuery: Schema.String,

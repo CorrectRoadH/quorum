@@ -1,3 +1,4 @@
+import { translate, type Locale } from '@/i18n/index.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Check, Search } from 'lucide'
 import { GLOSSARY, type GlossaryEntry } from '@quorum/simulation/catalog'
@@ -13,12 +14,14 @@ import { shell } from './panels.ts'
    Terms the player has met in play carry a check; the rest stay readable.
    ========================================================================== */
 
-const matches = (entry: GlossaryEntry, query: string): boolean => {
+const matches = (entry: GlossaryEntry, query: string, locale: Locale): boolean => {
   const text = query.trim().toLowerCase()
   return (
     text === '' ||
     entry.term.toLowerCase().includes(text) ||
-    entry.definition.toLowerCase().includes(text)
+    entry.definition.toLowerCase().includes(text) ||
+    translate(locale, entry.term).toLowerCase().includes(text) ||
+    translate(locale, entry.definition).toLowerCase().includes(text)
   )
 }
 
@@ -69,7 +72,7 @@ const detail = (entry: GlossaryEntry, h: HtmlBuilder<Message>): Html =>
   )
 
 export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const shown = GLOSSARY.filter((entry) => matches(entry, model.glossaryQuery))
+  const shown = GLOSSARY.filter((entry) => matches(entry, model.glossaryQuery, model.locale))
   const open = GLOSSARY.find((entry) => entry.id === model.glossaryFocus) ?? shown[0] ?? GLOSSARY[0]
   const met = (entry: GlossaryEntry) => model.founder.glossary.includes(entry.id)
   return shell(
