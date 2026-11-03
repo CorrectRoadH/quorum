@@ -4,7 +4,7 @@ import type { ChallengeScores } from '@quorum/rpc'
 /** A Challenge's histogram: results only compare within one Simulation version. */
 export type Board = Readonly<{ challengeId: string; simVersion: number }>
 
-export type Axis = 'cost' | 'tail' | 'complexity'
+export type Axis = keyof ChallengeScores
 
 export type Edges = Readonly<Record<Axis, ReadonlyArray<number>>>
 

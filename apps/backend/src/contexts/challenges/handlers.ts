@@ -8,13 +8,24 @@ import {
   decodeReplay,
   runChallenge,
 } from '@quorum/simulation'
-import { ResultStore, type Board } from './store.ts'
+import { ResultStore, StoreError, type Board } from './store.ts'
 
 /* Challenge verification (14 "Rules"): the server re-runs every submitted replay and keeps its own score. */
 
 const DAY_MS = 86_400_000
 
 const unavailable = () => new ApiError({ message: 'Results are unavailable. Try again later.' })
+
+/** A store failure reaches the client as "unavailable"; its cause goes to the Worker log. */
+const storeUnavailable = <A, E, R>(effect: Effect.Effect<A, E | StoreError, R>) =>
+  effect.pipe(
+    Effect.tapError((error) =>
+      error instanceof StoreError
+        ? Effect.logError('ResultStore failed', error.cause)
+        : Effect.void,
+    ),
+    Effect.catchTag('StoreError', () => Effect.fail(unavailable())),
+  )
 
 const fail = (message: string) => Effect.fail(new ApiError({ message }))
 
@@ -69,7 +80,7 @@ export const ChallengeHandlers = ChallengeRpc.toLayer(
             best,
             percentiles,
           }
-        }).pipe(Effect.catchTag('StoreError', () => Effect.fail(unavailable()))),
+        }).pipe(storeUnavailable),
       challengeHistogramGet: ({ challengeId, simVersion }) =>
         Effect.gen(function* () {
           const challenge = challengeById(challengeId)
@@ -88,7 +99,7 @@ export const ChallengeHandlers = ChallengeRpc.toLayer(
             tail: axis('tail'),
             complexity: axis('complexity'),
           }
-        }).pipe(Effect.catchTag('StoreError', () => Effect.fail(unavailable()))),
+        }).pipe(storeUnavailable),
     })
   }),
 )

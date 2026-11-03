@@ -4,7 +4,7 @@ import * as Scope from 'effect/Scope'
 import { Result } from 'effect'
 import { FetchHttpClient } from 'effect/http'
 import { RpcClient, RpcSerialization } from 'effect/rpc'
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 import { Api, RPC_PATH } from '@quorum/rpc'
 import {
   SIM_VERSION,
@@ -159,4 +159,31 @@ test("today's daily drill takes a result", async () => {
   const today = dailyDrill(new Date().toISOString().slice(0, 10))
   const verdict = await run(submit(today, replayOf(today, today.start())))
   expect(typeof verdict.passed).toBe('boolean')
+})
+
+test('a failing store reaches the client as unavailable and logs its cause', async () => {
+  const cause = new Error('D1_ERROR: no such table: results')
+  env = {
+    RESULTS: {
+      prepare: () => {
+        throw cause
+      },
+    },
+  }
+  const logged: Array<unknown> = []
+  const spies = (['log', 'error', 'warn'] as const).map((level) =>
+    vi.spyOn(console, level).mockImplementation((...args) => void logged.push(...args)),
+  )
+  try {
+    const error = await run(Effect.flip(submit(hello, replayOf(hello, general(hello.start())))))
+    expect(error).toMatchObject({
+      _tag: 'ApiError',
+      message: 'Results are unavailable. Try again later.',
+    })
+  } finally {
+    for (const spy of spies) spy.mockRestore()
+  }
+  expect(
+    JSON.stringify(logged, (_, value) => (value instanceof Error ? value.message : value)),
+  ).toContain('no such table')
 })
