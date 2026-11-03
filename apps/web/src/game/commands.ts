@@ -5,11 +5,12 @@ import { Command } from 'foldkit'
 import { load, pushUrl, replaceUrl } from 'foldkit/navigation'
 import { fitBoard, setBoard } from './board.ts'
 import { solveFlow } from '@quorum/simulation/solve'
+import { compute } from './compute.ts'
 import { regionView } from '@quorum/simulation/regions'
 import { ComponentId, Game, Region } from '@quorum/simulation/state'
 import { Message } from './message.ts'
 import { Founder } from '@quorum/simulation/founder'
-import { Motion, Prefs, Reveal, SandboxStore } from './model.ts'
+import { Motion, Prefs, Reveal, SandboxStore, TradeoffOption } from './model.ts'
 import { History } from './history.ts'
 import { play, setMuted, SOUND_NAMES } from './sound.ts'
 import { setAgentAccess } from './agent-relay.ts'
@@ -83,6 +84,36 @@ export const SyncBoard = Command.define('SyncBoard', {
         cue,
       }),
     ).pipe(Effect.as(Message.Synced())),
+})
+
+/** Runs a Tradeoff option's ghost runs on the compute worker. A superseded or refused run sends nothing back. */
+export const ComputePreview = Command.define('ComputePreview', {
+  args: { game: Game, nodeId: Schema.String, option: TradeoffOption },
+  messages: [Message.PreviewComputed, Message.Synced],
+  execute: ({ game, nodeId, option }) =>
+    Effect.promise(() => compute('preview', { game, nodeId, option })).pipe(
+      Effect.map((preview) =>
+        preview
+          ? Message.PreviewComputed({
+              nodeId,
+              option,
+              preview: { ...preview, burn: [...preview.burn] },
+            })
+          : Message.Synced(),
+      ),
+    ),
+})
+
+/** Searches the Bottleneck on the compute worker. A superseded search sends nothing back. */
+export const ComputeBottleneck = Command.define('ComputeBottleneck', {
+  args: { game: Game, at: Schema.Finite },
+  messages: [Message.BottleneckFound, Message.Synced],
+  execute: ({ game, at }) =>
+    Effect.promise(() => compute('bottleneck', { game })).pipe(
+      Effect.map((bottleneck) =>
+        bottleneck === undefined ? Message.Synced() : Message.BottleneckFound({ bottleneck, at }),
+      ),
+    ),
 })
 
 /** Adds a history entry for the route a Message opened. */

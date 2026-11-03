@@ -32,7 +32,16 @@ import {
 } from '@quorum/simulation/state'
 import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
-import { BuildGroupKey, Folder, Menu, Panel, SandboxId, Tone, TradeoffOption } from './model.ts'
+import {
+  BuildGroupKey,
+  Folder,
+  Menu,
+  Panel,
+  PreviewFigures,
+  SandboxId,
+  Tone,
+  TradeoffOption,
+} from './model.ts'
 
 /* ==========================================================================
    Every gesture in Quorum becomes one of these.
@@ -205,6 +214,10 @@ export const Message = defineMessageUnion({
   OptionLeft: {},
   OptionChosen: { nodeId: Schema.String, option: TradeoffOption },
   OptionConfirmed: {},
+  /** The compute worker ran an option's ghost runs. */
+  PreviewComputed: { nodeId: Schema.String, option: TradeoffOption, preview: PreviewFigures },
+  /** The compute worker searched the Bottleneck for the sim second `at`. */
+  BottleneckFound: { bottleneck: Schema.NullOr(Schema.String), at: Schema.Finite },
   TradeoffClosed: {},
   UndoChosen: {},
   RedoChosen: {},

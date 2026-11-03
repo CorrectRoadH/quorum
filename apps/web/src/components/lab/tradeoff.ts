@@ -227,7 +227,9 @@ const effect = (model: Model, card: Tradeoff, h: HtmlBuilder<Message>): Html =>
             : h.empty,
         ],
       )
-    : h.span([h.Class('text-[12px] text-warn')], [card.refusal ?? ''])
+    : card.refusal
+      ? h.span([h.Class('text-[12px] text-warn')], [card.refusal])
+      : h.empty
 
 /* ---------- the card ---------- */
 

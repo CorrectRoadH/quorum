@@ -123,8 +123,8 @@ import {
   sandboxOf,
   START,
 } from '@quorum/simulation/sandbox'
-import { previewOf } from '@quorum/simulation/preview'
-import { bottleneckOf, solveFlow } from '@quorum/simulation/solve'
+import { solveFlow } from '@quorum/simulation/solve'
+import { optionAction } from './jobs.ts'
 import { Game } from '@quorum/simulation/state'
 import { IPO_BURN_SECONDS, PRE_IPO_STAGE } from '@quorum/simulation/ipo'
 import { firstQuarter } from '@quorum/simulation/quarters'
@@ -141,6 +141,8 @@ import {
   WriteFounder,
   AppendLog,
   ClearLog,
+  ComputeBottleneck,
+  ComputePreview,
   ClearToast,
   ExportLog,
   FitBoard,
@@ -612,18 +614,6 @@ const migrationNote = (before: Game, after: Game): Note => {
 
 /* ---------- Tradeoff cards ---------- */
 
-/** The action an option stands for. */
-const optionAction = (game: Game, nodeId: string, option: TradeoffOption): Actions.Action => {
-  switch (option.kind) {
-    case 'runtime':
-      return Actions.setRuntime(game, nodeId, option.id)
-    case 'framework':
-      return Actions.setFramework(game, nodeId, option.id)
-    case 'family':
-      return Actions.setFamily(game, nodeId, option.id)
-  }
-}
-
 /** The Message that applies an option, as the inspector sent before Tradeoff cards. */
 const optionMessage = (nodeId: string, option: TradeoffOption): Message => {
   switch (option.kind) {
@@ -636,28 +626,28 @@ const optionMessage = (nodeId: string, option: TradeoffOption): Message => {
   }
 }
 
-/** A card for an option, with its ghost-run preview: computed here, never in a view. */
+/**
+ * A card for an option. A refusal shows at once; the ghost runs go to the compute
+ * worker, and their preview arrives as PreviewComputed.
+ */
 const tradeoffOf = (
   model: Model,
   nodeId: string,
   option: TradeoffOption,
   pinned: boolean,
-): Tradeoff =>
-  Result.match(
-    previewOf(model.game, `${nodeId}:${option.kind}:${option.id}`, (game) =>
-      optionAction(game, nodeId, option),
-    ),
-    {
-      onSuccess: (preview) => ({ nodeId, option, pinned, preview, refusal: null }),
-      onFailure: (refusal) => ({
-        nodeId,
-        option,
-        pinned,
-        preview: null,
-        refusal: Actions.describeRefusal(refusal),
-      }),
-    },
-  )
+): readonly [Tradeoff, ReadonlyArray<AnyCommand>] =>
+  Result.match(optionAction(model.game, nodeId, option), {
+    onSuccess: () =>
+      [
+        { nodeId, option, pinned, preview: null, refusal: null },
+        [ComputePreview({ game: model.game, nodeId, option })],
+      ] as const,
+    onFailure: (refusal) =>
+      [
+        { nodeId, option, pinned, preview: null, refusal: Actions.describeRefusal(refusal) },
+        [],
+      ] as const,
+  })
 
 /** Applies an option and logs what its card predicted, so playtests can compare it with the outcome. */
 const applyOption = (model: Model, card: Tradeoff): Result => {
@@ -1016,7 +1006,8 @@ const tick = (model: Model): Result => {
   const second = Math.floor(game.time)
   const search = model.bottleneckAt < 0 || second !== model.bottleneckAt
   const flow = solveFlow(game)
-  const bottleneck = search ? bottleneckOf(game, flow) : model.bottleneck
+  // The search runs on the compute worker; until it answers, the last Bottleneck stands.
+  const bottleneck = model.bottleneck
   const ledger: Ledger = { ...flow, bottleneck }
   // An incident drops the clock to 1×, so the player has time to respond.
   const incident = events.some((event) => event._tag === 'IncidentStarted')
@@ -1037,6 +1028,7 @@ const tick = (model: Model): Result => {
   }
   next = advanceReveals(next, ledger)
   const commands: Array<AnyCommand> = [sync(next)]
+  if (search) commands.push(ComputeBottleneck({ game, at: second }))
   const logs: Array<LogEntry> = []
 
   if (run && guided && advanced) {
@@ -1760,19 +1752,44 @@ const handle = (model: Model, message: Message): Result =>
         }),
       }),
 
-    OptionPreviewed: ({ nodeId, option }) =>
-      model.tradeoff?.pinned
-        ? { model }
-        : { model: { ...model, tradeoff: tradeoffOf(model, nodeId, option, false) } },
+    OptionPreviewed: ({ nodeId, option }) => {
+      if (model.tradeoff?.pinned) return { model }
+      const [card, commands] = tradeoffOf(model, nodeId, option, false)
+      return { model: { ...model, tradeoff: card }, commands }
+    },
+    PreviewComputed: ({ nodeId, option, preview }) => {
+      const card = model.tradeoff
+      const same =
+        card?.nodeId === nodeId && card.option.kind === option.kind && card.option.id === option.id
+      return same ? { model: { ...model, tradeoff: { ...card, preview } } } : { model }
+    },
+    BottleneckFound: ({ bottleneck, at }) => {
+      if (at !== model.bottleneckAt || bottleneck === model.bottleneck) return { model }
+      const next: Model = { ...model, bottleneck }
+      return { model: next, commands: [sync(next)] }
+    },
     OptionLeft: () =>
       model.tradeoff && !model.tradeoff.pinned
         ? { model: { ...model, tradeoff: null } }
         : { model },
     OptionChosen: ({ nodeId, option }) => {
-      const card = tradeoffOf(model, nodeId, option, true)
       // Once an option set is confirmed, its options apply on click; the card stays one line.
-      if (model.seenTradeoffs.includes(option.kind)) return applyOption(model, card)
-      return { model: { ...model, tradeoff: card } }
+      if (model.seenTradeoffs.includes(option.kind)) {
+        const hovered = model.tradeoff
+        const same =
+          hovered?.nodeId === nodeId &&
+          hovered.option.kind === option.kind &&
+          hovered.option.id === option.id
+        return applyOption(model, {
+          nodeId,
+          option,
+          pinned: true,
+          preview: same ? hovered.preview : null,
+          refusal: null,
+        })
+      }
+      const [card, commands] = tradeoffOf(model, nodeId, option, true)
+      return { model: { ...model, tradeoff: card }, commands }
     },
     OptionConfirmed: () =>
       model.tradeoff?.pinned ? applyOption(model, model.tradeoff) : { model },

@@ -5,6 +5,7 @@ import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { COMPONENTS } from '@quorum/simulation/catalog'
 import { SHARED } from '@quorum/simulation/playbook'
+import { JOBS } from './jobs.ts'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'
@@ -219,9 +220,21 @@ describe('Tradeoff cards', () => {
   const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
     messages.reduce((current, message) => update(current, message).model, model)
 
-  test('hovering previews; leaving closes; the Game does not change', () => {
+  test('hovering asks the worker for a preview; leaving closes; the Game does not change', () => {
     const start = ready()
-    const hovered = send(start, Message.OptionPreviewed({ nodeId: 'server', option }))
+    const asked = update(start, Message.OptionPreviewed({ nodeId: 'server', option }))
+    expect(asked.model.tradeoff?.preview).toBeNull()
+    expect(asked.commands?.map((command) => command.name)).toContain('ComputePreview')
+    const preview = JOBS.preview({ game: start.game, nodeId: 'server', option })
+    if (!preview) throw new Error('The option was refused.')
+    const hovered = send(
+      asked.model,
+      Message.PreviewComputed({
+        nodeId: 'server',
+        option,
+        preview: { ...preview, burn: [...preview.burn] },
+      }),
+    )
     expect(hovered.tradeoff?.pinned).toBe(false)
     expect(hovered.tradeoff?.preview?.after.revenue).toBeGreaterThan(
       hovered.tradeoff?.preview?.before.revenue ?? Infinity,

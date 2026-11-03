@@ -102,7 +102,8 @@ import {
   type Pt,
   type Route,
 } from './geometry.ts'
-import { HOP, routeLinks, type Wire } from './routing.ts'
+import { compute } from './compute.ts'
+import { HOP, type Wire } from './routing.ts'
 import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
 
 /* ==========================================================================
@@ -1998,13 +1999,12 @@ class BoardController {
   /** Where the held card, new Node or Playbook lands: the nearest spot that keeps clear. */
   private landing: Pt | null = null
   private landingKey = ''
-  /** Routed links for the Model's positions, and the Design they were routed for. */
+  /** Routed links, the Nodes where they were routed, and the Design key asked for last. */
   private routed = new Map<string, Wire>()
+  private routedNodes = new Map<string, GameNode>()
   private routedFor = ''
-  /** The Game the routes and `modelNodes` were last checked against. */
+  /** The Game the routes were last checked against. */
   private routedGame: Game | null = null
-  /** The Model's Nodes by id, where they are in the Design (not where they are drawn). */
-  private modelNodes = new Map<string, GameNode>()
   private ghostType: ComponentId | null = null
   private ghostLocale: Locale = 'en'
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
@@ -2280,17 +2280,26 @@ class BoardController {
     return null
   }
 
-  /** Routes every link once per change to the Design, not once per frame. The key is
-   *  built once per Game, since a Game is never changed in place. */
+  /**
+   * Asks the compute worker to route every link once per change to the Design, not
+   * once per frame. Until it answers, the old routes stand for links whose Nodes did
+   * not move, and the others take the quick route. The key is built once per Game,
+   * since a Game is never changed in place.
+   */
   private routes(): Map<string, Wire> {
     const game = this.state?.game
     if (!game || game === this.routedGame) return this.routed
     this.routedGame = game
-    this.modelNodes = new Map(game.nodes.map((node) => [node.id, node]))
     const key = `${game.nodes.map((node) => `${node.id}:${node.type}:${node.x}:${node.y}`).join('|')}#${game.links.map((link) => `${link.from}>${link.to}`).join('|')}`
     if (key !== this.routedFor) {
       this.routedFor = key
-      this.routed = routeLinks(game.nodes, game.links)
+      const nodes = game.nodes.map(({ id, type, x, y }) => ({ id, type, x, y }))
+      const links = game.links.map(({ from, to }) => ({ from, to }))
+      void compute('route', { nodes, links }).then((wires) => {
+        if (!wires || this.destroyed) return
+        this.routed = wires
+        this.routedNodes = new Map(game.nodes.map((node) => [node.id, node]))
+      })
     }
     return this.routed
   }
@@ -2302,7 +2311,7 @@ class BoardController {
   private wireOf(from: GameNode, to: GameNode): Wire {
     const routes = this.routes()
     const settled = (node: GameNode) => {
-      const entry = this.modelNodes.get(node.id)
+      const entry = this.routedNodes.get(node.id)
       return entry !== undefined && entry.x === node.x && entry.y === node.y
     }
     const routed = settled(from) && settled(to) ? routes.get(`${from.id}>${to.id}`) : undefined
