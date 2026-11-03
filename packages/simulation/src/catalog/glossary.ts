@@ -71,6 +71,13 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     inGame: 'Links.',
   },
   {
+    id: 'burn-rate',
+    term: 'Burn rate',
+    definition:
+      'How fast a service spends its error budget, relative to the SLO. A burn rate of 1 spends exactly the whole budget in the SLO window.',
+    inGame: 'The Dashboard.',
+  },
+  {
     id: 'cache-aside',
     term: 'Cache-aside',
     definition:
@@ -331,6 +338,13 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     inGame: 'Read Replica.',
   },
   {
+    id: 'red-method',
+    term: 'RED method',
+    definition:
+      'Rate, Errors, and Duration for each service. It measures what users feel, so alerts watch it.',
+    inGame: 'The Dashboard.',
+  },
+  {
     id: 'replication-lag',
     term: 'Replication lag',
     definition: 'The delay between a write on a primary database and its arrival on a replica.',
@@ -424,6 +438,13 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     definition:
       'Writing a change and an event about it in the same database transaction, then publishing the event later.',
     inGame: 'Keeping copies in sync.',
+  },
+  {
+    id: 'use-method',
+    term: 'USE method',
+    definition:
+      'Utilization, Saturation, and Errors for each resource, such as CPU, memory, or a connection pool. It measures causes, not symptoms.',
+    inGame: 'The Dashboard.',
   },
   {
     id: 'utilization',

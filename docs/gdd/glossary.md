@@ -56,6 +56,11 @@ headcount. In the game: [Coordination](./08-team-and-velocity.md#coordination).
 A limit on how much of a caller's capacity one dependency can use, so one slow dependency cannot
 exhaust it. In the game: [Links](./05-components.md#links).
 
+## Burn rate
+
+How fast a service spends its error budget, relative to the SLO. A burn rate of 1 spends exactly
+the whole budget in the SLO window. In the game: [The Dashboard](./12-observability.md#the-dashboard).
+
 ## Cache-aside
 
 The application reads from the cache, and on a miss reads from the database and fills the cache.
@@ -263,6 +268,11 @@ Capping how many requests a client can make in a period, often with a token buck
 A guarantee that a user always sees their own recent writes. In the game:
 [Read Replica](./07-data-tier.md#read-replica).
 
+## RED method
+
+Rate, Errors, and Duration for each service. It measures what users feel, so alerts watch it. In
+the game: [The Dashboard](./12-observability.md#the-dashboard).
+
 ## Replication lag
 
 The delay between a write on a primary database and its arrival on a replica. In the game:
@@ -335,6 +345,11 @@ A rate limiting method: tokens refill at a fixed rate, and each request takes on
 
 Writing a change and an event about it in the same database transaction, then publishing the event
 later. In the game: [Keeping copies in sync](./07-data-tier.md#keeping-copies-in-sync).
+
+## USE method
+
+Utilization, Saturation, and Errors for each resource, such as CPU, memory, or a connection pool. It
+measures causes, not symptoms. In the game: [The Dashboard](./12-observability.md#the-dashboard).
 
 ## Utilization
 

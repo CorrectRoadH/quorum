@@ -269,7 +269,7 @@ visible so that the player can plan ([Interface](./15-ui-ux.md#research-screen))
 | ID                  | Name                 | Era      | ◇      | Requires      | Effect                                                 |
 | ------------------- | -------------------- | -------- | ------ | ------------- | ------------------------------------------------------ |
 | `logs`              | Structured logs      | Garage   | 20     | —             | Error breakdown by cause                               |
-| `metrics`           | Metrics              | Garage   | 50     | —             | History graphs per Node                                |
+| `metrics`           | Metrics              | Garage   | 50     | —             | History graphs per Node; the Dashboard                 |
 | `percentiles`       | Percentiles          | Pre-seed | 150    | `metrics`     | p50, p95, p99 on cards                                 |
 | `alerting`          | Alerting             | Pre-seed | 250    | `metrics`     | Pager banner before users notice                       |
 | `tracing`           | Distributed tracing  | Seed     | 800    | `percentiles` | Per-kind waterfalls; bottleneck per kind               |
