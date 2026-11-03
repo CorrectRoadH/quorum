@@ -1042,12 +1042,11 @@ const ledgerOf = (
   }
 
   // Third parties (09 "Third-party fees"): the Payment Provider takes a share of each checkout
-  // and a fixed part, which the cost index scales like every other price.
+  // and a fixed part. Both are real dollars on a real-dollar checkout, so the cost index skips them.
   const checkouts = kinds.buy ? kinds.buy.rate * kinds.buy.success : 0
   const fees =
     checkouts > 0
-      ? checkouts *
-        (KINDS.buy.value * valueFactor(game, 'buy') * PSP_RATE + PSP_FIXED * eraOf(game).costIndex)
+      ? checkouts * (KINDS.buy.value * valueFactor(game, 'buy') * PSP_RATE + PSP_FIXED)
       : 0
 
   // A Data Warehouse bills each scan; the LLM API bills each token (09 "Pricing models").

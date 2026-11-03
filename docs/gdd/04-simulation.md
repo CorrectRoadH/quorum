@@ -44,22 +44,22 @@ patience target. Kinds arrive by Era ([Progression](./10-progression.md#eras)).
 
 | Kind       | Code     | Era      | Value ($) | App CPU (ref ms) | Synchronous downstream                        | Payload   | Apdex T  | Traits                                            |
 | ---------- | -------- | -------- | --------- | ---------------- | --------------------------------------------- | --------- | -------- | ------------------------------------------------- |
-| Page view  | `page`   | Garage   | 0.20      | 4                | 2 × `q-read`                                  | 80 KB     | 400 ms   | Cacheable at the edge for anonymous users (70%)   |
-| API read   | `read`   | Garage   | 0.40      | 1.5              | 1 × `q-read`                                  | 4 KB      | 200 ms   | Cacheable                                         |
-| API write  | `write`  | Pre-seed | 1.00      | 2                | 1 × `q-write`                                 | 2 KB      | 300 ms   | Invalidates cached reads; needs read-your-writes  |
-| Login      | `login`  | Pre-seed | 0.50      | 80               | 1 × `q-read`                                  | 1 KB      | 800 ms   | CPU-heavy (password hash); bot target             |
-| Search     | `search` | Seed     | 1.20      | 3                | 1 × `q-search`                                | 8 KB      | 300 ms   | Fan-out inside the search engine                  |
-| Upload     | `upload` | Seed     | 1.50      | 120              | 1 × `blob-put`, 1 × `q-write`                 | 2 MB in   | 1,500 ms | CPU-heavy (image resize); can go async            |
+| Page view  | `page`   | Garage   | 0.10      | 4                | 2 × `q-read`                                  | 80 KB     | 400 ms   | Cacheable at the edge for anonymous users (70%)   |
+| API read   | `read`   | Garage   | 0.20      | 1.5              | 1 × `q-read`                                  | 4 KB      | 200 ms   | Cacheable                                         |
+| API write  | `write`  | Pre-seed | 0.50      | 2                | 1 × `q-write`                                 | 2 KB      | 300 ms   | Invalidates cached reads; needs read-your-writes  |
+| Login      | `login`  | Pre-seed | 0.25      | 80               | 1 × `q-read`                                  | 1 KB      | 800 ms   | CPU-heavy (password hash); bot target             |
+| Search     | `search` | Seed     | 0.60      | 3                | 1 × `q-search`                                | 8 KB      | 300 ms   | Fan-out inside the search engine                  |
+| Upload     | `upload` | Seed     | 0.75      | 120              | 1 × `blob-put`, 1 × `q-write`                 | 2 MB in   | 1,500 ms | CPU-heavy (image resize); can go async            |
 | Bot        | `bot`    | Seed     | 0         | 2                | 1 × `q-read`                                  | 4 KB      | —        | Earns nothing; WAF target                         |
-| Video      | `media`  | Series A | 2.00      | 1                | 1 × `blob-get`                                | 5 MB      | 1,000 ms | Egress-heavy; CDN-cacheable                       |
-| Realtime   | `rt`     | Series A | 0.05      | 0.3              | 1 × `msg`                                     | 1 KB      | 100 ms   | Holds a long-lived connection                     |
+| Video      | `media`  | Series A | 1.00      | 1                | 1 × `blob-get`                                | 5 MB      | 1,000 ms | Egress-heavy; CDN-cacheable                       |
+| Realtime   | `rt`     | Series A | 0.025     | 0.3              | 1 × `msg`                                     | 1 KB      | 100 ms   | Holds a long-lived connection                     |
 | Checkout   | `buy`    | Series A | 25.00     | 5                | 1 × `q-tx`, 1 × `ext` (payment)               | 2 KB      | 2,000 ms | Needs strong consistency and idempotency          |
-| Export job | `job`    | Series B | 3.20      | 400              | 50 × `q-read`                                 | 10 MB out | async    | Long-running; should go through a queue           |
-| Report     | `report` | Series B | 4.00      | 20               | 1 × `q-scan`                                  | 50 KB     | 3,000 ms | Analytical scan; harms the transactional database |
-| AI prompt  | `ai`     | Series B | 8.00      | 5                | 1 × `infer`                                   | 4 KB      | 4,000 ms | GPU-bound; streams tokens                         |
-| Feed       | `feed`   | Series C | 0.60      | 6                | 20 × `q-read` (pull) or 1 × cache read (push) | 30 KB     | 300 ms   | Fan-out; celebrity accounts create hot keys       |
-| Webhook    | `hook`   | Series C | 0.80      | 2                | 1 × `ext` (customer endpoint)                 | 2 KB      | async    | Bursty; the far end is slow and unreliable        |
-| Notify     | `push`   | Series C | 0.10      | 0.5              | 1 × `ext` (push provider)                     | 1 KB      | async    | Fan-out on write                                  |
+| Export job | `job`    | Series B | 1.60      | 400              | 50 × `q-read`                                 | 10 MB out | async    | Long-running; should go through a queue           |
+| Report     | `report` | Series B | 2.00      | 20               | 1 × `q-scan`                                  | 50 KB     | 3,000 ms | Analytical scan; harms the transactional database |
+| AI prompt  | `ai`     | Series B | 4.00      | 5                | 1 × `infer`                                   | 4 KB      | 4,000 ms | GPU-bound; streams tokens                         |
+| Feed       | `feed`   | Series C | 0.30      | 6                | 20 × `q-read` (pull) or 1 × cache read (push) | 30 KB     | 300 ms   | Fan-out; celebrity accounts create hot keys       |
+| Webhook    | `hook`   | Series C | 0.40      | 2                | 1 × `ext` (customer endpoint)                 | 2 KB      | async    | Bursty; the far end is slow and unreliable        |
+| Notify     | `push`   | Series C | 0.05      | 0.5              | 1 × `ext` (push provider)                     | 1 KB      | async    | Fan-out on write                                  |
 
 "App CPU (ref ms)" is CPU time on a runtime with speed 1.0 (Go). Each runtime divides it by its
 speed factor ([Runtimes](./06-runtimes.md#language-profiles)). Values are game dollars and are

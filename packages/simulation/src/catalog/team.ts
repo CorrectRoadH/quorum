@@ -135,4 +135,4 @@ export const SESSION_STATE_CRASHES = 0.05
 
 /** Share of users on a paid plan, and what a plan pays per calendar day. */
 export const PAYING_SHARE = 0.05
-export const PLAN_PER_DAY = 48
+export const PLAN_PER_DAY = 24
