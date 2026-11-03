@@ -562,7 +562,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
   test('a Tradeoff term opens the Glossary on it and marks it met', () => {
     const opened = update(inLab(), Message.GlossaryOpened({ id: 'event-loop' })).model
     expect(opened.panel).toBe('glossary')
-    expect(opened.glossaryFocus).toBe('event-loop')
+    expect(opened.glossary.focus).toBe('event-loop')
     expect(opened.founder.glossary).toContain('event-loop')
   })
 

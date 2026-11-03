@@ -229,10 +229,10 @@ const detail = (entry: GlossaryEntry, met: (id: string) => boolean, h: HtmlBuild
 
 export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
   const shown = GLOSSARY.filter((entry) =>
-    matches(entry, model.glossaryQuery, model.glossaryCategory, model.prefs.locale),
+    matches(entry, model.glossary.query, model.glossary.category, model.prefs.locale),
   )
   const open =
-    (model.glossaryFocus !== null ? BY_ID.get(model.glossaryFocus) : undefined) ??
+    (model.glossary.focus !== null ? BY_ID.get(model.glossary.focus) : undefined) ??
     shown[0] ??
     GLOSSARY[0]
   const met = (id: string) => model.founder.glossary.includes(id)
@@ -256,7 +256,7 @@ export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.input([
             h.Type('search'),
             h.AriaLabel('Search the glossary'),
-            h.Value(model.glossaryQuery),
+            h.Value(model.glossary.query),
             h.OnInput((query) => Message.GlossarySearched({ query })),
             h.Class('w-full min-w-0 bg-transparent text-[13px] outline-none'),
           ]),
@@ -264,7 +264,7 @@ export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
     ],
     [
-      filters(model.glossaryCategory, h),
+      filters(model.glossary.category, h),
       h.div(
         [
           h.Class(

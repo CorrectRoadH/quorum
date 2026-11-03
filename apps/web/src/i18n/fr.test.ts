@@ -159,7 +159,7 @@ describe('French presentation', () => {
     const model = {
       ...initialModel(),
       prefs: { ...initialModel().prefs, locale: 'fr' as const },
-      glossaryQuery: 'contre-pression',
+      glossary: { ...initialModel().glossary, query: 'contre-pression' },
     }
     Scene.scene(
       { update, view: glossaryPanel },
@@ -168,7 +168,7 @@ describe('French presentation', () => {
     )
     Scene.scene(
       { update, view: glossaryPanel },
-      Scene.given({ ...model, glossaryCategory: 'security' }),
+      Scene.given({ ...model, glossary: { ...model.glossary, category: 'security' } }),
       Scene.expect(Scene.text('No matches')).toExist(),
     )
   })
@@ -179,7 +179,7 @@ describe('French presentation', () => {
       Scene.given({
         ...initialModel(),
         prefs: { ...initialModel().prefs, locale: 'fr' },
-        glossaryQuery: 'repartiteur de charge',
+        glossary: { ...initialModel().glossary, query: 'repartiteur de charge' },
       }),
       Scene.expect(Scene.text('Load balancer')).toExist(),
     )

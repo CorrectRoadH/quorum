@@ -113,7 +113,7 @@ describe('interface languages', () => {
     const model = {
       ...initialModel(),
       prefs: { ...initialModel().prefs, locale: 'zh-CN' as const },
-      glossaryQuery: '背压',
+      glossary: { ...initialModel().glossary, query: '背压' },
     }
     Scene.scene(
       { update, view: glossaryPanel },
@@ -122,7 +122,7 @@ describe('interface languages', () => {
     )
     Scene.scene(
       { update, view: glossaryPanel },
-      Scene.given({ ...model, glossaryCategory: 'security' }),
+      Scene.given({ ...model, glossary: { ...model.glossary, category: 'security' } }),
       Scene.expect(Scene.text('No matches')).toExist(),
     )
   })

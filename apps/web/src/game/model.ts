@@ -287,6 +287,16 @@ export const Undo = Schema.Struct({
 })
 export type Undo = typeof Undo.Type
 
+/** The Glossary panel: its open entry, search, category filter, and the panel it closes back to. */
+export const Glossary = Schema.Struct({
+  focus: Schema.NullOr(Schema.String),
+  /** Research when a (?) link opened it. */
+  returnTo: Panel,
+  query: Schema.String,
+  category: Schema.NullOr(Schema.String),
+})
+export type Glossary = typeof Glossary.Type
+
 /** A board mode: placing one Component, or stamping the Founder's Playbook (by index) or the copied Nodes. */
 export const Tool = Schema.Union([
   Schema.TaggedStruct('Placing', { type: ComponentId }),
@@ -364,14 +374,9 @@ export const Model = Schema.Struct({
   languagePicker: Listbox.Model,
   /** The phone toolbar's More menu. */
   moreMenu: UiMenu.Model,
-  /** The Glossary panel's open entry, search, and category filter. */
-  glossaryFocus: Schema.NullOr(Schema.String),
-  /** The panel the Glossary closes back to: Research when a (?) link opened it. */
-  glossaryReturn: Panel,
+  glossary: Glossary,
   /** The Insight card's help section is open. */
   insightHelp: Schema.Boolean,
-  glossaryQuery: Schema.String,
-  glossaryCategory: Schema.NullOr(Schema.String),
   /** Advice the game has sent, oldest first, and the one the Inbox shows. */
   inbox: Schema.Array(Mail),
   inboxFocus: Schema.NullOr(Schema.Finite),

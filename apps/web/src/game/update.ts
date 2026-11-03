@@ -281,11 +281,8 @@ export const initialModel = (): Model =>
     },
     languagePicker: Listbox.init({ id: 'interface-language' }),
     moreMenu: UiMenu.init({ id: 'more-menu' }),
-    glossaryFocus: null,
-    glossaryReturn: 'none',
+    glossary: { focus: null, returnTo: 'none', query: '', category: null },
     insightHelp: false,
-    glossaryQuery: '',
-    glossaryCategory: null,
     inbox: [],
     inboxFocus: null,
     mailPeek: null,
@@ -330,11 +327,11 @@ const closePanel = (model: Model): Model => ({
   ...model,
   panel:
     model.panel === 'glossary'
-      ? model.glossaryReturn
+      ? model.glossary.returnTo
       : model.panel === 'settings' && onBoard(model.route)
         ? 'menu'
         : 'none',
-  glossaryReturn: 'none',
+  glossary: { ...model.glossary, returnTo: 'none' },
 })
 
 const sync = (model: Model, fit: boolean): AnyCommand =>
@@ -2968,11 +2965,13 @@ const handle = (model: Model, message: Message): Result =>
         ...model,
         panel: 'glossary',
         tool: null,
-        glossaryFocus: id,
-        glossaryReturn:
-          model.panel === 'research' ? 'research' : browsing ? model.glossaryReturn : 'none',
-        glossaryQuery: browsing ? model.glossaryQuery : '',
-        glossaryCategory: browsing ? model.glossaryCategory : null,
+        glossary: {
+          focus: id,
+          returnTo:
+            model.panel === 'research' ? 'research' : browsing ? model.glossary.returnTo : 'none',
+          query: browsing ? model.glossary.query : '',
+          category: browsing ? model.glossary.category : null,
+        },
         founder,
       }
       return {
@@ -3050,12 +3049,16 @@ const handle = (model: Model, message: Message): Result =>
           return { model }
       }
     },
-    GlossarySearched: ({ query }) => ({ model: { ...model, glossaryQuery: query } }),
+    GlossarySearched: ({ query }) => ({
+      model: { ...model, glossary: { ...model.glossary, query } },
+    }),
     DashboardRangeChosen: ({ minutes }) => ({
       model: { ...model, dashboardRange: minutes, dashboardHover: null },
     }),
     DashboardHovered: ({ index }) => ({ model: { ...model, dashboardHover: index } }),
-    GlossaryFiltered: ({ category }) => ({ model: { ...model, glossaryCategory: category } }),
+    GlossaryFiltered: ({ category }) => ({
+      model: { ...model, glossary: { ...model.glossary, category } },
+    }),
 
     CheatCash: () => {
       const next: Model = {
