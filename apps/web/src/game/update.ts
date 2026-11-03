@@ -1978,10 +1978,9 @@ const handle = (model: Model, message: Message): Result =>
 
     NodeTapped: ({ nodeId }) => {
       const node = model.game.nodes.find((entry) => entry.id === nodeId)
-      if (node?.type === 'payments' && model.game.pending > 0) {
-        const next: Model = { ...model, selected: nodeId }
-        return route(next, Message.Collected())
-      }
+      // Collecting is a tap on the drawer, not a request to inspect it.
+      if (node?.type === 'payments' && model.game.pending > 0)
+        return route(model, Message.Collected())
       const next: Model = {
         ...model,
         selected: nodeId,
@@ -2180,8 +2179,7 @@ const handle = (model: Model, message: Message): Result =>
     FooterPressed: ({ nodeId }) => {
       const node = model.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
-      if (node.type === 'payments')
-        return route({ ...model, selected: nodeId }, Message.Collected())
+      if (node.type === 'payments') return route(model, Message.Collected())
       if (node.down === -1) return route(model, Message.ReplaceBought({ nodeId }))
       return route(model, Message.ResizeChosen({ nodeId, direction: 1 }))
     },

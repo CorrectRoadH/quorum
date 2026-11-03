@@ -174,6 +174,36 @@ describe('the clock', () => {
   })
 })
 
+describe('collecting the Payments drawer', () => {
+  const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
+    messages.reduce((current, message) => update(current, message).model, model)
+  const withPending = (): Model => {
+    const model = inLab()
+    return { ...model, game: { ...model.game, pending: 42 } }
+  }
+
+  test('a tap on Payments collects without opening the Inspector', () => {
+    const start = withPending()
+    const tapped = send(start, Message.NodeTapped({ nodeId: 'payments' }))
+    expect(tapped.selected).toBeNull()
+    expect(tapped.game.pending).toBe(0)
+    expect(tapped.game.cash).toBe(start.game.cash + 42)
+  })
+
+  test('the footer Collect button collects without opening the Inspector', () => {
+    const start = withPending()
+    const pressed = send(start, Message.FooterPressed({ nodeId: 'payments' }))
+    expect(pressed.selected).toBeNull()
+    expect(pressed.game.pending).toBe(0)
+    expect(pressed.game.cash).toBe(start.game.cash + 42)
+  })
+
+  test('an empty drawer still opens the Inspector', () => {
+    const tapped = send(inLab(), Message.NodeTapped({ nodeId: 'payments' }))
+    expect(tapped.selected).toBe('payments')
+  })
+})
+
 describe('Tradeoff cards', () => {
   const option = { kind: 'runtime', id: 'node_cluster' } as const
   const ready = (): Model => ({
