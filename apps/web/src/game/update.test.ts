@@ -117,11 +117,20 @@ describe('copy, cut, paste, and select all', () => {
     const copied = send(placed, key('Mod+a'), key('Mod+c'))
     expect(copied.clipboard?.nodes.length).toBe(movable(placed).length)
     const stamping = send(copied, key('Mod+v'))
-    expect(stamping.stamping).toBe('clipboard')
+    expect(stamping.tool).toEqual({ _tag: 'Stamping', source: 'clipboard' })
     const pasted = send(stamping, Message.NodePlaced({ x: 900, y: 700 }))
     expect(movable(pasted).length).toBe(2 * movable(placed).length)
-    expect(pasted.stamping).toBeNull()
+    expect(pasted.tool).toBeNull()
     expect(pasted.game.cash).toBeLessThan(placed.game.cash)
+  })
+
+  test('choosing a part while pasting places the part, not the paste', () => {
+    const placed = start()
+    const stamping = send(placed, key('Mod+a'), key('Mod+c'), key('Mod+v'))
+    const chosen = send(stamping, Message.PlacingChosen({ type: 'server' }))
+    const dropped = send(chosen, Message.NodePlaced({ x: 900, y: 700 }))
+    expect(dropped.game.nodes.length).toBe(placed.game.nodes.length + 1)
+    expect(dropped.game.nodes.at(-1)?.type).toBe('server')
   })
 
   test('cut sells the Nodes and keeps them to paste', () => {
@@ -179,7 +188,7 @@ describe('copy, cut, paste, and select all', () => {
   })
 
   test('paste with nothing copied does not start placing', () => {
-    expect(send(start(), key('Mod+v')).stamping).toBeNull()
+    expect(send(start(), key('Mod+v')).tool).toBeNull()
   })
 })
 

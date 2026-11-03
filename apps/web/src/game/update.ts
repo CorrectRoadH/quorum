@@ -193,6 +193,7 @@ import {
   type TradeoffOption,
   halted,
   offCompany,
+  placingOf,
   stampedPlaybook,
   type ChallengeRun,
   type Menu,
@@ -244,8 +245,7 @@ export const initialModel = (): Model =>
     freeBoard: null,
     selected: null,
     selection: [],
-    placing: null,
-    stamping: null,
+    tool: null,
     confirmSell: null,
     clipboard: null,
     founder: emptyFounder(),
@@ -342,7 +342,7 @@ const sync = (model: Model): AnyCommand =>
     bottleneck: model.bottleneck,
     selected: model.selected,
     selection: model.selection,
-    placing: model.placing,
+    placing: placingOf(model),
     stamp: stampOf(model),
     history: model.nodeHistory,
     region: model.region,
@@ -1030,7 +1030,7 @@ const tick = (model: Model): Result => {
     )
     if (done) {
       const passed = next.passed.includes(guided.id) ? next.passed : [...next.passed, guided.id]
-      next = { ...next, passed, panel: 'passed', placing: null }
+      next = { ...next, passed, panel: 'passed', tool: null }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     } else {
       const [raised, clear] = toasted(
@@ -1247,7 +1247,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
     game,
     freeBoard: game,
     selected: null,
-    placing: null,
+    tool: null,
     undo: [],
     redo: [],
     change: null,
@@ -1323,8 +1323,7 @@ const leaveExited = (model: Model, menu: Menu): Result => ({
     game: newGame(model.game.seed),
     selected: null,
     selection: [],
-    stamping: null,
-    placing: null,
+    tool: null,
   },
 })
 
@@ -1462,7 +1461,7 @@ const startRun = (model: Model, run: ChallengeRun): Result => {
         challenge: { ...run, phase: 'running', board: model.game, replay, totals: NO_TOTALS },
         carry: 0,
         paused: false,
-        placing: null,
+        tool: null,
         selected: null,
         panel: 'none',
         bottleneckAt: -1,
@@ -1573,7 +1572,7 @@ const leaveChallenge = (model: Model): Result => ({
     ...model,
     route: AppRoute.Menu({ menu: 'challenges' }),
     panel: 'none',
-    placing: null,
+    tool: null,
     selected: null,
     game: model.company ?? newGame(),
     challenge: null,
@@ -1604,7 +1603,7 @@ const leaveBoard = (model: Model): Result => {
   if (model.challenge) return leaveChallenge(model)
   if (!model.sandbox)
     return {
-      model: { ...model, route: AppRoute.Title(), panel: 'none', placing: null },
+      model: { ...model, route: AppRoute.Title(), panel: 'none', tool: null },
       commands: [saveOf(model)],
     }
   const freeBoard = model.sandbox.id === null ? model.game : model.freeBoard
@@ -1612,7 +1611,7 @@ const leaveBoard = (model: Model): Result => {
     ...model,
     route: AppRoute.Menu({ menu: 'sandbox' }),
     panel: 'none',
-    placing: null,
+    tool: null,
     selected: null,
     game: model.company ?? newGame(),
     sandbox: null,
@@ -1945,13 +1944,17 @@ const handle = (model: Model, message: Message): Result =>
           if (model.confirmSell) return { model: { ...model, confirmSell: null } }
           if (model.tradeoff) return { model: { ...model, tradeoff: null } }
           if (model.insightHelp) return { model: { ...model, insightHelp: false } }
-          if (model.stamping !== null || model.selection.length > 0) {
-            const cleared: Model = { ...model, stamping: null, selection: [] }
+          if (model.tool?._tag === 'Stamping' || model.selection.length > 0) {
+            const cleared: Model = {
+              ...model,
+              tool: model.tool?._tag === 'Stamping' ? null : model.tool,
+              selection: [],
+            }
             return { model: cleared, commands: [sync(cleared)] }
           }
           const next: Model =
-            model.placing !== null
-              ? { ...model, placing: null }
+            model.tool !== null
+              ? { ...model, tool: null }
               : model.buildGroup !== null
                 ? { ...model, buildGroup: null }
                 : model.panel !== 'none'
@@ -2081,7 +2084,7 @@ const handle = (model: Model, message: Message): Result =>
       // Picking a part closes its list: the board is the next step.
       const next: Model = {
         ...model,
-        placing: model.placing === type ? null : type,
+        tool: type === null || placingOf(model) === type ? null : { _tag: 'Placing', type },
         panel: 'none',
         buildGroup: null,
       }
@@ -2106,7 +2109,7 @@ const handle = (model: Model, message: Message): Result =>
           Result.map(placed, (result) => result.game),
           {
             undoable: true,
-            patch: () => ({ stamping: null }),
+            patch: () => ({ tool: null }),
             note: () =>
               Result.match(placed, {
                 onFailure: () => null,
@@ -2127,7 +2130,7 @@ const handle = (model: Model, message: Message): Result =>
           },
         )
       }
-      const type = model.placing
+      const type = placingOf(model)
       if (!type) return { model }
       const spot = freeSpot(others, { x, y, w: CARD_W, h: heightOf(type) })
       return act(
@@ -2136,7 +2139,7 @@ const handle = (model: Model, message: Message): Result =>
         Actions.place(model.game, type, spot.x, spot.y, model.region),
         {
           undoable: true,
-          patch: (_, game) => ({ placing: null, selected: game.nodes.at(-1)?.id ?? null }),
+          patch: (_, game) => ({ tool: null, selected: game.nodes.at(-1)?.id ?? null }),
         },
       )
     },
@@ -2207,8 +2210,7 @@ const handle = (model: Model, message: Message): Result =>
       if (!model.clipboard) return withToast(model, 'Copy some Nodes first.', 'plain')
       const next: Model = {
         ...model,
-        stamping: 'clipboard',
-        placing: null,
+        tool: { _tag: 'Stamping', source: 'clipboard' },
         selected: null,
         selection: [],
         panel: 'none',
@@ -2872,7 +2874,7 @@ const handle = (model: Model, message: Message): Result =>
             saved: false,
             selected: null,
             selection: [],
-            stamping: null,
+            tool: null,
             exited: { row: result.row, researched: model.game.researched },
           }
           return {
@@ -2919,9 +2921,8 @@ const handle = (model: Model, message: Message): Result =>
       if (!model.founder.playbooks[index]) return { model }
       const next: Model = {
         ...model,
-        stamping: index,
+        tool: { _tag: 'Stamping', source: index },
         panel: 'none',
-        placing: null,
         selected: null,
       }
       return { model: next, commands: [sync(next)] }
@@ -2955,7 +2956,7 @@ const handle = (model: Model, message: Message): Result =>
         ...model,
         panel,
         teamDrag: DragAndDrop.init({ id: 'team-drag' }),
-        placing: null,
+        tool: null,
         researchFocus: null,
         dashboardHover: null,
       }
@@ -2995,7 +2996,7 @@ const handle = (model: Model, message: Message): Result =>
       const next: Model = {
         ...model,
         panel: 'glossary',
-        placing: null,
+        tool: null,
         glossaryFocus: id,
         glossaryReturn:
           model.panel === 'research' ? 'research' : browsing ? model.glossaryReturn : 'none',
@@ -3012,7 +3013,7 @@ const handle = (model: Model, message: Message): Result =>
     MailPeekOpened: ({ id }) => {
       const mail = model.inbox.find((entry) => entry.id === id)
       const folder = mail?.spam ? 'spam' : mail && needsAction(mail) ? 'action' : 'fyi'
-      return { model: reading({ ...model, panel: 'inbox', placing: null, folder }, id) }
+      return { model: reading({ ...model, panel: 'inbox', tool: null, folder }, id) }
     },
     MailPeekDismissed: () => ({ model: { ...model, mailPeek: null } }),
     MailTrashed: ({ id }) => ({ model: reading(withMail(model, id, { trashed: true })) }),

@@ -1,7 +1,7 @@
 import { canRaise } from '@quorum/simulation/actions'
 import { senderOf } from './mail.ts'
 import type { Message } from './message.ts'
-import type { Model, Tone } from './model.ts'
+import { placingOf, type Model, type Tone } from './model.ts'
 import { onBoard } from './route.ts'
 import type { Sound } from './sound.ts'
 
@@ -48,7 +48,7 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
       if (after.buildGroup === null) return gesture('close')
       return before.buildGroup === null ? gesture('open') : gesture('switch')
     case 'PlacingChosen':
-      return after.placing ? gesture('pick') : gesture('close')
+      return placingOf(after) ? gesture('pick') : gesture('close')
     case 'NodePlaced':
       return next.nodes.length > game.nodes.length ? gesture('place') : null
     case 'NodeTapped':
@@ -105,7 +105,7 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
     case 'KeyPressed':
       // Other keys route to the Message they stand for, which plays its own cue.
       return message.key === 'Escape' &&
-        (after.placing !== before.placing ||
+        (placingOf(after) !== placingOf(before) ||
           after.buildGroup !== before.buildGroup ||
           after.panel !== before.panel)
         ? gesture('close')

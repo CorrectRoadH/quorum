@@ -11,7 +11,7 @@ import { isUnlocked, priceOf } from '@quorum/simulation/lookups'
 import { money } from '@/game/format.ts'
 import { COMPONENT_ICONS, GROUP_ICONS } from '@/game/icons.ts'
 import { Message } from '@/game/message.ts'
-import type { Model } from '@/game/model.ts'
+import { placingOf, type Model } from '@/game/model.ts'
 import { dockGroups, dockItems } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { Kbd } from '@/components/ui/kbd'
@@ -114,6 +114,7 @@ const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
  *  mid-morph, the tabs stay put and the top edge moves. */
 export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
   const open = model.buildGroup
+  const placing = placingOf(model)
   const groups = BUILD_GROUPS.filter((group) => dockGroups(model.game).includes(group.key))
   return h.div(
     [
@@ -124,7 +125,7 @@ export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
     ],
     [
-      open ? list(model, open, h) : model.placing ? armed(model.placing, h) : h.empty,
+      open ? list(model, open, h) : placing ? armed(placing, h) : h.empty,
       h.div(
         [h.Class('flex items-center justify-center gap-1'), h.Role('group'), h.AriaLabel('Build')],
         [

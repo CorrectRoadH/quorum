@@ -287,6 +287,15 @@ export const Undo = Schema.Struct({
 })
 export type Undo = typeof Undo.Type
 
+/** A board mode: placing one Component, or stamping the Founder's Playbook (by index) or the copied Nodes. */
+export const Tool = Schema.Union([
+  Schema.TaggedStruct('Placing', { type: ComponentId }),
+  Schema.TaggedStruct('Stamping', {
+    source: Schema.Union([Schema.Finite, Schema.Literal('clipboard')]),
+  }),
+])
+export type Tool = typeof Tool.Type
+
 export const Model = Schema.Struct({
   /** The screen, parsed from the URL. */
   route: AppRoute,
@@ -313,9 +322,8 @@ export const Model = Schema.Struct({
   selected: Schema.NullOr(Schema.String),
   /** Nodes picked with shift for a Playbook. */
   selection: Schema.Array(Schema.String),
-  placing: Schema.NullOr(ComponentId),
-  /** What follows the pointer: the Founder's Playbook by index, or the copied Nodes. */
-  stamping: Schema.NullOr(Schema.Union([Schema.Finite, Schema.Literal('clipboard')])),
+  /** What a click on the board does, and what follows the pointer. */
+  tool: Schema.NullOr(Tool),
   /** The Nodes a sale is waiting on, until the player confirms it. */
   confirmSell: Schema.NullOr(Schema.Array(Schema.String)),
   /** The Nodes last copied or cut. Kept for this session only. */
@@ -433,8 +441,12 @@ export const halted = (model: Model): boolean => model.paused || inMenu(model)
 
 /** The Playbook that follows the pointer, if any. */
 export const stampedPlaybook = (model: Model): Playbook | null =>
-  model.stamping === null
+  model.tool?._tag !== 'Stamping'
     ? null
-    : model.stamping === 'clipboard'
+    : model.tool.source === 'clipboard'
       ? model.clipboard
-      : (model.founder.playbooks[model.stamping] ?? null)
+      : (model.founder.playbooks[model.tool.source] ?? null)
+
+/** The Component a click on the board places, if any. */
+export const placingOf = (model: Model): typeof ComponentId.Type | null =>
+  model.tool?._tag === 'Placing' ? model.tool.type : null
