@@ -32,6 +32,14 @@ This repository is a pnpm monorepo for an Effect + Foldkit application deployed 
 - `pnpm typecheck`, `pnpm test`, and `pnpm build` run through Turbo.
 - `pnpm deploy` changes Cloudflare infrastructure. Do not run it without explicit approval.
 
+## Type checking
+
+- Use only `tsrs` for TypeScript diagnostics, and only `effect-tsrs` for Effect diagnostics. `pnpm typecheck` runs both.
+- To check one package, run `pnpm exec tsrs --noEmit -p tsconfig.json && pnpm exec effect-tsrs diagnostics --strict --project tsconfig.json` in its directory.
+- `vp lint` runs the Effect rules from the `effect-tsrs` Oxlint preset. The root `prepare` script runs `effect-tsrs patch --oxlint`, which replaces the tsgolint backend with `effect-tsrs`. If `vp lint` fails after an install that skipped scripts, run `pnpm exec effect-tsrs patch --oxlint`.
+- Never run `tsc`, `tsgo`, `@typescript/native-preview`, the original `oxlint-tsgolint` binary, or `vp lint --type-check`. Do not add `typescript` or `@typescript/native-preview` as a dependency, and do not turn on `typeCheck` in `vite.config.ts`.
+- Do not turn on a non-Effect type-aware Oxlint rule (such as `typescript/no-floating-promises`), because `effect-tsrs` sends those rules to tsgolint.
+
 See `docs/architecture.md` and `docs/tooling.md` before changing workspace boundaries or tool ownership. `docs/guardrails.md` lists the rules this repository enforces and the check behind each one.
 
 <!-- BEGIN:turborepo-agent-rules -->
