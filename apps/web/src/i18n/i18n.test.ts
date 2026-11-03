@@ -19,11 +19,15 @@ describe('interface languages', () => {
   test.each(['fr', 'zh-CN'] as const)(
     'switching to %s persists and synchronizes a paused board without changing the game',
     (locale) => {
-      const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
+      const model = {
+        ...initialModel(),
+        route: AppRoute.Company(),
+        board: { ...initialModel().board, paused: true },
+      }
       const result = update(model, Message.LocaleChosen({ locale }))
       expect(result.model.prefs.locale).toBe(locale)
-      expect(result.model.game).toBe(model.game)
-      expect(result.model.paused).toBe(true)
+      expect(result.model.board.game).toBe(model.board.game)
+      expect(result.model.board.paused).toBe(true)
       expect(result.commands).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -47,8 +51,8 @@ describe('interface languages', () => {
         }),
       )
       expect(restored.model.prefs).toMatchObject({ locale, muted: true, motion: 'reduce' })
-      expect(update(result.model, Message.LocaleChosen({ locale: 'en' })).model.game).toBe(
-        model.game,
+      expect(update(result.model, Message.LocaleChosen({ locale: 'en' })).model.board.game).toBe(
+        model.board.game,
       )
     },
   )
@@ -78,7 +82,11 @@ describe('interface languages', () => {
   test.each(['fr', 'zh-CN'] as const)(
     'selecting %s closes the listbox, restores focus and persists the locale',
     (locale) => {
-      const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
+      const model = {
+        ...initialModel(),
+        route: AppRoute.Company(),
+        board: { ...initialModel().board, paused: true },
+      }
       const opened = update(
         model,
         Message.LanguagePickerChanged({
@@ -94,8 +102,8 @@ describe('interface languages', () => {
       )
       expect(selected.model.languagePicker.isOpen).toBe(false)
       expect(selected.model.prefs.locale).toBe(locale)
-      expect(selected.model.game).toBe(model.game)
-      expect(selected.model.paused).toBe(true)
+      expect(selected.model.board.game).toBe(model.board.game)
+      expect(selected.model.board.paused).toBe(true)
       expect(selected.commands?.map((command) => command.name)).toEqual(
         expect.arrayContaining(['FocusButton', 'WritePrefs', 'ApplySettings', 'SyncBoard']),
       )

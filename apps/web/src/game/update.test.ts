@@ -24,20 +24,27 @@ const tick = (model: Model, times = 1): Model => {
 
 const at = (path: string) => Option.getOrThrow(fromString(`https://quorum.test${path}`))
 
-const inLab = (): Model => ({ ...initialModel(), route: AppRoute.Company(), game: newGame() })
+const inLab = (): Model => ({
+  ...initialModel(),
+  route: AppRoute.Company(),
+  board: { ...initialModel().board, game: newGame() },
+})
 
 test('dropping an engineer on another team moves them', () => {
   const game = preseedGame()
   const start: Model = {
     ...inLab(),
     panel: 'team',
-    game: {
-      ...game,
-      teams: [
-        ...game.teams,
-        { id: 't2', name: 'Team 2', policy: 'balanced', previous: 'balanced', since: 0 },
-      ],
-      engineers: [{ id: 'e1', team: 'core', language: 'php', hiredAt: 0 }],
+    board: {
+      ...inLab().board,
+      game: {
+        ...game,
+        teams: [
+          ...game.teams,
+          { id: 't2', name: 'Team 2', policy: 'balanced', previous: 'balanced', since: 0 },
+        ],
+        engineers: [{ id: 'e1', team: 'core', language: 'php', hiredAt: 0 }],
+      },
     },
   }
   const send = (model: Model, message: DragAndDrop.Message) =>
@@ -51,14 +58,14 @@ test('dropping an engineer on another team moves them', () => {
     DragAndDrop.Message.CompletedResolveKeyboardMove({ targetContainerId: 't2', targetIndex: 0 }),
   )
   const dropped = send(moved, DragAndDrop.Message.ConfirmedKeyboardDrop())
-  expect(dropped.game.engineers.find((engineer) => engineer.id === 'e1')?.team).toBe('t2')
+  expect(dropped.board.game.engineers.find((engineer) => engineer.id === 'e1')?.team).toBe('t2')
 })
 
 test('the menu button opens a menu over the board that holds the clock, and Escape walks back out', () => {
   const key = Message.KeyPressed({ key: 'Escape' })
   const opened = update(inLab(), Message.PanelOpened({ panel: 'menu' }))
   expect(opened.model.route).toEqual(AppRoute.Company())
-  expect(opened.model.paused).toBe(false)
+  expect(opened.model.board.paused).toBe(false)
   expect(opened.commands).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -87,7 +94,7 @@ describe('copy, cut, paste, and select all', () => {
     messages.reduce((current, message) => update(current, message).model, model)
   const key = (value: string) => Message.KeyPressed({ key: value })
   const start = (): Model => {
-    const model = { ...inLab(), game: { ...preseedGame(), cash: 1e6 } }
+    const model = { ...inLab(), board: { ...inLab().board, game: { ...preseedGame(), cash: 1e6 } } }
     return send(
       model,
       Message.PlacingChosen({ type: 'server' }),
@@ -95,33 +102,35 @@ describe('copy, cut, paste, and select all', () => {
     )
   }
   const movable = (model: Model) =>
-    model.game.nodes.filter((node) => !COMPONENTS[node.type].fixed && !SHARED.includes(node.type))
+    model.board.game.nodes.filter(
+      (node) => !COMPONENTS[node.type].fixed && !SHARED.includes(node.type),
+    )
 
   test('select all picks every Node that can be sold, and Delete sells them in one undo step', () => {
     const placed = start()
     const all = send(placed, key('Mod+a'))
-    expect(all.selection).toEqual(movable(placed).map((node) => node.id))
-    expect(all.selection.length).toBeGreaterThan(0)
+    expect(all.board.selection).toEqual(movable(placed).map((node) => node.id))
+    expect(all.board.selection.length).toBeGreaterThan(0)
     const asked = send(all, key('Delete'))
-    expect(asked.game.nodes).toEqual(placed.game.nodes)
-    expect(asked.confirmSell).toEqual(all.selection)
-    expect(send(asked, key('Escape')).confirmSell).toBeNull()
+    expect(asked.board.game.nodes).toEqual(placed.board.game.nodes)
+    expect(asked.board.confirmSell).toEqual(all.board.selection)
+    expect(send(asked, key('Escape')).board.confirmSell).toBeNull()
     const sold = send(asked, key('Enter'))
     expect(movable(sold)).toEqual([])
-    expect(sold.game.nodes.length).toBeLessThan(placed.game.nodes.length)
-    expect(send(sold, key('z')).game.nodes).toEqual(placed.game.nodes)
+    expect(sold.board.game.nodes.length).toBeLessThan(placed.board.game.nodes.length)
+    expect(send(sold, key('z')).board.game.nodes).toEqual(placed.board.game.nodes)
   })
 
   test('paste places a second copy where the click lands, and it costs Cash', () => {
     const placed = start()
     const copied = send(placed, key('Mod+a'), key('Mod+c'))
-    expect(copied.clipboard?.nodes.length).toBe(movable(placed).length)
+    expect(copied.board.clipboard?.nodes.length).toBe(movable(placed).length)
     const stamping = send(copied, key('Mod+v'))
-    expect(stamping.tool).toEqual({ _tag: 'Stamping', source: 'clipboard' })
+    expect(stamping.board.tool).toEqual({ _tag: 'Stamping', source: 'clipboard' })
     const pasted = send(stamping, Message.NodePlaced({ x: 900, y: 700 }))
     expect(movable(pasted).length).toBe(2 * movable(placed).length)
-    expect(pasted.tool).toBeNull()
-    expect(pasted.game.cash).toBeLessThan(placed.game.cash)
+    expect(pasted.board.tool).toBeNull()
+    expect(pasted.board.game.cash).toBeLessThan(placed.board.game.cash)
   })
 
   test('choosing a part while pasting places the part, not the paste', () => {
@@ -129,15 +138,15 @@ describe('copy, cut, paste, and select all', () => {
     const stamping = send(placed, key('Mod+a'), key('Mod+c'), key('Mod+v'))
     const chosen = send(stamping, Message.PlacingChosen({ type: 'server' }))
     const dropped = send(chosen, Message.NodePlaced({ x: 900, y: 700 }))
-    expect(dropped.game.nodes.length).toBe(placed.game.nodes.length + 1)
-    expect(dropped.game.nodes.at(-1)?.type).toBe('server')
+    expect(dropped.board.game.nodes.length).toBe(placed.board.game.nodes.length + 1)
+    expect(dropped.board.game.nodes.at(-1)?.type).toBe('server')
   })
 
   test('cut sells the Nodes and keeps them to paste', () => {
     const placed = start()
     const cut = send(placed, key('Mod+a'), key('Mod+x'))
     expect(movable(cut)).toEqual([])
-    expect(cut.clipboard?.nodes.length).toBe(movable(placed).length)
+    expect(cut.board.clipboard?.nodes.length).toBe(movable(placed).length)
     const back = send(cut, key('Mod+v'), Message.NodePlaced({ x: 400, y: 300 }))
     expect(movable(back).length).toBe(movable(placed).length)
   })
@@ -146,8 +155,8 @@ describe('copy, cut, paste, and select all', () => {
     const placed = start()
     const dup = send(placed, key('Mod+a'), key('Mod+d'))
     expect(movable(dup).length).toBe(2 * movable(placed).length)
-    expect(dup.game.cash).toBeLessThan(placed.game.cash)
-    expect(send(dup, key('z')).game.nodes).toEqual(placed.game.nodes)
+    expect(dup.board.game.cash).toBeLessThan(placed.board.game.cash)
+    expect(send(dup, key('z')).board.game.nodes).toEqual(placed.board.game.nodes)
   })
 
   test('Shift+Arrow nudges the selected Nodes', () => {
@@ -163,9 +172,11 @@ describe('copy, cut, paste, and select all', () => {
     const placed = start()
     const ids = movable(placed).map((node) => node.id)
     const added = send(placed, Message.SelectionBoxed({ ids, mode: 'add' }))
-    expect([...added.selection].sort()).toEqual([...ids].sort())
-    expect(send(added, Message.SelectionBoxed({ ids, mode: 'subtract' })).selection).toEqual([])
-    expect(send(placed, key('Escape'), key('Mod+c')).clipboard).toBeNull()
+    expect([...added.board.selection].sort()).toEqual([...ids].sort())
+    expect(send(added, Message.SelectionBoxed({ ids, mode: 'subtract' })).board.selection).toEqual(
+      [],
+    )
+    expect(send(placed, key('Escape'), key('Mod+c')).board.clipboard).toBeNull()
   })
 
   test('dragging one selected Node moves the whole selection by the same step', () => {
@@ -188,30 +199,30 @@ describe('copy, cut, paste, and select all', () => {
   })
 
   test('paste with nothing copied does not start placing', () => {
-    expect(send(start(), key('Mod+v')).tool).toBeNull()
+    expect(send(start(), key('Mod+v')).board.tool).toBeNull()
   })
 })
 
 describe('the clock', () => {
   test('four ticks at 1× run ten 0.1 s Steps: one sim second', () => {
     const start = inLab()
-    expect(tick(start, 2).game.time).toBeCloseTo(start.game.time + 0.5)
-    expect(tick(start, 4).game.time).toBe(start.game.time + 1)
+    expect(tick(start, 2).board.game.time).toBeCloseTo(start.board.game.time + 0.5)
+    expect(tick(start, 4).board.game.time).toBe(start.board.game.time + 1)
   })
 
   test('3× runs three times the Steps', () => {
-    const start = { ...inLab(), speed: 3 }
-    expect(tick(start, 4).game.time).toBe(start.game.time + 3)
+    const start = { ...inLab(), board: { ...inLab().board, speed: 3 } }
+    expect(tick(start, 4).board.game.time).toBe(start.board.game.time + 3)
   })
 
   test('the Bottleneck search runs once per sim second, and again after an action', () => {
     const first = tick(inLab())
-    expect(first.bottleneckAt).toBe(Math.floor(first.game.time))
+    expect(first.board.bottleneckAt).toBe(Math.floor(first.board.game.time))
     const second = tick(first)
-    expect(second.bottleneckAt).toBe(first.bottleneckAt)
+    expect(second.board.bottleneckAt).toBe(first.board.bottleneckAt)
     const acted = update(second, Message.ResizeChosen({ nodeId: 'server', direction: 1 })).model
-    expect(acted.bottleneckAt).toBe(-1)
-    expect(tick(acted).bottleneckAt).toBe(Math.floor(tick(acted).game.time))
+    expect(acted.board.bottleneckAt).toBe(-1)
+    expect(tick(acted).board.bottleneckAt).toBe(Math.floor(tick(acted).board.game.time))
   })
 })
 
@@ -220,28 +231,28 @@ describe('collecting the Payments drawer', () => {
     messages.reduce((current, message) => update(current, message).model, model)
   const withPending = (): Model => {
     const model = inLab()
-    return { ...model, game: { ...model.game, pending: 42 } }
+    return { ...model, board: { ...model.board, game: { ...model.board.game, pending: 42 } } }
   }
 
   test('a tap on Payments opens the Inspector and leaves the drawer alone', () => {
     const start = withPending()
     const tapped = send(start, Message.NodeTapped({ nodeId: 'payments' }))
-    expect(tapped.selected).toBe('payments')
-    expect(tapped.game.pending).toBe(42)
-    expect(tapped.game.cash).toBe(start.game.cash)
+    expect(tapped.board.selected).toBe('payments')
+    expect(tapped.board.game.pending).toBe(42)
+    expect(tapped.board.game.cash).toBe(start.board.game.cash)
   })
 
   test('the footer Collect button collects without opening the Inspector', () => {
     const start = withPending()
     const pressed = send(start, Message.FooterPressed({ nodeId: 'payments' }))
-    expect(pressed.selected).toBeNull()
-    expect(pressed.game.pending).toBe(0)
-    expect(pressed.game.cash).toBe(start.game.cash + 42)
+    expect(pressed.board.selected).toBeNull()
+    expect(pressed.board.game.pending).toBe(0)
+    expect(pressed.board.game.cash).toBe(start.board.game.cash + 42)
   })
 
   test('an empty drawer still opens the Inspector', () => {
     const tapped = send(inLab(), Message.NodeTapped({ nodeId: 'payments' }))
-    expect(tapped.selected).toBe('payments')
+    expect(tapped.board.selected).toBe('payments')
   })
 })
 
@@ -250,11 +261,14 @@ describe('Tradeoff cards', () => {
   const ready = (): Model => ({
     ...initialModel(),
     route: AppRoute.Company(),
-    selected: 'server',
-    game: {
-      ...preseedGame(),
-      users: 4_000,
-      researched: [...preseedGame().researched, 'lang-node', 'node-cluster'],
+    board: {
+      ...initialModel().board,
+      selected: 'server',
+      game: {
+        ...preseedGame(),
+        users: 4_000,
+        researched: [...preseedGame().researched, 'lang-node', 'node-cluster'],
+      },
     },
   })
   const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
@@ -263,9 +277,9 @@ describe('Tradeoff cards', () => {
   test('hovering asks the worker for a preview; leaving closes; the Game does not change', () => {
     const start = ready()
     const asked = update(start, Message.OptionPreviewed({ nodeId: 'server', option }))
-    expect(asked.model.tradeoff?.preview).toBeNull()
+    expect(asked.model.board.tradeoff?.preview).toBeNull()
     expect(asked.commands?.map((command) => command.name)).toContain('ComputePreview')
-    const preview = JOBS.preview({ game: start.game, nodeId: 'server', option })
+    const preview = JOBS.preview({ game: start.board.game, nodeId: 'server', option })
     if (!preview) throw new Error('The option was refused.')
     const hovered = send(
       asked.model,
@@ -275,57 +289,64 @@ describe('Tradeoff cards', () => {
         preview: { ...preview, burn: [...preview.burn] },
       }),
     )
-    expect(hovered.tradeoff?.pinned).toBe(false)
-    expect(hovered.tradeoff?.preview?.after.revenue).toBeGreaterThan(
-      hovered.tradeoff?.preview?.before.revenue ?? Infinity,
+    expect(hovered.board.tradeoff?.pinned).toBe(false)
+    expect(hovered.board.tradeoff?.preview?.after.revenue).toBeGreaterThan(
+      hovered.board.tradeoff?.preview?.before.revenue ?? Infinity,
     )
-    expect(hovered.game).toBe(start.game)
-    expect(send(hovered, Message.OptionLeft()).tradeoff).toBeNull()
+    expect(hovered.board.game).toBe(start.board.game)
+    expect(send(hovered, Message.OptionLeft()).board.tradeoff).toBeNull()
   })
 
   test('the first click pins the card; Confirm applies it; the second time a click applies it', () => {
     const pinned = send(ready(), Message.OptionChosen({ nodeId: 'server', option }))
-    expect(pinned.tradeoff?.pinned).toBe(true)
-    expect(pinned.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
+    expect(pinned.board.tradeoff?.pinned).toBe(true)
+    expect(pinned.board.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
     // Leaving the option keeps a pinned card open.
-    expect(send(pinned, Message.OptionLeft()).tradeoff?.pinned).toBe(true)
+    expect(send(pinned, Message.OptionLeft()).board.tradeoff?.pinned).toBe(true)
     // In a Company, Confirm starts a migration: Dev Hours first, then the strangler.
     const confirmed = send(pinned, Message.OptionConfirmed())
-    expect(confirmed.tradeoff).toBeNull()
+    expect(confirmed.board.tradeoff).toBeNull()
     expect(confirmed.prefs.seenTradeoffs).toEqual(['runtime'])
-    expect(confirmed.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
-    expect(confirmed.game.services[0]?.migration?.runtime).toBe('node_cluster')
-    expect(confirmed.game.backlog.some((item) => item.kind === 'migration')).toBe(true)
-    expect(confirmed.change).not.toBeNull()
+    expect(confirmed.board.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('php_fpm')
+    expect(confirmed.board.game.services[0]?.migration?.runtime).toBe('node_cluster')
+    expect(confirmed.board.game.backlog.some((item) => item.kind === 'migration')).toBe(true)
+    expect(confirmed.board.change).not.toBeNull()
     // The second time, a click applies at once.
     const fresh = { ...ready(), prefs: confirmed.prefs }
     const clicked = send(fresh, Message.OptionChosen({ nodeId: 'server', option }))
-    expect(clicked.tradeoff).toBeNull()
-    expect(clicked.game.services[0]?.migration?.runtime).toBe('node_cluster')
+    expect(clicked.board.tradeoff).toBeNull()
+    expect(clicked.board.game.services[0]?.migration?.runtime).toBe('node_cluster')
   })
 
   test('a Sandbox swaps the Stack at once', () => {
     const start = ready()
-    const sandboxed = { ...start, game: { ...start.game, sandbox: true } }
+    const sandboxed = {
+      ...start,
+      board: { ...start.board, game: { ...start.board.game, sandbox: true } },
+    }
     const applied = send(
       sandboxed,
       Message.OptionChosen({ nodeId: 'server', option }),
       Message.OptionConfirmed(),
     )
-    expect(applied.game.nodes.find((node) => node.id === 'server')?.runtime).toBe('node_cluster')
+    expect(applied.board.game.nodes.find((node) => node.id === 'server')?.runtime).toBe(
+      'node_cluster',
+    )
   })
 
   test('Escape and Cancel close the card without changing anything', () => {
     const pinned = send(ready(), Message.OptionChosen({ nodeId: 'server', option }))
-    expect(send(pinned, Message.KeyPressed({ key: 'Escape' })).tradeoff).toBeNull()
-    expect(send(pinned, Message.TradeoffClosed()).game).toBe(pinned.game)
+    expect(send(pinned, Message.KeyPressed({ key: 'Escape' })).board.tradeoff).toBeNull()
+    expect(send(pinned, Message.TradeoffClosed()).board.game).toBe(pinned.board.game)
   })
 
   test('a locked option shows why, and Confirm does nothing', () => {
-    const locked = { ...ready(), game: preseedGame() }
+    const locked = { ...ready(), board: { ...ready().board, game: preseedGame() } }
     const pinned = send(locked, Message.OptionChosen({ nodeId: 'server', option }))
-    expect(pinned.tradeoff?.refusal).toBeTruthy()
-    expect(send(pinned, Message.OptionConfirmed()).game.nodes).toEqual(locked.game.nodes)
+    expect(pinned.board.tradeoff?.refusal).toBeTruthy()
+    expect(send(pinned, Message.OptionConfirmed()).board.game.nodes).toEqual(
+      locked.board.game.nodes,
+    )
   })
 })
 
@@ -335,7 +356,10 @@ describe('Exit and offline return', () => {
 
   test('an Exit pays Legacy, writes history, and the next company starts fresh with the record', () => {
     const game = { ...preseedGame(), stage: 4, users: 200_000, cash: 1e8 }
-    const exited = send({ ...inLab(), game }, Message.ExitTaken({ exit: 'acquisition' }))
+    const exited = send(
+      { ...inLab(), board: { ...inLab().board, game } },
+      Message.ExitTaken({ exit: 'acquisition' }),
+    )
     expect(exited.panel).toBe('exited')
     expect(exited.founder.history).toHaveLength(1)
     expect(exited.founder.legacy).toBe(exited.founder.history[0]?.legacy)
@@ -343,7 +367,7 @@ describe('Exit and offline return', () => {
     expect(title.route).toEqual(AppRoute.Menu({ menu: 'found' }))
     const next = send(title, Message.CompanyFounded())
     expect(next.route).toEqual(AppRoute.Company())
-    expect(next.game.stage).toBe(0)
+    expect(next.board.game.stage).toBe(0)
     expect(next.founder.history).toHaveLength(1)
   })
 
@@ -353,9 +377,9 @@ describe('Exit and offline return', () => {
       initialModel(),
       Message.SaveLoaded({ json: JSON.stringify(game), now: 1_000_000 + 3_600_000 }),
     )
-    expect(loaded.game.time).toBeCloseTo(game.time + 3_600)
-    expect(loaded.away?.seconds).toBe(3_600)
-    expect(loaded.game.incident).toBeNull()
+    expect(loaded.board.game.time).toBeCloseTo(game.time + 3_600)
+    expect(loaded.board.away?.seconds).toBe(3_600)
+    expect(loaded.board.game.incident).toBeNull()
     expect(send(loaded, Message.Continued()).panel).toBe('away')
   })
 })
@@ -381,18 +405,22 @@ describe('Challenges', () => {
     )
 
   test('Run scores a provisional result, and the server confirms it', () => {
-    const company = { ...initialModel(), saved: true, game: preseedGame() }
+    const company = {
+      ...initialModel(),
+      saved: true,
+      board: { ...initialModel().board, game: preseedGame() },
+    }
     const done = solved(company)
-    expect(done.challenge?.phase).toBe('result')
-    expect(done.challenge?.result?.passed).toBe(true)
-    expect(done.challenge?.verification).toBe('sending')
+    expect(done.board.challenge?.phase).toBe('result')
+    expect(done.board.challenge?.result?.passed).toBe(true)
+    expect(done.board.challenge?.verification).toBe('sending')
     expect(done.panel).toBe('challenge')
     const verified = send(done, Message.ChallengeVerified({ verdict }))
-    expect(verified.challenge?.verification).toBe('verified')
+    expect(verified.board.challenge?.verification).toBe('verified')
     // Leaving brings the Company back untouched.
     const left = send(verified, Message.TitleOpened())
-    expect(left.challenge).toBeNull()
-    expect(left.game).toBe(company.game)
+    expect(left.board.challenge).toBeNull()
+    expect(left.board.game).toBe(company.board.game)
   })
 
   test('a first completion pays Legacy once, and perks do not reach the board', () => {
@@ -400,7 +428,7 @@ describe('Challenges', () => {
     const once = solved({ ...initialModel(), founder })
     expect(once.founder.legacy).toBe(1)
     expect(once.founder.completed).toEqual(['hello-world'])
-    expect(once.game.founding.perks).toEqual({})
+    expect(once.board.game.founding.perks).toEqual({})
     const twice = solved(send(once, Message.TitleOpened()))
     expect(twice.founder.legacy).toBe(1)
   })
@@ -412,16 +440,16 @@ describe('Challenges', () => {
       Message.ChallengeRan(),
     )
     const resized = send(running, Message.FamilyChosen({ nodeId: 'server', family: 'general' }))
-    expect(resized.game.nodes).toEqual(running.game.nodes)
+    expect(resized.board.game.nodes).toEqual(running.board.game.nodes)
     const built = send(
       initialModel(),
       Message.ChallengeStarted({ id: 'hello-world' }),
       Message.FamilyChosen({ nodeId: 'server', family: 'general' }),
       Message.ChallengeRan(),
     )
-    expect(send(built, Message.UndoChosen()).game.nodes).toEqual(built.game.nodes)
+    expect(send(built, Message.UndoChosen()).board.game.nodes).toEqual(built.board.game.nodes)
     const restarted = send(running, Message.RestartChosen({ nodeId: 'server' }))
-    expect(restarted.challenge?.replay?.actions).toEqual([
+    expect(restarted.board.challenge?.replay?.actions).toEqual([
       { step: 0, action: { _tag: 'Restart', node: 'server' } },
     ])
   })
@@ -432,8 +460,8 @@ describe('Challenges', () => {
       done,
       Message.ChallengeUnverified({ message: 'Failed to fetch', offline: true }),
     )
-    expect(offline.challenge?.verification).toBe('offline')
-    expect(offline.challenge?.result?.passed).toBe(true)
+    expect(offline.board.challenge?.verification).toBe('offline')
+    expect(offline.board.challenge?.result?.passed).toBe(true)
   })
 
   test('a locked Challenge URL lands on the Challenge list; a completed one opens', () => {
@@ -441,20 +469,20 @@ describe('Challenges', () => {
       initialModel(),
       Message.ChangedUrl({ url: at('/challenges/split-the-box') }),
     )
-    expect(locked.challenge).toBeNull()
+    expect(locked.board.challenge).toBeNull()
     expect(locked.route).toEqual(AppRoute.Menu({ menu: 'challenges' }))
     const completed = {
       ...initialModel(),
       founder: { ...initialModel().founder, completed: ['hello-world'] },
     }
     const opened = send(completed, Message.ChangedUrl({ url: at('/challenges/split-the-box') }))
-    expect(opened.challenge?.id).toBe('split-the-box')
+    expect(opened.board.challenge?.id).toBe('split-the-box')
   })
 
   test('every Challenge opens with its cards apart, and Run keeps them where they are', () => {
     for (const challenge of CHALLENGES) {
       const built = send(initialModel(), Message.ChallengeStarted({ id: challenge.id }))
-      const nodes = built.game.nodes
+      const nodes = built.board.game.nodes
       const crowded = nodes.flatMap((a, index) =>
         nodes
           .slice(index + 1)
@@ -463,7 +491,7 @@ describe('Challenges', () => {
       )
       expect(crowded).toEqual([])
       const running = send(built, Message.ChallengeRan())
-      for (const node of running.game.nodes) {
+      for (const node of running.board.game.nodes) {
         const before = nodes.find((entry) => entry.id === node.id)
         if (before) expect([node.x, node.y]).toEqual([before.x, before.y])
       }
@@ -480,7 +508,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
     return {
       ...initialModel(),
       route: AppRoute.Company(),
-      game: { ...game, nextIncidentAt: game.time },
+      board: { ...initialModel().board, game: { ...game, nextIncidentAt: game.time } },
       ...change,
     }
   }
@@ -516,8 +544,8 @@ describe('M9: sound, achievements, glossary, keys', () => {
       key: 'alarm',
       sender: 'monitoring',
       subject: 'Errors are up',
-      time: opened.game.time + 600,
-      entries: [{ time: opened.game.time + 600, text: 'Errors are up.' }],
+      time: opened.board.game.time + 600,
+      entries: [{ time: opened.board.game.time + 600, text: 'Errors are up.' }],
       actions: [],
       answer: null,
       read: false,
@@ -526,7 +554,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
       resolved: null,
     }
     const reset = update(
-      { ...opened, inbox: { ...opened.inbox, mail: [alarm] } },
+      { ...opened, board: { ...opened.board, inbox: { ...opened.board.inbox, mail: [alarm] } } },
       Message.FreeSandboxReset(),
     ).model
     expect(sounds(tick(reset))).not.toContain('warn')
@@ -543,8 +571,11 @@ describe('M9: sound, achievements, glossary, keys', () => {
   test('a Sandbox earns no achievement and meets no glossary entry', () => {
     const sandbox: Model = {
       ...inLab(),
-      game: { ...newGame(), sandbox: true },
-      sandbox: { id: null, progress: { objective: 0, held: 0, scripted: false } } as never,
+      board: {
+        ...inLab().board,
+        game: { ...newGame(), sandbox: true },
+        sandbox: { id: null, progress: { objective: 0, held: 0, scripted: false } } as never,
+      },
     }
     const after = update(sandbox, Message.Ticked()).model
     expect(after.founder.achievements).toEqual([])
@@ -555,7 +586,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
     const start = inLab()
     const muted = update(start, Message.MuteToggled())
     expect(muted.model.prefs.muted).toBe(true)
-    expect(muted.model.game).toBe(start.game)
+    expect(muted.model.board.game).toBe(start.board.game)
     const write = names(muted.commands).find((command) => command.name === 'WritePrefs')
     expect(write?.args['prefs']).toMatchObject({ muted: true, motion: 'system' })
     expect(update(start, Message.KeyPressed({ key: 'm' })).model.prefs.muted).toBe(true)
@@ -570,10 +601,10 @@ describe('M9: sound, achievements, glossary, keys', () => {
   })
 
   test('arrow keys move the selection between Nodes', () => {
-    const start: Model = { ...inLab(), selected: 'users' }
+    const start: Model = { ...inLab(), board: { ...inLab().board, selected: 'users' } }
     const moved = update(start, Message.KeyPressed({ key: 'ArrowRight' })).model
-    expect(moved.selected).not.toBe('users')
-    expect(moved.selected).not.toBeNull()
+    expect(moved.board.selected).not.toBe('users')
+    expect(moved.board.selected).not.toBeNull()
   })
 })
 
@@ -600,12 +631,12 @@ describe('URL routing', () => {
 
     const back = update(opened.model, Message.ChangedUrl({ url: at('/') }))
     expect(back.model.route).toEqual(AppRoute.Title())
-    expect(back.model.sandbox).toBeNull()
-    expect(back.model.game).toBe(company.game)
+    expect(back.model.board.sandbox).toBeNull()
+    expect(back.model.board.game).toBe(company.board.game)
     expect(pushed(back.commands)).toEqual([])
 
     const forward = update(back.model, Message.ChangedUrl({ url: at('/sandbox/second-server') }))
-    expect(forward.model.sandbox?.id).toBe('second-server')
+    expect(forward.model.board.sandbox?.id).toBe('second-server')
     expect(pushed(forward.commands)).toEqual([])
   })
 
@@ -627,40 +658,49 @@ describe('progressive disclosure', () => {
   test('a first Company opens on the board, with Research shut until Insight can buy an item', () => {
     const start = founded()
     expect(start.panel).toBe('none')
-    expect(start.revealed).not.toContain('research')
+    expect(start.board.revealed).not.toContain('research')
     expect(send(start, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
     // The cheapest Garage item costs 15 Insight: 14 is not enough, 15 is.
-    const short = tick({ ...start, game: { ...start.game, insight: 14 } })
-    expect(short.revealed).not.toContain('research')
-    const enough = tick({ ...start, game: { ...start.game, insight: 15 } })
-    expect(enough.revealed).toContain('research')
-    expect(enough.cue?.key).toBe('research')
+    const short = tick({
+      ...start,
+      board: { ...start.board, game: { ...start.board.game, insight: 14 } },
+    })
+    expect(short.board.revealed).not.toContain('research')
+    const enough = tick({
+      ...start,
+      board: { ...start.board, game: { ...start.board.game, insight: 15 } },
+    })
+    expect(enough.board.revealed).toContain('research')
+    expect(enough.board.cue?.key).toBe('research')
     const opened = send(enough, Message.KeyPressed({ key: 'r' }))
     expect(opened.panel).toBe('research')
-    expect(opened.cue).toBeNull()
+    expect(opened.board.cue).toBeNull()
   })
 
   test('two triggers at once show one element; the second waits until the first is used', () => {
     const start = founded()
     const both = tick(
       send(
-        { ...start, game: { ...start.game, insight: 100, cash: 10_000 } },
+        {
+          ...start,
+          board: { ...start.board, game: { ...start.board.game, insight: 100, cash: 10_000 } },
+        },
         Message.ResizeChosen({ nodeId: 'server', direction: 1 }),
       ),
     )
-    expect(both.revealed).toContain('undo')
-    expect(both.revealed).not.toContain('research')
-    expect(both.pending).toContain('research')
+    expect(both.board.revealed).toContain('undo')
+    expect(both.board.revealed).not.toContain('research')
+    expect(both.board.pending).toContain('research')
     const used = tick(send(both, Message.UndoChosen()))
-    expect(used.revealed).toContain('research')
-    expect(used.cue?.key).toBe('research')
+    expect(used.board.revealed).toContain('research')
+    expect(used.board.cue?.key).toBe('research')
   })
 
   test('a save from before disclosure shows everything; a save with it keeps its set', () => {
     const game = preseedGame()
     const old = send(initialModel(), Message.SaveLoaded({ json: JSON.stringify(game), now: 0 }))
-    expect(old.revealed).toContain('team')
-    expect(old.revealed).toContain('glossary')
+    expect(old.board.revealed).toContain('team')
+    expect(old.board.revealed).toContain('glossary')
     const kept = send(
       initialModel(),
       Message.SaveLoaded({
@@ -668,8 +708,8 @@ describe('progressive disclosure', () => {
         now: 0,
       }),
     )
-    expect(kept.revealed).toEqual(['undo'])
-    expect(kept.pending).toEqual(['team'])
+    expect(kept.board.revealed).toEqual(['undo'])
+    expect(kept.board.pending).toEqual(['team'])
   })
 })
 
@@ -678,17 +718,20 @@ test('tidying the board groups nodes into a band per zone, in flow order', () =>
   const [first, second, third] = game.nodes
   const model: Model = {
     ...inLab(),
-    game: {
-      ...game,
-      links: [{ ...game.links[0]!, from: 'p', to: 'q' }],
-      nodes: [
-        { ...first!, id: 'q', type: 'server', zone: 'a', x: 40, y: 500 },
-        { ...second!, id: 'p', type: 'server', zone: 'a', x: 400, y: 300 },
-        { ...third!, id: 'r', type: 'server', zone: 'b', x: 10, y: 50 },
-      ],
+    board: {
+      ...inLab().board,
+      game: {
+        ...game,
+        links: [{ ...game.links[0]!, from: 'p', to: 'q' }],
+        nodes: [
+          { ...first!, id: 'q', type: 'server', zone: 'a', x: 40, y: 500 },
+          { ...second!, id: 'p', type: 'server', zone: 'a', x: 400, y: 300 },
+          { ...third!, id: 'r', type: 'server', zone: 'b', x: 10, y: 50 },
+        ],
+      },
     },
   }
-  const [q, p, r] = update(model, Message.BoardTidied()).model.game.nodes
+  const [q, p, r] = update(model, Message.BoardTidied()).model.board.game.nodes
   expect(p!.x).toBeLessThan(q!.x)
   expect(p!.y).toBe(q!.y)
   expect(r!.y).toBeGreaterThan(q!.y)
@@ -696,9 +739,9 @@ test('tidying the board groups nodes into a band per zone, in flow order', () =>
 
 test('losing focus pauses the clock, unless the setting is off', () => {
   const blurred = update(inLab(), Message.WindowBlurred()).model
-  expect(blurred.paused).toBe(true)
+  expect(blurred.board.paused).toBe(true)
   const off = update(inLab(), Message.BlurPauseToggled()).model
-  expect(update(off, Message.WindowBlurred()).model.paused).toBe(false)
+  expect(update(off, Message.WindowBlurred()).model.board.paused).toBe(false)
 })
 
 test('a queued Study can run now, keeping the running one’s progress, and be cancelled', () => {
@@ -708,23 +751,26 @@ test('a queued Study can run now, keeping the running one’s progress, and be c
   const lab = inLab()
   const queued: Model = {
     ...lab,
-    game: {
-      ...lab.game,
-      studies: [
-        { id: first.id, progress: 0.25 },
-        { id: second.id, progress: 0 },
-      ],
+    board: {
+      ...lab.board,
+      game: {
+        ...lab.board.game,
+        studies: [
+          { id: first.id, progress: 0.25 },
+          { id: second.id, progress: 0 },
+        ],
+      },
     },
   }
   const now = update(queued, Message.StudyPrioritized({ id: second.id })).model
-  expect(now.game.studies).toEqual([
+  expect(now.board.game.studies).toEqual([
     { id: second.id, progress: 0 },
     { id: first.id, progress: 0.25 },
   ])
   const back = update(now, Message.StudyMoved({ id: first.id, direction: -1 })).model
-  expect(back.game.studies.map((item) => item.id)).toEqual([first.id, second.id])
+  expect(back.board.game.studies.map((item) => item.id)).toEqual([first.id, second.id])
   const cancelled = update(back, Message.StudyCancelled({ id: first.id })).model
-  expect(cancelled.game.studies).toEqual([{ id: second.id, progress: 0 }])
+  expect(cancelled.board.game.studies).toEqual([{ id: second.id, progress: 0 }])
 })
 
 test('pointer-rate Messages stay out of the playtest log, and gestures go in', () => {
@@ -743,7 +789,7 @@ test('a save this version cannot read is kept aside instead of dropped', () => {
   const saved = JSON.stringify({ ...game, wall: 0 })
   const loaded = update(initialModel(), Message.SaveLoaded({ json: saved, now: 0 }))
   expect(loaded.model.saved).toBe(true)
-  expect(loaded.model.game.nodes).toEqual(game.nodes)
+  expect(loaded.model.board.game.nodes).toEqual(game.nodes)
 
   const renamed = JSON.stringify({
     ...game,
@@ -794,4 +840,16 @@ test("a toast from the last board cannot clear the next board's toast", () => {
   const fresh = update(entered, Message.ToastRaised({ message: 'New news.', tone: 'plain' })).model
   const cleared = update(fresh, Message.ToastCleared({ id: oldId ?? -1 })).model
   expect(cleared.toast?.message).toBe('New news.')
+})
+
+test('a Company comes back from a Sandbox as it was: its Inbox, history and undo too', () => {
+  let company = update(inLab(), Message.MailGenerated({ count: 3 })).model
+  for (let index = 0; index < 40; index += 1) company = update(company, Message.Ticked()).model
+  const sandbox = update(company, Message.FreeSandboxStarted()).model
+  expect(sandbox.board.inbox.mail).toEqual([])
+  const back = update(update(sandbox, Message.TitleOpened()).model, Message.Continued()).model
+  expect(back.board.game).toBe(company.board.game)
+  expect(back.board.inbox).toEqual(company.board.inbox)
+  expect(back.board.dashboard.history).toEqual(company.board.dashboard.history)
+  expect(back.board.undo).toEqual(company.board.undo)
 })

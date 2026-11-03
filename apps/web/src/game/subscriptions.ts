@@ -97,7 +97,7 @@ const blurs = Stream.callback<Message>((queue) =>
 )
 
 const teamDrag = Subscription.lift(DragAndDrop.subscriptions)<Model, Message>({
-  read: (model) => (model.panel === 'team' ? Option.some(model.teamDrag) : Option.none()),
+  read: (model) => (model.panel === 'team' ? Option.some(model.board.teamDrag) : Option.none()),
   toParentMessage: (message) => Message.TeamDragChanged({ message }),
 })
 
@@ -211,7 +211,7 @@ export const subscriptions = {
       {
         modelToDependencies: (model: Model) => ({
           lab: onBoard(model.route),
-          dragging: model.panel === 'team' && model.teamDrag.dragState._tag !== 'Idle',
+          dragging: model.panel === 'team' && model.board.teamDrag.dragState._tag !== 'Idle',
         }),
         dependenciesToStream: ({ lab, dragging }: { lab: boolean; dragging: boolean }) =>
           lab && !dragging ? keys : Stream.empty,
@@ -223,8 +223,8 @@ export const subscriptions = {
         modelToDependencies: (model: Model) => ({
           active:
             model.panel === 'team' &&
-            (model.teamDrag.dragState._tag === 'Pending' ||
-              model.teamDrag.dragState._tag === 'Dragging'),
+            (model.board.teamDrag.dragState._tag === 'Pending' ||
+              model.board.teamDrag.dragState._tag === 'Dragging'),
         }),
         dependenciesToStream: ({ active }: { active: boolean }) =>
           active ? teamDragScroll : Stream.empty,

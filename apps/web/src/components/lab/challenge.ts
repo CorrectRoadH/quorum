@@ -81,7 +81,8 @@ const figures = (
   const errors = ledger.errorShare * 100
   const { targets } = challenge
   const margin = ledger.revenue > 0 ? (ledger.revenue - ledger.burn) / ledger.revenue : -1
-  const spent = challenge.devHours === undefined ? 0 : devHoursOf(challenge.start(), model.game)
+  const spent =
+    challenge.devHours === undefined ? 0 : devHoursOf(challenge.start(), model.board.game)
   return h.div(
     [h.Class(`flex flex-col divide-y divide-hairline ${WELL} ${CHIPS}`)],
     [
@@ -99,7 +100,7 @@ const figures = (
         targets.tail !== undefined && ledger.p99 > targets.tail ? 'danger' : 'plain',
         h,
       ),
-      figureRow('Complexity', Waypoints, String(complexityOf(model.game)), 'plain', h),
+      figureRow('Complexity', Waypoints, String(complexityOf(model.board.game)), 'plain', h),
       targets.margin === undefined
         ? h.empty
         : figureRow(
@@ -156,7 +157,7 @@ const targetText = (challenge: Challenge): string => {
 
 /** The code fixes a Design may pay Dev Hours for, while it is built. */
 const fixes = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const open = FIXES.filter((fix) => {
     const research = TASKS[fix].research
     return research !== null && has(game, research)
@@ -237,7 +238,7 @@ const actions = (run: ChallengeRun, h: HtmlBuilder<Message>): Html =>
   )
 
 export const challengeHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const run = model.challenge
+  const run = model.board.challenge
   const challenge = run ? challengeById(run.id) : undefined
   if (!run || !challenge) return h.empty
   return h.header(
@@ -276,7 +277,7 @@ export const challengeHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Messag
 
 /** The brief and targets in the goal slot; while running, how far the run is. */
 export const challengeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const run = model.challenge
+  const run = model.board.challenge
   const challenge = run ? challengeById(run.id) : undefined
   if (!run || !challenge) return h.empty
   const running = run.phase !== 'build'
@@ -370,7 +371,7 @@ const VERIFICATION: Record<ChallengeRun['verification'], string> = {
 }
 
 export const challengePanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const run = model.challenge
+  const run = model.board.challenge
   const challenge = run ? challengeById(run.id) : undefined
   if (!run?.result || !challenge) return h.empty
   const result = run.result

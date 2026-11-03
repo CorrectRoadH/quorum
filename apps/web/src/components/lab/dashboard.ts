@@ -103,7 +103,7 @@ const labelOf = (time: number, range: number): string =>
  * which draws the worst minute: a block's mean p99 would hide the spike the tail is about.
  */
 const rowsOf = (model: Model, slo: number): ReadonlyArray<Row> => {
-  const range = model.dashboard.range
+  const range = model.board.dashboard.range
   const tier = tierOf(range)
   const figures = (value: (field: Field) => number, at: number, span: number): Row => ({
     t: labelOf(at, range),
@@ -121,15 +121,15 @@ const rowsOf = (model: Model, slo: number): ReadonlyArray<Row> => {
     burnRate: value('errors') / (1 - slo),
   })
   if (tier === null) {
-    const history = model.game.history
-    const last = Math.floor(model.game.time)
+    const history = model.board.game.history
+    const last = Math.floor(model.board.game.time)
     const kept = history.slice(Math.max(0, history.length - range))
     return kept.map((sample: Sample, index) =>
       figures((field) => sample[field], last - (kept.length - 1 - index), 1),
     )
   }
   const { minutes } = TIERS[tier]
-  const blocks = model.dashboard.history[tier]
+  const blocks = model.board.dashboard.history[tier]
   return blocks
     .slice(Math.max(0, blocks.length - Math.ceil(range / minutes)))
     .map((block) =>
@@ -155,7 +155,7 @@ type NodeTrack = Readonly<{ id: string; name: string; values: ReadonlyArray<numb
 /** Utilization per Node from the Model's 10-second history, with numbered names. */
 const tracksOf = (model: Model): ReadonlyArray<NodeTrack> => {
   const names = new Map<string, number>()
-  return model.game.nodes
+  return model.board.game.nodes
     .filter((node) => node.type !== 'users')
     .map((node) => {
       const base = COMPONENTS[node.type].name
@@ -164,7 +164,7 @@ const tracksOf = (model: Model): ReadonlyArray<NodeTrack> => {
       return {
         id: node.id,
         name: count > 1 ? `${base} ${count}` : base,
-        values: model.nodeHistory[node.id] ?? [],
+        values: model.board.nodeHistory[node.id] ?? [],
       }
     })
 }
@@ -297,7 +297,7 @@ const TOP_OF_PLOT = -150
 
 /** Design changes from the undo stack and the open Incident, as labelled vertical markers. */
 const markersOf = (model: Model, rows: ReadonlyArray<Row>): ReadonlyArray<CartesianChild> => {
-  const changes = model.undo
+  const changes = model.board.undo
     .flatMap((entry) => {
       const t = labelAt(rows, Math.floor(entry.at))
       return t === null ? [] : [{ t, label: entry.label }]
@@ -310,7 +310,7 @@ const markersOf = (model: Model, rows: ReadonlyArray<Row>): ReadonlyArray<Cartes
         label: { value: mark.label, dx: 4, dy: TOP_OF_PLOT, fill: BLUE },
       }),
     )
-  const incident = model.game.incident
+  const incident = model.board.game.incident
   const at = incident ? labelAt(rows, Math.floor(incident.startedAt)) : null
   const open =
     incident && at !== null
@@ -426,7 +426,8 @@ const timeSeries = (
   spec: SeriesSpec,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const hovered = model.dashboard.hover !== null ? rows[model.dashboard.hover] : undefined
+  const hovered =
+    model.board.dashboard.hover !== null ? rows[model.board.dashboard.hover] : undefined
   const id = (series: Series) => `fill-${spec.key}-${series.key}`
   return panel(
     spec.key,
@@ -447,7 +448,7 @@ const timeSeries = (
               title: spec.title,
               className: PLOT,
               accessibilityLayer: true,
-              activeIndex: model.dashboard.hover,
+              activeIndex: model.board.dashboard.hover,
               onActiveIndexChange: (index) => Message.DashboardHovered({ index }),
               defs: spec.series
                 .filter((series) => series.fill)
@@ -795,7 +796,7 @@ const stateTimeline = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const length = Math.max(1, ...tracks.map((track) => track.values.length))
-  const last = Math.floor(model.game.time / NODE_EVERY) * NODE_EVERY
+  const last = Math.floor(model.board.game.time / NODE_EVERY) * NODE_EVERY
   const first = last - (length - 1) * NODE_EVERY
   const runs = (values: ReadonlyArray<number>) => {
     const out: Array<{ level: Level; from: number; to: number }> = []
@@ -1153,8 +1154,12 @@ const rangeLabel = (minutes: number): string =>
 
 /** Grafana's top bar: breadcrumb, time picker, and refresh. */
 const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const now = clockOf(model.game.time)
-  const place = model.sandbox ? (model.sandbox.id === null ? 'Free Sandbox' : 'Sandbox') : 'Company'
+  const now = clockOf(model.board.game.time)
+  const place = model.board.sandbox
+    ? model.board.sandbox.id === null
+      ? 'Free Sandbox'
+      : 'Sandbox'
+    : 'Company'
   return h.div(
     [h.Class('flex flex-wrap items-center gap-2 px-4 pt-4 compact:px-3')],
     [
@@ -1193,12 +1198,12 @@ const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 [
                   h.Key(`range-${minutes}`),
                   h.Type('button'),
-                  h.AriaPressed(minutes === model.dashboard.range ? 'true' : 'false'),
+                  h.AriaPressed(minutes === model.board.dashboard.range ? 'true' : 'false'),
                   h.OnClick(Message.DashboardRangeChosen({ minutes })),
                   h.Class(
                     cn(
                       'h-6 rounded-md px-2.5 text-[12px]',
-                      minutes === model.dashboard.range
+                      minutes === model.board.dashboard.range
                         ? 'bg-raised text-foreground shadow-raised'
                         : 'text-muted-foreground hover:text-foreground',
                     ),
@@ -1214,13 +1219,13 @@ const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 cn(
                   FIGURE,
                   'flex h-7 items-center gap-2 rounded-lg bg-raised px-2.5 text-[12px] shadow-raised',
-                  model.paused ? 'text-muted-foreground' : 'text-foreground',
+                  model.board.paused ? 'text-muted-foreground' : 'text-foreground',
                 ),
               ),
             ],
             [
-              led(model.paused ? MUTED : GREEN, h),
-              model.paused
+              led(model.board.paused ? MUTED : GREEN, h),
+              model.board.paused
                 ? 'Paused'
                 : `Live · D${now.day} ${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`,
               icon(h, RefreshCw, 'size-3.5 text-muted-foreground'),
@@ -1273,8 +1278,8 @@ const variables = (model: Model, slo: number, h: HtmlBuilder<Message>): Html => 
   return h.div(
     [h.Class('flex flex-wrap items-center gap-2 px-4 pt-4 compact:px-3')],
     [
-      chip('era', eraOf(model.game).name),
-      chip('region', model.region),
+      chip('era', eraOf(model.board.game).name),
+      chip('region', model.board.region),
       chip('slo', percent(slo, slo >= 0.999 ? 1 : 0)),
       h.span([h.Class('flex-1')], []),
       h.span(
@@ -1301,7 +1306,7 @@ const variables = (model: Model, slo: number, h: HtmlBuilder<Message>): Html => 
 }
 
 export const dashboardPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const ledger = ledgerOf(model)
   const budget = budgetOf(game)
   const slo = budget.slo > 0 && budget.slo < 1 ? budget.slo : 0.999

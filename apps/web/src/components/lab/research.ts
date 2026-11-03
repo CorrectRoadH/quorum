@@ -117,8 +117,8 @@ const stateOf = (game: Game, entry: ResearchDef): State =>
 
 /** The item the side pane shows: the player's pick, else the most useful next one. */
 const focusOf = (model: Model): ResearchDef => {
-  const game = model.game
-  if (model.researchFocus) return RESEARCH[model.researchFocus]
+  const game = model.board.game
+  if (model.board.researchFocus) return RESEARCH[model.board.researchFocus]
   const action = game.openActions.find((id) => !has(game, id))
   if (action) return RESEARCH[action]
   const ready = researchList
@@ -433,7 +433,7 @@ const card = (game: Game, entry: ResearchDef, state: State, h: HtmlBuilder<Messa
 }
 
 const node = (model: Model, place: Placed, focused: boolean, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const { entry } = place
   const state = stateOf(game, entry)
   // Beyond the next Era: in the fog.
@@ -481,9 +481,9 @@ const wires = (model: Model, layout: Layout, focus: ResearchDef, h: HtmlBuilder<
     ],
     layout.wires.map((wire) => {
       const done = wire.from
-        ? has(model.game, wire.from)
+        ? has(model.board.game, wire.from)
         : wire.to
-          ? has(model.game, wire.to)
+          ? has(model.board.game, wire.to)
           : false
       const lit = focus.id === wire.to || focus.id === wire.from
       return h.path(
@@ -565,7 +565,7 @@ const eraLabel = (game: Game, era: number, h: HtmlBuilder<Message>) => [
 ]
 
 const backdrop = (model: Model, layout: Layout, h: HtmlBuilder<Message>) => {
-  const game = model.game
+  const game = model.board.game
   // One band per Era, the current one tinted and the ones ahead washed out.
   const bands = layout.bands.map((band) =>
     h.div(
@@ -802,7 +802,7 @@ const queueButton = (
 
 /** The Study queue, in order: the first one runs. */
 const queuePanel = (model: Model, focus: ResearchId, h: HtmlBuilder<Message>): Html => {
-  const studies = model.game.studies
+  const studies = model.board.game.studies
   if (studies.length === 0) return h.empty
   return h.section(
     [
@@ -864,7 +864,7 @@ const queuePanel = (model: Model, focus: ResearchId, h: HtmlBuilder<Message>): H
 }
 
 const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const queued = game.studies.findIndex((item) => item.id === entry.id)
   const state = stateOf(game, entry)
   const open = state !== 'owned' && game.openActions.includes(entry.id)
@@ -1037,8 +1037,8 @@ export const researchPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.span([h.Class('text-[17px] font-semibold tracking-[-0.025em]')], ['Research']),
               h.span(
                 [h.Class('flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]')],
-                POOL_ORDER.filter((pool) => model.game.pools[pool] >= 1).map((pool) =>
-                  insightChip(pool, compact(model.game.pools[pool]), h),
+                POOL_ORDER.filter((pool) => model.board.game.pools[pool] >= 1).map((pool) =>
+                  insightChip(pool, compact(model.board.game.pools[pool]), h),
                 ),
               ),
             ],

@@ -29,8 +29,8 @@ const TAB_OFFSET = ['translate-x-0', 'translate-x-11', 'translate-x-22', 'transl
 
 const row = (model: Model, type: ComponentId, index: number, h: HtmlBuilder<Message>): Html => {
   const def = COMPONENTS[type]
-  const unlocked = isUnlocked(model.game, type)
-  const price = priceOf(model.game, type)
+  const unlocked = isUnlocked(model.board.game, type)
+  const price = priceOf(model.board.game, type)
   return h.button(
     [
       h.Key(type),
@@ -57,8 +57,12 @@ const row = (model: Model, type: ComponentId, index: number, h: HtmlBuilder<Mess
       ),
       unlocked
         ? h.span(
-            [h.Class(cn(FIGURE, 'text-[12.5px]', model.game.cash >= price ? '' : 'text-danger'))],
-            [model.game.sandbox ? '' : money(price)],
+            [
+              h.Class(
+                cn(FIGURE, 'text-[12.5px]', model.board.game.cash >= price ? '' : 'text-danger'),
+              ),
+            ],
+            [model.board.game.sandbox ? '' : money(price)],
           )
         : h.span(
             [h.Class('flex items-center gap-1 text-[11px] text-muted-foreground')],
@@ -105,7 +109,7 @@ const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
       h.DataAttribute('exit-anchor', 'bottom'),
       h.Class('swap flex w-[420px] max-w-full flex-col gap-0.5 pb-1 compact:w-auto'),
     ],
-    dockItems(model.game, group).map((type, index) => row(model, type, index, h)),
+    dockItems(model.board.game, group).map((type, index) => row(model, type, index, h)),
   )
 
 /** One surface. Its top slot holds the open group's parts or the part in hand,
@@ -113,9 +117,9 @@ const list = (model: Model, group: BuildGroup, h: HtmlBuilder<Message>): Html =>
  *  The dock is pinned at its bottom edge, so its content packs to the bottom:
  *  mid-morph, the tabs stay put and the top edge moves. */
 export const dock = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const open = model.buildGroup
+  const open = model.board.buildGroup
   const placing = placingOf(model)
-  const groups = BUILD_GROUPS.filter((group) => dockGroups(model.game).includes(group.key))
+  const groups = BUILD_GROUPS.filter((group) => dockGroups(model.board.game).includes(group.key))
   return h.div(
     [
       h.Key('dock'),

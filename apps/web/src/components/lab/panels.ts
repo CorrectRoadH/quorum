@@ -325,9 +325,9 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
 /* ---------- funding ---------- */
 
 export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const deal = offer(model.game)
+  const deal = offer(model.board.game)
   if (!deal) return h.empty
-  const ipo = model.game.stage === PRE_IPO_STAGE
+  const ipo = model.board.game.stage === PRE_IPO_STAGE
   return shell(
     ipo ? 'IPO' : `${deal.era.name} round`,
     [],
@@ -346,7 +346,7 @@ export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.span(
                     [],
                     [
-                      `Equity ${Math.round(model.game.equity * 100)}% → ${Math.round(model.game.equity * (1 - deal.dilution) * 100)}%`,
+                      `Equity ${Math.round(model.board.game.equity * 100)}% → ${Math.round(model.board.game.equity * (1 - deal.dilution) * 100)}%`,
                     ],
                   ),
                   h.span([], [ipo ? 'Quarters begin' : 'Full growth']),
@@ -369,7 +369,7 @@ export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
                     [h.Class('flex flex-1 flex-col gap-0.5 text-[13px] text-muted-foreground')],
                     [
                       h.span([], ['No Cash']),
-                      h.span([], [`Equity stays ${Math.round(model.game.equity * 100)}%`]),
+                      h.span([], [`Equity stays ${Math.round(model.board.game.equity * 100)}%`]),
                       h.span([], ['Growth × 0.7']),
                     ],
                   ),
@@ -385,7 +385,7 @@ export const offerPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 export const eraPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const era = eraOf(model.game)
+  const era = eraOf(model.board.game)
   return shell(
     era.name,
     [],
@@ -444,10 +444,10 @@ export const endPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
           stats(
             'max-w-[640px] grid-cols-4 narrow:grid-cols-2 narrow:[&>:nth-child(n+3)]:border-t',
             [
-              stat('Time', clock(model.game.time), h),
-              stat('Users', compact(model.game.users), h),
-              stat('Earned', money(model.game.earned), h),
-              stat('Equity', `${Math.round(model.game.equity * 100)}%`, h),
+              stat('Time', clock(model.board.game.time), h),
+              stat('Users', compact(model.board.game.users), h),
+              stat('Earned', money(model.board.game.earned), h),
+              stat('Equity', `${Math.round(model.board.game.equity * 100)}%`, h),
             ],
             h,
           ),
@@ -481,11 +481,11 @@ export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.span([h.Class(EYEBROW)], ['Speed']),
               h.div(
                 [h.Class('flex gap-2')],
-                speedsOf(model.game).map((speed) =>
+                speedsOf(model.board.game).map((speed) =>
                   button(
                     {
                       onClick: Message.SpeedChosen({ speed }),
-                      variant: model.speed === speed ? 'default' : 'outline',
+                      variant: model.board.speed === speed ? 'default' : 'outline',
                       size: 'lg',
                       className: cn(FIGURE, 'w-16'),
                       attributes: [h.Key(String(speed))],
@@ -504,16 +504,16 @@ export const devPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.div(
                 [h.Class('flex flex-wrap gap-2')],
                 [
-                  nextEra(model.game) && !isFinalEra(model.game)
+                  nextEra(model.board.game) && !isFinalEra(model.board.game)
                     ? secondaryButton(
-                        `Skip to ${nextEra(model.game)?.name ?? ''}`,
+                        `Skip to ${nextEra(model.board.game)?.name ?? ''}`,
                         Message.CheatRound(),
                         h,
                       )
                     : h.empty,
-                  secondaryButton(`+${money(cheatCash(model.game))}`, Message.CheatCash(), h),
+                  secondaryButton(`+${money(cheatCash(model.board.game))}`, Message.CheatCash(), h),
                   secondaryButton(
-                    `+${cheatInsight(model.game).toLocaleString('en-US')} Insight`,
+                    `+${cheatInsight(model.board.game).toLocaleString('en-US')} Insight`,
                     Message.CheatInsight(),
                     h,
                   ),

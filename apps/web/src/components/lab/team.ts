@@ -448,14 +448,14 @@ const policySwitch = (team: Team, h: HtmlBuilder<Message>): Html =>
   )
 
 const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const output = teamOutputs(game, ledgerOf(model)).find((entry) => entry.team.id === team.id)
   const now = policyNow(game, team)
   const pending = game.hires.filter((entry) => entry.team === team.id)
   const sandbox = game.sandbox
-  const target = DragAndDrop.maybeDropTarget(model.teamDrag)
+  const target = DragAndDrop.maybeDropTarget(model.board.teamDrag)
   const dropTarget =
-    DragAndDrop.isDragging(model.teamDrag) &&
+    DragAndDrop.isDragging(model.board.teamDrag) &&
     Option.exists(target, (entry) => entry.containerId === team.id)
   return h.section(
     [
@@ -522,7 +522,7 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
                   [
                     ...DragAndDrop.draggable(
                       {
-                        model: model.teamDrag,
+                        model: model.board.teamDrag,
                         toParentMessage: (message) => Message.TeamDragChanged({ message }),
                         itemId: engineer.id,
                         containerId: team.id,
@@ -536,7 +536,7 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
                       cn(
                         'cursor-grab touch-none rounded-xl focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing',
                         Option.exists(
-                          DragAndDrop.maybeDraggedItemId(model.teamDrag),
+                          DragAndDrop.maybeDraggedItemId(model.board.teamDrag),
                           (id) => id === engineer.id,
                         ) && 'opacity-45',
                       ),
@@ -582,12 +582,14 @@ const working = (item: WorkItem | undefined, h: HtmlBuilder<Message>): Html =>
   )
 
 const floor = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   return h.div(
     [
       h.Class(`flex min-h-0 flex-col gap-3 p-4 ${SCROLL}`),
       h.DataAttribute('team-drag-floor', ''),
-      ...(DragAndDrop.isDragging(model.teamDrag) ? [h.DataAttribute('team-drag-active', '')] : []),
+      ...(DragAndDrop.isDragging(model.board.teamDrag)
+        ? [h.DataAttribute('team-drag-active', '')]
+        : []),
     ],
     [
       game.teams.length > 1 && game.engineers.length > 0
@@ -597,10 +599,10 @@ const floor = (model: Model, h: HtmlBuilder<Message>): Html => {
           )
         : h.empty,
       ...game.teams.map((team, index) => pod(model, team, index, h)),
-      Option.match(DragAndDrop.ghostStyle(model.teamDrag), {
+      Option.match(DragAndDrop.ghostStyle(model.board.teamDrag), {
         onNone: () => h.empty,
         onSome: (style) =>
-          Option.match(DragAndDrop.maybeDraggedItemId(model.teamDrag), {
+          Option.match(DragAndDrop.maybeDraggedItemId(model.board.teamDrag), {
             onNone: () => h.empty,
             onSome: (id) =>
               h.div(
@@ -1264,7 +1266,7 @@ const board = (game: Game, h: HtmlBuilder<Message>): Html => {
 }
 
 const autopilot = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   return h.button(
     [
       h.Type('button'),
@@ -1450,7 +1452,7 @@ const taskTile = (game: Game, id: TaskId, h: HtmlBuilder<Message>) => {
 const TILES = 'grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2'
 
 const work = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const tasks = TASK_IDS.filter((id) => {
     const def = TASKS[id]
     return !def.internal && (def.research === null || has(game, def.research))
@@ -1493,7 +1495,7 @@ const work = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 export const teamPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const rate = devHoursRate(game, ledgerOf(model))
   const payroll = payrollOf(game)
   return shell(

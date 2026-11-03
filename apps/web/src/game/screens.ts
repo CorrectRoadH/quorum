@@ -73,9 +73,9 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(
         [h.Class(TOP)],
         [
-          model.challenge
+          model.board.challenge
             ? challengeHud(model, ledger, h)
-            : model.sandbox
+            : model.board.sandbox
               ? sandboxHud(model, ledger, h)
               : hud(model, ledger, h),
           // On a desktop the top row runs from the HUD's right edge to the screen's: the lane
@@ -87,9 +87,9 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
                 [h.DataAttribute('flip', 'notice'), h.Class(LANE)],
                 [
                   regionTabs(model, h),
-                  model.challenge
+                  model.board.challenge
                     ? challengeBar(model, h)
-                    : model.sandbox
+                    : model.board.sandbox
                       ? objectiveBar(model, h)
                       : h.empty,
                   pager(model, h),
@@ -108,9 +108,9 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
         [h.DataAttribute('flip', 'gesture'), h.Class(BOTTOM)],
         [
           changeBar(model, h, 'enter-pop compact:hidden'),
-          model.confirmSell
+          model.board.confirmSell
             ? sellBar(model, h)
-            : !offCompany(model) && model.selection.length > 0
+            : !offCompany(model) && model.board.selection.length > 0
               ? selectionBar(model, h)
               : stampedPlaybook(model)
                 ? stampBar(model, h)
@@ -121,7 +121,8 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       tradeoffCard(model, h),
       bottomNotices(model, h),
       // The inspector takes the Inbox's corner; the Inbox comes back when it closes.
-      model.challenge || model.game.nodes.some((node) => node.id === model.selected)
+      model.board.challenge ||
+      model.board.game.nodes.some((node) => node.id === model.board.selected)
         ? h.empty
         : inboxButton(model, h),
       model.panel === 'research' ? researchPanel(model, h) : h.empty,

@@ -180,7 +180,7 @@ const previewLine = (model: Model, preview: PreviewFigures): string =>
       worse: false,
       shownAt: 0,
     },
-    has(model.game, 'percentiles'),
+    has(model.board.game, 'percentiles'),
   )
 
 /** Cash now, the change in Burn, and the restart. */
@@ -188,7 +188,7 @@ const costLine = (model: Model, preview: PreviewFigures): string => {
   const [before = 0, after = 0] = preview.burn
   const burn = after - before
   return [
-    !model.game.sandbox && preview.cash > 0 ? money(preview.cash) : null,
+    !model.board.game.sandbox && preview.cash > 0 ? money(preview.cash) : null,
     Math.abs(burn) >= 0.005 ? `Burn ${burn > 0 ? '+' : '−'}${money(Math.abs(burn))}/s` : null,
     preview.restart > 0 ? `restarts cold for ${Math.ceil(preview.restart)} s` : null,
   ]
@@ -237,9 +237,9 @@ const PLACE =
   'absolute top-[76px] right-[372px] z-20 w-[320px] compact:inset-x-2 compact:top-auto compact:right-2 compact:bottom-[calc(62%+16px)] compact:w-auto short:right-[340px]'
 
 export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const card = model.tradeoff
-  if (!card || card.nodeId !== model.selected) return h.empty
-  const node = model.game.nodes.find((entry) => entry.id === card.nodeId)
+  const card = model.board.tradeoff
+  if (!card || card.nodeId !== model.board.selected) return h.empty
+  const node = model.board.game.nodes.find((entry) => entry.id === card.nodeId)
   if (!node) return h.empty
   const current = currentOf(node, card.option)
   const title = `${KIND_TITLE[card.option.kind]}: ${nameOf(current)} → ${nameOf(card.option)}`

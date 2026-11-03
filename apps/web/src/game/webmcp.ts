@@ -25,17 +25,22 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
   get_company: (m) => {
     const ledger = ledgerOf(m)
     return {
-      mode: m.challenge ? 'challenge' : m.sandbox ? 'sandbox' : 'company',
+      mode: m.board.challenge ? 'challenge' : m.board.sandbox ? 'sandbox' : 'company',
       offCompany: offCompany(m),
-      screen: { route: m.route._tag, panel: m.panel, region: m.region, selectedNode: m.selected },
-      paused: m.paused,
-      speed: m.speed,
-      simSeconds: round(m.game.time),
-      stage: m.game.stage,
-      founding: m.game.founding,
-      cash: round(m.game.cash),
-      equity: m.game.equity,
-      users: round(m.game.users),
+      screen: {
+        route: m.route._tag,
+        panel: m.panel,
+        region: m.board.region,
+        selectedNode: m.board.selected,
+      },
+      paused: m.board.paused,
+      speed: m.board.speed,
+      simSeconds: round(m.board.game.time),
+      stage: m.board.game.stage,
+      founding: m.board.game.founding,
+      cash: round(m.board.game.cash),
+      equity: m.board.game.equity,
+      users: round(m.board.game.users),
       market: round(ledger.market),
       apdex: round(ledger.apdex),
       demand: round(ledger.demand),
@@ -49,18 +54,18 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
       },
       revenuePerSec: round(ledger.revenue),
       burnPerSec: round(ledger.burn),
-      bottleneck: m.bottleneck,
+      bottleneck: m.board.bottleneck,
       failingKinds: ledger.failing,
-      researched: m.game.researched,
-      studies: m.game.studies,
-      openActions: m.game.openActions,
+      researched: m.board.game.researched,
+      studies: m.board.game.studies,
+      openActions: m.board.game.openActions,
     }
   },
   get_design: (m) => {
     const ledger = ledgerOf(m)
     return {
-      nodes: m.game.nodes.map((node) => ({ ...node, ledger: ledger.nodes[node.id] ?? null })),
-      links: m.game.links.map((link) => ({
+      nodes: m.board.game.nodes.map((node) => ({ ...node, ledger: ledger.nodes[node.id] ?? null })),
+      links: m.board.game.links.map((link) => ({
         ...link,
         ledger: ledger.links.find((l) => l.from === link.from && l.to === link.to) ?? null,
       })),
@@ -69,15 +74,15 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
     }
   },
   get_incidents: (m, input) => ({
-    active: m.game.incident,
-    alertRules: m.game.alertRules,
-    alarms: m.game.alarms,
-    falseAlarms: m.game.falseAlarms,
-    openActions: m.game.openActions,
-    postmortems: m.game.postmortems.slice(-(Number(input['limit']) || 5)),
+    active: m.board.game.incident,
+    alertRules: m.board.game.alertRules,
+    alarms: m.board.game.alarms,
+    falseAlarms: m.board.game.falseAlarms,
+    openActions: m.board.game.openActions,
+    postmortems: m.board.game.postmortems.slice(-(Number(input['limit']) || 5)),
   }),
   get_inbox: (m, input) =>
-    m.inbox.mail
+    m.board.inbox.mail
       .filter((mail) => {
         const folder = mail.trashed ? 'trash' : mail.spam ? 'spam' : 'inbox'
         return folder === (input['folder'] ?? 'inbox') && (!input['unreadOnly'] || !mail.read)
@@ -93,15 +98,16 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
         choices: mail.actions.map((action) => action.label),
         entries: mail.entries,
       })),
-  get_history: (m, input) => m.game.history.slice(-Math.min(600, Number(input['last']) || 60)),
-  get_game: (m) => ({ ...m.game, history: undefined }),
+  get_history: (m, input) =>
+    m.board.game.history.slice(-Math.min(600, Number(input['last']) || 60)),
+  get_game: (m) => ({ ...m.board.game, history: undefined }),
 }
 
 /** Why an agent gets nothing, or null when it may read the game. */
 export const refusal = (model: Model | null): string | null =>
   model === null
     ? 'No Company is open. Ask the player to open one.'
-    : model.challenge
+    : model.board.challenge
       ? 'A Challenge is open. Challenges are scored, so agents cannot read them.'
       : null
 

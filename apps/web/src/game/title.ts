@@ -568,7 +568,7 @@ const achievementsMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<
 ]
 
 const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const page = menuOf(model.route)
   return h.nav(
     [

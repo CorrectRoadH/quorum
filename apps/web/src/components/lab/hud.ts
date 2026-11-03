@@ -62,7 +62,7 @@ import { itemName } from '@quorum/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
 import { clock as mmss, compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
-import { exitLegacy, offCompany, type Model } from '@/game/model.ts'
+import { exitLegacy, offCompany, type Board, type Model } from '@/game/model.ts'
 import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
 import { moreMenu, type MoreItem } from '@/game/more.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
@@ -269,7 +269,7 @@ const poolRow = (
  * how they fill, in the card.
  */
 const insightCard = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const running = game.studies[0]
   const recipe = running ? RECIPE[running.id] : {}
   const limit = running ? limitingPool(game) : null
@@ -332,12 +332,14 @@ const insightCard = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Htm
               h.Type('button'),
               h.Title('About Insight'),
               h.AriaLabel('About Insight'),
-              h.AriaExpanded(model.insightHelp),
+              h.AriaExpanded(model.board.insightHelp),
               h.OnClick(Message.InsightHelpToggled()),
               h.Class(
                 cn(
                   'grid size-6 shrink-0 place-items-center rounded-md hover:bg-foreground/5',
-                  model.insightHelp ? 'bg-foreground/5 text-foreground' : 'text-muted-foreground',
+                  model.board.insightHelp
+                    ? 'bg-foreground/5 text-foreground'
+                    : 'text-muted-foreground',
                 ),
               ),
             ],
@@ -369,7 +371,7 @@ const insightCard = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Htm
             ),
           )
         : h.empty,
-      model.insightHelp ? insightHelp(h) : h.empty,
+      model.board.insightHelp ? insightHelp(h) : h.empty,
     ],
   )
 }
@@ -377,7 +379,7 @@ const insightCard = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Htm
 const percent = (share: number): string => `${(Math.floor(share * 10_000) / 100).toFixed(2)}%`
 
 /** Availability over the week against the Era's SLO; the error budget left with SLO dashboards. */
-const slo = (game: Model['game'], h: HtmlBuilder<Message>): Html => {
+const slo = (game: Board['game'], h: HtmlBuilder<Message>): Html => {
   const budget = budgetOf(game)
   const left = Math.max(0, budget.left)
   return stat(
@@ -399,7 +401,7 @@ const slo = (game: Model['game'], h: HtmlBuilder<Message>): Html => {
 const TOOLBAR_ROOM = 'compact:min-h-9 compact:pr-[var(--toolbar-w)]'
 
 const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const era = eraOf(game)
   const next = nextEra(game)
   const share = next ? Math.min(1, game.users / era.raiseAt) : 1
@@ -459,7 +461,7 @@ const funding = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 /** What the Team builds now: the top of the backlog, and how fast. Opens the Team panel. */
 const building = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const item = game.backlog[0]
   const rate = devHoursRate(game, ledger) * 60
   const ready = game.awaiting.length
@@ -525,7 +527,7 @@ const building = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =
 }
 
 export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const income = has(game, 'stripe') ? ledger.revenue : 0
   const net = income - ledger.burn
   const then = game.history.at(-30)
@@ -635,7 +637,7 @@ const line = (name: string, value: string, tone: Tone, h: HtmlBuilder<Message>, 
 
 /** The IPO checklist (10 "Era 6"): every item at once opens the IPO. */
 const checklist = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const items = checklistOf(game, ledger)
   const drillReady = has(game, 'dr-drills') && !game.incident && !(game.drill && !game.drill.done)
   return h.div(
@@ -703,7 +705,7 @@ const guidance = (
 
 /** The Public quarter (10 "Era 7"): days left, guidance, and the market's verdict. */
 const quarterly = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const quarter = game.quarter
   if (!quarter) return h.empty
   const day = Math.min(7, Math.floor((game.time - quarter.startedAt) / 1_440) + 1)
@@ -865,7 +867,7 @@ const MORE: Record<MoreItem, Readonly<{ label: string; glyph: IconNode }>> = {
 const moreItems = (model: Model): ReadonlyArray<MoreItem> => [
   ...(exitLegacy(model) === null ? [] : (['exit'] as const)),
   ...(playbooksShown(model) ? (['playbooks'] as const) : []),
-  ...(has(model.game, 'metrics') ? (['dashboard'] as const) : []),
+  ...(has(model.board.game, 'metrics') ? (['dashboard'] as const) : []),
   'help',
   ...(shown(model, 'glossary') ? (['glossary'] as const) : []),
   ...(shown(model, 'undo') ? (['undo', 'redo'] as const) : []),
@@ -908,7 +910,8 @@ const moreButton = (model: Model, h: HtmlBuilder<Message>): Html => {
       backdropClassName: 'fixed inset-0 z-40',
       itemsClassName: `z-50 min-w-48 p-1 outline-none ${FLOAT}`,
       isItemDisabled: (item) =>
-        (item === 'undo' && !undoAvailable(model)) || (item === 'redo' && !redoAvailable(model)),
+        (item === 'undo' && !undoAvailable(model.board)) ||
+        (item === 'redo' && !redoAvailable(model.board)),
       itemToConfig: (item, { isActive, isDisabled }) => ({
         className: cn(
           'flex h-10 cursor-pointer items-center gap-2.5 rounded-xl px-2.5 text-[13px] outline-none',
@@ -932,7 +935,7 @@ const moreButton = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const affordable =
     game.studies.length > 0
       ? 0
@@ -1031,7 +1034,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                 model.panel === 'playbooks',
                 h,
               ),
-          has(model.game, 'metrics')
+          has(model.board.game, 'metrics')
             ? toolButton(
                 'Dashboard (D)',
                 ChartLine,
@@ -1067,7 +1070,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                   'Undo (Z)',
                   Undo2,
                   Message.UndoChosen(),
-                  undoAvailable(model),
+                  undoAvailable(model.board),
                   h,
                   glowing(model, 'undo'),
                 ),
@@ -1075,7 +1078,7 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
                   'Redo (Shift+Z)',
                   Redo2,
                   Message.RedoChosen(),
-                  redoAvailable(model),
+                  redoAvailable(model.board),
                   h,
                 ),
               ]
@@ -1085,10 +1088,10 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       divider(h),
       toolButton(
-        model.paused ? 'Resume (Space)' : 'Pause (Space)',
-        model.paused ? Play : Pause,
+        model.board.paused ? 'Resume (Space)' : 'Pause (Space)',
+        model.board.paused ? Play : Pause,
         Message.PauseToggled(),
-        model.paused,
+        model.board.paused,
         h,
       ),
       h.button(
@@ -1098,9 +1101,11 @@ export const toolbar = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.Title('Speed (S)'),
           h.AriaLabel('Speed (S)'),
           h.OnClick(Message.SpeedCycled()),
-          h.Class(cn(tool(model.speed > 1), FIGURE, 'text-[12.5px] font-medium compact:size-9')),
+          h.Class(
+            cn(tool(model.board.speed > 1), FIGURE, 'text-[12.5px] font-medium compact:size-9'),
+          ),
         ],
-        [`${model.speed}×`],
+        [`${model.board.speed}×`],
       ),
       desktopOnly(
         [
@@ -1140,10 +1145,10 @@ const undoButton = (danger: boolean, h: HtmlBuilder<Message>): Html =>
 /** One pill from the first change to the delta: Settling morphs into the result,
  *  and the pill leaves when the delta expires. */
 export const changeBar = (model: Model, h: HtmlBuilder<Message>, className: string): Html => {
-  const undo = undoAvailable(model)
-  const delta = model.delta
-  if (!model.change && !delta) return h.empty
-  const body = model.change
+  const undo = undoAvailable(model.board)
+  const delta = model.board.delta
+  if (!model.board.change && !delta) return h.empty
+  const body = model.board.change
     ? h.span(
         [
           h.Key('settling'),
@@ -1151,10 +1156,14 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>, className: stri
           h.Class('swap flex items-center gap-2.5 whitespace-nowrap'),
         ],
         [
-          ring(settleProgress(model), 'size-3.5 shrink-0 text-muted-foreground', h),
+          ring(settleProgress(model.board), 'size-3.5 shrink-0 text-muted-foreground', h),
           h.span(
             [h.Class('text-muted-foreground')],
-            [model.change.count > 1 ? `${model.change.count} changes` : model.change.label],
+            [
+              model.board.change.count > 1
+                ? `${model.board.change.count} changes`
+                : model.board.change.label,
+            ],
           ),
         ],
       )
@@ -1171,9 +1180,9 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>, className: stri
           ),
           h.span(
             [h.Class(cn(FIGURE, 'text-[11.5px]'))],
-            [delta ? describeDelta(delta, has(model.game, 'percentiles')) : ''],
+            [delta ? describeDelta(delta, has(model.board.game, 'percentiles')) : ''],
           ),
-          model.stableTicks > 0
+          model.board.stableTicks > 0
             ? h.span(
                 [h.Key('stable'), h.Class('enter-badge text-[11.5px] font-medium text-ok')],
                 ['Stable'],
@@ -1188,7 +1197,7 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>, className: stri
       h.DataAttribute('exit', 'notice'),
       h.Class(cn(pill, className)),
     ],
-    [body, undo ? undoButton(!model.change && !!delta?.worse, h) : h.empty],
+    [body, undo ? undoButton(!model.board.change && !!delta?.worse, h) : h.empty],
   )
 }
 
@@ -1197,7 +1206,7 @@ export const changeBar = (model: Model, h: HtmlBuilder<Message>, className: stri
  * tabs; with Multiple regions, each closed one offers to open, at its price.
  */
 export const regionTabs = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const open = openRegions(game)
   if (open.length < 2 && !(has(game, 'multi-region') && regional(game))) return h.empty
   return h.nav(
@@ -1220,13 +1229,13 @@ export const regionTabs = (model: Model, h: HtmlBuilder<Message>): Html => {
               ? info.name
               : `Open ${info.name}: ${money(game.sandbox ? 0 : OPEN_REGION_PRICE * eraOf(game).costIndex)}`,
           ),
-          h.AriaPressed(model.region === region ? 'true' : 'false'),
+          h.AriaPressed(model.board.region === region ? 'true' : 'false'),
           h.OnClick(isOpen ? Message.RegionPicked({ region }) : Message.RegionOpened({ region })),
           h.Class(
             cn(
               FIGURE,
               'h-7 rounded-lg px-2.5 text-[11.5px] font-medium',
-              model.region === region
+              model.board.region === region
                 ? 'bg-foreground text-background'
                 : isOpen
                   ? 'hover:bg-foreground/5'

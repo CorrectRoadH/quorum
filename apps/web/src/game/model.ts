@@ -334,29 +334,24 @@ export const Tool = Schema.Union([
 ])
 export type Tool = typeof Tool.Type
 
-export const Model = Schema.Struct({
-  /** The screen, parsed from the URL. */
-  route: AppRoute,
-  /** The clock-in splash before the title: shut until the first click or key press, which lets the title play sound. */
-  gate: Gate,
-  /** The Company, or the Sandbox while one is open. */
+/**
+ * One board: the Company, a Sandbox or a Challenge being played, and
+ * everything the player does on it. Entering another board starts a fresh
+ * one; the Company's board waits aside while a Sandbox or Challenge is open.
+ */
+export const Board = Schema.Struct({
+  /** The Company, or the Sandbox or Challenge while one is open. */
   game: Game,
-  /** A saved company exists, so the title screen offers Continue. */
-  saved: Schema.Boolean,
+  /** The open Sandbox, or null. */
+  sandbox: Schema.NullOr(SandboxRun),
   /** The open Challenge, or null. */
   challenge: Schema.NullOr(ChallengeRun),
-  /** Challenge histograms from the API Worker. */
-  histograms: histogramQuery.Model,
-  /** Today's UTC date, for the daily drill. */
-  today: Schema.String,
-  /** The open Sandbox, or null in a Company. */
-  sandbox: Schema.NullOr(SandboxRun),
-  /** The Company, kept aside while a Sandbox is open. */
-  company: Schema.NullOr(Game),
-  /** Guided Sandboxes the player has passed. */
-  passed: Schema.Array(SandboxId),
-  /** The free Sandbox as the player left it. */
-  freeBoard: Schema.NullOr(Game),
+  /** What the Company earned when it exited, until the player leaves it. */
+  exited: Schema.NullOr(Exited),
+  /** What happened while the player was away. */
+  away: Schema.NullOr(Away),
+  /** The region tab the board shows. */
+  region: Region,
   selected: Schema.NullOr(Schema.String),
   /** Nodes picked with shift for a Playbook. */
   selection: Schema.Array(Schema.String),
@@ -364,22 +359,16 @@ export const Model = Schema.Struct({
   tool: Schema.NullOr(Tool),
   /** The Nodes a sale is waiting on, until the player confirms it. */
   confirmSell: Schema.NullOr(Schema.Array(Schema.String)),
-  /** The Nodes last copied or cut. Kept for this session only. */
+  /** The Nodes last copied or cut. */
   clipboard: Schema.NullOr(Playbook),
-  /** The player across Companies, kept apart from the Company save. */
-  founder: Founder,
-  away: Schema.NullOr(Away),
-  exited: Schema.NullOr(Exited),
-  /** The region tab the board shows. */
-  region: Region,
-  panel: Panel,
+  /** The open build tray, or null when the dock shows only its group icons. */
+  buildGroup: Schema.NullOr(BuildGroupKey),
   /** The transient drag gesture for moving engineers between teams. */
   teamDrag: DragAndDrop.Model,
   /** The research item the Research panel shows in its side pane; null picks one. */
   researchFocus: Schema.NullOr(ResearchId),
-  /** The open build tray, or null when the dock shows only its group icons. */
-  buildGroup: Schema.NullOr(BuildGroupKey),
-  /** The group that was open last, so the dock can animate out of it and back from it. */
+  /** The Insight card's help section is open. */
+  insightHelp: Schema.Boolean,
   speed: Schema.Finite,
   paused: Schema.Boolean,
   /** Steps owed to the clock but not run yet: a tick at 1× is 2.5 Steps. */
@@ -388,26 +377,15 @@ export const Model = Schema.Struct({
   savedAt: Schema.Finite,
   /** Game time of the last log sample. */
   sampledAt: Schema.Finite,
-  toast: Schema.NullOr(Toast),
-  toastSeq: Schema.Finite,
   change: Schema.NullOr(Change),
   delta: Schema.NullOr(Delta),
+  /** Ticks left to show "Stable" after a change settles. */
+  stableTicks: Schema.Finite,
   tradeoff: Schema.NullOr(Tradeoff),
-  /** Elements this Company shows, triggers that wait their turn, and the one that glows. */
+  /** Elements this board shows, triggers that wait their turn, and the one that glows. */
   revealed: Schema.Array(Reveal),
   pending: Schema.Array(Reveal),
   cue: Schema.NullOr(RevealCue),
-  /** The player's settings, kept in the browser apart from saves. */
-  prefs: Prefs,
-  languagePicker: Listbox.Model,
-  /** The phone toolbar's More menu. */
-  moreMenu: UiMenu.Model,
-  glossary: Glossary,
-  /** The Insight card's help section is open. */
-  insightHelp: Schema.Boolean,
-  inbox: Inbox,
-  /** Ticks left to show "Stable" after a change settles. */
-  stableTicks: Schema.Finite,
   /** Board actions to undo, newest last, at most 50. */
   undo: Schema.Array(Undo),
   /** Undone actions to redo, newest last. A new action clears it. */
@@ -418,27 +396,61 @@ export const Model = Schema.Struct({
   bottleneckAt: Schema.Finite,
   /** Utilization per Node over the last two minutes, for Metrics. */
   nodeHistory: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
+  inbox: Inbox,
   dashboard: Dashboard,
   /** The last goal and bottleneck logged, so the log records changes only. */
   lastGoal: Schema.String,
   lastBottleneck: Schema.String,
 })
+export type Board = typeof Board.Type
+
+/** The session: what lasts while the page is open, and the board being played. */
+export const Model = Schema.Struct({
+  /** The screen, parsed from the URL. */
+  route: AppRoute,
+  /** The clock-in splash before the title: shut until the first click or key press, which lets the title play sound. */
+  gate: Gate,
+  panel: Panel,
+  toast: Schema.NullOr(Toast),
+  toastSeq: Schema.Finite,
+  board: Board,
+  /** The Company's board, kept aside while a Sandbox or Challenge is open. */
+  company: Schema.NullOr(Board),
+  /** A saved company exists, so the title screen offers Continue. */
+  saved: Schema.Boolean,
+  /** The player across Companies, kept apart from the Company save. */
+  founder: Founder,
+  /** Guided Sandboxes the player has passed. */
+  passed: Schema.Array(SandboxId),
+  /** The free Sandbox as the player left it. */
+  freeBoard: Schema.NullOr(Game),
+  /** Challenge histograms from the API Worker. */
+  histograms: histogramQuery.Model,
+  /** Today's UTC date, for the daily drill. */
+  today: Schema.String,
+  /** The player's settings, kept in the browser apart from saves. */
+  prefs: Prefs,
+  glossary: Glossary,
+  languagePicker: Listbox.Model,
+  /** The phone toolbar's More menu. */
+  moreMenu: UiMenu.Model,
+})
 export type Model = typeof Model.Type
 
 /** The Ledger the views show: the flow solve, with the Bottleneck the clock last searched. */
 export const ledgerOf = (model: Model): Ledger => ({
-  ...solveFlow(model.game),
-  bottleneck: model.bottleneck,
+  ...solveFlow(model.board.game),
+  bottleneck: model.board.bottleneck,
 })
 
 /** The board is not the Company: a Sandbox or a Challenge is open. */
 export const offCompany = (model: Model): boolean =>
-  model.sandbox !== null || model.challenge !== null
+  model.board.sandbox !== null || model.board.challenge !== null
 
 /** The most Legacy an Exit pays now, or null while no Exit is on the table. */
 export const exitLegacy = (model: Model): number | null => {
-  if (offCompany(model) || model.exited) return null
-  const offers = exitOffers(model.game, ledgerOf(model))
+  if (offCompany(model) || model.board.exited) return null
+  const offers = exitOffers(model.board.game, ledgerOf(model))
   return offers.length === 0 ? null : Math.max(...offers.map((offer) => offer.legacy))
 }
 
@@ -447,16 +459,16 @@ export const inMenu = (model: Model): boolean =>
   model.panel === 'menu' || model.panel === 'settings'
 
 /** The clock holds still: the player paused it, or the game menu is open. */
-export const halted = (model: Model): boolean => model.paused || inMenu(model)
+export const halted = (model: Model): boolean => model.board.paused || inMenu(model)
 
 /** The Playbook that follows the pointer, if any. */
 export const stampedPlaybook = (model: Model): Playbook | null =>
-  model.tool?._tag !== 'Stamping'
+  model.board.tool?._tag !== 'Stamping'
     ? null
-    : model.tool.source === 'clipboard'
-      ? model.clipboard
-      : (model.founder.playbooks[model.tool.source] ?? null)
+    : model.board.tool.source === 'clipboard'
+      ? model.board.clipboard
+      : (model.founder.playbooks[model.board.tool.source] ?? null)
 
 /** The Component a click on the board places, if any. */
 export const placingOf = (model: Model): typeof ComponentId.Type | null =>
-  model.tool?._tag === 'Placing' ? model.tool.type : null
+  model.board.tool?._tag === 'Placing' ? model.board.tool.type : null

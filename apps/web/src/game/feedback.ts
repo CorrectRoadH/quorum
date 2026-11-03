@@ -1,7 +1,7 @@
 import type { Ledger } from '@quorum/simulation/ledger'
 import type { Game } from '@quorum/simulation/state'
 import { priceOf, refundOf } from '@quorum/simulation/lookups'
-import type { Change, Delta, Figures, Model, Undo } from './model.ts'
+import type { Board, Change, Delta, Figures, Undo } from './model.ts'
 
 /* ==========================================================================
    Feedback after a change: Settling while the Design settles, then a delta
@@ -20,13 +20,13 @@ export { figuresOf } from '@quorum/simulation/preview'
 import { figuresOf } from '@quorum/simulation/preview'
 
 /** Starts or extends a change. Several quick changes settle as one. */
-export const beginChange = (model: Model, label: string, before: Figures): Model => ({
-  ...model,
+export const beginChange = (board: Board, label: string, before: Figures): Board => ({
+  ...board,
   delta: null,
   stableTicks: 0,
-  change: model.change
-    ? { ...model.change, label, count: model.change.count + 1, recent: [], steady: 0 }
-    : { label, count: 1, startedAt: model.game.time, before, recent: [], steady: 0 },
+  change: board.change
+    ? { ...board.change, label, count: board.change.count + 1, recent: [], steady: 0 }
+    : { label, count: 1, startedAt: board.game.time, before, recent: [], steady: 0 },
 })
 
 const warming = (game: Game): boolean => game.nodes.some((node) => node.down > 0 || node.warm < 1)
@@ -53,26 +53,26 @@ const steadyCount = (recent: ReadonlyArray<Sample>): number => {
 }
 
 /** How far the running change is from settling, from 0 to 1, for the Settling ring. */
-export const settleProgress = (model: Model): number => {
-  const change = model.change
+export const settleProgress = (board: Board): number => {
+  const change = board.change
   if (!change) return 1
-  const elapsed = model.game.time - change.startedAt
+  const elapsed = board.game.time - change.startedAt
   return Math.min(1, Math.max(change.steady / STEADY_TICKS, elapsed / SETTLE_LIMIT))
 }
 
 /** Advances the running change; returns the delta once it settles. */
 export const advanceChange = (
-  model: Model,
+  board: Board,
   ledger: Ledger,
   seq: number,
 ): Readonly<{ change: Change | null; delta: Delta | null }> => {
-  const change = model.change
+  const change = board.change
   if (!change) return { change: null, delta: null }
   const sample = { revenue: ledger.revenue, served: ledger.served, errors: ledger.errorShare }
   const recent = [...change.recent, sample].slice(-STEADY_TICKS)
   const steady = steadyCount(recent)
-  const elapsed = model.game.time - change.startedAt
-  if (elapsed < SETTLE_LIMIT && (steady < STEADY_TICKS || warming(model.game)))
+  const elapsed = board.game.time - change.startedAt
+  if (elapsed < SETTLE_LIMIT && (steady < STEADY_TICKS || warming(board.game)))
     return { change: { ...change, recent, steady }, delta: null }
   const after = figuresOf(ledger)
   const worse =
@@ -85,13 +85,13 @@ export const advanceChange = (
       before: change.before,
       after,
       worse,
-      shownAt: model.game.time,
+      shownAt: board.game.time,
     },
   }
 }
 
-export const deltaExpired = (model: Model): boolean =>
-  !!model.delta && model.game.time - model.delta.shownAt > DELTA_SECONDS && !model.delta.worse
+export const deltaExpired = (board: Board): boolean =>
+  !!board.delta && board.game.time - board.delta.shownAt > DELTA_SECONDS && !board.delta.worse
 
 /** Undo is exact for this long after an action; later, money settles at normal prices (16 D17). */
 export const UNDO_SECONDS = 30
@@ -109,13 +109,13 @@ export const snapshotOf = (label: string, game: Game, cash: number, at: number):
 })
 
 /** Records an undoable action: its entry goes on the stack and redo is cleared. */
-export const pushUndo = (model: Model, entry: Undo): Pick<Model, 'undo' | 'redo'> => ({
-  undo: [...model.undo, entry].slice(-UNDO_LIMIT),
+export const pushUndo = (board: Board, entry: Undo): Pick<Board, 'undo' | 'redo'> => ({
+  undo: [...board.undo, entry].slice(-UNDO_LIMIT),
   redo: [],
 })
 
-export const undoAvailable = (model: Model): boolean => model.undo.length > 0
-export const redoAvailable = (model: Model): boolean => model.redo.length > 0
+export const undoAvailable = (board: Board): boolean => board.undo.length > 0
+export const redoAvailable = (board: Board): boolean => board.redo.length > 0
 
 /** Puts a Design back, keeping what time did to each Node: credits, leaks, and failures. */
 const restore = (game: Game, entry: Undo, cash: number): Game => ({
@@ -167,33 +167,33 @@ export type Reversal = Readonly<{
  * moved, so undoing never gains Cash. Later, money settles at normal prices.
  * Returns a reason when it cannot.
  */
-export const undoGame = (model: Model): Reversal | string => {
-  const entry = model.undo.at(-1)
+export const undoGame = (board: Board): Reversal | string => {
+  const entry = board.undo.at(-1)
   if (!entry) return 'Nothing to undo.'
-  const game = model.game
+  const game = board.game
   const cash = game.time - entry.at <= UNDO_SECONDS ? -entry.cash : settledCash(game, entry)
   if (cash < 0 && game.cash + cash < 0) return 'Not enough Cash to undo that.'
   return {
     game: restore(game, entry, cash),
     label: entry.label,
-    undo: model.undo.slice(0, -1),
+    undo: board.undo.slice(0, -1),
     // Redo puts this Design back and takes back exactly the Cash the undo moved.
-    redo: [...model.redo, snapshotOf(entry.label, game, cash, entry.at)],
+    redo: [...board.redo, snapshotOf(entry.label, game, cash, entry.at)],
   }
 }
 
 /** Redoes the newest undone action, with the inverse of the Cash its undo moved. */
-export const redoGame = (model: Model): Reversal | string => {
-  const entry = model.redo.at(-1)
+export const redoGame = (board: Board): Reversal | string => {
+  const entry = board.redo.at(-1)
   if (!entry) return 'Nothing to redo.'
-  const game = model.game
+  const game = board.game
   const cash = -entry.cash
   if (cash < 0 && game.cash + cash < 0) return 'Not enough Cash to redo that.'
   return {
     game: restore(game, entry, cash),
     label: entry.label,
-    undo: [...model.undo, snapshotOf(entry.label, game, cash, game.time)].slice(-UNDO_LIMIT),
-    redo: model.redo.slice(0, -1),
+    undo: [...board.undo, snapshotOf(entry.label, game, cash, game.time)].slice(-UNDO_LIMIT),
+    redo: board.redo.slice(0, -1),
   }
 }
 

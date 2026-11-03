@@ -6,11 +6,15 @@ import { AppRoute } from './route.ts'
 import { initialModel, update } from './update.ts'
 import { publish, readTool, stateJson } from './webmcp.ts'
 
-const company: Model = { ...initialModel(), route: AppRoute.Company(), game: preseedGame() }
+const company: Model = {
+  ...initialModel(),
+  route: AppRoute.Company(),
+  board: { ...initialModel().board, game: preseedGame() },
+}
 
 const withChallenge = (): Model =>
   update(
-    { ...initialModel(), saved: true, game: newGame() },
+    { ...initialModel(), saved: true, board: { ...initialModel().board, game: newGame() } },
     Message.ChallengeStarted({ id: 'hello-world' }),
   ).model
 
@@ -23,7 +27,7 @@ describe('what an agent may read', () => {
 
   test('an open Challenge answers nothing, through the tools or the JSON button', () => {
     const challenge = withChallenge()
-    expect(challenge.challenge).not.toBeNull()
+    expect(challenge.board.challenge).not.toBeNull()
     publish(challenge)
     expect(() => readTool('get_design')).toThrow('Challenges are scored')
 

@@ -71,11 +71,11 @@ const badge = (sender: Sender, size: string, h: HtmlBuilder<Message>): Html => {
 }
 
 const unreadIn = (model: Model, folder: Folder): number =>
-  model.inbox.mail.filter((mail) => folderHolds(mail, folder) && !mail.read).length
+  model.board.inbox.mail.filter((mail) => folderHolds(mail, folder) && !mail.read).length
 
 /** Threads waiting on the player: it does not fall when they are read, only when they are answered. */
 const openCount = (model: Model): number =>
-  model.inbox.mail.filter((mail) => folderHolds(mail, 'action')).length
+  model.board.inbox.mail.filter((mail) => folderHolds(mail, 'action')).length
 
 /** The first line of a letter that says something, for the preview. */
 const gist = (mail: Mail): string =>
@@ -87,7 +87,9 @@ const gist = (mail: Mail): string =>
  * button here, so a patch is one click away.
  */
 export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const mail = model.inbox.mail.find((entry) => entry.id === model.inbox.peek && !entry.trashed)
+  const mail = model.board.inbox.mail.find(
+    (entry) => entry.id === model.board.inbox.peek && !entry.trashed,
+  )
   if (!mail || model.panel === 'inbox') return h.empty
   const sender = senderOf(mail.sender)
   const decision = needsAction(mail)
@@ -185,7 +187,7 @@ export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
 export const inboxButton = (model: Model, h: HtmlBuilder<Message>): Html => {
   const unread = unreadIn(model, 'action') + unreadIn(model, 'fyi')
   // A decision waiting turns the badge red and rings the button; FYI mail keeps the quiet badge.
-  const waiting = model.inbox.mail.some((mail) => folderHolds(mail, 'action') && !mail.read)
+  const waiting = model.board.inbox.mail.some((mail) => folderHolds(mail, 'action') && !mail.read)
   return inboxToggle(model, unread, waiting, h)
 }
 
@@ -474,7 +476,7 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
           label: 'Sample',
           labelClass: 'sr-only',
           size: 'sm',
-          value: model.inbox.sample,
+          value: model.board.inbox.sample,
           onChange: (id) => Message.MailSampleChosen({ id }),
           wrapperClass: 'w-64',
           options: [...new Set(SAMPLES.map((sample) => sample.group))].map((group) =>
@@ -518,8 +520,8 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 /** A mail window docked above the corner button: the Board stays in view and clickable. */
 export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const newest = folderList(model.inbox)
-  const open = newest.find((mail) => mail.id === model.inbox.focus) ?? newest[0]
+  const newest = folderList(model.board.inbox)
+  const open = newest.find((mail) => mail.id === model.board.inbox.focus) ?? newest[0]
   return h.section(
     [
       h.Key('inbox-panel'),
@@ -540,12 +542,24 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
                 'action',
                 'Needs action',
                 openCount(model),
-                model.inbox.folder === 'action',
+                model.board.inbox.folder === 'action',
                 h,
               ),
-              folderTab('fyi', 'FYI', unreadIn(model, 'fyi'), model.inbox.folder === 'fyi', h),
-              folderTab('spam', 'Spam', unreadIn(model, 'spam'), model.inbox.folder === 'spam', h),
-              folderTab('trash', 'Trash', 0, model.inbox.folder === 'trash', h),
+              folderTab(
+                'fyi',
+                'FYI',
+                unreadIn(model, 'fyi'),
+                model.board.inbox.folder === 'fyi',
+                h,
+              ),
+              folderTab(
+                'spam',
+                'Spam',
+                unreadIn(model, 'spam'),
+                model.board.inbox.folder === 'spam',
+                h,
+              ),
+              folderTab('trash', 'Trash', 0, model.board.inbox.folder === 'trash', h),
             ],
           ),
           h.span([h.Class('flex-1')], []),
@@ -564,7 +578,7 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
           ),
         ],
       ),
-      model.sandbox ? generator(model, h) : h.empty,
+      model.board.sandbox ? generator(model, h) : h.empty,
       h.div(
         [
           h.Class(
@@ -588,7 +602,7 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
               ? [
                   h.li(
                     [h.Class('px-4 py-4 text-[12.5px] text-muted-foreground')],
-                    [EMPTY[model.inbox.folder]],
+                    [EMPTY[model.board.inbox.folder]],
                   ),
                 ]
               : newest.map((mail) => row(mail, mail.id === open?.id, h)),

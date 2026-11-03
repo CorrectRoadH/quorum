@@ -193,6 +193,7 @@ import {
   ledgerOf,
   Model,
   Prefs,
+  type Board,
   SandboxStore,
   type SandboxRun,
   type Tone,
@@ -237,46 +238,61 @@ export const speedsOf = (game: Game): ReadonlyArray<number> => [
 
 /* ---------- init ---------- */
 
+/** A board that starts on `game`: nothing selected, nothing measured yet, and an empty Inbox. */
+export const freshBoard = (game: Game): Board => ({
+  game,
+  sandbox: null,
+  challenge: null,
+  exited: null,
+  away: null,
+  region: 'na',
+  selected: null,
+  selection: [],
+  tool: null,
+  confirmSell: null,
+  clipboard: null,
+  buildGroup: null,
+  teamDrag: DragAndDrop.init({ id: 'team-drag' }),
+  researchFocus: null,
+  insightHelp: false,
+  speed: 1,
+  paused: false,
+  carry: 0,
+  savedAt: game.time,
+  sampledAt: game.time,
+  change: null,
+  delta: null,
+  stableTicks: 0,
+  tradeoff: null,
+  revealed: [],
+  pending: [],
+  cue: null,
+  undo: [],
+  redo: [],
+  bottleneck: null,
+  bottleneckAt: -1,
+  nodeHistory: {},
+  inbox: EMPTY_INBOX,
+  dashboard: { history: EMPTY_HISTORY, range: 360, hover: null },
+  lastGoal: '',
+  lastBottleneck: '',
+})
+
 export const initialModel = (): Model =>
   Model.make({
     route: AppRoute.Title(),
     gate: 'open',
-    game: newGame(),
-    saved: false,
-    challenge: null,
-    histograms: histogramQuery.init(),
-    today: '',
-    sandbox: null,
-    company: null,
-    passed: [],
-    freeBoard: null,
-    selected: null,
-    selection: [],
-    tool: null,
-    confirmSell: null,
-    clipboard: null,
-    founder: emptyFounder(),
-    away: null,
-    exited: null,
-    region: 'na',
     panel: 'none',
-    teamDrag: DragAndDrop.init({ id: 'team-drag' }),
-    researchFocus: null,
-    buildGroup: null,
-    speed: 1,
-    paused: false,
-    carry: 0,
-    savedAt: 0,
-    sampledAt: 0,
     toast: null,
     toastSeq: 0,
-    change: null,
-    delta: null,
-    stableTicks: 0,
-    tradeoff: null,
-    revealed: [],
-    pending: [],
-    cue: null,
+    board: freshBoard(newGame()),
+    company: null,
+    saved: false,
+    founder: emptyFounder(),
+    passed: [],
+    freeBoard: null,
+    histograms: histogramQuery.init(),
+    today: '',
     prefs: {
       locale: 'en',
       seenTradeoffs: [],
@@ -286,19 +302,9 @@ export const initialModel = (): Model =>
       motion: 'system',
       agentAccess: false,
     },
+    glossary: { focus: null, returnTo: 'none', query: '', category: null },
     languagePicker: Listbox.init({ id: 'interface-language' }),
     moreMenu: UiMenu.init({ id: 'more-menu' }),
-    glossary: { focus: null, returnTo: 'none', query: '', category: null },
-    insightHelp: false,
-    inbox: EMPTY_INBOX,
-    undo: [],
-    redo: [],
-    bottleneck: null,
-    bottleneckAt: -1,
-    nodeHistory: {},
-    dashboard: { history: EMPTY_HISTORY, range: 360, hover: null },
-    lastGoal: '',
-    lastBottleneck: '',
   })
 
 /** A fresh load opens on the title screen behind the clock-in splash, so a
@@ -337,15 +343,15 @@ const closePanel = (model: Model): Model => ({
 const sync = (model: Model, fit: boolean): AnyCommand =>
   SyncBoard({
     fit,
-    game: model.game,
+    game: model.board.game,
     locale: model.prefs.locale,
-    bottleneck: model.bottleneck,
-    selected: model.selected,
-    selection: model.selection,
+    bottleneck: model.board.bottleneck,
+    selected: model.board.selected,
+    selection: model.board.selection,
     placing: placingOf(model),
     stamp: stampOf(model),
-    history: model.nodeHistory,
-    region: model.region,
+    history: model.board.nodeHistory,
+    region: model.board.region,
     paused: halted(model),
     cue: cueNode(model),
   })
@@ -353,10 +359,10 @@ const sync = (model: Model, fit: boolean): AnyCommand =>
 /** The Company save: the Game, and what this Company has shown so far. */
 const saveOf = (model: Model): AnyCommand =>
   WriteSave({
-    game: model.game,
-    revealed: model.revealed,
-    pending: model.pending,
-    dashboard: model.dashboard.history,
+    game: model.board.game,
+    revealed: model.board.revealed,
+    pending: model.board.pending,
+    dashboard: model.board.dashboard.history,
   })
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
@@ -367,7 +373,7 @@ const stampOf = (model: Model) => {
     type: node.type,
     dx: node.dx,
     dy: node.dy,
-    ghost: ghostReason(model.game, node, model.region) !== null,
+    ghost: ghostReason(model.board.game, node, model.board.region) !== null,
   }))
 }
 
@@ -376,30 +382,48 @@ const stampOf = (model: Model) => {
 /** A fact joins the Inbox; it needs no preview card while the Inbox panel is open. */
 const mailedTo = (model: Model, fact: Fact, time: number, repeats = false): Model => ({
   ...model,
-  inbox: mailed(model.inbox, fact, time, model.panel === 'inbox', repeats),
+  board: {
+    ...model.board,
+    inbox: mailed(model.board.inbox, fact, time, model.panel === 'inbox', repeats),
+  },
 })
 
 /** The Inbox's keys: J and K move, E deletes (or restores), S reports spam, 1 to 3 press a button. */
 const mailKey = (model: Model, key: string): Result | null => {
-  const list = folderList(model.inbox)
-  const at = list.findIndex((mail) => mail.id === model.inbox.focus)
+  const list = folderList(model.board.inbox)
+  const at = list.findIndex((mail) => mail.id === model.board.inbox.focus)
   const current = list[at]
   const neighbour = (list[at + 1] ?? list[at - 1])?.id ?? null
   const apply = (message: Message): Result => {
     const result = handle(model, message)
-    return { ...result, model: { ...result.model, inbox: reading(result.model.inbox, neighbour) } }
+    return {
+      ...result,
+      model: {
+        ...result.model,
+        board: { ...result.model.board, inbox: reading(result.model.board.inbox, neighbour) },
+      },
+    }
   }
   switch (key) {
     case 'j':
       return {
         model: {
           ...model,
-          inbox: reading(model.inbox, list[Math.min(at + 1, list.length - 1)]?.id ?? null),
+          board: {
+            ...model.board,
+            inbox: reading(model.board.inbox, list[Math.min(at + 1, list.length - 1)]?.id ?? null),
+          },
         },
       }
     case 'k':
       return {
-        model: { ...model, inbox: reading(model.inbox, list[Math.max(at - 1, 0)]?.id ?? null) },
+        model: {
+          ...model,
+          board: {
+            ...model.board,
+            inbox: reading(model.board.inbox, list[Math.max(at - 1, 0)]?.id ?? null),
+          },
+        },
       }
     case 'e':
       return current
@@ -446,7 +470,9 @@ const withToast = (
 type ActOptions = Readonly<{
   /** Board actions go on the undo stack. */
   undoable?: boolean
-  patch?: (model: Model, game: Game) => Partial<Model>
+  patch?: (model: Model, game: Game) => Partial<Board>
+  /** The panel the action opens, from the Game it made. */
+  panel?: (game: Game) => Model['panel']
   note?: (game: Game) => readonly [string, Tone] | null
 }>
 
@@ -463,23 +489,32 @@ const act = (
   Result.match(action, {
     onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
     onSuccess: (game) => {
-      if (game === model.game) return { model }
+      if (game === model.board.game) return { model }
       // A run replays the Design it started with: only logged run actions may change it.
-      if (model.challenge && model.challenge.phase !== 'build')
+      if (model.board.challenge && model.board.challenge.phase !== 'build')
         return withToast(model, 'Rebuild to change the Design.', 'warn')
-      const measured = beginChange(model, label, figuresOf(solveFlow(model.game)))
+      const measured = beginChange(model.board, label, figuresOf(solveFlow(model.board.game)))
       const next: Model = {
-        ...measured,
-        ...options.patch?.(model, game),
-        game,
-        // The Design changed: search for the Bottleneck again on the next tick.
-        bottleneckAt: -1,
-        ...(options.undoable
-          ? pushUndo(
-              model,
-              snapshotOf(label, model.game, game.cash - model.game.cash, model.game.time),
-            )
-          : {}),
+        ...model,
+        panel: options.panel?.(game) ?? model.panel,
+        board: {
+          ...measured,
+          ...options.patch?.(model, game),
+          game,
+          // The Design changed: search for the Bottleneck again on the next tick.
+          bottleneckAt: -1,
+          ...(options.undoable
+            ? pushUndo(
+                model.board,
+                snapshotOf(
+                  label,
+                  model.board.game,
+                  game.cash - model.board.game.cash,
+                  model.board.game.time,
+                ),
+              )
+            : {}),
+        },
       }
       const note = options.note?.(game)
       return note ? withToast(next, note[0], note[1]) : { model: next }
@@ -489,21 +524,33 @@ const act = (
 /** Applies an undo or a redo, or says why it cannot. */
 const reverse = (model: Model, reversal: Reversal | string, verb: string): Result => {
   if (typeof reversal === 'string') return withToast(model, reversal, 'plain')
-  if (model.challenge && model.challenge.phase !== 'build')
+  if (model.board.challenge && model.board.challenge.phase !== 'build')
     return withToast(model, 'Rebuild to change the Design.', 'warn')
+  const measured = beginChange(
+    model.board,
+    `${verb} ${reversal.label}`,
+    figuresOf(solveFlow(model.board.game)),
+  )
   const next: Model = {
-    ...beginChange(model, `${verb} ${reversal.label}`, figuresOf(solveFlow(model.game))),
-    game: reversal.game,
-    undo: reversal.undo,
-    redo: reversal.redo,
-    bottleneckAt: -1,
+    ...model,
+    board: {
+      ...measured,
+      game: reversal.game,
+      undo: reversal.undo,
+      redo: reversal.redo,
+      bottleneckAt: -1,
+    },
   }
   return withToast(next, `${verb}: ${reversal.label}.`, 'plain')
 }
 
 /** The Nodes an edit applies to: the multi-selection, or the one Node open. */
 const chosenIds = (model: Model): ReadonlyArray<string> =>
-  model.selection.length > 0 ? model.selection : model.selected ? [model.selected] : []
+  model.board.selection.length > 0
+    ? model.board.selection
+    : model.board.selected
+      ? [model.board.selected]
+      : []
 
 const NUDGE = 16
 
@@ -566,11 +613,11 @@ const tradeoffOf = (
   option: TradeoffOption,
   pinned: boolean,
 ): readonly [Tradeoff, ReadonlyArray<AnyCommand>] =>
-  Result.match(optionAction(model.game, nodeId, option), {
+  Result.match(optionAction(model.board.game, nodeId, option), {
     onSuccess: () =>
       [
         { nodeId, option, pinned, preview: null, refusal: null },
-        [ComputePreview({ game: model.game, nodeId, option })],
+        [ComputePreview({ game: model.board.game, nodeId, option })],
       ] as const,
     onFailure: (refusal) =>
       [
@@ -581,9 +628,9 @@ const tradeoffOf = (
 
 /** Applies an option and logs what its card predicted, so playtests can compare it with the outcome. */
 const applyOption = (model: Model, card: Tradeoff): Result => {
-  const closed: Model = { ...model, tradeoff: null }
+  const closed: Model = { ...model, board: { ...model.board, tradeoff: null } }
   const applied = route(closed, optionMessage(card.nodeId, card.option))
-  if (applied.model.game === closed.game) return applied
+  if (applied.model.board.game === closed.board.game) return applied
   const seen = applied.model.prefs.seenTradeoffs.includes(card.option.kind)
     ? applied.model.prefs.seenTradeoffs
     : [...applied.model.prefs.seenTradeoffs, card.option.kind]
@@ -595,7 +642,7 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
       WritePrefs({ prefs: next.prefs }),
       AppendLog({
         entries: [
-          line(model.game.time, 'TradeoffPreviewed', {
+          line(model.board.game.time, 'TradeoffPreviewed', {
             option: card.option,
             preview: card.preview,
           }),
@@ -604,19 +651,6 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
     ],
   }
 }
-
-/** What outlives a board: the player's settings and records. The toast counter
- *  carries on too, so a ClearToast still waiting from the last board cannot
- *  clear a new toast that reused its id. */
-const sessionOf = (model: Model) => ({
-  prefs: model.prefs,
-  founder: model.founder,
-  histograms: model.histograms,
-  today: model.today,
-  passed: model.passed,
-  freeBoard: model.freeBoard,
-  toastSeq: model.toastSeq,
-})
 
 /** Changes settings, then saves and applies them. */
 const settled = (model: Model, change: Partial<Prefs>): Result => {
@@ -664,7 +698,9 @@ const achieve = (
   if (!next.prefs.muted)
     commands.push(PlaySound({ sound: 'achievement', pitch: 1, spatial: false }))
   commands.push(
-    AppendLog({ entries: fresh.map((id) => line(next.game.time, 'AchievementEarned', { id })) }),
+    AppendLog({
+      entries: fresh.map((id) => line(next.board.game.time, 'AchievementEarned', { id })),
+    }),
   )
   return [next, commands]
 }
@@ -684,10 +720,10 @@ const milestones = (
   const commands: Array<AnyCommand> = [...(result.commands ?? [])]
   const stats = countStats(after.founder.stats, events)
   const earned = detectAchievements(
-    { before: before.game, after: after.game, ledger, events, stats },
+    { before: before.board.game, after: after.board.game, ledger, events, stats },
     after.founder.achievements,
   )
-  const terms = discoverTerms(after.game, events).filter(
+  const terms = discoverTerms(after.board.game, events).filter(
     (id) => !after.founder.glossary.includes(id),
   )
   let next = after
@@ -700,7 +736,7 @@ const milestones = (
   if (next.founder !== after.founder && earnedCommands.length === 0)
     commands.push(WriteFounder({ founder: next.founder }))
   if (!next.prefs.muted) {
-    if (after.game.stage > before.game.stage)
+    if (after.board.game.stage > before.board.game.stage)
       commands.push(PlaySound({ sound: 'era', pitch: 1, spatial: false }))
     else if (events.some((event) => event._tag === 'IncidentStarted'))
       commands.push(PlaySound({ sound: 'incident', pitch: 1, spatial: false }))
@@ -886,10 +922,10 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
 /* ---------- the clock ---------- */
 
 const tick = (model: Model): Result => {
-  if (model.challenge?.phase === 'running') return runTick(model, model.challenge)
-  const owed = model.carry + STEPS_PER_TICK * model.speed
+  if (model.board.challenge?.phase === 'running') return runTick(model, model.board.challenge)
+  const owed = model.board.carry + STEPS_PER_TICK * model.board.speed
   const steps = Math.floor(owed)
-  let game = model.game
+  let game = model.board.game
   const events: Array<StepEvent> = []
   for (let index = 0; index < steps; index += 1) {
     const result = step(game, STEP_SECONDS)
@@ -897,8 +933,8 @@ const tick = (model: Model): Result => {
     events.push(...result.events)
   }
   // A guided Sandbox checks its objective, and may script an incident or change demand.
-  const guided = model.sandbox?.id ? GUIDED[model.sandbox.id] : null
-  let run = model.sandbox
+  const guided = model.board.sandbox?.id ? GUIDED[model.board.sandbox.id] : null
+  let run = model.board.sandbox
   let advanced = false
   if (run && guided && !passedAll(guided, run.progress)) {
     const advance = advanceSandbox(
@@ -916,10 +952,10 @@ const tick = (model: Model): Result => {
   }
   // The Bottleneck search re-solves three times, so it runs once per sim second (04).
   const second = Math.floor(game.time)
-  const search = model.bottleneckAt < 0 || second !== model.bottleneckAt
+  const search = model.board.bottleneckAt < 0 || second !== model.board.bottleneckAt
   const flow = solveFlow(game)
   // The search runs on the compute worker; until it answers, the last Bottleneck stands.
-  const bottleneck = model.bottleneck
+  const bottleneck = model.board.bottleneck
   const ledger: Ledger = { ...flow, bottleneck }
   // An incident drops the clock to 1×, so the player has time to respond.
   const incident = events.some((event) => event._tag === 'IncidentStarted')
@@ -927,16 +963,19 @@ const tick = (model: Model): Result => {
   const severe = events.find(
     (event) => event._tag === 'IncidentStarted' && event.incident.severity <= 2,
   )
-  const autoPaused = model.prefs.autoPause && severe !== undefined && !model.paused
+  const autoPaused = model.prefs.autoPause && severe !== undefined && !model.board.paused
   let next: Model = {
     ...model,
-    game,
-    sandbox: run,
-    paused: model.paused || autoPaused,
-    speed: incident ? Math.min(model.speed, 1) : model.speed,
-    carry: owed - steps,
-    bottleneck,
-    bottleneckAt: search ? second : model.bottleneckAt,
+    board: {
+      ...model.board,
+      game,
+      sandbox: run,
+      paused: model.board.paused || autoPaused,
+      speed: incident ? Math.min(model.board.speed, 1) : model.board.speed,
+      carry: owed - steps,
+      bottleneck,
+      bottleneckAt: search ? second : model.board.bottleneckAt,
+    },
   }
   next = advanceReveals(next, ledger)
   const commands: Array<AnyCommand> = []
@@ -950,7 +989,7 @@ const tick = (model: Model): Result => {
     )
     if (done) {
       const passed = next.passed.includes(guided.id) ? next.passed : [...next.passed, guided.id]
-      next = { ...next, passed, panel: 'passed', tool: null }
+      next = { ...next, passed, panel: 'passed', board: { ...next.board, tool: null } }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     } else {
       const [raised, clear] = toasted(
@@ -976,34 +1015,40 @@ const tick = (model: Model): Result => {
   for (const event of events) {
     logs.push(line(game.time, event._tag, eventLog(event)))
     // The Simulation files a CVE as a ticket; Security writes the advisory, and a thread closes with its ticket.
-    if (!next.challenge && event._tag === 'CveDisclosed') {
+    if (!next.board.challenge && event._tag === 'CveDisclosed') {
       next = mailedTo(next, disclosureFact(event.item, game), game.time)
       continue
     }
     if (event._tag === 'CveExploited')
       next = {
         ...next,
-        inbox: closed(
-          next.inbox,
-          `security:${event.cve}`,
-          game.time,
-          'Exploited. The ticket expired, and so did the Users who trusted you.',
-        ),
+        board: {
+          ...next.board,
+          inbox: closed(
+            next.board.inbox,
+            `security:${event.cve}`,
+            game.time,
+            'Exploited. The ticket expired, and so did the Users who trusted you.',
+          ),
+        },
       }
     if (event._tag === 'WorkFinished' && event.item.kind === 'patch')
       next = {
         ...next,
-        inbox: closed(
-          next.inbox,
-          `security:${event.item.ref}`,
-          game.time,
-          'Patched before the deadline. Nothing happened, which is the point.',
-        ),
+        board: {
+          ...next.board,
+          inbox: closed(
+            next.board.inbox,
+            `security:${event.item.ref}`,
+            game.time,
+            'Patched before the deadline. Nothing happened, which is the point.',
+          ),
+        },
       }
     const text = eventText(event, game)
     if (!text) continue
     // What happened in the Design is Mail (GDD 18); a Challenge has no Inbox, so it keeps the toast.
-    if (next.challenge) {
+    if (next.board.challenge) {
       const [raised, clear] = toasted(next, text[0], text[1])
       next = raised
       commands.push(clear)
@@ -1013,72 +1058,81 @@ const tick = (model: Model): Result => {
   }
 
   // Feedback after a change.
-  const settled = advanceChange(next, ledger, next.toastSeq + 1)
+  const settled = advanceChange(next.board, ledger, next.toastSeq + 1)
   next = {
     ...next,
-    change: settled.change,
-    delta: settled.delta ?? next.delta,
-    stableTicks: settled.delta ? STABLE_TICKS : Math.max(0, next.stableTicks - 1),
+    board: {
+      ...next.board,
+      change: settled.change,
+      delta: settled.delta ?? next.board.delta,
+      stableTicks: settled.delta ? STABLE_TICKS : Math.max(0, next.board.stableTicks - 1),
+    },
   }
   if (settled.delta) logs.push(line(game.time, 'ChangeSettled', settled.delta))
-  if (deltaExpired(next)) next = { ...next, delta: null }
+  if (deltaExpired(next.board)) next = { ...next, board: { ...next.board, delta: null } }
 
   // The Dashboard's long history: every Sample the Steps added.
   next = {
     ...next,
-    dashboard: {
-      ...next.dashboard,
-      history: record(
-        next.dashboard.history,
-        newSamples(game.history, model.game.time, game.time),
-        Math.floor(game.time),
-      ),
+    board: {
+      ...next.board,
+      dashboard: {
+        ...next.board.dashboard,
+        history: record(
+          next.board.dashboard.history,
+          newSamples(game.history, model.board.game.time, game.time),
+          Math.floor(game.time),
+        ),
+      },
     },
   }
 
   // Utilization history, once per 10 sim seconds.
-  if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.game.time / HISTORY_EVERY)) {
+  if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.board.game.time / HISTORY_EVERY)) {
     const history: Record<string, ReadonlyArray<number>> = {}
     for (const node of game.nodes) {
-      const past = next.nodeHistory[node.id] ?? []
+      const past = next.board.nodeHistory[node.id] ?? []
       history[node.id] = [...past, ledger.nodes[node.id]?.utilization ?? 0].slice(-HISTORY_POINTS)
     }
-    next = { ...next, nodeHistory: history }
+    next = { ...next, board: { ...next.board, nodeHistory: history } }
   }
 
   // The log records what the player was told and what limited the Design.
   const advice = nextAdvice(game, ledger)
   const told = `${advice.key}|${advice.text}`
-  if (told !== next.lastGoal) {
+  if (told !== next.board.lastGoal) {
     logs.push(line(game.time, 'GoalChanged', { goal: advice.text }))
-    next = { ...next, lastGoal: told }
+    next = { ...next, board: { ...next.board, lastGoal: told } }
     if (!offCompany(next))
       next = mailedTo(
-        { ...next, inbox: resolvedExcept(next.inbox, advice.key, game.time) },
+        {
+          ...next,
+          board: { ...next.board, inbox: resolvedExcept(next.board.inbox, advice.key, game.time) },
+        },
         factOf(advice, game),
         game.time,
       )
   }
   // The world writes too: teammates, CVEs, customers, and spam.
   const bucket = Math.floor(game.time / EVENT_EVERY)
-  if (!offCompany(next) && game.stage >= 1 && bucket > next.inbox.bucket) {
+  if (!offCompany(next) && game.stage >= 1 && bucket > next.board.inbox.bucket) {
     const event = eventMail(game, bucket)
-    next = { ...next, inbox: { ...next.inbox, bucket } }
+    next = { ...next, board: { ...next.board, inbox: { ...next.board.inbox, bucket } } }
     if (event) next = mailedTo(next, event, game.time)
   }
   const marker = bottleneck ? `${bottleneck}:${ledger.nodes[bottleneck]?.limit ?? 'none'}` : ''
-  if (marker !== next.lastBottleneck) {
+  if (marker !== next.board.lastBottleneck) {
     logs.push(line(game.time, 'BottleneckChanged', { bottleneck: marker || null }))
-    next = { ...next, lastBottleneck: marker }
+    next = { ...next, board: { ...next.board, lastBottleneck: marker } }
   }
-  if (game.time - next.sampledAt >= SAMPLE_EVERY) {
+  if (game.time - next.board.sampledAt >= SAMPLE_EVERY) {
     logs.push(line(game.time, 'Sample', sampleOf(next, ledger)))
-    next = { ...next, sampledAt: game.time }
+    next = { ...next, board: { ...next.board, sampledAt: game.time } }
   }
-  if (game.time - model.savedAt >= SAVE_EVERY) {
-    next = { ...next, savedAt: game.time }
+  if (game.time - model.board.savedAt >= SAVE_EVERY) {
+    next = { ...next, board: { ...next.board, savedAt: game.time } }
     if (!offCompany(next)) commands.push(saveOf(next))
-    else if (next.sandbox?.id === null) {
+    else if (next.board.sandbox?.id === null) {
       next = { ...next, freeBoard: game }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     }
@@ -1108,14 +1162,13 @@ const ARROWS: Record<string, Direction> = {
 
 const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
   const fresh: Model = {
-    ...initialModel(),
-    ...sessionOf(model),
+    ...model,
     route: AppRoute.Company(),
-    game,
     saved: true,
+    toast: null,
     panel,
-    savedAt: game.time,
-    sampledAt: game.time,
+    company: null,
+    board: freshBoard(game),
   }
   const next = revealAtStart(fresh, ledgerOf(fresh))
   return {
@@ -1141,15 +1194,12 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
 /** Opens a Sandbox on the board. The Company waits aside until the title screen. */
 const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
   const next: Model = {
-    ...initialModel(),
-    ...sessionOf(model),
+    ...model,
     route: AppRoute.Sandbox({ sandbox: run.id ?? 'free' }),
-    game,
-    sandbox: run,
-    company: model.sandbox ? model.company : model.game,
-    saved: model.saved,
-    savedAt: game.time,
-    sampledAt: game.time,
+    toast: null,
+    panel: 'none',
+    company: offCompany(model) ? model.company : model.board,
+    board: { ...freshBoard(game), sandbox: run },
   }
   return {
     model: next,
@@ -1162,31 +1212,34 @@ const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
 
 /** Swaps the free Sandbox's Game, keeping the player's view. */
 const replaceFree = (model: Model, game: Game, text: string): Result => {
-  if (model.sandbox?.id !== null) return { model }
+  if (model.board.sandbox?.id !== null) return { model }
   const next: Model = {
     ...model,
-    game,
     freeBoard: game,
-    selected: null,
-    tool: null,
-    undo: [],
-    redo: [],
-    change: null,
-    delta: null,
-    bottleneck: null,
-    bottleneckAt: -1,
-    nodeHistory: {},
-    dashboard: { ...model.dashboard, history: EMPTY_HISTORY },
-    savedAt: game.time,
-    sampledAt: game.time,
+    board: {
+      ...model.board,
+      game,
+      selected: null,
+      tool: null,
+      undo: [],
+      redo: [],
+      change: null,
+      delta: null,
+      bottleneck: null,
+      bottleneckAt: -1,
+      nodeHistory: {},
+      dashboard: { ...model.board.dashboard, history: EMPTY_HISTORY },
+      savedAt: game.time,
+      sampledAt: game.time,
+    },
   }
   return withToast(next, text, 'plain', [FitBoard({}), WriteSandboxStore({ store: storeOf(next) })])
 }
 
 /** Changes the free Sandbox's demand or mix in place. */
 const tuneFree = (model: Model, game: Game): Result => {
-  if (model.sandbox?.id !== null) return { model }
-  const next: Model = { ...model, game, bottleneckAt: -1 }
+  if (model.board.sandbox?.id !== null) return { model }
+  const next: Model = { ...model, board: { ...model.board, game, bottleneckAt: -1 } }
   return { model: next }
 }
 
@@ -1194,10 +1247,7 @@ const tuneFree = (model: Model, game: Game): Result => {
 const DEMAND_STEPS = [100, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000]
 
 /** After a round: the Era card, or the end of the slice. */
-const afterRound = (model: Model, game: Game): Partial<Model> => ({
-  panel: isFinalEra(game) ? 'end' : 'era',
-  selected: model.selected,
-})
+const afterRound = (game: Game): Model['panel'] => (isFinalEra(game) ? 'end' : 'era')
 
 /* ---------- the Founder ---------- */
 
@@ -1221,7 +1271,11 @@ const changeFounder = (
 /** Founds the next Company with the Founder's Venture, Mutators, perks and kept research. */
 const found = (model: Model): Result => {
   const founder = founded(model.founder)
-  const game = foundCompany(model.game.seed + 7919, foundingOf(model.founder), model.founder.keep)
+  const game = foundCompany(
+    model.board.game.seed + 7919,
+    foundingOf(model.founder),
+    model.founder.keep,
+  )
   const started = startCompany({ ...model, founder }, game, game.stage >= 1 ? 'era' : 'none')
   return {
     ...started,
@@ -1235,12 +1289,8 @@ const leaveExited = (model: Model, menu: Menu): Result => ({
     ...model,
     route: routeOfMenu(menu),
     panel: 'none',
-    exited: null,
     saved: false,
-    game: newGame(model.game.seed),
-    selected: null,
-    selection: [],
-    tool: null,
+    board: freshBoard(newGame(model.board.game.seed)),
   },
 })
 
@@ -1321,25 +1371,25 @@ const enterChallenge = (model: Model, id: string): Result => {
   if (!challenge) return { model }
   const game = boardOf(challenge)
   const next: Model = {
-    ...initialModel(),
-    ...sessionOf(model),
+    ...model,
     route: AppRoute.Challenge({ challenge: id }),
-    game,
-    challenge: {
-      id,
-      phase: 'build',
-      board: null,
-      replay: null,
-      totals: NO_TOTALS,
-      result: null,
-      verdict: null,
-      verification: 'local',
-      note: null,
+    toast: null,
+    panel: 'none',
+    company: offCompany(model) ? model.company : model.board,
+    board: {
+      ...freshBoard(game),
+      challenge: {
+        id,
+        phase: 'build',
+        board: null,
+        replay: null,
+        totals: NO_TOTALS,
+        result: null,
+        verdict: null,
+        verification: 'local',
+        note: null,
+      },
     },
-    company: offCompany(model) ? model.company : model.game,
-    saved: model.saved,
-    savedAt: game.time,
-    sampledAt: game.time,
   }
   const loaded = histograms.loadIfMissing(next, { challengeId: id, simVersion: SIM_VERSION })
   return {
@@ -1360,7 +1410,7 @@ const startRun = (model: Model, run: ChallengeRun): Result => {
     v: 1 as const,
     challenge: run.id,
     simVersion: SIM_VERSION,
-    design: designOf(model.game),
+    design: designOf(model.board.game),
     actions: [],
   }
   return Result.match(beginRun(challenge, replay), {
@@ -1368,14 +1418,23 @@ const startRun = (model: Model, run: ChallengeRun): Result => {
     onSuccess: (game) => {
       const next: Model = {
         ...model,
-        game,
-        challenge: { ...run, phase: 'running', board: model.game, replay, totals: NO_TOTALS },
-        carry: 0,
-        paused: false,
-        tool: null,
-        selected: null,
         panel: 'none',
-        bottleneckAt: -1,
+        board: {
+          ...model.board,
+          game,
+          challenge: {
+            ...run,
+            phase: 'running',
+            board: model.board.game,
+            replay,
+            totals: NO_TOTALS,
+          },
+          carry: 0,
+          paused: false,
+          tool: null,
+          selected: null,
+          bottleneckAt: -1,
+        },
       }
       return { model: next }
     },
@@ -1392,9 +1451,10 @@ const runSteps = (
   if (!challenge || !run.replay) return { model, done: false }
   const owed = all
     ? Number.POSITIVE_INFINITY
-    : model.carry + (STEPS_PER_TICK * model.speed * STEP_SECONDS) / challenge.stepSeconds
+    : model.board.carry +
+      (STEPS_PER_TICK * model.board.speed * STEP_SECONDS) / challenge.stepSeconds
   const total = stepsOf(challenge)
-  let game = model.game
+  let game = model.board.game
   let totals = run.totals
   let taken = 0
   while (totals.step < total && taken + 1 <= owed) {
@@ -1406,9 +1466,7 @@ const runSteps = (
   return {
     model: {
       ...model,
-      game,
-      carry: all ? 0 : owed - taken,
-      challenge: { ...run, totals },
+      board: { ...model.board, game, carry: all ? 0 : owed - taken, challenge: { ...run, totals } },
     },
     done: totals.step >= total,
   }
@@ -1416,10 +1474,10 @@ const runSteps = (
 
 /** The run is over: the provisional result shows, and the server is asked to confirm it. */
 const finishRun = (model: Model): Result => {
-  const run = model.challenge
+  const run = model.board.challenge
   const challenge = run ? challengeById(run.id) : undefined
   if (!run || !challenge || !run.replay) return { model }
-  const result = resultOf(challenge, model.game, run.totals)
+  const result = resultOf(challenge, model.board.game, run.totals)
   const first = result.passed && !model.founder.completed.includes(run.id)
   const founder = result.passed
     ? completeChallenge(model.founder, run.id, challenge.legacy)
@@ -1428,7 +1486,10 @@ const finishRun = (model: Model): Result => {
     ...model,
     founder,
     panel: 'challenge',
-    challenge: { ...run, phase: 'result', result, verification: 'sending' },
+    board: {
+      ...model.board,
+      challenge: { ...run, phase: 'result', result, verification: 'sending' },
+    },
   }
   const commands: Array<AnyCommand> = [
     SubmitChallenge({
@@ -1440,7 +1501,7 @@ const finishRun = (model: Model): Result => {
       },
     }),
     AppendLog({
-      entries: [line(model.game.time, 'ChallengeRun', { challenge: run.id, ...result })],
+      entries: [line(model.board.game.time, 'ChallengeRun', { challenge: run.id, ...result })],
     }),
   ]
   if (founder !== model.founder) commands.push(WriteFounder({ founder }))
@@ -1456,18 +1517,18 @@ const runTick = (model: Model, run: ChallengeRun): Result => {
 
 /** A run action is logged at the next Step and applied there, as the server will apply it. */
 const logRunAction = (model: Model, action: ReplayAction): Result | null => {
-  const run = model.challenge
+  const run = model.board.challenge
   if (run?.phase !== 'running' || !run.replay) return null
   const replay = {
     ...run.replay,
     actions: [...run.replay.actions, { step: run.totals.step, action }],
   }
-  return { model: { ...model, challenge: { ...run, replay } } }
+  return { model: { ...model, board: { ...model.board, challenge: { ...run, replay } } } }
 }
 
 /** An incident response during a run: logged like any run action, or refused when the Challenge forbids it. */
 const logResponse = (model: Model, response: Response): Result | null => {
-  const run = model.challenge
+  const run = model.board.challenge
   if (run?.phase !== 'running') return null
   const challenge = challengeById(run.id)
   const action: ReplayAction = { _tag: 'Respond', response }
@@ -1477,18 +1538,17 @@ const logResponse = (model: Model, response: Response): Result | null => {
 }
 
 /** Leaves a Challenge for the Challenges menu; the Company comes back as it was. */
+/** The Company's board as the player left it for a Sandbox or Challenge. Its Bottleneck is searched again. */
+const companyBoard = (model: Model): Board =>
+  model.company ? { ...model.company, bottleneckAt: -1 } : freshBoard(newGame())
+
 const leaveChallenge = (model: Model): Result => ({
   model: {
     ...model,
     route: AppRoute.Menu({ menu: 'challenges' }),
     panel: 'none',
-    tool: null,
-    selected: null,
-    game: model.company ?? newGame(),
-    challenge: null,
+    board: companyBoard(model),
     company: null,
-    bottleneck: null,
-    bottleneckAt: -1,
   },
 })
 
@@ -1498,36 +1558,36 @@ const continued = (model: Model): Result => {
   const next: Model = {
     ...model,
     route: AppRoute.Company(),
-    panel: model.away ? 'away' : 'none',
-    paused: false,
+    panel: model.board.away ? 'away' : 'none',
+    board: { ...model.board, paused: false },
   }
   return {
     model: next,
-    commands: [AppendLog({ entries: [line(model.game.time, 'SessionResumed', {})] })],
+    commands: [AppendLog({ entries: [line(model.board.game.time, 'SessionResumed', {})] })],
   }
 }
 
 /** Closes the board for the title screen. A Sandbox or Challenge gives the Company back. */
 const leaveBoard = (model: Model): Result => {
-  if (model.exited) return leaveExited(model, 'found')
-  if (model.challenge) return leaveChallenge(model)
-  if (!model.sandbox)
+  if (model.board.exited) return leaveExited(model, 'found')
+  if (model.board.challenge) return leaveChallenge(model)
+  if (!model.board.sandbox)
     return {
-      model: { ...model, route: AppRoute.Title(), panel: 'none', tool: null },
+      model: {
+        ...model,
+        route: AppRoute.Title(),
+        panel: 'none',
+        board: { ...model.board, tool: null },
+      },
       commands: [saveOf(model)],
     }
-  const freeBoard = model.sandbox.id === null ? model.game : model.freeBoard
+  const freeBoard = model.board.sandbox.id === null ? model.board.game : model.freeBoard
   const next: Model = {
     ...model,
     route: AppRoute.Menu({ menu: 'sandbox' }),
     panel: 'none',
-    tool: null,
-    selected: null,
-    game: model.company ?? newGame(),
-    sandbox: null,
+    board: companyBoard(model),
     company: null,
-    bottleneck: null,
-    bottleneckAt: -1,
     freeBoard,
   }
   return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
@@ -1607,14 +1667,17 @@ const handle = (model: Model, message: Message): Result =>
       return {
         model: {
           ...model,
-          ...revealsOfSave(file),
-          dashboard: { ...model.dashboard, history: historyOfSave(file) },
-          game,
           saved: true,
-          savedAt: game.time,
-          sampledAt: game.time,
-          bottleneckAt: -1,
-          away: back?.report ?? null,
+          board: {
+            ...model.board,
+            ...revealsOfSave(file),
+            dashboard: { ...model.board.dashboard, history: historyOfSave(file) },
+            game,
+            savedAt: game.time,
+            sampledAt: game.time,
+            bottleneckAt: -1,
+            away: back?.report ?? null,
+          },
         },
         commands: back
           ? [AppendLog({ entries: [line(game.time, 'OfflineReturned', { ...back.report })] })]
@@ -1640,16 +1703,20 @@ const handle = (model: Model, message: Message): Result =>
     PreseedStarted: () =>
       startCompany(
         model,
-        { ...preseedGame(model.game.seed + 7919), founding: foundingOf(model.founder) },
+        { ...preseedGame(model.board.game.seed + 7919), founding: foundingOf(model.founder) },
         'era',
       ),
-    AwayClosed: () => ({ model: { ...model, panel: 'none', away: null } }),
+    AwayClosed: () => ({
+      model: { ...model, panel: 'none', board: { ...model.board, away: null } },
+    }),
 
     TitleOpened: () => leaveBoard(model),
     ClockedIn: () => clockIn(model),
     TitleRevealed: () => ({ model: { ...model, gate: 'open' } }),
     MenuChosen: ({ menu }) =>
-      model.exited ? leaveExited(model, menu) : { model: { ...model, route: routeOfMenu(menu) } },
+      model.board.exited
+        ? leaveExited(model, menu)
+        : { model: { ...model, route: routeOfMenu(menu) } },
     ClickedLink: ({ request }) =>
       UrlRequest.match<Result>(request, {
         Internal: ({ url }) => ({ model, commands: [PushUrl({ url: urlToString(url) })] }),
@@ -1678,29 +1745,31 @@ const handle = (model: Model, message: Message): Result =>
       }),
 
     OptionPreviewed: ({ nodeId, option }) => {
-      if (model.tradeoff?.pinned) return { model }
+      if (model.board.tradeoff?.pinned) return { model }
       const [card, commands] = tradeoffOf(model, nodeId, option, false)
-      return { model: { ...model, tradeoff: card }, commands }
+      return { model: { ...model, board: { ...model.board, tradeoff: card } }, commands }
     },
     PreviewComputed: ({ nodeId, option, preview }) => {
-      const card = model.tradeoff
+      const card = model.board.tradeoff
       const same =
         card?.nodeId === nodeId && card.option.kind === option.kind && card.option.id === option.id
-      return same ? { model: { ...model, tradeoff: { ...card, preview } } } : { model }
+      return same
+        ? { model: { ...model, board: { ...model.board, tradeoff: { ...card, preview } } } }
+        : { model }
     },
     BottleneckFound: ({ bottleneck, at }) => {
-      if (at !== model.bottleneckAt || bottleneck === model.bottleneck) return { model }
-      const next: Model = { ...model, bottleneck }
+      if (at !== model.board.bottleneckAt || bottleneck === model.board.bottleneck) return { model }
+      const next: Model = { ...model, board: { ...model.board, bottleneck } }
       return { model: next }
     },
     OptionLeft: () =>
-      model.tradeoff && !model.tradeoff.pinned
-        ? { model: { ...model, tradeoff: null } }
+      model.board.tradeoff && !model.board.tradeoff.pinned
+        ? { model: { ...model, board: { ...model.board, tradeoff: null } } }
         : { model },
     OptionChosen: ({ nodeId, option }) => {
       // Once an option set is confirmed, its options apply on click; the card stays one line.
       if (model.prefs.seenTradeoffs.includes(option.kind)) {
-        const hovered = model.tradeoff
+        const hovered = model.board.tradeoff
         const same =
           hovered?.nodeId === nodeId &&
           hovered.option.kind === option.kind &&
@@ -1714,11 +1783,11 @@ const handle = (model: Model, message: Message): Result =>
         })
       }
       const [card, commands] = tradeoffOf(model, nodeId, option, true)
-      return { model: { ...model, tradeoff: card }, commands }
+      return { model: { ...model, board: { ...model.board, tradeoff: card } }, commands }
     },
     OptionConfirmed: () =>
-      model.tradeoff?.pinned ? applyOption(model, model.tradeoff) : { model },
-    TradeoffClosed: () => ({ model: { ...model, tradeoff: null } }),
+      model.board.tradeoff?.pinned ? applyOption(model, model.board.tradeoff) : { model },
+    TradeoffClosed: () => ({ model: { ...model, board: { ...model.board, tradeoff: null } } }),
 
     SandboxStoreLoaded: ({ json }) =>
       Option.match(json === null ? Option.none() : parseStore(json), {
@@ -1726,44 +1795,59 @@ const handle = (model: Model, message: Message): Result =>
         onSome: (store) => ({ model: { ...model, passed: store.passed, freeBoard: store.free } }),
       }),
     ChallengeStarted: ({ id }) => enterChallenge(model, id),
-    ChallengeRan: () => (model.challenge ? startRun(model, model.challenge) : { model }),
+    ChallengeRan: () =>
+      model.board.challenge ? startRun(model, model.board.challenge) : { model },
     ChallengeFinished: () => {
-      const run = model.challenge
+      const run = model.board.challenge
       if (run?.phase !== 'running') return { model }
       return finishRun(runSteps(model, run, true).model)
     },
     FixChosen: ({ fix, on }) =>
-      act(model, `${TASKS[fix].name} ${on ? 'on' : 'off'}`, Work.setFix(model.game, fix, on), {
-        undoable: true,
-      }),
+      act(
+        model,
+        `${TASKS[fix].name} ${on ? 'on' : 'off'}`,
+        Work.setFix(model.board.game, fix, on),
+        {
+          undoable: true,
+        },
+      ),
     ChallengeRebuilt: () => {
-      const run = model.challenge
+      const run = model.board.challenge
       if (!run?.board) return { model }
       const next: Model = {
         ...model,
-        game: run.board,
         panel: 'none',
-        bottleneckAt: -1,
-        challenge: {
-          ...run,
-          phase: 'build',
-          board: null,
-          replay: null,
-          totals: NO_TOTALS,
-          result: null,
-          verdict: null,
-          verification: 'local',
-          note: null,
+        board: {
+          ...model.board,
+          game: run.board,
+          bottleneckAt: -1,
+          challenge: {
+            ...run,
+            phase: 'build',
+            board: null,
+            replay: null,
+            totals: NO_TOTALS,
+            result: null,
+            verdict: null,
+            verification: 'local',
+            note: null,
+          },
         },
       }
       return { model: next }
     },
     ChallengeVerified: ({ verdict }) => {
-      const run = model.challenge
+      const run = model.board.challenge
       if (!run) return { model }
       const percentiles = verdict.percentiles
       const [next, earned] = achieve(
-        { ...model, challenge: { ...run, verdict, verification: 'verified', note: null } },
+        {
+          ...model,
+          board: {
+            ...model.board,
+            challenge: { ...run, verdict, verification: 'verified', note: null },
+          },
+        },
         percentiles
           ? challengeAchievements([percentiles.cost, percentiles.tail, percentiles.complexity])
           : [],
@@ -1772,12 +1856,15 @@ const handle = (model: Model, message: Message): Result =>
       return { ...fetched, commands: [...(fetched.commands ?? []), ...earned] }
     },
     ChallengeUnverified: ({ message, offline }) => {
-      const run = model.challenge
+      const run = model.board.challenge
       if (!run) return { model }
       return {
         model: {
           ...model,
-          challenge: { ...run, verification: offline ? 'offline' : 'unverified', note: message },
+          board: {
+            ...model.board,
+            challenge: { ...run, verification: offline ? 'offline' : 'unverified', note: message },
+          },
         },
       }
     },
@@ -1792,33 +1879,38 @@ const handle = (model: Model, message: Message): Result =>
         : replaceFree(model, stressBoard(), 'The stress board is loaded.'),
     CompanyCopied: () =>
       model.company && model.saved
-        ? replaceFree(model, sandboxOf(model.company), 'Copied the Company Design.')
+        ? replaceFree(model, sandboxOf(model.company.game), 'Copied the Company Design.')
         : withToast(model, 'There is no Company to copy.', 'plain'),
     DemandStepped: ({ direction }) => {
-      const index = DEMAND_STEPS.findIndex((users) => users >= model.game.users)
+      const index = DEMAND_STEPS.findIndex((users) => users >= model.board.game.users)
       const at = index === -1 ? DEMAND_STEPS.length - 1 : index
       const users =
         DEMAND_STEPS[Math.max(0, Math.min(DEMAND_STEPS.length - 1, at + direction))] ?? 1_000
-      return tuneFree(model, { ...model.game, users })
+      return tuneFree(model, { ...model.board.game, users })
     },
-    MixChosen: ({ stage }) => tuneFree(model, { ...model.game, stage }),
+    MixChosen: ({ stage }) => tuneFree(model, { ...model.board.game, stage }),
 
     Ticked: () => tick(model),
 
     SpeedCycled: () => {
-      const speeds = speedsOf(model.game)
-      const index = speeds.indexOf(model.speed)
-      return { model: { ...model, speed: speeds[(index + 1) % speeds.length] ?? 1 } }
+      const speeds = speedsOf(model.board.game)
+      const index = speeds.indexOf(model.board.speed)
+      return {
+        model: {
+          ...model,
+          board: { ...model.board, speed: speeds[(index + 1) % speeds.length] ?? 1 },
+        },
+      }
     },
-    SpeedChosen: ({ speed }) => ({ model: { ...model, speed } }),
+    SpeedChosen: ({ speed }) => ({ model: { ...model, board: { ...model.board, speed } } }),
     PauseToggled: () => {
-      const next = { ...model, paused: !model.paused }
+      const next = { ...model, board: { ...model.board, paused: !model.board.paused } }
       return { model: next }
     },
     FullscreenToggled: () => ({ model, commands: [ToggleFullscreen({})] }),
     BoardFitted: () => ({ model, commands: [FitBoard({})] }),
     BoardTidied: () => {
-      const view = regionView(model.game, model.region)
+      const view = regionView(model.board.game, model.board.region)
       const nodes = view.nodes.map((node) => ({
         ...node,
         group: zoned(node) ? node.zone : 'all',
@@ -1826,7 +1918,7 @@ const handle = (model: Model, message: Message): Result =>
       const spots = tidy(nodes, view.links, ['all', 'a', 'b', 'c'])
       const game = [...spots].reduce(
         (game, [id, spot]) => Actions.move(game, id, spot.x, spot.y),
-        model.game,
+        model.board.game,
       )
       const tidied = act(model, 'Tidied the board by zone', Result.succeed(game), {
         undoable: true,
@@ -1840,30 +1932,36 @@ const handle = (model: Model, message: Message): Result =>
         const mail = mailKey(model, key)
         if (mail) return mail
       }
-      const selected = model.selected
+      const selected = model.board.selected
       switch (key) {
         case 'Escape': {
-          if (model.exited) return leaveExited(model, 'found')
-          if (model.confirmSell) return { model: { ...model, confirmSell: null } }
-          if (model.tradeoff) return { model: { ...model, tradeoff: null } }
-          if (model.insightHelp) return { model: { ...model, insightHelp: false } }
-          if (model.tool?._tag === 'Stamping' || model.selection.length > 0) {
+          if (model.board.exited) return leaveExited(model, 'found')
+          if (model.board.confirmSell)
+            return { model: { ...model, board: { ...model.board, confirmSell: null } } }
+          if (model.board.tradeoff)
+            return { model: { ...model, board: { ...model.board, tradeoff: null } } }
+          if (model.board.insightHelp)
+            return { model: { ...model, board: { ...model.board, insightHelp: false } } }
+          if (model.board.tool?._tag === 'Stamping' || model.board.selection.length > 0) {
             const cleared: Model = {
               ...model,
-              tool: model.tool?._tag === 'Stamping' ? null : model.tool,
-              selection: [],
+              board: {
+                ...model.board,
+                tool: model.board.tool?._tag === 'Stamping' ? null : model.board.tool,
+                selection: [],
+              },
             }
             return { model: cleared }
           }
           const next: Model =
-            model.tool !== null
-              ? { ...model, tool: null }
-              : model.buildGroup !== null
-                ? { ...model, buildGroup: null }
+            model.board.tool !== null
+              ? { ...model, board: { ...model.board, tool: null } }
+              : model.board.buildGroup !== null
+                ? { ...model, board: { ...model.board, buildGroup: null } }
                 : model.panel !== 'none'
                   ? closePanel(model)
-                  : model.selected !== null
-                    ? { ...model, selected: null }
+                  : model.board.selected !== null
+                    ? { ...model, board: { ...model.board, selected: null } }
                     : { ...model, panel: 'menu' }
           return { model: next }
         }
@@ -1880,7 +1978,7 @@ const handle = (model: Model, message: Message): Result =>
             Message.PanelOpened({ panel: model.panel === 'team' ? 'none' : 'team' }),
           )
         case 'd':
-          if (!has(model.game, 'metrics')) return { model }
+          if (!has(model.board.game, 'metrics')) return { model }
           return route(
             model,
             Message.PanelOpened({ panel: model.panel === 'dashboard' ? 'none' : 'dashboard' }),
@@ -1920,13 +2018,17 @@ const handle = (model: Model, message: Message): Result =>
         case 'ArrowRight': {
           if (model.panel !== 'none') return { model }
           const direction = ARROWS[key] ?? 'right'
-          const id = nearestNode(regionView(model.game, model.region).nodes, selected, direction)
+          const id = nearestNode(
+            regionView(model.board.game, model.board.region).nodes,
+            selected,
+            direction,
+          )
           return id && id !== selected
             ? route(model, Message.NodeTapped({ nodeId: id }))
             : { model }
         }
         case 'Enter':
-          if (model.confirmSell) return route(model, Message.SellConfirmed())
+          if (model.board.confirmSell) return route(model, Message.SellConfirmed())
           if (model.panel !== 'none') return { model }
           return selected ? { model, commands: [FocusInspector({})] } : { model }
         case ' ':
@@ -1969,27 +2071,35 @@ const handle = (model: Model, message: Message): Result =>
           return route(model, Message.SellAsked())
         default: {
           // With a group open, a digit picks that part.
-          const picked = (model.buildGroup ? dockItems(model.game, model.buildGroup) : [])[
-            Number(key) - 1
-          ]
+          const picked = (
+            model.board.buildGroup ? dockItems(model.board.game, model.board.buildGroup) : []
+          )[Number(key) - 1]
           if (picked) return route(model, Message.PlacingChosen({ type: picked }))
-          const group = /^[1-9]$/.test(key) ? dockGroups(model.game)[Number(key) - 1] : undefined
+          const group = /^[1-9]$/.test(key)
+            ? dockGroups(model.board.game)[Number(key) - 1]
+            : undefined
           return group ? route(model, Message.BuildGroupChosen({ group })) : { model }
         }
       }
     },
 
     BuildGroupChosen: ({ group }) => ({
-      model: { ...model, buildGroup: model.buildGroup === group ? null : group },
+      model: {
+        ...model,
+        board: { ...model.board, buildGroup: model.board.buildGroup === group ? null : group },
+      },
     }),
 
     PlacingChosen: ({ type }) => {
       // Picking a part closes its list: the board is the next step.
       const next: Model = {
         ...model,
-        tool: type === null || placingOf(model) === type ? null : { _tag: 'Placing', type },
         panel: 'none',
-        buildGroup: null,
+        board: {
+          ...model.board,
+          tool: type === null || placingOf(model) === type ? null : { _tag: 'Placing', type },
+          buildGroup: null,
+        },
       }
       return { model: next }
     },
@@ -1997,7 +2107,7 @@ const handle = (model: Model, message: Message): Result =>
     NodePlaced: ({ x, y }) => {
       const playbook = stampedPlaybook(model)
       // Nothing lands on a card: a drop moves to the nearest spot that keeps clear.
-      const others = regionView(model.game, model.region).nodes.map(boxOf)
+      const others = regionView(model.board.game, model.board.region).nodes.map(boxOf)
       if (playbook) {
         const spot = freeSpot(others, {
           x,
@@ -2005,7 +2115,7 @@ const handle = (model: Model, message: Message): Result =>
           w: Math.max(...playbook.nodes.map((node) => node.dx)) + CARD_W,
           h: Math.max(...playbook.nodes.map((node) => node.dy + heightOf(node.type))),
         })
-        const placed = placePlaybook(model.game, playbook, spot.x, spot.y, model.region)
+        const placed = placePlaybook(model.board.game, playbook, spot.x, spot.y, model.board.region)
         return act(
           model,
           `Placed ${playbook.name}`,
@@ -2022,7 +2132,7 @@ const handle = (model: Model, message: Message): Result =>
                         `Placed ${result.placed}. ${result.ghosts.length} need research: ${[
                           ...new Set(
                             result.ghosts.map((ghost) =>
-                              ghostReason(model.game, ghost, model.region),
+                              ghostReason(model.board.game, ghost, model.board.region),
                             ),
                           ),
                         ].join(', ')}.`,
@@ -2039,7 +2149,7 @@ const handle = (model: Model, message: Message): Result =>
       return act(
         model,
         `Placed ${COMPONENTS[type].name}`,
-        Actions.place(model.game, type, spot.x, spot.y, model.region),
+        Actions.place(model.board.game, type, spot.x, spot.y, model.board.region),
         {
           undoable: true,
           patch: (_, game) => ({ tool: null, selected: game.nodes.at(-1)?.id ?? null }),
@@ -2050,57 +2160,77 @@ const handle = (model: Model, message: Message): Result =>
     NodeTapped: ({ nodeId }) => {
       const next: Model = {
         ...model,
-        selected: nodeId,
-        selection: [],
-        tradeoff: model.selected === nodeId ? model.tradeoff : null,
+        board: {
+          ...model.board,
+          selected: nodeId,
+          selection: [],
+          tradeoff: model.board.selected === nodeId ? model.board.tradeoff : null,
+        },
       }
       return { model: next }
     },
     NodeToggled: ({ nodeId }) => {
-      const selection = model.selection.includes(nodeId)
-        ? model.selection.filter((id) => id !== nodeId)
+      const selection = model.board.selection.includes(nodeId)
+        ? model.board.selection.filter((id) => id !== nodeId)
         : [
-            ...model.selection,
-            ...(model.selected && model.selection.length === 0 && model.selected !== nodeId
-              ? [model.selected]
+            ...model.board.selection,
+            ...(model.board.selected &&
+            model.board.selection.length === 0 &&
+            model.board.selected !== nodeId
+              ? [model.board.selected]
               : []),
             nodeId,
           ]
-      const next: Model = { ...model, selection, selected: null, tradeoff: null }
+      const next: Model = {
+        ...model,
+        board: { ...model.board, selection, selected: null, tradeoff: null },
+      }
       return { model: next }
     },
     SelectionBoxed: ({ ids, mode }) => {
       const selection =
         mode === 'add'
-          ? [...new Set([...model.selection, ...(model.selected ? [model.selected] : []), ...ids])]
+          ? [
+              ...new Set([
+                ...model.board.selection,
+                ...(model.board.selected ? [model.board.selected] : []),
+                ...ids,
+              ]),
+            ]
           : mode === 'subtract'
-            ? model.selection.filter((id) => !ids.includes(id))
+            ? model.board.selection.filter((id) => !ids.includes(id))
             : [...ids]
-      const next: Model = { ...model, selection, selected: null, tradeoff: null }
+      const next: Model = {
+        ...model,
+        board: { ...model.board, selection, selected: null, tradeoff: null },
+      }
       return { model: next }
     },
     SelectionAll: () => {
-      const ids = regionView(model.game, model.region)
+      const ids = regionView(model.board.game, model.board.region)
         .nodes.filter((node) => !COMPONENTS[node.type].fixed && !SHARED.includes(node.type))
         .map((node) => node.id)
       if (ids.length === 0) return { model }
-      const next: Model = { ...model, selection: ids, selected: null, tradeoff: null }
+      const next: Model = {
+        ...model,
+        board: { ...model.board, selection: ids, selected: null, tradeoff: null },
+      }
       return { model: next }
     },
     NodesCopied: () => {
-      const playbook = capture(model.game, chosenIds(model), 'Nodes')
+      const playbook = capture(model.board.game, chosenIds(model), 'Nodes')
       if (!playbook) return withToast(model, 'Select the Nodes to copy first.', 'plain')
-      const next: Model = { ...model, clipboard: playbook }
+      const next: Model = { ...model, board: { ...model.board, clipboard: playbook } }
       return withToast(next, `Copied ${countNodes(playbook.nodes.length)}.`, 'ok')
     },
     NodesCut: () => {
-      const playbook = capture(model.game, chosenIds(model), 'Nodes')
+      const playbook = capture(model.board.game, chosenIds(model), 'Nodes')
       if (!playbook) return withToast(model, 'Select the Nodes to cut first.', 'plain')
       return act(
         model,
         `Cut ${countNodes(playbook.nodes.length)}`,
         sellAll(
-          model.game,
+          model.board.game,
           playbook.nodes.map((node) => node.key),
         ),
         {
@@ -2110,30 +2240,33 @@ const handle = (model: Model, message: Message): Result =>
       )
     },
     NodesPasted: () => {
-      if (!model.clipboard) return withToast(model, 'Copy some Nodes first.', 'plain')
+      if (!model.board.clipboard) return withToast(model, 'Copy some Nodes first.', 'plain')
       const next: Model = {
         ...model,
-        tool: { _tag: 'Stamping', source: 'clipboard' },
-        selected: null,
-        selection: [],
         panel: 'none',
+        board: {
+          ...model.board,
+          tool: { _tag: 'Stamping', source: 'clipboard' },
+          selected: null,
+          selection: [],
+        },
       }
       return { model: next }
     },
     NodesDuplicated: () => {
-      const playbook = capture(model.game, chosenIds(model), 'Nodes')
+      const playbook = capture(model.board.game, chosenIds(model), 'Nodes')
       if (!playbook) return withToast(model, 'Select the Nodes to duplicate first.', 'plain')
       const keys = playbook.nodes.map((node) => node.key)
-      const chosen = model.game.nodes.filter((node) => keys.includes(node.id))
+      const chosen = model.board.game.nodes.filter((node) => keys.includes(node.id))
       const left = Math.min(...chosen.map((node) => node.x))
       const top = Math.min(...chosen.map((node) => node.y))
-      const spot = freeSpot(regionView(model.game, model.region).nodes.map(boxOf), {
+      const spot = freeSpot(regionView(model.board.game, model.board.region).nodes.map(boxOf), {
         x: left + 48,
         y: top + 48,
         w: Math.max(...playbook.nodes.map((node) => node.dx)) + CARD_W,
         h: Math.max(...playbook.nodes.map((node) => node.dy + heightOf(node.type))),
       })
-      const placed = placePlaybook(model.game, playbook, spot.x, spot.y, model.region)
+      const placed = placePlaybook(model.board.game, playbook, spot.x, spot.y, model.board.region)
       return act(
         model,
         `Duplicated ${countNodes(playbook.nodes.length)}`,
@@ -2144,51 +2277,53 @@ const handle = (model: Model, message: Message): Result =>
     NodesNudged: ({ dx, dy }) => {
       const ids = chosenIds(model)
       if (ids.length === 0) return { model }
-      const moving = model.game.nodes.filter((node) => ids.includes(node.id))
-      const still = regionView(model.game, model.region)
+      const moving = model.board.game.nodes.filter((node) => ids.includes(node.id))
+      const still = regionView(model.board.game, model.board.region)
         .nodes.filter((node) => !ids.includes(node.id))
         .map(boxOf)
       const moved = moving.map((node) => ({ ...boxOf(node), x: node.x + dx, y: node.y + dy }))
       if (moved.some((box) => still.some((other) => crowds(box, other)))) return { model }
       const game = moving.reduce(
         (current, node) => Actions.move(current, node.id, node.x + dx, node.y + dy),
-        model.game,
+        model.board.game,
       )
-      const next: Model = { ...model, game }
+      const next: Model = { ...model, board: { ...model.board, game } }
       return { model: next }
     },
     SellAsked: () => {
-      if (model.confirmSell) return route(model, Message.SellConfirmed())
+      if (model.board.confirmSell) return route(model, Message.SellConfirmed())
       const ids = chosenIds(model)
       if (ids.length === 0) return { model }
-      const sold = sellAll(model.game, ids)
+      const sold = sellAll(model.board.game, ids)
       // Nothing to sell (fixed Nodes): say why, without asking.
       if (Result.isFailure(sold))
         return withToast(model, Actions.describeRefusal(sold.failure), 'warn')
-      return { model: { ...model, confirmSell: ids } }
+      return { model: { ...model, board: { ...model.board, confirmSell: ids } } }
     },
     SellConfirmed: () => {
-      const ids = model.confirmSell ?? []
-      const cleared: Model = { ...model, confirmSell: null }
-      return act(cleared, `Sold ${countNodes(ids.length)}`, sellAll(model.game, ids), {
+      const ids = model.board.confirmSell ?? []
+      const cleared: Model = { ...model, board: { ...model.board, confirmSell: null } }
+      return act(cleared, `Sold ${countNodes(ids.length)}`, sellAll(model.board.game, ids), {
         undoable: true,
         patch: () => ({ selected: null, selection: [] }),
       })
     },
-    SellDismissed: () => ({ model: { ...model, confirmSell: null } }),
+    SellDismissed: () => ({ model: { ...model, board: { ...model.board, confirmSell: null } } }),
     SelectionCleared: () => {
-      const next: Model = { ...model, selection: [] }
+      const next: Model = { ...model, board: { ...model.board, selection: [] } }
       return { model: next }
     },
 
     NodeMoved: ({ nodeId, x, y }) => {
-      const node = model.game.nodes.find((entry) => entry.id === nodeId)
+      const node = model.board.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
       // A card in a multi-selection takes the rest of it along.
       const group =
-        model.selection.length > 1 && model.selection.includes(nodeId) ? model.selection : [nodeId]
-      const members = model.game.nodes.filter((entry) => group.includes(entry.id))
-      const others = regionView(model.game, model.region)
+        model.board.selection.length > 1 && model.board.selection.includes(nodeId)
+          ? model.board.selection
+          : [nodeId]
+      const members = model.board.game.nodes.filter((entry) => group.includes(entry.id))
+      const others = regionView(model.board.game, model.board.region)
         .nodes.filter((entry) => !group.includes(entry.id))
         .map(boxOf)
       const left = Math.min(...members.map((entry) => entry.x))
@@ -2203,10 +2338,13 @@ const handle = (model: Model, message: Message): Result =>
       const dy = spot.y - top
       const next: Model = {
         ...model,
-        game: members.reduce(
-          (game, entry) => Actions.move(game, entry.id, entry.x + dx, entry.y + dy),
-          model.game,
-        ),
+        board: {
+          ...model.board,
+          game: members.reduce(
+            (game, entry) => Actions.move(game, entry.id, entry.x + dx, entry.y + dy),
+            model.board.game,
+          ),
+        },
       }
       return { model: next }
     },
@@ -2214,12 +2352,12 @@ const handle = (model: Model, message: Message): Result =>
     LinkRequested: ({ from, to }) =>
       act(
         model,
-        `Linked ${nodeName(model.game, from)} to ${nodeName(model.game, to)}`,
-        Actions.connect(model.game, from, to),
+        `Linked ${nodeName(model.board.game, from)} to ${nodeName(model.board.game, to)}`,
+        Actions.connect(model.board.game, from, to),
         {
           undoable: true,
           note: (game) =>
-            model.game.nodes.find((node) => node.id === from)?.localDb &&
+            model.board.game.nodes.find((node) => node.id === from)?.localDb &&
             !game.nodes.find((node) => node.id === from)?.localDb
               ? ['Postgres moved off the App Server to its own Database.', 'ok']
               : null,
@@ -2229,21 +2367,24 @@ const handle = (model: Model, message: Message): Result =>
     LinkCut: ({ from, to }) =>
       act(
         model,
-        `Cut ${nodeName(model.game, from)} → ${nodeName(model.game, to)}`,
-        Result.succeed(Actions.disconnect(model.game, from, to)),
+        `Cut ${nodeName(model.board.game, from)} → ${nodeName(model.board.game, to)}`,
+        Result.succeed(Actions.disconnect(model.board.game, from, to)),
         {
           undoable: true,
         },
       ),
 
     EmptyTapped: () => {
-      if (model.selected === null && model.selection.length === 0) return { model }
-      const next: Model = { ...model, selected: null, selection: [], tradeoff: null }
+      if (model.board.selected === null && model.board.selection.length === 0) return { model }
+      const next: Model = {
+        ...model,
+        board: { ...model.board, selected: null, selection: [], tradeoff: null },
+      }
       return { model: next }
     },
 
     FooterPressed: ({ nodeId }) => {
-      const node = model.game.nodes.find((entry) => entry.id === nodeId)
+      const node = model.board.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
       if (node.type === 'payments') return route(model, Message.Collected())
       if (node.down === -1) return route(model, Message.ReplaceBought({ nodeId }))
@@ -2253,18 +2394,18 @@ const handle = (model: Model, message: Message): Result =>
     ResizeChosen: ({ nodeId, direction }) => {
       const logged = logRunAction(model, { _tag: 'Resize', node: nodeId, direction })
       if (logged) return logged
-      const node = model.game.nodes.find((entry) => entry.id === nodeId)
+      const node = model.board.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
       const sized = COMPONENTS[node.type].sized
       const size = node.size + direction
       return act(
         model,
-        `Resized ${nodeName(model.game, nodeId)}`,
-        Actions.resize(model.game, nodeId, direction),
+        `Resized ${nodeName(model.board.game, nodeId)}`,
+        Actions.resize(model.board.game, nodeId, direction),
         {
           undoable: true,
           note: (game) => {
-            const spent = model.game.cash - game.cash
+            const spent = model.board.game.cash - game.cash
             return [
               (spent >= BIG_PURCHASE ? 'Upgrade complete! ' : '') +
                 (sized
@@ -2280,19 +2421,24 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     FamilyChosen: ({ nodeId, family }) =>
-      act(model, `${FAMILIES[family].name} family`, Actions.setFamily(model.game, nodeId, family), {
-        undoable: true,
-      }),
+      act(
+        model,
+        `${FAMILIES[family].name} family`,
+        Actions.setFamily(model.board.game, nodeId, family),
+        {
+          undoable: true,
+        },
+      ),
 
     RuntimeChosen: ({ nodeId, runtime }) =>
       act(
         model,
         `Runtime ${RUNTIMES[runtime].name}`,
-        Work.changeStack(model.game, nodeId, { runtime }),
+        Work.changeStack(model.board.game, nodeId, { runtime }),
         {
-          undoable: !migrates(model.game, nodeId),
+          undoable: !migrates(model.board.game, nodeId),
           note: (game) =>
-            migrationNote(model.game, game) ?? [
+            migrationNote(model.board.game, game) ?? [
               `Now running ${RUNTIMES[runtime].name}. It restarts cold.`,
               'ok',
             ],
@@ -2303,10 +2449,10 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Framework ${FRAMEWORKS[framework].name}`,
-        Work.changeStack(model.game, nodeId, { framework }),
+        Work.changeStack(model.board.game, nodeId, { framework }),
         {
-          undoable: !migrates(model.game, nodeId),
-          note: (game) => migrationNote(model.game, game),
+          undoable: !migrates(model.board.game, nodeId),
+          note: (game) => migrationNote(model.board.game, game),
         },
       ),
 
@@ -2314,19 +2460,19 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Pool size ${Math.round(workers)}`,
-        Actions.setWorkers(model.game, nodeId, workers),
+        Actions.setWorkers(model.board.game, nodeId, workers),
         {
           undoable: true,
         },
       ),
 
     PmChosen: ({ nodeId, pm }) =>
-      act(model, `pm ${PM_MODES[pm].label}`, Actions.setPm(model.game, nodeId, pm), {
+      act(model, `pm ${PM_MODES[pm].label}`, Actions.setPm(model.board.game, nodeId, pm), {
         undoable: true,
       }),
 
     PoolerModeChosen: ({ nodeId, mode }) =>
-      act(model, `${mode} pooling`, Actions.setPoolerMode(model.game, nodeId, mode), {
+      act(model, `${mode} pooling`, Actions.setPoolerMode(model.board.game, nodeId, mode), {
         undoable: true,
       }),
 
@@ -2334,7 +2480,7 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         compress ? 'Gzip on' : 'Gzip off',
-        Actions.setCompression(model.game, nodeId, compress),
+        Actions.setCompression(model.board.game, nodeId, compress),
         { undoable: true },
       ),
 
@@ -2342,7 +2488,7 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Policy ${LB_POLICIES[policy].label}`,
-        Actions.setPolicy(model.game, nodeId, policy),
+        Actions.setPolicy(model.board.game, nodeId, policy),
         { undoable: true },
       ),
 
@@ -2354,7 +2500,7 @@ const handle = (model: Model, message: Message): Result =>
             ? 'Deep checks'
             : 'Shallow checks'
           : `Checks every ${checkEvery} s`,
-        Actions.setHealthCheck(model.game, nodeId, {
+        Actions.setHealthCheck(model.board.game, nodeId, {
           ...(checkEvery === undefined ? {} : { checkEvery }),
           ...(deepCheck === undefined ? {} : { deepCheck }),
         }),
@@ -2362,7 +2508,7 @@ const handle = (model: Model, message: Message): Result =>
       ),
 
     TtlChosen: ({ nodeId, ttl }) =>
-      act(model, `TTL ${duration(ttl)}`, Actions.setTtl(model.game, nodeId, ttl), {
+      act(model, `TTL ${duration(ttl)}`, Actions.setTtl(model.board.game, nodeId, ttl), {
         undoable: true,
       }),
 
@@ -2370,7 +2516,7 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Engine ${CACHE_ENGINES[engine].name}`,
-        Actions.setCacheEngine(model.game, nodeId, engine),
+        Actions.setCacheEngine(model.board.game, nodeId, engine),
         { undoable: true },
       ),
 
@@ -2388,7 +2534,7 @@ const handle = (model: Model, message: Message): Result =>
                 ? 'Retries with backoff'
                 : 'Retries off'
             : `Timeout ${timeout} s`,
-        Actions.setLinkPolicy(model.game, from, to, {
+        Actions.setLinkPolicy(model.board.game, from, to, {
           ...(timeout === undefined ? {} : { timeout }),
           ...(retries === undefined ? {} : { retries }),
           ...(breaker === undefined ? {} : { breaker }),
@@ -2400,18 +2546,22 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         kinds ? `Routes ${kinds.map((kind) => KINDS[kind].label).join(', ')}` : 'Routes every kind',
-        Actions.setLinkKinds(model.game, from, to, kinds),
+        Actions.setLinkKinds(model.board.game, from, to, kinds),
         { undoable: true },
       ),
 
     AlertRuleChosen: ({ rule, threshold }) =>
-      act(model, alertText(rule, threshold), Actions.setAlertRule(model.game, rule, threshold)),
+      act(
+        model,
+        alertText(rule, threshold),
+        Actions.setAlertRule(model.board.game, rule, threshold),
+      ),
 
     SampleChosen: ({ nodeId, sampleRate }) =>
       act(
         model,
         `Sample ${Math.round(sampleRate * 100)}%`,
-        Actions.setSample(model.game, nodeId, sampleRate),
+        Actions.setSample(model.board.game, nodeId, sampleRate),
         {
           undoable: true,
         },
@@ -2419,14 +2569,22 @@ const handle = (model: Model, message: Message): Result =>
 
     ReplaceBought: ({ nodeId }) =>
       logRunAction(model, { _tag: 'Replace', node: nodeId }) ??
-      act(model, `Replaced ${nodeName(model.game, nodeId)}`, Actions.replace(model.game, nodeId)),
+      act(
+        model,
+        `Replaced ${nodeName(model.board.game, nodeId)}`,
+        Actions.replace(model.board.game, nodeId),
+      ),
 
     RestartChosen: ({ nodeId }) =>
       logRunAction(model, { _tag: 'Restart', node: nodeId }) ??
-      act(model, `Restarted ${nodeName(model.game, nodeId)}`, Actions.restart(model.game, nodeId)),
+      act(
+        model,
+        `Restarted ${nodeName(model.board.game, nodeId)}`,
+        Actions.restart(model.board.game, nodeId),
+      ),
 
     IndexAdded: ({ nodeId }) =>
-      act(model, 'Added an index', Work.addIndex(model.game, nodeId), {
+      act(model, 'Added an index', Work.addIndex(model.board.game, nodeId), {
         note: (game) =>
           game.backlog[0]?.ref === 'add-index'
             ? ['Add index is at the top of the backlog.', 'plain']
@@ -2443,7 +2601,7 @@ const handle = (model: Model, message: Message): Result =>
           : warming
             ? 'Warming on'
             : 'Warming off',
-        Actions.setCacheGuard(model.game, nodeId, {
+        Actions.setCacheGuard(model.board.game, nodeId, {
           ...(coalesce === undefined ? {} : { coalesce }),
           ...(warming === undefined ? {} : { warming }),
         }),
@@ -2454,14 +2612,14 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         dlq ? 'Dead-letter queue on' : 'Dead-letter queue off',
-        Actions.setDlq(model.game, nodeId, dlq),
+        Actions.setDlq(model.board.game, nodeId, dlq),
         {
           undoable: true,
         },
       ),
 
     ParanoiaChosen: ({ nodeId, paranoia }) =>
-      act(model, `Paranoia ${paranoia}`, Actions.setParanoia(model.game, nodeId, paranoia), {
+      act(model, `Paranoia ${paranoia}`, Actions.setParanoia(model.board.game, nodeId, paranoia), {
         undoable: true,
       }),
 
@@ -2469,15 +2627,15 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         underAttack ? 'Under attack mode on' : 'Under attack mode off',
-        Actions.setUnderAttack(model.game, nodeId, underAttack),
+        Actions.setUnderAttack(model.board.game, nodeId, underAttack),
         { undoable: true },
       ),
 
     ZoneChosen: ({ nodeId, zone }) =>
       act(
         model,
-        `${nodeName(model.game, nodeId)} to zone ${zone}`,
-        Actions.setZone(model.game, nodeId, zone),
+        `${nodeName(model.board.game, nodeId)} to zone ${zone}`,
+        Actions.setZone(model.board.game, nodeId, zone),
         { undoable: true },
       ),
 
@@ -2485,7 +2643,7 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         standby ? 'Standby on' : 'Standby off',
-        Actions.setStandby(model.game, nodeId, standby),
+        Actions.setStandby(model.board.game, nodeId, standby),
         { undoable: true },
       ),
 
@@ -2493,7 +2651,7 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         'Autoscaler set',
-        Actions.setAutoscaler(model.game, nodeId, {
+        Actions.setAutoscaler(model.board.game, nodeId, {
           ...(signal === undefined ? {} : { signal }),
           ...(target === undefined ? {} : { target }),
           ...(minCopies === undefined ? {} : { minCopies }),
@@ -2503,7 +2661,7 @@ const handle = (model: Model, message: Message): Result =>
       ),
 
     GpuChosen: ({ nodeId, gpu }) =>
-      act(model, `GPU ${gpu.toUpperCase()}`, Actions.setGpuType(model.game, nodeId, gpu), {
+      act(model, `GPU ${gpu.toUpperCase()}`, Actions.setGpuType(model.board.game, nodeId, gpu), {
         undoable: true,
       }),
 
@@ -2511,18 +2669,20 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `Collector ${COLLECTORS[collector].label}`,
-        Actions.setCollector(model.game, nodeId, collector),
+        Actions.setCollector(model.board.game, nodeId, collector),
         { undoable: true },
       ),
 
     GogcChosen: ({ nodeId, gogc }) =>
-      act(model, `GOGC ${gogc}`, Actions.setGogc(model.game, nodeId, gogc), { undoable: true }),
+      act(model, `GOGC ${gogc}`, Actions.setGogc(model.board.game, nodeId, gogc), {
+        undoable: true,
+      }),
 
     ShedChosen: ({ nodeId, shed }) =>
       act(
         model,
         shed ? 'Load shedding on' : 'Load shedding off',
-        Actions.setShed(model.game, nodeId, shed),
+        Actions.setShed(model.board.game, nodeId, shed),
         { undoable: true },
       ),
 
@@ -2530,35 +2690,40 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         ryw ? 'Read-your-writes on' : 'Read-your-writes off',
-        Actions.setRyw(model.game, nodeId, ryw),
+        Actions.setRyw(model.board.game, nodeId, ryw),
         { undoable: true },
       ),
 
     RuleDisabled: () =>
       logResponse(model, 'disable-rule') ??
-      act(model, 'Disabled the WAF rule', Actions.disableRule(model.game)),
+      act(model, 'Disabled the WAF rule', Actions.disableRule(model.board.game)),
 
     RegionPicked: ({ region }) => {
-      const next = { ...model, region, selected: null }
+      const next = { ...model, board: { ...model.board, region, selected: null } }
       return { model: next, commands: [FitBoard({})] }
     },
 
     RegionOpened: ({ region }) =>
-      act(model, `Opened ${REGION_INFO[region].name}`, Actions.openRegion(model.game, region), {
-        undoable: true,
-        patch: () => ({ region, selected: null }),
-      }),
+      act(
+        model,
+        `Opened ${REGION_INFO[region].name}`,
+        Actions.openRegion(model.board.game, region),
+        {
+          undoable: true,
+          patch: () => ({ region, selected: null }),
+        },
+      ),
 
     NodeRegionChosen: ({ nodeId, region }) =>
       act(
         model,
         `Moved to ${REGION_INFO[region].name}`,
-        Actions.setRegion(model.game, nodeId, region),
+        Actions.setRegion(model.board.game, nodeId, region),
         { undoable: true },
       ),
 
     QuorumChosen: ({ nodeId, n, r, w }) =>
-      act(model, `N${n} R${r} W${w}`, Actions.setQuorum(model.game, nodeId, n, r, w), {
+      act(model, `N${n} R${r} W${w}`, Actions.setQuorum(model.board.game, nodeId, n, r, w), {
         undoable: true,
       }),
 
@@ -2566,20 +2731,25 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         spread ? 'Spread across regions' : 'One region',
-        Actions.setSpread(model.game, nodeId, spread),
+        Actions.setSpread(model.board.game, nodeId, spread),
         { undoable: true },
       ),
 
     BackupChosen: ({ nodeId, backup }) =>
-      act(model, `Backups ${BACKUPS[backup].name}`, Actions.setBackup(model.game, nodeId, backup), {
-        undoable: true,
-      }),
+      act(
+        model,
+        `Backups ${BACKUPS[backup].name}`,
+        Actions.setBackup(model.board.game, nodeId, backup),
+        {
+          undoable: true,
+        },
+      ),
 
     FanoutChosen: ({ nodeId, fanout }) =>
       act(
         model,
         fanout === 'push' ? 'Fan-out on write' : 'Fan-out on read',
-        Actions.setFanout(model.game, nodeId, fanout),
+        Actions.setFanout(model.board.game, nodeId, fanout),
         { undoable: true },
       ),
 
@@ -2587,59 +2757,69 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         split ? 'Hot keys split' : 'Hot keys not split',
-        Actions.setSplit(model.game, nodeId, split),
+        Actions.setSplit(model.board.game, nodeId, split),
         { undoable: true },
       ),
 
     RoutesRolledBack: () =>
       logResponse(model, 'roll-back-routes') ??
-      act(model, 'Rolled back the routes', Actions.rollBackRoutes(model.game)),
+      act(model, 'Rolled back the routes', Actions.rollBackRoutes(model.board.game)),
 
     LeaderFenced: () =>
       logResponse(model, 'fence-leader') ??
-      act(model, 'Fenced the old leader', Actions.fenceLeader(model.game)),
+      act(model, 'Fenced the old leader', Actions.fenceLeader(model.board.game)),
 
-    DrillRun: () => act(model, 'DR drill', Actions.runDrill(model.game)),
+    DrillRun: () => act(model, 'DR drill', Actions.runDrill(model.board.game)),
 
     GuidanceChosen: ({ growth, margin }) =>
-      act(model, 'Guidance', Actions.setGuidance(model.game, growth, margin)),
+      act(model, 'Guidance', Actions.setGuidance(model.board.game, growth, margin)),
 
     ReportCancelled: () =>
       logResponse(model, 'cancel-report') ??
-      act(model, 'Cancelled the report', Actions.cancelReport(model.game)),
+      act(model, 'Cancelled the report', Actions.cancelReport(model.board.game)),
 
     VolumeExpanded: () =>
       logResponse(model, 'expand-volume') ??
-      act(model, 'Expanded the volume', Actions.expandVolume(model.game)),
+      act(model, 'Expanded the volume', Actions.expandVolume(model.board.game)),
 
     CertificateRenewed: () =>
       logResponse(model, 'renew-certificate') ??
-      act(model, 'Renewed the certificate', Actions.renewCertificate(model.game)),
+      act(model, 'Renewed the certificate', Actions.renewCertificate(model.board.game)),
 
     MessageDeleted: () =>
       logResponse(model, 'delete-message') ??
-      act(model, 'Deleted the poison message', Actions.deleteMessage(model.game)),
+      act(model, 'Deleted the poison message', Actions.deleteMessage(model.board.game)),
 
     NodeSold: ({ nodeId }) =>
-      act(model, `Sold ${nodeName(model.game, nodeId)}`, Actions.sell(model.game, nodeId), {
-        undoable: true,
-        patch: () => ({ selected: null }),
-      }),
+      act(
+        model,
+        `Sold ${nodeName(model.board.game, nodeId)}`,
+        Actions.sell(model.board.game, nodeId),
+        {
+          undoable: true,
+          patch: () => ({ selected: null }),
+        },
+      ),
 
     Collected: () => {
-      if (model.game.pending <= 0) return { model }
-      const amount = model.game.pending
-      const next: Model = { ...model, game: Actions.collect(model.game) }
+      if (model.board.game.pending <= 0) return { model }
+      const amount = model.board.game.pending
+      const next: Model = {
+        ...model,
+        board: { ...model.board, game: Actions.collect(model.board.game) },
+      }
       return withToast(next, `Collected $${Math.round(amount).toLocaleString('en-US')}.`, 'ok')
     },
 
-    UndoChosen: () => reverse(model, undoGame(model), 'Undid'),
-    RedoChosen: () => reverse(model, redoGame(model), 'Redid'),
+    UndoChosen: () => reverse(model, undoGame(model.board), 'Undid'),
+    RedoChosen: () => reverse(model, redoGame(model.board), 'Redid'),
 
-    ResearchFocused: ({ id }) => ({ model: { ...model, researchFocus: id } }),
+    ResearchFocused: ({ id }) => ({
+      model: { ...model, board: { ...model.board, researchFocus: id } },
+    }),
 
     ResearchBought: ({ id }) =>
-      act(model, `Study ${RESEARCH[id].name}`, Actions.study(model.game, id), {
+      act(model, `Study ${RESEARCH[id].name}`, Actions.study(model.board.game, id), {
         note: (game) => {
           // Warn when the pools hold less than the recipe: the Study waits on their rates.
           const short = recipeOf(id)
@@ -2654,40 +2834,41 @@ const handle = (model: Model, message: Message): Result =>
         },
       }),
     StudyMoved: ({ id, direction }) =>
-      act(model, 'Reordered research', Actions.moveStudy(model.game, id, direction)),
+      act(model, 'Reordered research', Actions.moveStudy(model.board.game, id, direction)),
     StudyPrioritized: ({ id }) =>
-      act(model, `Study ${RESEARCH[id].name} now`, Actions.study(model.game, id, true), {
+      act(model, `Study ${RESEARCH[id].name} now`, Actions.study(model.board.game, id, true), {
         note: () => [`Studying now: ${RESEARCH[id].name}.`, 'primary'],
       }),
     StudyCancelled: ({ id }) =>
-      act(model, `Cancelled ${RESEARCH[id].name}`, Actions.cancelStudy(model.game, id), {
+      act(model, `Cancelled ${RESEARCH[id].name}`, Actions.cancelStudy(model.board.game, id), {
         note: () => [`Study cancelled: ${RESEARCH[id].name}.`, 'plain'],
       }),
 
     HireChosen: () =>
-      act(model, 'Hired', Work.hire(model.game), {
+      act(model, 'Hired', Work.hire(model.board.game), {
         note: () => ['Offer accepted. They start soon.', 'ok'],
       }),
     LayoffChosen: ({ engineerId }) =>
-      act(model, 'Laid off', Work.layoff(model.game, engineerId), {
+      act(model, 'Laid off', Work.layoff(model.board.game, engineerId), {
         note: () => ['Laid off. The team is shaken for a week.', 'warn'],
       }),
-    TeamCreated: () => act(model, 'New team', Work.createTeam(model.game)),
-    TeamRemoved: ({ teamId }) => act(model, 'Removed a team', Work.removeTeam(model.game, teamId)),
+    TeamCreated: () => act(model, 'New team', Work.createTeam(model.board.game)),
+    TeamRemoved: ({ teamId }) =>
+      act(model, 'Removed a team', Work.removeTeam(model.board.game, teamId)),
     EngineerAssigned: ({ engineerId, teamId }) =>
-      act(model, 'Moved an engineer', Work.assign(model.game, engineerId, teamId)),
+      act(model, 'Moved an engineer', Work.assign(model.board.game, engineerId, teamId)),
     TeamDragChanged: ({ message }) =>
       Update.foldChild({
         update: DragAndDrop.update,
-        read: (parent: Model) => Option.some(parent.teamDrag),
-        write: (parent, teamDrag) => ({ ...parent, teamDrag }),
+        read: (parent: Model) => Option.some(parent.board.teamDrag),
+        write: (parent, teamDrag) => ({ ...parent, board: { ...parent.board, teamDrag } }),
         toParentMessage: (child) => Message.TeamDragChanged({ message: child }),
         foldOutMessage: (out) => (parent) =>
           out._tag === 'Reordered' && out.fromContainerId !== out.toContainerId
             ? act(
                 parent,
                 'Moved an engineer',
-                Work.assign(parent.game, out.itemId, out.toContainerId),
+                Work.assign(parent.board.game, out.itemId, out.toContainerId),
               )
             : { model: parent },
       })(model, message),
@@ -2695,23 +2876,24 @@ const handle = (model: Model, message: Message): Result =>
       act(
         model,
         `${POLICIES[policy].label} policy`,
-        Work.setTeamPolicy(model.game, teamId, policy),
+        Work.setTeamPolicy(model.board.game, teamId, policy),
       ),
     FeatureQueued: ({ id }) =>
-      act(model, `Queued ${FEATURES[id].name}`, Work.queueFeature(model.game, id)),
-    TaskQueued: ({ id }) => act(model, `Queued ${TASKS[id].name}`, Work.queueTask(model.game, id)),
+      act(model, `Queued ${FEATURES[id].name}`, Work.queueFeature(model.board.game, id)),
+    TaskQueued: ({ id }) =>
+      act(model, `Queued ${TASKS[id].name}`, Work.queueTask(model.board.game, id)),
     WorkMoved: ({ id, direction }) =>
-      act(model, 'Reordered the backlog', Work.moveItem(model.game, id, direction)),
-    WorkCancelled: ({ id }) => act(model, 'Cancelled work', Work.cancelItem(model.game, id)),
+      act(model, 'Reordered the backlog', Work.moveItem(model.board.game, id, direction)),
+    WorkCancelled: ({ id }) => act(model, 'Cancelled work', Work.cancelItem(model.board.game, id)),
     WorkPrioritized: ({ id }) =>
-      act(model, 'Moved work to the top', Work.prioritizeItem(model.game, id)),
-    WorkRushed: ({ id }) => act(model, 'Rushed work', Work.rushItem(model.game, id)),
+      act(model, 'Moved work to the top', Work.prioritizeItem(model.board.game, id)),
+    WorkRushed: ({ id }) => act(model, 'Rushed work', Work.rushItem(model.board.game, id)),
     AutopilotToggled: () => {
-      const game = Work.setAutopilot(model.game, !model.game.autopilot)
-      return { model: { ...model, game } }
+      const game = Work.setAutopilot(model.board.game, !model.board.game.autopilot)
+      return { model: { ...model, board: { ...model.board, game } } }
     },
     MigrationShifted: () =>
-      act(model, 'Shifted traffic', Work.shiftMigration(model.game), {
+      act(model, 'Shifted traffic', Work.shiftMigration(model.board.game), {
         note: (game) => {
           const migration = serviceOf(game).migration
           return migration
@@ -2720,23 +2902,23 @@ const handle = (model: Model, message: Message): Result =>
         },
       }),
     MigrationCancelled: () =>
-      act(model, 'Cancelled the migration', Work.cancelMigration(model.game), {
+      act(model, 'Cancelled the migration', Work.cancelMigration(model.board.game), {
         note: () => ['Migration cancelled. App Servers are back on the old Stack.', 'plain'],
       }),
     RolledBack: () =>
-      act(model, 'Rolled back', Work.rollback(model.game), {
+      act(model, 'Rolled back', Work.rollback(model.board.game), {
         note: () => ['Rolled back. The Features ship again with the next deploy.', 'ok'],
       }),
 
     RoundRaised: () => {
-      if (model.game.stage !== PRE_IPO_STAGE || !Actions.canRaise(model.game))
-        return act(model, 'Raised a round', Actions.raise(model.game), { patch: afterRound })
-      const ipo = listed(model, model.game)
+      if (model.board.game.stage !== PRE_IPO_STAGE || !Actions.canRaise(model.board.game))
+        return act(model, 'Raised a round', Actions.raise(model.board.game), { panel: afterRound })
+      const ipo = listed(model, model.board.game)
       const result = act({ ...model, founder: ipo.founder }, 'Listed', Actions.raise(ipo.game), {
-        patch: afterRound,
+        panel: afterRound,
         note: (game) => [`Listed. +${game.banked} Legacy.`, 'primary'],
       })
-      return result.model.game === model.game
+      return result.model.board.game === model.board.game
         ? withToast(model, 'The IPO did not go through.', 'warn')
         : {
             ...result,
@@ -2745,18 +2927,18 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     RoundDeclined: () =>
-      act(model, 'Declined a round', Actions.decline(model.game), { patch: afterRound }),
+      act(model, 'Declined a round', Actions.decline(model.board.game), { panel: afterRound }),
 
     PostmortemFiled: ({ id, take }) => {
-      const action = model.game.postmortems.find((entry) => entry.id === id)?.action
-      return act(model, 'Postmortem', Actions.filePostmortem(model.game, id, take), {
+      const action = model.board.game.postmortems.find((entry) => entry.id === id)?.action
+      return act(model, 'Postmortem', Actions.filePostmortem(model.board.game, id, take), {
         note: () =>
           take && action ? [`Study queued: ${RESEARCH[action].name}.`, 'primary'] : null,
       })
     },
 
     ExitTaken: ({ exit }) =>
-      Result.match(takeExit(model.game, solveFlow(model.game), exit), {
+      Result.match(takeExit(model.board.game, solveFlow(model.board.game), exit), {
         onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
         onSuccess: (result) => {
           const exited = recordExit(model.founder, result)
@@ -2771,12 +2953,15 @@ const handle = (model: Model, message: Message): Result =>
             ...earned,
             founder,
             panel: 'exited',
-            paused: true,
             saved: false,
-            selected: null,
-            selection: [],
-            tool: null,
-            exited: { row: result.row, researched: model.game.researched },
+            board: {
+              ...earned.board,
+              paused: true,
+              selected: null,
+              selection: [],
+              tool: null,
+              exited: { row: result.row, researched: model.board.game.researched },
+            },
           }
           return {
             model: next,
@@ -2786,7 +2971,7 @@ const handle = (model: Model, message: Message): Result =>
               ClearSave({}),
               AppendLog({
                 entries: [
-                  line(model.game.time, 'Exited', {
+                  line(model.board.game.time, 'Exited', {
                     exit: EXITS[exit].name,
                     payout: result.row.payout,
                     legacy: result.legacy,
@@ -2805,13 +2990,13 @@ const handle = (model: Model, message: Message): Result =>
 
     PlaybookSaved: () => {
       const playbook = capture(
-        model.game,
-        model.selection,
+        model.board.game,
+        model.board.selection,
         `Playbook ${model.founder.playbooks.length + 1}`,
       )
       if (!playbook) return withToast(model, 'Shift-click the Nodes to save first.', 'plain')
       const saved = changeFounder(
-        { ...model, selection: [] },
+        { ...model, board: { ...model.board, selection: [] } },
         savePlaybook(model.founder, playbook),
         `Saved ${playbook.name}: ${playbook.nodes.length} Nodes.`,
       )
@@ -2821,9 +3006,8 @@ const handle = (model: Model, message: Message): Result =>
       if (!model.founder.playbooks[index]) return { model }
       const next: Model = {
         ...model,
-        tool: { _tag: 'Stamping', source: index },
         panel: 'none',
-        selected: null,
+        board: { ...model.board, tool: { _tag: 'Stamping', source: index }, selected: null },
       }
       return { model: next }
     },
@@ -2855,20 +3039,29 @@ const handle = (model: Model, message: Message): Result =>
       const opened: Model = {
         ...model,
         panel,
-        teamDrag: DragAndDrop.init({ id: 'team-drag' }),
-        tool: null,
-        researchFocus: null,
-        dashboard: { ...model.dashboard, hover: null },
+        board: {
+          ...model.board,
+          teamDrag: DragAndDrop.init({ id: 'team-drag' }),
+          tool: null,
+          researchFocus: null,
+          dashboard: { ...model.board.dashboard, hover: null },
+        },
       }
       const next =
         panel === 'inbox'
-          ? { ...opened, inbox: reading({ ...opened.inbox, folder: 'action' }) }
+          ? {
+              ...opened,
+              board: {
+                ...opened.board,
+                inbox: reading({ ...opened.board.inbox, folder: 'action' }),
+              },
+            }
           : opened
       return { model: next }
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () => {
-      if (model.exited) return leaveExited(model, 'found')
+      if (model.board.exited) return leaveExited(model, 'found')
       const next = closePanel(model)
       return { model: next }
     },
@@ -2881,11 +3074,13 @@ const handle = (model: Model, message: Message): Result =>
     BlurPauseToggled: () => settled(model, { blurPause: !model.prefs.blurPause }),
     WindowBlurred: () => {
       if (!model.prefs.blurPause || halted(model) || !onBoard(model.route)) return { model }
-      const next: Model = { ...model, paused: true }
+      const next: Model = { ...model, board: { ...model.board, paused: true } }
       return withToast(next, 'Paused while you were away. Space resumes.', 'plain')
     },
     AgentAccessToggled: () => settled(model, { agentAccess: !model.prefs.agentAccess }),
-    InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
+    InsightHelpToggled: () => ({
+      model: { ...model, board: { ...model.board, insightHelp: !model.board.insightHelp } },
+    }),
     MotionToggled: () =>
       settled(model, { motion: model.prefs.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
@@ -2895,7 +3090,6 @@ const handle = (model: Model, message: Message): Result =>
       const next: Model = {
         ...model,
         panel: 'glossary',
-        tool: null,
         glossary: {
           focus: id,
           returnTo:
@@ -2904,71 +3098,122 @@ const handle = (model: Model, message: Message): Result =>
           category: browsing ? model.glossary.category : null,
         },
         founder,
+        board: { ...model.board, tool: null },
       }
       return {
         model: next,
         commands: founder === model.founder ? [] : [WriteFounder({ founder })],
       }
     },
-    MailOpened: ({ id }) => ({ model: { ...model, inbox: reading(model.inbox, id) } }),
+    MailOpened: ({ id }) => ({
+      model: { ...model, board: { ...model.board, inbox: reading(model.board.inbox, id) } },
+    }),
     MailPeekOpened: ({ id }) => {
-      const mail = model.inbox.mail.find((entry) => entry.id === id)
+      const mail = model.board.inbox.mail.find((entry) => entry.id === id)
       const folder = mail?.spam ? 'spam' : mail && needsAction(mail) ? 'action' : 'fyi'
       return {
         model: {
           ...model,
           panel: 'inbox',
-          tool: null,
-          inbox: reading({ ...model.inbox, folder }, id),
+          board: {
+            ...model.board,
+            tool: null,
+            inbox: reading({ ...model.board.inbox, folder }, id),
+          },
         },
       }
     },
-    MailPeekDismissed: () => ({ model: { ...model, inbox: { ...model.inbox, peek: null } } }),
+    MailPeekDismissed: () => ({
+      model: { ...model, board: { ...model.board, inbox: { ...model.board.inbox, peek: null } } },
+    }),
     MailTrashed: ({ id }) => ({
-      model: { ...model, inbox: reading(withMail(model.inbox, id, { trashed: true })) },
+      model: {
+        ...model,
+        board: {
+          ...model.board,
+          inbox: reading(withMail(model.board.inbox, id, { trashed: true })),
+        },
+      },
     }),
     MailRestored: ({ id }) => ({
-      model: { ...model, inbox: reading(withMail(model.inbox, id, { trashed: false })) },
+      model: {
+        ...model,
+        board: {
+          ...model.board,
+          inbox: reading(withMail(model.board.inbox, id, { trashed: false })),
+        },
+      },
     }),
     MailMarkedSpam: ({ id }) => {
-      const mail = model.inbox.mail.find((entry) => entry.id === id)
+      const mail = model.board.inbox.mail.find((entry) => entry.id === id)
       return {
-        model: { ...model, inbox: reading(withMail(model.inbox, id, { spam: !mail?.spam })) },
+        model: {
+          ...model,
+          board: {
+            ...model.board,
+            inbox: reading(withMail(model.board.inbox, id, { spam: !mail?.spam })),
+          },
+        },
       }
     },
-    MailSampleChosen: ({ id }) => ({ model: { ...model, inbox: { ...model.inbox, sample: id } } }),
+    MailSampleChosen: ({ id }) => ({
+      model: { ...model, board: { ...model.board, inbox: { ...model.board.inbox, sample: id } } },
+    }),
     MailGenerated: ({ count }) => {
       // Send uses the chosen sample; a burst of 10 or 50 draws a random sample for each Mail.
-      const chosen = SAMPLES.find((entry) => entry.id === model.inbox.sample) ?? SAMPLES[0]
+      const chosen = SAMPLES.find((entry) => entry.id === model.board.inbox.sample) ?? SAMPLES[0]
       if (!chosen) return { model }
       let next = model
       for (let sent = 0; sent < count; sent += 1) {
-        const n = Math.max(0, ...next.inbox.mail.map((mail) => mail.id)) + 1
-        const sample = count === 1 ? chosen : randomSample(next.game, n)
-        next = mailedTo(next, sample.make(next.game, n), next.game.time)
+        const n = Math.max(0, ...next.board.inbox.mail.map((mail) => mail.id)) + 1
+        const sample = count === 1 ? chosen : randomSample(next.board.game, n)
+        next = mailedTo(next, sample.make(next.board.game, n), next.board.game.time)
       }
-      return { model: { ...next, inbox: reading(next.inbox, null) } }
+      return {
+        model: { ...next, board: { ...next.board, inbox: reading(next.board.inbox, null) } },
+      }
     },
     MailResolved: () => ({
-      model: { ...model, inbox: resolvedExcept(model.inbox, '', model.game.time) },
+      model: {
+        ...model,
+        board: {
+          ...model.board,
+          inbox: resolvedExcept(model.board.inbox, '', model.board.game.time),
+        },
+      },
     }),
     MailCleared: () => ({
-      model: { ...model, inbox: { ...model.inbox, mail: [], focus: null, peek: null } },
+      model: {
+        ...model,
+        board: {
+          ...model.board,
+          inbox: { ...model.board.inbox, mail: [], focus: null, peek: null },
+        },
+      },
     }),
     FolderChosen: ({ folder }) => ({
-      model: { ...model, inbox: reading({ ...model.inbox, folder }) },
+      model: {
+        ...model,
+        board: { ...model.board, inbox: reading({ ...model.board.inbox, folder }) },
+      },
     }),
     MailActed: ({ id, action }) => {
-      const mail = model.inbox.mail.find((entry) => entry.id === id)
+      const mail = model.board.inbox.mail.find((entry) => entry.id === id)
       if (!mail) return { model }
       model = {
         ...model,
-        inbox: { ...model.inbox, peek: model.inbox.peek === id ? null : model.inbox.peek },
+        board: {
+          ...model.board,
+          inbox: {
+            ...model.board.inbox,
+            peek: model.board.inbox.peek === id ? null : model.board.inbox.peek,
+          },
+        },
       }
       const [kind, target] = action.split(':')
       const answered = (answer: string): Model => ({
         ...model,
-        inbox: withMail(model.inbox, id, { answer }),
+        board: { ...model.board, inbox: withMail(model.board.inbox, id, { answer }) },
       })
       switch (kind) {
         case 'raise':
@@ -2994,7 +3239,7 @@ const handle = (model: Model, message: Message): Result =>
             Message.WorkRushed({ id: Number(target) }),
           )
         case 'show':
-          return { model: { ...model, selected: target ?? null } }
+          return { model: { ...model, board: { ...model.board, selected: target ?? null } } }
         case 'trap':
           return withToast(
             answered('You clicked it. It was a trap: the address was not the real sender.'),
@@ -3009,10 +3254,19 @@ const handle = (model: Model, message: Message): Result =>
       model: { ...model, glossary: { ...model.glossary, query } },
     }),
     DashboardRangeChosen: ({ minutes }) => ({
-      model: { ...model, dashboard: { ...model.dashboard, range: minutes, hover: null } },
+      model: {
+        ...model,
+        board: {
+          ...model.board,
+          dashboard: { ...model.board.dashboard, range: minutes, hover: null },
+        },
+      },
     }),
     DashboardHovered: ({ index }) => ({
-      model: { ...model, dashboard: { ...model.dashboard, hover: index } },
+      model: {
+        ...model,
+        board: { ...model.board, dashboard: { ...model.board.dashboard, hover: index } },
+      },
     }),
     GlossaryFiltered: ({ category }) => ({
       model: { ...model, glossary: { ...model.glossary, category } },
@@ -3021,21 +3275,27 @@ const handle = (model: Model, message: Message): Result =>
     CheatCash: () => {
       const next: Model = {
         ...model,
-        game: { ...model.game, cash: model.game.cash + cheatCash(model.game) },
+        board: {
+          ...model.board,
+          game: { ...model.board.game, cash: model.board.game.cash + cheatCash(model.board.game) },
+        },
       }
       return { model: next }
     },
     CheatInsight: () => ({
       model: {
         ...model,
-        game: {
-          ...model.game,
-          pools: Object.fromEntries(
-            Object.entries(model.game.pools).map(([pool, held]) => [
-              pool,
-              held + cheatInsight(model.game),
-            ]),
-          ) as Game['pools'],
+        board: {
+          ...model.board,
+          game: {
+            ...model.board.game,
+            pools: Object.fromEntries(
+              Object.entries(model.board.game.pools).map(([pool, held]) => [
+                pool,
+                held + cheatInsight(model.board.game),
+              ]),
+            ) as Game['pools'],
+          },
         },
       },
     }),
@@ -3044,9 +3304,13 @@ const handle = (model: Model, message: Message): Result =>
       return withToast({ ...model, founder }, '+20 Legacy.', 'plain', [WriteFounder({ founder })])
     },
     CheatRound: () => {
-      const next = nextEra(model.game)
-      if (!next || isFinalEra(model.game)) return withToast(model, 'No round to skip to.', 'plain')
-      const ready = { ...model.game, users: Math.max(model.game.users, eraOf(model.game).raiseAt) }
+      const next = nextEra(model.board.game)
+      if (!next || isFinalEra(model.board.game))
+        return withToast(model, 'No round to skip to.', 'plain')
+      const ready = {
+        ...model.board.game,
+        users: Math.max(model.board.game.users, eraOf(model.board.game).raiseAt),
+      }
       // A playtest skips the IPO checklist.
       if (ready.stage === PRE_IPO_STAGE) {
         const ledger = solveFlow(ready)
@@ -3060,27 +3324,36 @@ const handle = (model: Model, message: Message): Result =>
         }
         const next: Model = {
           ...model,
-          ...afterRound(model, listedGame),
-          game: listedGame,
+          panel: afterRound(listedGame),
+          board: { ...model.board, game: listedGame },
           founder: ipo.founder,
         }
         return { model: next, commands: [WriteFounder({ founder: ipo.founder })] }
       }
-      return act({ ...model, game: ready }, `Skipped to ${next.name}`, Actions.raise(ready), {
-        patch: afterRound,
-      })
+      return act(
+        { ...model, board: { ...model.board, game: ready } },
+        `Skipped to ${next.name}`,
+        Actions.raise(ready),
+        {
+          panel: afterRound,
+        },
+      )
     },
     IncidentForced: ({ kind }) => {
-      if (model.game.incident)
+      if (model.board.game.incident)
         return withToast(
           model,
-          `${INCIDENTS[model.game.incident.kind].name} is still running.`,
+          `${INCIDENTS[model.board.game.incident.kind].name} is still running.`,
           'warn',
         )
-      const game = forceIncident(model.game, solveFlow(model.game), kind)
+      const game = forceIncident(model.board.game, solveFlow(model.board.game), kind)
       if (!game)
         return withToast(model, `${INCIDENTS[kind].name} has no target in this Design.`, 'warn')
-      const next: Model = { ...model, game, panel: 'none', bottleneckAt: -1 }
+      const next: Model = {
+        ...model,
+        panel: 'none',
+        board: { ...model.board, game, bottleneckAt: -1 },
+      }
       return { model: next }
     },
     LogExported: () => ({ model, commands: [ExportLog({})] }),
@@ -3122,7 +3395,8 @@ const QUIET = new Set([
 
 /** A team drag sends a Message per pointer move; only the drop that moves someone is a gesture. */
 const quiet = (model: Model, message: Message, after: Model): boolean =>
-  QUIET.has(message._tag) || (message._tag === 'TeamDragChanged' && after.game === model.game)
+  QUIET.has(message._tag) ||
+  (message._tag === 'TeamDragChanged' && after.board.game === model.board.game)
 
 const fieldsOf = (message: Message): Record<string, unknown> =>
   Object.fromEntries(Object.entries(message).filter(([key]) => key !== '_tag'))
@@ -3131,17 +3405,17 @@ const fieldsOf = (message: Message): Record<string, unknown> =>
 const logged = (model: Model, message: Message, result: Result): Result => {
   const logs: Array<LogEntry> = []
   const after = result.model
-  const time = after.game.time
+  const time = after.board.game.time
   const raised = after.toast && after.toast.id !== model.toast?.id ? after.toast : null
   if (!quiet(model, message, after)) {
     const ledger: Ledger = ledgerOf(model)
     const refused =
-      raised?.tone === 'warn' && after.game === model.game ? raised.message : undefined
+      raised?.tone === 'warn' && after.board.game === model.board.game ? raised.message : undefined
     logs.push(
       line(time, message._tag, {
         ...fieldsOf(message),
         ...(refused ? { refused } : {}),
-        diff: diffOf(model.game, after.game),
+        diff: diffOf(model.board.game, after.board.game),
         ...(after.panel !== model.panel ? { panel: after.panel } : {}),
         context: contextOf(model, ledger),
       }),
@@ -3165,16 +3439,16 @@ const ROUNDS = new Set(['RoundRaised', 'RoundDeclined', 'CheatRound'])
 
 /** Whether the board draws anything differently after a Message, or has just come on screen. */
 const boardChanged = (before: Model, after: Model): boolean =>
-  before.game !== after.game ||
+  before.board.game !== after.board.game ||
   before.prefs.locale !== after.prefs.locale ||
-  before.region !== after.region ||
-  before.bottleneck !== after.bottleneck ||
-  before.selected !== after.selected ||
-  before.selection !== after.selection ||
-  before.tool !== after.tool ||
-  before.clipboard !== after.clipboard ||
+  before.board.region !== after.board.region ||
+  before.board.bottleneck !== after.board.bottleneck ||
+  before.board.selected !== after.board.selected ||
+  before.board.selection !== after.board.selection ||
+  before.board.tool !== after.board.tool ||
+  before.board.clipboard !== after.board.clipboard ||
   before.founder.playbooks !== after.founder.playbooks ||
-  before.nodeHistory !== after.nodeHistory ||
+  before.board.nodeHistory !== after.board.nodeHistory ||
   halted(before) !== halted(after) ||
   cueNode(before) !== cueNode(after) ||
   (onBoard(after.route) && !onBoard(before.route))
@@ -3196,7 +3470,7 @@ const withBoard = (model: Model, result: Result): Result => {
 
 export const update = (model: Model, message: Message): Result => {
   const result = withUrl(model, message, route(model, message))
-  const moved = ROUNDS.has(message._tag) && result.model.game.stage !== model.game.stage
+  const moved = ROUNDS.has(message._tag) && result.model.board.game.stage !== model.board.game.stage
   return logged(
     model,
     message,
@@ -3204,4 +3478,4 @@ export const update = (model: Model, message: Message): Result => {
   )
 }
 
-export const percentilesVisible = (model: Model): boolean => has(model.game, 'percentiles')
+export const percentilesVisible = (model: Model): boolean => has(model.board.game, 'percentiles')

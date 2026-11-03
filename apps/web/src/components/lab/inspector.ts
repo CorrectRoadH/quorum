@@ -1518,11 +1518,11 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
 /* ---------- the panel ---------- */
 
 export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
-  const node = game.nodes.find((entry) => entry.id === model.selected)
+  const game = model.board.game
+  const node = game.nodes.find((entry) => entry.id === model.board.selected)
   if (!node) return h.empty
   const def = COMPONENTS[node.type]
-  const history = model.nodeHistory[node.id] ?? []
+  const history = model.board.nodeHistory[node.id] ?? []
   const price = resizePrice(game, node)
   const sizeLabel = def.sized || def.steps > 1 ? sizeLabelOf(node) : null
 

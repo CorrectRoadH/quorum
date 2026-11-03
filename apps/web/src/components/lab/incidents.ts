@@ -35,7 +35,7 @@ import { EYEBROW, FIGURE, PANEL, WELL, insightChip } from './bits.ts'
 /** Symptom-based pages, like real alerting: they name what users feel, not the cause. A rule
  * that cried wolf too often today is ignored until the player changes its threshold. */
 export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   if (!has(game, 'alerting')) return h.empty
   const rules = Object.keys(ALERT_RULES) as Array<AlertRule>
   const firing = rules.filter(
@@ -112,7 +112,7 @@ export const pager = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 /** A bad deploy on screen: App Servers crash until it is rolled back or runs its course. */
 export const badDeploy = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   if (game.incident?.kind !== 'bad-deploy') return h.empty
   const ready = has(game, 'ci')
   return h.div(
@@ -148,7 +148,7 @@ const BANNERS = {
 } as const
 
 export const expiredCertificate = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const kind = model.game.incident?.kind
+  const kind = model.board.game.incident?.kind
   if (kind !== 'certificate' && kind !== 'bgp' && kind !== 'partition') return h.empty
   const banner = BANNERS[kind]
   return h.div(
@@ -295,5 +295,5 @@ export const postmortems = (model: Model, h: HtmlBuilder<Message>): Html =>
         'absolute bottom-3 left-3 z-20 flex flex-col gap-2 compact:static compact:w-auto compact:pointer-events-auto short:[&>details:not(:last-child)]:hidden',
       ),
     ],
-    model.game.postmortems.slice(-3).map((entry) => card(model.game, entry, h)),
+    model.board.game.postmortems.slice(-3).map((entry) => card(model.board.game, entry, h)),
   )

@@ -33,7 +33,7 @@ const footer = (children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
   h.div([h.Class('flex justify-end gap-2 border-t border-hairline bg-nested px-5 py-3')], children)
 
 export const exitPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.game
+  const game = model.board.game
   const ledger = ledgerOf(model)
   const value = valuationOf(game, ledger)
   const offers = exitOffers(game, ledger)
@@ -143,7 +143,7 @@ export const snapshotSvg = (
 }
 
 export const exitedPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const exited = model.exited
+  const exited = model.board.exited
   if (!exited) return h.empty
   const row = exited.row
   const slots = keepSlots(model.founder)
@@ -218,7 +218,7 @@ export const exitedPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 /** The return from time away (15 "Offline return"). */
 export const awayPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const away = model.away
+  const away = model.board.away
   if (!away) return h.empty
   const hours = away.away / 3_600
   const capped = away.seconds < away.away
@@ -264,7 +264,7 @@ export const awayPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
 export const selectionBar = (model: Model, h: HtmlBuilder<Message>): Html =>
   offCompany(model)
     ? h.empty
-    : model.selection.length === 0
+    : model.board.selection.length === 0
       ? h.empty
       : h.div(
           [
@@ -274,7 +274,7 @@ export const selectionBar = (model: Model, h: HtmlBuilder<Message>): Html =>
             ),
           ],
           [
-            h.span([h.Class(FIGURE)], [`${model.selection.length} selected`]),
+            h.span([h.Class(FIGURE)], [`${model.board.selection.length} selected`]),
             ...(
               [
                 [Message.NodesCopied(), Copy, 'Copy (Ctrl+C)'],
@@ -300,11 +300,11 @@ export const selectionBar = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 /** Asks before Nodes are sold: the sale waits for Enter or the button. */
 export const sellBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const ids = model.confirmSell
+  const ids = model.board.confirmSell
   if (!ids) return h.empty
-  const refund = model.game.nodes
+  const refund = model.board.game.nodes
     .filter((node) => ids.includes(node.id))
-    .reduce((total, node) => total + refundOf(model.game, node), 0)
+    .reduce((total, node) => total + refundOf(model.board.game, node), 0)
   return h.div(
     [
       h.Key('sell'),

@@ -79,37 +79,37 @@ const nodeBrief = (node: GameNode, ledger: Ledger) => {
 
 /** A short context attached to every gesture. */
 export const contextOf = (model: Model, ledger: Ledger): Record<string, unknown> => ({
-  users: Math.round(model.game.users),
-  cash: round(model.game.cash),
-  insight: round(insightTotal(model.game.pools), 1),
-  stage: model.game.stage,
+  users: Math.round(model.board.game.users),
+  cash: round(model.board.game.cash),
+  insight: round(insightTotal(model.board.game.pools), 1),
+  stage: model.board.game.stage,
   revenue: round(ledger.revenue),
   apdex: round(ledger.apdex, 3),
   errors: round(ledger.errorShare, 4),
   bottleneck: ledger.bottleneck,
   panel: model.panel,
-  speed: model.speed,
-  selected: model.game.nodes.find((node) => node.id === model.selected)?.type ?? null,
+  speed: model.board.speed,
+  selected: model.board.game.nodes.find((node) => node.id === model.board.selected)?.type ?? null,
 })
 
 /** A full sample of the company, every 10 sim seconds. */
 export const sampleOf = (model: Model, ledger: Ledger): Record<string, unknown> => {
-  const clock = clockOf(model.game.time)
-  const bottleneck = model.game.nodes.find((node) => node.id === ledger.bottleneck)
+  const clock = clockOf(model.board.game.time)
+  const bottleneck = model.board.game.nodes.find((node) => node.id === ledger.bottleneck)
   return {
     clock: `${clock.day} ${String(clock.hour).padStart(2, '0')}:${String(clock.minute).padStart(2, '0')}`,
-    stage: model.game.stage,
-    users: Math.round(model.game.users),
+    stage: model.board.game.stage,
+    users: Math.round(model.board.game.users),
     market: Math.round(ledger.market),
-    cash: round(model.game.cash),
-    pending: round(model.game.pending),
-    spilled: round(model.game.spilled),
+    cash: round(model.board.game.cash),
+    pending: round(model.board.game.pending),
+    spilled: round(model.board.game.spilled),
     revenue: round(ledger.revenue),
     burn: round(ledger.burn),
     demand: round(ledger.demand),
     served: round(ledger.served),
     apdex: round(ledger.apdex, 3),
-    apdexHour: round(model.game.apdex, 3),
+    apdexHour: round(model.board.game.apdex, 3),
     errors: round(ledger.errorShare, 4),
     errorCauses: Object.fromEntries(
       Object.entries(ledger.errors).map(([cause, rate]) => [cause, round(rate)]),
@@ -118,18 +118,18 @@ export const sampleOf = (model: Model, ledger: Ledger): Record<string, unknown> 
     p50: round(ledger.p50, 1),
     p95: round(ledger.p95, 1),
     p99: round(ledger.p99, 1),
-    insight: round(insightTotal(model.game.pools), 1),
+    insight: round(insightTotal(model.board.game.pools), 1),
     insightRate: round(insightTotal(ledger.insight), 2),
     bottleneck: bottleneck
       ? { id: bottleneck.id, type: bottleneck.type, limit: ledger.nodes[bottleneck.id]?.limit }
       : null,
-    incident: model.game.incident?.kind ?? null,
-    nodes: model.game.nodes
+    incident: model.board.game.incident?.kind ?? null,
+    nodes: model.board.game.nodes
       .filter((node) => !COMPONENTS[node.type].fixed)
       .map((node) => nodeBrief(node, ledger)),
-    speed: model.speed,
-    paused: model.paused,
+    speed: model.board.speed,
+    paused: model.board.paused,
     panel: model.panel,
-    settling: model.change !== null,
+    settling: model.board.change !== null,
   }
 }

@@ -12,7 +12,7 @@ import {
 } from '@quorum/simulation/lookups'
 import type { Game } from '@quorum/simulation/state'
 import type { Message } from './message.ts'
-import { Reveal, offCompany, type Model } from './model.ts'
+import { Reveal, offCompany, type Board, type Model } from './model.ts'
 
 /* ==========================================================================
    Progressive disclosure (GDD 15): a first Company shows each element the
@@ -30,10 +30,10 @@ export const veteran = (model: Model): boolean =>
   offCompany(model) || model.founder.history.length > 0
 
 export const shown = (model: Model, key: Reveal): boolean =>
-  veteran(model) || model.revealed.includes(key)
+  veteran(model) || model.board.revealed.includes(key)
 
 export const glowing = (model: Model, key: Reveal): boolean =>
-  model.cue?.key === key && model.cue.left > 0
+  model.board.cue?.key === key && model.board.cue.left > 0
 
 /** Playbooks are a Legacy feature: they appear after the first Exit. */
 export const playbooksShown = (model: Model): boolean =>
@@ -55,10 +55,10 @@ const resizable = (game: Game, bottleneck: string | null): string | null => {
 }
 
 const triggered = (key: Reveal, model: Model, ledger: Ledger): boolean => {
-  const game = model.game
+  const game = model.board.game
   switch (key) {
     case 'undo':
-      return model.undo.length > 0
+      return model.board.undo.length > 0
     case 'collect':
       return !has(game, 'stripe') && game.pending >= drawerSize(game, ledger.revenue) / 2
     case 'resize':
@@ -77,7 +77,7 @@ const triggered = (key: Reveal, model: Model, ledger: Ledger): boolean => {
     case 'autopilot':
       return game.backlog.length >= 2
     case 'glossary':
-      return model.tradeoff !== null
+      return model.board.tradeoff !== null
   }
 }
 
@@ -87,29 +87,39 @@ const CUES: ReadonlyArray<Reveal> = ['collect', 'resize']
 /** A new Company shows what its state already calls for at once, with no cue. */
 export const revealAtStart = (model: Model, ledger: Ledger): Model => ({
   ...model,
-  revealed: ALL.filter((key) => !CUES.includes(key) && triggered(key, model, ledger)),
-  pending: [],
-  cue: null,
+  board: {
+    ...model.board,
+    revealed: ALL.filter((key) => !CUES.includes(key) && triggered(key, model, ledger)),
+    pending: [],
+    cue: null,
+  },
 })
 
 /** One UI tick: queues the triggers that fired, and shows the next one once the cue is free. */
 export const advanceReveals = (model: Model, ledger: Ledger): Model => {
   if (veteran(model)) return model
-  const cue = model.cue && model.cue.left > 0 ? { ...model.cue, left: model.cue.left - 1 } : null
+  const cue =
+    model.board.cue && model.board.cue.left > 0
+      ? { ...model.board.cue, left: model.board.cue.left - 1 }
+      : null
   const fired = ALL.filter(
     (key) =>
-      !model.revealed.includes(key) &&
-      !model.pending.includes(key) &&
+      !model.board.revealed.includes(key) &&
+      !model.board.pending.includes(key) &&
       triggered(key, model, ledger),
   )
-  const pending = [...model.pending, ...fired]
+  const pending = [...model.board.pending, ...fired]
   const [next, ...rest] = pending
-  if (next === undefined || cue !== null) return { ...model, pending, cue }
+  if (next === undefined || cue !== null)
+    return { ...model, board: { ...model.board, pending, cue } }
   return {
     ...model,
-    revealed: [...model.revealed, next],
-    pending: rest,
-    cue: { key: next, left: CUE_TICKS },
+    board: {
+      ...model.board,
+      revealed: [...model.board.revealed, next],
+      pending: rest,
+      cue: { key: next, left: CUE_TICKS },
+    },
   }
 }
 
@@ -133,23 +143,28 @@ export const noticed = (model: Model, message: Message): Model => {
   if (key === null || veteran(model)) return model
   return {
     ...model,
-    revealed: model.revealed.includes(key) ? model.revealed : [...model.revealed, key],
-    pending: model.pending.filter((entry) => entry !== key),
-    cue: model.cue?.key === key ? null : model.cue,
+    board: {
+      ...model.board,
+      revealed: model.board.revealed.includes(key)
+        ? model.board.revealed
+        : [...model.board.revealed, key],
+      pending: model.board.pending.filter((entry) => entry !== key),
+      cue: model.board.cue?.key === key ? null : model.board.cue,
+    },
   }
 }
 
 /** The Node whose footer button glows on the board. */
 export const cueNode = (model: Model): string | null => {
-  if (!model.cue || !glowing(model, model.cue.key)) return null
-  if (model.cue.key === 'collect')
-    return model.game.nodes.find((node) => node.type === 'payments')?.id ?? null
-  if (model.cue.key === 'resize') return resizable(model.game, model.bottleneck)
+  if (!model.board.cue || !glowing(model, model.board.cue.key)) return null
+  if (model.board.cue.key === 'collect')
+    return model.board.game.nodes.find((node) => node.type === 'payments')?.id ?? null
+  if (model.board.cue.key === 'resize') return resizable(model.board.game, model.board.bottleneck)
   return null
 }
 
 /** What a save says about disclosure. A save from before it shows everything. */
-export const revealsOfSave = (saved: unknown): Pick<Model, 'revealed' | 'pending'> => {
+export const revealsOfSave = (saved: unknown): Pick<Board, 'revealed' | 'pending'> => {
   const disclosure =
     typeof saved === 'object' && saved !== null && 'disclosure' in saved ? saved.disclosure : null
   if (typeof disclosure !== 'object' || disclosure === null) return { revealed: ALL, pending: [] }

@@ -83,10 +83,10 @@ const figureRow = (
 
 const figures = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
   const errors = ledger.errorShare * 100
-  const percentiles = has(model.game, 'percentiles')
+  const percentiles = has(model.board.game, 'percentiles')
   // A guided objective sets the Apdex and Burn it asks for, and may be measured on another figure.
-  const objective = model.sandbox?.id
-    ? GUIDED[model.sandbox.id].objectives[model.sandbox.progress.objective]
+  const objective = model.board.sandbox?.id
+    ? GUIDED[model.board.sandbox.id].objectives[model.board.sandbox.progress.objective]
     : undefined
   const apdex = objective?.apdex ?? 0.85
   const watch = objective?.watch
@@ -196,7 +196,7 @@ const steps = (run: SandboxRun, id: SandboxId, h: HtmlBuilder<Message>): Html =>
 
 /** The current objective, in the goal slot, with how long it has held. */
 export const objectiveBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const run = model.sandbox
+  const run = model.board.sandbox
   if (!run?.id) return h.empty
   const objective = GUIDED[run.id].objectives[run.progress.objective]
   if (!objective) return h.empty
@@ -285,7 +285,7 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
           h.span(
             [h.Class(cn(FIGURE, 'w-14 text-center text-[13px]'))],
-            [model.game.users.toLocaleString('en-US')],
+            [model.board.game.users.toLocaleString('en-US')],
           ),
           button(
             {
@@ -304,7 +304,7 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.span([h.Class(cn(EYEBROW, 'mr-auto'))], ['Mix']),
           ...ERAS.slice(0, 3).map((era, stage) =>
-            tiny(era.name, Message.MixChosen({ stage }), h, model.game.stage === stage),
+            tiny(era.name, Message.MixChosen({ stage }), h, model.board.game.stage === stage),
           ),
         ],
       ),
@@ -313,8 +313,8 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
           id: 'sandbox-incident',
           label: 'Incident',
           size: 'sm',
-          value: model.game.incident?.kind ?? '',
-          isDisabled: model.game.incident !== null,
+          value: model.board.game.incident?.kind ?? '',
+          isDisabled: model.board.game.incident !== null,
           onChange: (kind) =>
             Schema.is(IncidentId)(kind) ? Message.IncidentForced({ kind }) : Message.Synced(),
           wrapperClass: 'flex-row items-center gap-1.5 [&>div]:flex-1',
@@ -390,7 +390,7 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
 /* ---------- the HUD ---------- */
 
 export const sandboxHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const run = model.sandbox
+  const run = model.board.sandbox
   if (!run) return h.empty
   return h.header(
     [
@@ -411,7 +411,7 @@ export const sandboxHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>
 /* ---------- passed ---------- */
 
 export const passedPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const id = model.sandbox?.id
+  const id = model.board.sandbox?.id
   if (!id) return h.empty
   const next = nextGuided(id)
   return shell(
