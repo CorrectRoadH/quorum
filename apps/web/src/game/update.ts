@@ -257,6 +257,8 @@ export const initialModel = (): Model =>
     muted: false,
     motion: 'system',
     glossaryFocus: null,
+    glossaryReturn: 'none',
+    insightHelp: false,
     glossaryQuery: '',
     glossaryCategory: null,
     inbox: [],
@@ -1704,6 +1706,7 @@ const handle = (model: Model, message: Message): Result =>
         case 'Escape': {
           if (model.exited) return leaveExited(model, 'found')
           if (model.tradeoff) return { model: { ...model, tradeoff: null } }
+          if (model.insightHelp) return { model: { ...model, insightHelp: false } }
           if (model.stamping !== null || model.selection.length > 0) {
             const cleared: Model = { ...model, stamping: null, selection: [] }
             return { model: cleared, commands: [sync(cleared)] }
@@ -1714,7 +1717,11 @@ const handle = (model: Model, message: Message): Result =>
               : model.buildGroup !== null
                 ? { ...model, buildGroup: null }
                 : model.panel !== 'none'
-                  ? { ...model, panel: 'none' }
+                  ? {
+                      ...model,
+                      panel: model.panel === 'glossary' ? model.glossaryReturn : 'none',
+                      glossaryReturn: 'none',
+                    }
                   : { ...model, selected: null }
           return { model: next, commands: [sync(next)] }
         }
@@ -2340,8 +2347,8 @@ const handle = (model: Model, message: Message): Result =>
     ResearchFocused: ({ id }) => ({ model: { ...model, researchFocus: id } }),
 
     ResearchBought: ({ id }) =>
-      act(model, `Researched ${RESEARCH[id].name}`, Actions.study(model.game, id), {
-        note: () => [`Researched ${RESEARCH[id].name}.`, 'primary'],
+      act(model, `Study ${RESEARCH[id].name}`, Actions.study(model.game, id), {
+        note: () => [`Study queued: ${RESEARCH[id].name}.`, 'primary'],
       }),
 
     HireChosen: () =>
@@ -2544,9 +2551,18 @@ const handle = (model: Model, message: Message): Result =>
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () =>
-      model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
+      model.exited
+        ? leaveExited(model, 'found')
+        : {
+            model: {
+              ...model,
+              panel: model.panel === 'glossary' ? model.glossaryReturn : 'none',
+              glossaryReturn: 'none',
+            },
+          },
 
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
+    InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
@@ -2558,6 +2574,8 @@ const handle = (model: Model, message: Message): Result =>
         panel: 'glossary',
         placing: null,
         glossaryFocus: id,
+        glossaryReturn:
+          model.panel === 'research' ? 'research' : browsing ? model.glossaryReturn : 'none',
         glossaryQuery: browsing ? model.glossaryQuery : '',
         glossaryCategory: browsing ? model.glossaryCategory : null,
         founder,

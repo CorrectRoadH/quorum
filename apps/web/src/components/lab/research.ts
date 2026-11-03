@@ -59,10 +59,12 @@ import {
   Recycle,
   Repeat,
   ShieldMinus,
+  CircleHelp,
 } from 'lucide'
 import { siStripe } from 'simple-icons'
 import {
   COMPONENTS,
+  GLOSSARY,
   RESEARCH,
   RESEARCH_TRACKS,
   researchList,
@@ -72,6 +74,7 @@ import {
   type ResearchId,
   type ResearchTrack,
 } from '@quorum/simulation/catalog'
+import { BY_RESEARCH } from '@quorum/simulation/discovery'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { has, researchReady } from '@quorum/simulation/lookups'
 import type { Game } from '@quorum/simulation/state'
@@ -744,6 +747,32 @@ const linkRow = (game: Game, entry: ResearchDef, h: HtmlBuilder<Message>): Html 
     ],
   )
 
+/** One (?) link per glossary term behind the item; each opens its Glossary entry. */
+const terms = (entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
+  const entries = (BY_RESEARCH[entry.id] ?? []).flatMap((id) =>
+    GLOSSARY.filter((term) => term.id === id),
+  )
+  return entries.length > 0
+    ? h.div(
+        [h.Class('flex flex-wrap gap-1.5')],
+        entries.map((term) =>
+          h.button(
+            [
+              h.Key(term.id),
+              h.Type('button'),
+              h.Title(`Glossary: ${term.term}`),
+              h.OnClick(Message.GlossaryOpened({ id: term.id })),
+              h.Class(
+                'flex items-center gap-1 rounded-md bg-nested px-1.5 py-0.5 text-[11.5px] text-muted-foreground hover:text-foreground',
+              ),
+            ],
+            [icon(h, CircleHelp, 'size-3 shrink-0'), term.term],
+          ),
+        ),
+      )
+    : h.empty
+}
+
 const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   const queued = game.studies.findIndex((item) => item.id === entry.id)
@@ -795,6 +824,7 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
             ],
           ),
           h.p([h.Class('text-[13px] leading-relaxed text-foreground/85')], [entry.blurb]),
+          terms(entry, h),
           open
             ? h.div(
                 [

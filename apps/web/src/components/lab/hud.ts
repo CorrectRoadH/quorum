@@ -9,7 +9,6 @@ import {
   DatabaseZap,
   Expand,
   FlaskConical,
-  Gem,
   Hammer,
   type IconNode,
   Menu,
@@ -27,14 +26,18 @@ import {
   Users,
   UsersRound,
   Wallet,
+  X,
 } from 'lucide'
 import {
   OPEN_REGION_PRICE,
+  FAILURE_YIELD,
+  POOLS,
   RECIPE,
   REGIONS,
   REGION_INFO,
   RESEARCH,
   researchList,
+  type InsightPool,
 } from '@quorum/simulation/catalog'
 import { openRegions, regional } from '@quorum/simulation/regions'
 import { canRaise } from '@quorum/simulation/actions'
@@ -57,18 +60,19 @@ import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/g
 import { compact, money, ms, rate } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { offCompany, type Model } from '@/game/model.ts'
-import { POOL_ORDER } from '@/game/pools.ts'
+import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
 import { icon } from '@/lib/icons'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   CHIPS,
+  EYEBROW,
+  FLOAT,
   FIGURE,
   PANEL,
   WELL,
   type Tone,
-  insightChip,
   meter,
   ring,
   tool,
@@ -80,9 +84,8 @@ import {
    and the goal and the last change in the middle.
    ========================================================================== */
 
-/** A phone shows Apdex before Insight, Errors and Latency, which scroll off the edge. */
+/** A phone shows Apdex before Errors and Latency, which scroll off the edge. */
 const CHIP_ORDER: Record<string, string> = {
-  Insight: 'compact:order-1',
   Errors: 'compact:order-2',
   p99: 'compact:order-3',
   Latency: 'compact:order-3',
@@ -148,55 +151,217 @@ const stat = (
     ],
   )
 
-/**
- * Insight: the pools the running Study takes from, or else the three the
- * Design earns most, each with its icon and what it holds.
- */
-const insight = (game: Model['game'], ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const running = game.studies[0]
-  const pools = running
-    ? POOL_ORDER.filter((pool) => (RECIPE[running.id][pool] ?? 0) > 0)
-    : POOL_ORDER.filter((pool) => ledger.insight[pool] > 0)
-        .toSorted((a, b) => ledger.insight[b] - ledger.insight[a])
-        .slice(0, 3)
-  const limit = running ? limitingPool(game) : null
-  return h.div(
+/** What Insight is, how it is earned and spent, and how much a pool keeps. */
+const INSIGHT_HELP: ReadonlyArray<readonly [string, string]> = [
+  [
+    'Pools',
+    'Insight pays for Research. Each request kind fills its own pool. Failed and slow requests also fill the Failure pool.',
+  ],
+  [
+    'Earn',
+    `Analytics samples the Nodes it links to. A pool earns with the square root of its samples, so a new request kind earns more than more of the same traffic. A failed sample earns ${FAILURE_YIELD}× Failure Insight.`,
+  ],
+  [
+    'Spend',
+    'Each Research item costs Insight from one or more pools. A Study takes it while it runs. The pool that is lowest sets the pace.',
+  ],
+  [
+    'Keep',
+    'A pool holds at most its rate × the Analytics retention window. A longer window costs more Storage.',
+  ],
+]
+
+/** What Insight is, in a dialog to the right of the card; below it on a phone. */
+const insightHelp = (h: HtmlBuilder<Message>): Html =>
+  h.div(
     [
-      h.Key('Insight'),
-      h.Title(running ? `Insight for ${RESEARCH[running.id].name}` : 'Insight'),
+      h.Key('insight-help'),
+      h.Role('dialog'),
+      h.AriaLabel('About Insight'),
       h.Class(
         cn(
-          'enter-pop flex h-8 items-center gap-2.5 px-2.5 compact:shrink-0 compact:gap-1.5 compact:px-3',
-          CHIP_ORDER.Insight,
+          'enter-pop absolute top-0 left-[calc(100%+8px)] z-30 flex w-[288px] flex-col gap-2.5 p-3.5 compact:top-[calc(100%+6px)] compact:left-0 compact:w-full',
+          FLOAT,
         ),
       ),
     ],
     [
-      icon(h, Gem, 'size-3.5 shrink-0 text-muted-foreground'),
-      h.span(
-        [h.Class('w-[46px] shrink-0 text-[11.5px] text-muted-foreground compact:hidden')],
-        ['Insight'],
-      ),
-      h.span(
-        [h.Class('flex min-w-0 items-center gap-1.5 text-[12px] leading-none')],
-        pools.length > 0
-          ? pools.map((pool) =>
-              insightChip(
-                pool,
-                compact(game.pools[pool]),
-                h,
-                false,
-                pool === limit && ledger.insight[pool] <= 0 ? 'danger' : 'plain',
+      h.div(
+        [h.Class('flex items-center justify-between')],
+        [
+          h.span([h.Class('text-[13px] font-semibold')], ['About Insight']),
+          h.button(
+            [
+              h.Type('button'),
+              h.AriaLabel('Close'),
+              h.Title('Close (Esc)'),
+              h.OnClick(Message.InsightHelpToggled()),
+              h.Class(
+                'grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
               ),
-            )
-          : [h.span([h.Class(FIGURE)], ['0'])],
+            ],
+            [icon(h, X, 'size-3.5')],
+          ),
+        ],
       ),
-      running
-        ? h.span(
-            [h.Class(cn(FIGURE, 'ml-auto text-[10px] leading-none text-muted-foreground'))],
-            [`${Math.floor(running.progress * 100)}%`],
+      h.dl(
+        [h.Class('flex flex-col gap-2.5')],
+        INSIGHT_HELP.map(([term, text]) =>
+          h.div(
+            [h.Key(term), h.Class('flex flex-col gap-0.5')],
+            [
+              h.dt([h.Class(EYEBROW)], [term]),
+              h.dd([h.Class('text-[12px] leading-snug text-foreground/85')], [text]),
+            ],
+          ),
+        ),
+      ),
+    ],
+  )
+
+/** One pool: its icon and name, then what it holds and what it earns. */
+const poolRow = (
+  pool: InsightPool,
+  held: number,
+  perSecond: number,
+  inStudy: boolean,
+  limiting: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [
+      h.Key(pool),
+      h.Class(cn('flex items-center gap-2 text-[12px] leading-none', inStudy && 'font-semibold')),
+    ],
+    [
+      h.span(
+        [h.Class('inline-flex'), h.Style({ color: poolColor(pool) })],
+        [icon(h, POOL_ICONS[pool], 'size-3.5 shrink-0')],
+      ),
+      h.span([h.Class('min-w-0 flex-1 truncate')], [POOLS[pool].label]),
+      h.span([h.Class(cn(FIGURE, limiting && 'text-danger'))], [compact(held)]),
+      h.span(
+        [
+          h.Class(
+            cn(
+              FIGURE,
+              'w-[52px] text-right text-[10.5px] font-normal',
+              perSecond > 0 ? 'text-ok' : limiting ? 'text-danger' : 'text-muted-foreground',
+            ),
+          ),
+        ],
+        [`+${perSecond.toFixed(1)}/s`],
+      ),
+    ],
+  )
+
+/**
+ * Insight, in its own card: the running Study and its progress, then a row for
+ * every pool the Design holds or earns. The (?) opens what the pools are and
+ * how they fill, in the card.
+ */
+const insightCard = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
+  const game = model.game
+  const running = game.studies[0]
+  const recipe = running ? RECIPE[running.id] : {}
+  const limit = running ? limitingPool(game) : null
+  const pools = POOL_ORDER.filter(
+    (pool) => game.pools[pool] >= 1 || ledger.insight[pool] > 0 || (recipe[pool] ?? 0) > 0,
+  )
+  return h.section(
+    [
+      h.Key('insight'),
+      h.AriaLabel('Insight'),
+      h.Class(
+        cn(
+          'enter-pop relative flex flex-col gap-2 p-2.5 compact:pointer-events-auto compact:p-2',
+          PANEL,
+        ),
+      ),
+    ],
+    [
+      h.div(
+        [h.Class('flex items-center gap-1')],
+        [
+          h.button(
+            [
+              h.Type('button'),
+              h.Title('Research (R)'),
+              h.OnClick(
+                Message.PanelOpened({ panel: model.panel === 'research' ? 'none' : 'research' }),
+              ),
+              h.Class(
+                'flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left text-[12px] hover:bg-foreground/5',
+              ),
+            ],
+            [
+              icon(h, FlaskConical, 'size-3.5 shrink-0 text-muted-foreground'),
+              h.span(
+                [
+                  h.Class(
+                    cn(
+                      'min-w-0 flex-1 truncate',
+                      running ? 'font-medium' : 'text-muted-foreground',
+                    ),
+                  ),
+                ],
+                [running ? RESEARCH[running.id].name : 'Idle'],
+              ),
+              running
+                ? h.span(
+                    [h.Class(cn(FIGURE, 'text-[10.5px] text-muted-foreground'))],
+                    [
+                      game.studies.length > 1
+                        ? `${Math.floor(running.progress * 100)}% · +${game.studies.length - 1}`
+                        : `${Math.floor(running.progress * 100)}%`,
+                    ],
+                  )
+                : h.empty,
+            ],
+          ),
+          h.button(
+            [
+              h.Type('button'),
+              h.Title('About Insight'),
+              h.AriaLabel('About Insight'),
+              h.AriaExpanded(model.insightHelp),
+              h.OnClick(Message.InsightHelpToggled()),
+              h.Class(
+                cn(
+                  'grid size-6 shrink-0 place-items-center rounded-md hover:bg-foreground/5',
+                  model.insightHelp ? 'bg-foreground/5 text-foreground' : 'text-muted-foreground',
+                ),
+              ),
+            ],
+            [icon(h, CircleHelp, 'size-3.5')],
+          ),
+        ],
+      ),
+      running ? meter(running.progress, 'bg-ok', h) : h.empty,
+      pools.length > 0
+        ? h.div(
+            [
+              h.Class(
+                cn(
+                  'flex flex-col gap-2 rounded-lg px-2.5 py-2',
+                  WELL,
+                  'compact:max-h-28 compact:overflow-y-auto',
+                ),
+              ),
+            ],
+            pools.map((pool) =>
+              poolRow(
+                pool,
+                game.pools[pool],
+                ledger.insight[pool],
+                (recipe[pool] ?? 0) > 0,
+                pool === limit && ledger.insight[pool] <= 0,
+                h,
+              ),
+            ),
           )
         : h.empty,
+      model.insightHelp ? insightHelp(h) : h.empty,
     ],
   )
 }
@@ -347,12 +512,10 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
         .join(' · ') || 'No errors'
     : 'Research Structured logs to see causes'
 
-  return h.header(
+  const header = h.header(
     [
       h.DataAttribute('morph', 'notice'),
-      h.Class(
-        `absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-1 p-1.5 ${PANEL} compact:pointer-events-auto compact:static compact:w-auto compact:p-1`,
-      ),
+      h.Class(`flex flex-col gap-1 p-1.5 ${PANEL} compact:pointer-events-auto compact:p-1`),
     ],
     [
       funding(model, h),
@@ -375,7 +538,6 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
             trend >= 0 ? 'ok' : 'danger',
             h,
           ),
-          shown(model, 'research') ? insight(game, ledger, h) : h.empty,
           stat(
             'Apdex',
             Smile,
@@ -412,6 +574,11 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
       game.quarter && !offCompany(model) ? quarterly(model, ledger, h) : h.empty,
       shown(model, 'team') ? building(model, ledger, h) : h.empty,
     ],
+  )
+  // On a phone the wrapper dissolves, so both cards stack with the rest of the top.
+  return h.div(
+    [h.Class('absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-2 compact:contents')],
+    [header, shown(model, 'research') ? insightCard(model, ledger, h) : h.empty],
   )
 }
 

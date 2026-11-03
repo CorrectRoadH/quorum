@@ -345,6 +345,10 @@ export const Model = Schema.Struct({
   motion: Motion,
   /** The Glossary panel's open entry, search, and category filter. */
   glossaryFocus: Schema.NullOr(Schema.String),
+  /** The panel the Glossary closes back to: Research when a (?) link opened it. */
+  glossaryReturn: Panel,
+  /** The Insight card's help section is open. */
+  insightHelp: Schema.Boolean,
   glossaryQuery: Schema.String,
   glossaryCategory: Schema.NullOr(Schema.String),
   /** Advice the game has sent, oldest first, and the one the Inbox shows. */

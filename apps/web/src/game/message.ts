@@ -236,6 +236,7 @@ export const Message = defineMessageUnion({
   /** Settings and the Glossary (15). */
   MuteToggled: {},
   MotionToggled: {},
+  InsightHelpToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },
   DashboardRangeChosen: { minutes: Schema.Finite },
