@@ -665,6 +665,14 @@ const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
                       false,
                       h,
                     ),
+                    item(
+                      'Settings',
+                      '',
+                      'lb',
+                      Message.PanelOpened({ panel: 'settings' }),
+                      false,
+                      h,
+                    ),
                   ],
   )
 }

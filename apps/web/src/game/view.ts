@@ -1,6 +1,7 @@
 import { localizeHtml } from '../i18n/index.ts'
 import type { Document, HtmlBuilder } from 'foldkit/html'
 import { toast } from '@/components/lab/bits.ts'
+import { settingsPanel } from '@/components/lab/panels.ts'
 import { labScreen } from './screens.ts'
 import { titleScreen } from './title.ts'
 import type { Message } from './message.ts'
@@ -23,6 +24,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
           [h.Key(onBoard(model.route) ? 'board' : 'title'), h.Class('h-full')],
           [onBoard(model.route) ? labScreen(model, h) : titleScreen(model, h)],
         ),
+        // Outside the title's dark palette, so Settings looks the same as on the board.
+        !onBoard(model.route) && model.panel === 'settings' ? settingsPanel(model, h) : h.empty,
         toast(model.toast, h),
       ],
     ),
