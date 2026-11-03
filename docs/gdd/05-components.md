@@ -468,8 +468,8 @@ harder with each Era.
 Real products: an OpenTelemetry collector with a tracing backend.
 
 Analytics is a tap. Link any Node into it, and it samples that Node's traffic. Each sampled request
-earns Insight. [Observability](./12-observability.md#earning-insight) defines the formula, the
-sampling rate tradeoff, and what Analytics reveals.
+earns Insight of its request kind. [Observability](./12-observability.md#earning-insight) defines the formula, the
+sampling rate tradeoff, retention, and what Analytics reveals.
 
 ### Payments
 

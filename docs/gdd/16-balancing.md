@@ -29,31 +29,34 @@ Formatting: SI suffixes only (k, M, B, T). No letter suffixes such as "aa".
 
 ## Constants
 
-| Constant              | Symbol   | Value                           | Where used                                                       |
-| --------------------- | -------- | ------------------------------- | ---------------------------------------------------------------- |
-| Step length           | —        | 100 ms                          | [Simulation](./04-simulation.md#time)                            |
-| Calendar rate         | —        | 1 sim s = 1 calendar min        | [Simulation](./04-simulation.md#time)                            |
-| Requests per user     | `R_user` | 0.02 rps                        | [Demand](./04-simulation.md#demand)                              |
-| Diurnal amplitude     | `A`      | 0.45                            | [Demand](./04-simulation.md#demand)                              |
-| Copy price growth     | —        | 1.25×                           | [Prices](#prices)                                                |
-| Resize price growth   | —        | 2× per size step                | [Vertical and horizontal](#vertical-and-horizontal)              |
-| Sell refund           | —        | 50%                             | [Components](./05-components.md#rules-for-all-components)        |
-| Insight yield         | —        | 0.5 per sample                  | [Observability](./12-observability.md#earning-insight)           |
-| Default sample rate   | —        | 10%                             | [Observability](./12-observability.md#earning-insight)           |
-| Growth rate           | `g`      | See [User growth](#user-growth) |                                                                  |
-| Churn rate            | `c`      | 0.004/s                         | [User growth](#user-growth)                                      |
-| Declined-round growth | —        | 0.7 × `g`                       | [Funding](./09-economy.md#funding)                               |
-| Valuation scale       | —        | 1.5 × 10⁻⁴                      | [Valuation scale](#valuation-scale)                              |
-| Coordination penalty  | `k`      | 0.08                            | [Team](./08-team-and-velocity.md#coordination)                   |
-| Dev Hours per day     | —        | 8 per engineer, 6.4 founder     | [Team](./08-team-and-velocity.md#dev-hours)                      |
-| Adoption time         | `τ`      | 7 calendar days                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
-| Lift spread           | `σ`      | 1.0                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
-| Upkeep ceiling        | —        | 0.4 × S / (S + 2,000), max 0.6  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
-| Market gain cap       | —        | +100% of the Era market         | [Sizes](./08-team-and-velocity.md#sizes)                         |
-| Link timeout          | —        | 30 s                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
-| Drawer size           | —        | 60 s of revenue                 | [Economy](./09-economy.md#the-payments-drawer)                   |
-| Offline cap           | —        | 8 h                             | [Simulation](./04-simulation.md#offline-progress)                |
-| Offline churn cap     | —        | 5%                              | [Simulation](./04-simulation.md#offline-progress)                |
+| Constant              | Symbol   | Value                                           | Where used                                                       |
+| --------------------- | -------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| Step length           | —        | 100 ms                                          | [Simulation](./04-simulation.md#time)                            |
+| Calendar rate         | —        | 1 sim s = 1 calendar min                        | [Simulation](./04-simulation.md#time)                            |
+| Requests per user     | `R_user` | 0.02 rps                                        | [Demand](./04-simulation.md#demand)                              |
+| Diurnal amplitude     | `A`      | 0.45                                            | [Demand](./04-simulation.md#demand)                              |
+| Copy price growth     | —        | 1.25×                                           | [Prices](#prices)                                                |
+| Resize price growth   | —        | 2× per size step                                | [Vertical and horizontal](#vertical-and-horizontal)              |
+| Sell refund           | —        | 50%                                             | [Components](./05-components.md#rules-for-all-components)        |
+| Insight yield         | —        | 1 × √(sampled rps), per Component type and kind | [Observability](./12-observability.md#earning-insight)           |
+| Default sample rate   | —        | 10%                                             | [Observability](./12-observability.md#earning-insight)           |
+| Default retention     | —        | 15 min; pool cap at least 100                   | [Observability](./12-observability.md#retention)                 |
+| Study duration        | —        | 20 s (Garage) to 60 min (Public)                | [Progression](./10-progression.md#studies)                       |
+| Spike speed           | —        | 2×                                              | [Team](./08-team-and-velocity.md#spikes)                         |
+| Growth rate           | `g`      | See [User growth](#user-growth)                 |                                                                  |
+| Churn rate            | `c`      | 0.004/s                                         | [User growth](#user-growth)                                      |
+| Declined-round growth | —        | 0.7 × `g`                                       | [Funding](./09-economy.md#funding)                               |
+| Valuation scale       | —        | 1.5 × 10⁻⁴                                      | [Valuation scale](#valuation-scale)                              |
+| Coordination penalty  | `k`      | 0.08                                            | [Team](./08-team-and-velocity.md#coordination)                   |
+| Dev Hours per day     | —        | 8 per engineer, 6.4 founder                     | [Team](./08-team-and-velocity.md#dev-hours)                      |
+| Adoption time         | `τ`      | 7 calendar days                                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
+| Lift spread           | `σ`      | 1.0                                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
+| Upkeep ceiling        | —        | 0.4 × S / (S + 2,000), max 0.6                  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
+| Market gain cap       | —        | +100% of the Era market                         | [Sizes](./08-team-and-velocity.md#sizes)                         |
+| Link timeout          | —        | 30 s                                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
+| Drawer size           | —        | 60 s of revenue                                 | [Economy](./09-economy.md#the-payments-drawer)                   |
+| Offline cap           | —        | 8 h                                             | [Simulation](./04-simulation.md#offline-progress)                |
+| Offline churn cap     | —        | 5%                                              | [Simulation](./04-simulation.md#offline-progress)                |
 
 ## Prices
 
@@ -646,5 +649,55 @@ intended choice. The design pace now runs the Team's calendar at the live pace, 
 for the bots too: the Balanced bot reaches Seed with 6 Features live and ships the four cheapest
 Series A Features before Series B. Upkeep is not built, so the times above must be measured again
 when it is.
+
+### Insight by kind and Studies (built)
+
+The old Balanced bot never grew its Analytics tap, so it earned about 2 Insight/s from minute 20 on,
+and the pacing tests did not show how fast a player could research. Measured on seed 1 at 130
+minutes, with the bot's own Design and a larger tap:
+
+| Era      | Research in the Era | Time to buy all of it                                                |
+| -------- | ------------------- | -------------------------------------------------------------------- |
+| Garage   | 455 ◇               | ~8 min at size 1, the Era is ~11 min                                 |
+| Pre-seed | 2,580 ◇             | 20–33 min at size 1, the Era is ~17 min                              |
+| Seed     | 11,150 ◇            | ~22 min at size 4 and 10%, for 6% of revenue; the Era is ~21 min     |
+| Series A | 59,000 ◇            | ~4 min at size 8 and 50% (the 512 samples/s cap), the Era is ~38 min |
+| Series B | 78,000 ◇            | ~5 min at the cap                                                    |
+
+`SIM_VERSION` 10 builds the design in [Observability](./12-observability.md#earning-insight) and
+[Progression](./10-progression.md#studies). Choices the calibration made:
+
+| Topic          | Build                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Yield          | 1 × √(sampled rps) per Component type and kind; Failure × 3                                                               |
+| Default recipe | The Era's own kinds to Seed; from Series A, the kinds of the Era before (a Feature brings the new)                        |
+| Price scale    | ◇ × 2 in Seed and × 1.5 in Series A; the other Eras × 1                                                                   |
+| Pool cap       | Retention × the live rate, never below the pool's share of the costliest open item                                        |
+| Breadth        | `tracing` only (3 Component types); `profiling` and `rum` are not built                                                   |
+| Pacing bot     | Taps every Node, grows the tap with spare Cash, keeps 2 Studies queued, and queues the Feature that brings a missing kind |
+
+**Calibration.** Two bots, five seeds each, 130 minutes. The Balanced bot follows its priority list
+with 2 Studies queued and no Spikes. The Skilled probe (not committed) queues 8 Studies, spikes every
+priority Study, and fills the queue with the cheapest open items. Each cell is when the Era's last
+priority item completes, as a share of the Era, and how much of the Era's catalog was done in it.
+
+| Era      | Balanced: last priority item | Balanced: catalog | Skilled: last priority item | Skilled: catalog |
+| -------- | ---------------------------- | ----------------- | --------------------------- | ---------------- |
+| Garage   | 47%                          | 7/15              | 48%                         | 15/15            |
+| Pre-seed | 42–59%                       | 7–9/21            | 65–81%                      | 11–15/21         |
+| Seed     | 45–81%                       | 9/20              | 53–78% (one seed 146%)      | 11–20/20         |
+| Series A | 94–109%                      | 6–7/21            | 65–149%                     | 10–15/21         |
+
+Before the rework, a larger tap bought all of Series A in about 4 minutes. Now a skilled player who
+spikes every Study finishes about half of Series A's catalog in the Era. Era times barely moved:
+Pre-seed at 10.7 min, Seed at 27–36 min, Series A at 53–75 min, and Series B at 96–116 min.
+
+Open points:
+
+- `tiered-caching` costs `media`, and Video ships late in Series A, so it often completes in Series
+  B. That is the recipe working as designed, but it pushes the Series A tail past 100%.
+- Series B's priority items (`hosted-models`, `data-warehouse`) need `ai` and `report`, which arrive
+  with their Features. The bots stop at 130 minutes before they ship.
+- Postmortems: an action item goes first in the queue, so incidents now slow other research.
 
 [Scope and roadmap](./17-scope-and-roadmap.md) orders the work to close these gaps.

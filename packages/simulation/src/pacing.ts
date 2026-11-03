@@ -2,6 +2,7 @@ import { Result } from 'effect'
 import {
   canRaise,
   cancelReport,
+  cancelStudy,
   collect,
   disableRule,
   expandVolume,
@@ -29,19 +30,24 @@ import {
 } from './actions.ts'
 import {
   COMPONENTS,
+  CREDIT_CAP,
   DESIGN_COST_INDEX,
   DESIGN_SALARY_INDEX,
   DESIGN_TUNING,
+  FEATURES,
   FRAMEWORKS,
   LANGUAGES,
   OS_RAM,
   POOL_LIMITS,
+  RECIPE,
   RESEARCH,
   RESEARCH_IDS,
   RUNTIMES,
   SALARY_BASE,
   STANDBY_TYPES,
   type ComponentId,
+  type FeatureDef,
+  type InsightPool,
   type ResearchId,
   type RuntimeId,
   type Tuning,
@@ -54,7 +60,7 @@ import { bottleneckOf, solveFlow } from './solve.ts'
 import type { Founding, Game, GameNode } from './state.ts'
 import { step } from './step.ts'
 import { languageOfService, salaryOf, serviceOf, signingOf, stackOf } from './team.ts'
-import { addIndex, changeStack, hire, moveItem, queueTask, rushItem } from './work.ts'
+import { addIndex, changeStack, hire, moveItem, queueFeature, queueTask, rushItem } from './work.ts'
 
 /* ==========================================================================
    Pacing bots (16 "Pacing model"): scripted players that run against the real
@@ -426,6 +432,17 @@ const relieve = (game: Game, ledger: Ledger, node: GameNode, strategy: Strategy)
       return splitDatabase(game, ledger, node)
     if (limit === 'workers' && RUNTIMES[node.runtime].pool && node.workers < fittingWorkers(node))
       return tried(game, setWorkers(game, node.id, fittingWorkers(node)))
+    // More workers open more connections: near the limit, a Pooler goes in front of the Database first.
+    const database = game.nodes.find((entry) => entry.type === 'database')
+    const connections = database ? ledger.nodes[database.id]?.connections : null
+    if (
+      database &&
+      connections &&
+      connections.used > POOLER_AT * connections.max &&
+      has(game, 'pooling') &&
+      !game.nodes.some((entry) => entry.type === 'pooler')
+    )
+      return inFront(game, ledger, database, 'pooler')
     // Grow a box up to medium, then scale out.
     if (node.size < 3) {
       const bigger = affordable(game, ledger, grow)
@@ -452,14 +469,112 @@ const relieve = (game: Game, ledger: Ledger, node: GameNode, strategy: Strategy)
   return affordable(game, ledger, grow)
 }
 
+/** Share of the credit cap at which the Balanced bot moves a Burstable box to General. */
+const LOW_CREDITS = 0.25
+
+/** Share of the Database's connections at which a bigger App Server waits for a Pooler. */
+const POOLER_AT = 0.6
+
+/** The tap grows only while Cash stays above this many reserves. */
+const TAP_RESERVE = 4
+
+/** Studies the bot keeps queued, the running one included. */
+const QUEUED = 2
+
+/**
+ * Keeps the Study queue full from the priority list (10 "Studies"). A Study
+ * whose recipe has a pool the Design does not earn yet would stall the queue,
+ * so the bot leaves it for later.
+ */
+const studies = (
+  game: Game,
+  ledger: Ledger,
+  strategy: Strategy,
+  realtime: boolean,
+  ready: (id: ResearchId) => boolean,
+): Game => {
+  const payable = (id: ResearchId) =>
+    (Object.keys(RECIPE[id]) as Array<InsightPool>).every(
+      (pool) => ledger.insight[pool] > 0 || game.pools[pool] >= (RECIPE[id][pool] ?? 0),
+    )
+  let next = game
+  const head = next.studies[0]
+  if (head && !payable(head.id)) next = tried(next, cancelStudy(next, head.id))
+  const urgent = (realtime ? REALTIME_RESEARCH : []).find((id) => ready(id) && payable(id))
+  if (urgent) next = tried(next, study(next, urgent, true))
+  const order =
+    strategy === 'greedy'
+      ? RESEARCH_IDS.filter(ready).toSorted((a, b) => RESEARCH[a].cost - RESEARCH[b].cost)
+      : (strategy === 'polyglot' ? POLYGLOT_PRIORITY : PRIORITY).filter(ready)
+  // A priority Study that needs a kind no one sends yet waits for the Feature that brings it.
+  for (const blocked of order
+    .filter((id) => !payable(id))
+    .slice(0, 2)
+    .toReversed())
+    next = planFeatureFor(next, ledger, blocked)
+  for (const id of order) {
+    if (next.studies.length >= QUEUED) break
+    if (payable(id) && !next.studies.some((entry) => entry.id === id))
+      next = tried(next, study(next, id))
+  }
+  return next
+}
+
+/** Puts the Feature that brings a missing kind, or the Feature it needs first, at the top of the backlog. */
+const planFeatureFor = (game: Game, ledger: Ledger, id: ResearchId): Game => {
+  const missing = (Object.keys(RECIPE[id]) as Array<InsightPool>).filter(
+    (pool) => pool !== 'failure' && ledger.insight[pool] <= 0,
+  )
+  const bringing = (Object.values(FEATURES) as Array<FeatureDef>).find(
+    (feature) => feature.unlocks && missing.includes(feature.unlocks.kind),
+  )
+  if (!bringing) return game
+  const first = (feature: FeatureDef): FeatureDef => {
+    const needed = feature.requires.find(
+      (other) =>
+        !game.shipped.includes(other) &&
+        !game.awaiting.includes(other) &&
+        !game.backlog.some((item) => item.ref === other),
+    )
+    return needed ? first(FEATURES[needed]) : feature
+  }
+  const feature = first(bringing)
+  let next = game.backlog.some((item) => item.ref === feature.id)
+    ? game
+    : tried(game, queueFeature(game, feature.id))
+  // It goes above other Features, not above a migration step or a task.
+  const item = next.backlog.find((entry) => entry.ref === feature.id)
+  if (!item) return next
+  for (let index = next.backlog.indexOf(item); index > 0; index -= 1) {
+    if (next.backlog[index - 1]?.kind !== 'feature') break
+    next = tried(next, moveItem(next, item.id, -1))
+  }
+  return next
+}
+
+/** Links every Node that carries traffic to Analytics, and grows the tap when it drops samples. */
+const sampleAll = (game: Game, ledger: Ledger): Game => {
+  const tap = game.nodes.find((node) => node.type === 'analytics')
+  if (!tap) return game
+  let next = game
+  for (const node of game.nodes) {
+    const def = COMPONENTS[node.type]
+    if (node.id === tap.id || def.tap || def.control || def.fixed || node.type === 'users') continue
+    if (game.links.some((link) => link.from === node.id && link.to === tap.id)) continue
+    next = tried(next, connect(next, node.id, tap.id))
+  }
+  if ((ledger.nodes[tap.id]?.utilization ?? 0) <= 1) return next
+  const grown = tried(next, resize(next, tap.id, 1))
+  return grown.cash >= ledger.burn * RESERVE_SECONDS * TAP_RESERVE ? grown : next
+}
+
 /** Incidents, postmortems, the drawer, research, the Stack, and the Bottleneck. */
 const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   let next = game.pending > 0 ? collect(game) : game
 
-  for (const postmortem of next.postmortems) {
-    const cost = postmortem.action ? RESEARCH[postmortem.action].cost : 0
-    next = tried(next, filePostmortem(next, postmortem.id, next.insight >= cost))
-  }
+  // Each action item's Study goes first: an unfixed root cause comes back.
+  for (const postmortem of next.postmortems)
+    next = tried(next, filePostmortem(next, postmortem.id, true))
   for (const node of next.nodes.filter((entry) => entry.down === -1))
     next = tried(next, replace(next, node.id))
   const incident = next.incident
@@ -487,12 +602,7 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
     next.backlog.some((item) => item.ref === 'chat')
   const realtime =
     strategy !== 'stubborn' && chat && RUNTIMES[stackOf(next).runtime].connectionKB === null
-  const research =
-    strategy === 'greedy'
-      ? RESEARCH_IDS.filter(ready).toSorted((a, b) => RESEARCH[a].cost - RESEARCH[b].cost)[0]
-      : ((realtime ? REALTIME_RESEARCH : []).find(ready) ??
-        (strategy === 'polyglot' ? POLYGLOT_PRIORITY : PRIORITY).find(ready))
-  if (research && next.insight >= RESEARCH[research].cost) next = tried(next, study(next, research))
+  next = studies(next, solveFlow(next), strategy, realtime, ready)
 
   // PHP-FPM replaces Apache as soon as it is researched. Polyglot moves to the language it
   // researched last. Once Chat is on the way, a Stack that refuses realtime connections moves
@@ -546,6 +656,12 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   if (strategy !== 'greedy' && next.stage >= 3) next = seriesABuild(next, solveFlow(next))
   if (strategy !== 'greedy' && next.stage >= 4) next = seriesBBuild(next, solveFlow(next))
 
+  // A Burstable box low on credits moves to General before it throttles, as a player watching it would.
+  if (strategy !== 'greedy')
+    for (const server of servers(next))
+      if (server.family === 'burstable' && server.credits < LOW_CREDITS * CREDIT_CAP)
+        next = tried(next, setFamily(next, server.id, 'general'))
+
   const flow = solveFlow(next)
   const target =
     bottleneckOf(next, flow) ??
@@ -556,6 +672,8 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
       .toSorted((a, b) => b[1] - a[1])[0]?.[0]
   const node = target ? byId(next, target) : undefined
   if (node) next = relieve(next, flow, node, strategy)
+  // Insight comes after capacity: the tap grows with Cash the bottleneck does not need.
+  if (strategy !== 'greedy') next = sampleAll(next, solveFlow(next))
 
   if (!canRaise(next)) return next
   return tried(
@@ -570,10 +688,9 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
 const reached = (before: Game, after: Game): ReadonlyArray<Milestone> => {
   const found: Array<Milestone> = []
   const sized = (game: Game) =>
-    game.nodes.reduce((total, node) => total + node.size, 0) +
+    game.nodes.reduce((total, node) => total + (node.type === 'analytics' ? 0 : node.size), 0) +
     game.nodes.filter((node) => node.family !== 'burstable').length
   if (sized(after) > sized(before)) found.push('first-upgrade')
-  if (after.researched.length > before.researched.length) found.push('first-research')
   if (after.nodes.some((node) => node.type === 'database')) found.push('db-split')
   if (servers(after).length > 1) found.push('second-server')
   if (after.stage >= 1) found.push('preseed')
@@ -640,6 +757,7 @@ export const runBot = (
     game = result.game
     if (result.events.some((event) => event._tag === 'IncidentStarted')) mark('first-incident')
     if (result.events.some((event) => event._tag === 'Deployed')) mark('first-feature')
+    if (result.events.some((event) => event._tag === 'StudyCompleted')) mark('first-research')
   }
   return { game, milestones, margins }
 }

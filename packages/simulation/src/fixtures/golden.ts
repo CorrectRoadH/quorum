@@ -41,16 +41,19 @@ export const GOLDEN_STEPS = 10_000
 // founder's backlog builds at a new pace.
 // SIM_VERSION 9: prices follow real list prices, requests earn half as much, and
 // the cost and salary index rise from Seed (16 "Cost index").
-export const GOLDEN_HASH = '1a61571d'
+// SIM_VERSION 10: Insight has a pool per request kind and a Failure pool, grows
+// with the square root of samples per Component type, and research runs as
+// Studies that take Insight over time; sampling adds CPU and latency.
+export const GOLDEN_HASH = '92286274'
 
 /**
  * The hash of the Game each Challenge's reference solution ends on
  * (`fixtures/challenges.ts`). Node, the browsers and workerd must agree.
  */
 export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
-  'hello-world': '479a2caf',
-  'split-the-box': '18a81de8',
-  slashdotted: '28453f42',
-  'event-loop': '2b3a9461',
-  'too-many-connections': 'c1bcede1',
+  'hello-world': 'c511bccc',
+  'split-the-box': '178f2382',
+  slashdotted: '064ca838',
+  'event-loop': 'fbc0863f',
+  'too-many-connections': 'acf29962',
 }

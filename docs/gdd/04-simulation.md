@@ -352,12 +352,13 @@ When the player returns, the game simulates the time they were away:
 - The day and night cycle and the weekly cycle apply, so a design that cannot hold the peak loses
   users at peak.
 - Incidents do not fire offline ([pillar 5](./01-vision.md#pillar-5-respect-the-player)).
+- Studies keep running and take Insight as it is earned ([Progression](./10-progression.md#studies)).
 - Offline revenue goes straight to Cash. The Payments drawer limit applies only to live play
   ([Economy](./09-economy.md#the-payments-drawer)).
 - Offline churn is capped at 5% of users, so the player never returns to a ruined company.
 - The cap is 8 hours. Legacy raises it to 24 hours.
-- A return screen shows what happened: users, Cash, Insight, Dev Hours, peak utilization, and the
-  worst calendar hour.
+- A return screen shows what happened: users, Cash, the Studies that completed, Dev Hours, peak
+  utilization, and the worst calendar hour.
 
 ## Performance budget
 

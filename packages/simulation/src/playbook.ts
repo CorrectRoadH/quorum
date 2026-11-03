@@ -49,6 +49,7 @@ export type Playbook = typeof Playbook.Type
 export const NODE_SETTINGS = [
   'workers',
   'sampleRate',
+  'retention',
   'compress',
   'policy',
   'checkEvery',

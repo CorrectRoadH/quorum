@@ -190,9 +190,12 @@ describe('perks in a new Company', () => {
     expect(raised.engineers).toHaveLength(1)
   })
 
+  const insightOf = (game: Game): number =>
+    Object.values(solveFlow(game).insight).reduce((sum, rate) => sum + rate, 0)
+
   test('Pattern recognition raises Insight; Founder’s reputation raises growth', () => {
     const sharp = { ...plain, founding: founding({ perks: { 'pattern-recognition': 2 } }) }
-    expect(solveFlow(sharp).insight).toBeCloseTo(solveFlow(plain).insight * 1.4)
+    expect(insightOf(sharp)).toBeCloseTo(insightOf(plain) * 1.4)
     const known = { ...plain, founding: founding({ perks: { 'founders-reputation': 1 } }) }
     expect(growthOf(known, solveFlow(known))).toBeCloseTo(growthOf(plain, solveFlow(plain)) * 1.1)
   })
@@ -210,7 +213,7 @@ describe('perks in a new Company', () => {
       sandbox: true,
       founding: founding({ perks: { 'pattern-recognition': 5 } }),
     }
-    expect(solveFlow(sandbox).insight).toBeCloseTo(solveFlow({ ...plain, sandbox: true }).insight)
+    expect(insightOf(sandbox)).toBeCloseTo(insightOf({ ...plain, sandbox: true }))
   })
 })
 

@@ -70,36 +70,54 @@ Factorio is the reference for automation games and is popular with software deve
 | **Phase shifts.** Universal Paperclips changes what the game is about several times. "It's not merely the fact that the numbers go up but how they do so."                  | The New Yorker; How-To Geek.                              |
 | **A real ending.** Lantz wanted the game "to end in a way that let people pull back from it".                                                                               | hey.gg interview with Frank Lantz.                        |
 
+## Research in factory games
+
+Research done in November 2026, after the live Insight rate ran far ahead of research costs from
+the Seed Era on ([Balancing](./16-balancing.md#insight-by-kind-and-studies-not-built)).
+
+| Observation                                                                                                                                                                         | Evidence                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Research is paid in kinds, not one currency.** Factorio has 7 science packs in the base game, and each needs its own production chain. More of an old pack never buys a new tier. | Factorio wiki, Research; teemo.dev, Research tech tree.     |
+| **The slowest input limits research.** A technology needs one of each listed pack per unit, so the scarcest pack sets the rate.                                                     | teemo.dev, Research tech tree.                              |
+| **Research takes time.** Each Factorio research unit has a lab time. Dyson Sphere Program labs produce a fixed hash rate. A full stock of packs still takes time.                   | Factorio wiki, Research; DSP wiki, Research.                |
+| **Research uses what would make money.** An Upload Labs Data Lab consumes files that an Uploader would sell. Satisfactory milestones consume parts that cannot be taken back.       | Upload Labs wiki, Research; Satisfactory wiki, Milestones.  |
+| **Quality beats volume.** Upload Labs yields 1 Research for a text file and 32 for a game file, and Refined files yield 2×.                                                         | Upload Labs wiki, Research.                                 |
+| **New tiers ask for new shapes.** Each shapez level asks for one new, more complex shape. Freeplay asks for shapes per second, not a total.                                         | shapez wiki, Levels and Upgrading.                          |
+| **Research speed is research.** Factorio's lab speed bonus and DSP's Research speed upgrades are technologies.                                                                      | teemo.dev, Research labs and science costs; DSP calculator. |
+
 ## Translation table
 
 This table turns each lesson into a Quorum rule and names the document that owns it.
 
-| Lesson                           | Quorum rule                                                                                                                          | Owner                                                |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| Nodes as live windows            | Node cards show Inbound, Capacity with a load bar, Stack, Latency, and Out. No decorative art on the board.                          | [Interface](./15-ui-ux.md#node-cards)                |
-| Left-to-right flow               | Users enter on the left. Data stores sit on the right. Payments and Analytics sit at the bottom.                                     | [Interface](./15-ui-ux.md#the-board)                 |
-| Income per second                | The HUD leads with $/s. Each change shows a delta toast after the system settles.                                                    | [Interface](./15-ui-ux.md#feedback-after-a-change)   |
-| Upgrade the slowest stage        | The simulation is a flow network. The tightest Node limits the chain, and the board marks it.                                        | [Simulation](./04-simulation.md#the-bottleneck)      |
-| Stacked multipliers              | Runtimes, frameworks, and techniques multiply different terms of one formula, so combinations matter.                                | [Runtimes](./06-runtimes.md)                         |
-| Resource ratios                  | Instance types split vCPU and RAM. Each runtime spends them in a different ratio.                                                    | [Runtimes](./06-runtimes.md#the-capacity-model)      |
-| Several currencies               | Cash, Insight, Dev Hours, and Legacy, each with one main source and one main sink.                                                   | [Economy](./09-economy.md)                           |
-| Prestige with modifiers          | Exit grants Legacy. The next company picks a Venture and optional Mutators.                                                          | [Exit and Legacy](./13-prestige.md)                  |
-| **Fix:** shallow late game       | Each Era adds a new failure mode, not a bigger number.                                                                               | [Progression](./10-progression.md#eras)              |
-| **Fix:** meaningless numbers     | Real units only: users, rps, ms, $/s. The user count stops near 6 billion.                                                           | [Balancing](./16-balancing.md#number-ranges)         |
-| **Fix:** click tedium            | Buy ×10 and Buy Max from day one, hold to repeat, policies at Series A, and Playbooks after the first Exit.                          | [Interface](./15-ui-ux.md#bulk-actions)              |
-| **Fix:** poor documentation      | Every Component, runtime, and incident has an in-game card that names the real behavior. The engineering glossary ships in the game. | [Glossary](./glossary.md)                            |
-| **Fix:** monetization pressure   | No paid currency. No timers that payment can skip.                                                                                   | [Vision](./01-vision.md#pillar-5-respect-the-player) |
-| **Fix:** confusing tutorial      | No tutorial screens. The Garage Era is the tutorial: one box, two request kinds, one choice at a time.                               | [Progression](./10-progression.md#era-0-garage)      |
-| **Fix:** learning needs a replay | Guided Sandboxes teach each later mechanic outside the Company, like Factorio tutorial levels. The free Sandbox is a test bench.     | [Sandbox](./14-challenges.md#sandbox)                |
-| Evenly spaced goals              | Pacing targets: a new goal every 2–5 minutes early, every 10–20 minutes late.                                                        | [Game loops](./03-game-loops.md#pacing)              |
-| Problems caused by the player    | Incidents attack weaknesses in the player's design. Random bad luck is rare and always survivable with redundancy.                   | [Incidents](./11-incidents.md#design-rules)          |
-| Lack of visibility               | Observability is a progression track. The player earns p99, traces, and profiles.                                                    | [Observability](./12-observability.md)               |
-| Watching the system settle       | After a change, the HUD shows "Settling", then "Stable" with the new rates.                                                          | [Interface](./15-ui-ux.md#feedback-after-a-change)   |
-| Refactoring is inevitable        | Migrations, service splits, and data moves are real projects that cost Dev Hours.                                                    | [Team and velocity](./08-team-and-velocity.md)       |
-| Blueprints                       | Playbooks: saved sub-designs that a player places in one action.                                                                     | [Exit and Legacy](./13-prestige.md#playbooks)        |
-| Histograms on conflicting axes   | Challenges score cost, p99, and complexity on three histograms.                                                                      | [Challenges](./14-challenges.md)                     |
-| Phase shifts                     | Each Era changes what the player optimizes: one box, then scale-out, data, availability, teams, geography, and margin.               | [Progression](./10-progression.md#eras)              |
-| A real ending                    | Each company ends at an Exit with a score. The player chooses to continue.                                                           | [Exit and Legacy](./13-prestige.md)                  |
+| Lesson                           | Quorum rule                                                                                                                          | Owner                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| Nodes as live windows            | Node cards show Inbound, Capacity with a load bar, Stack, Latency, and Out. No decorative art on the board.                          | [Interface](./15-ui-ux.md#node-cards)                  |
+| Left-to-right flow               | Users enter on the left. Data stores sit on the right. Payments and Analytics sit at the bottom.                                     | [Interface](./15-ui-ux.md#the-board)                   |
+| Income per second                | The HUD leads with $/s. Each change shows a delta toast after the system settles.                                                    | [Interface](./15-ui-ux.md#feedback-after-a-change)     |
+| Upgrade the slowest stage        | The simulation is a flow network. The tightest Node limits the chain, and the board marks it.                                        | [Simulation](./04-simulation.md#the-bottleneck)        |
+| Stacked multipliers              | Runtimes, frameworks, and techniques multiply different terms of one formula, so combinations matter.                                | [Runtimes](./06-runtimes.md)                           |
+| Resource ratios                  | Instance types split vCPU and RAM. Each runtime spends them in a different ratio.                                                    | [Runtimes](./06-runtimes.md#the-capacity-model)        |
+| Several currencies               | Cash, Insight, Dev Hours, and Legacy, each with one main source and one main sink.                                                   | [Economy](./09-economy.md)                             |
+| Prestige with modifiers          | Exit grants Legacy. The next company picks a Venture and optional Mutators.                                                          | [Exit and Legacy](./13-prestige.md)                    |
+| **Fix:** shallow late game       | Each Era adds a new failure mode, not a bigger number.                                                                               | [Progression](./10-progression.md#eras)                |
+| **Fix:** meaningless numbers     | Real units only: users, rps, ms, $/s. The user count stops near 6 billion.                                                           | [Balancing](./16-balancing.md#number-ranges)           |
+| **Fix:** click tedium            | Buy ×10 and Buy Max from day one, hold to repeat, policies at Series A, and Playbooks after the first Exit.                          | [Interface](./15-ui-ux.md#bulk-actions)                |
+| **Fix:** poor documentation      | Every Component, runtime, and incident has an in-game card that names the real behavior. The engineering glossary ships in the game. | [Glossary](./glossary.md)                              |
+| **Fix:** monetization pressure   | No paid currency. No timers that payment can skip.                                                                                   | [Vision](./01-vision.md#pillar-5-respect-the-player)   |
+| **Fix:** confusing tutorial      | No tutorial screens. The Garage Era is the tutorial: one box, two request kinds, one choice at a time.                               | [Progression](./10-progression.md#era-0-garage)        |
+| **Fix:** learning needs a replay | Guided Sandboxes teach each later mechanic outside the Company, like Factorio tutorial levels. The free Sandbox is a test bench.     | [Sandbox](./14-challenges.md#sandbox)                  |
+| Evenly spaced goals              | Pacing targets: a new goal every 2–5 minutes early, every 10–20 minutes late.                                                        | [Game loops](./03-game-loops.md#pacing)                |
+| Problems caused by the player    | Incidents attack weaknesses in the player's design. Random bad luck is rare and always survivable with redundancy.                   | [Incidents](./11-incidents.md#design-rules)            |
+| Lack of visibility               | Observability is a progression track. The player earns p99, traces, and profiles.                                                    | [Observability](./12-observability.md)                 |
+| Research paid in kinds           | Insight has a request kind. Each research item costs Insight of the kinds that teach it, so a new Era's research needs its traffic.  | [Observability](./12-observability.md#earning-insight) |
+| Quality beats volume             | Insight grows with the square root of sampled traffic, per Component and kind. A broad Design teaches more than a big one.           | [Observability](./12-observability.md#earning-insight) |
+| Research takes time              | Research is a Study with a duration that takes its Insight over time. A Spike or study-speed research makes it faster.               | [Progression](./10-progression.md#studies)             |
+| Watching the system settle       | After a change, the HUD shows "Settling", then "Stable" with the new rates.                                                          | [Interface](./15-ui-ux.md#feedback-after-a-change)     |
+| Refactoring is inevitable        | Migrations, service splits, and data moves are real projects that cost Dev Hours.                                                    | [Team and velocity](./08-team-and-velocity.md)         |
+| Blueprints                       | Playbooks: saved sub-designs that a player places in one action.                                                                     | [Exit and Legacy](./13-prestige.md#playbooks)          |
+| Histograms on conflicting axes   | Challenges score cost, p99, and complexity on three histograms.                                                                      | [Challenges](./14-challenges.md)                       |
+| Phase shifts                     | Each Era changes what the player optimizes: one box, then scale-out, data, availability, teams, geography, and margin.               | [Progression](./10-progression.md#eras)                |
+| A real ending                    | Each company ends at an Exit with a score. The player chooses to continue.                                                           | [Exit and Legacy](./13-prestige.md)                    |
 
 ## Sources
 
@@ -115,6 +133,15 @@ This table turns each lesson into a Quorum rule and names the document that owns
 - Steam discussion, "Questions about 2.0": <https://steamcommunity.com/app/3606890/discussions/0/684116795952744705>
 - SteamDB, Upload Labs 3.0 patch notes: <https://steamdb.info/patchnotes/25397076/>
 - VaporLens, Upload Labs review summary: <https://vaporlens.app/app/3606890/upload_labs>
+- Upload Labs wiki, Research: <https://labs-wiki.enigmastudio.dev/en/hub/research>
+- Factorio wiki, Research: <https://wiki.factorio.com/Research>
+- teemo.dev, Factorio research tech tree and science packs: <https://teemo.dev/game-design/factorio/systems/research-tech-tree-and-science>
+- teemo.dev, Factorio research, labs and science costs: <https://teemo.dev/game-design/factorio/systems/research-labs-and-science-costs/>
+- shapez wiki, Levels: <https://shapezio.fandom.com/wiki/Levels>
+- shapez wiki, Upgrading: <https://shapezio.fandom.com/wiki/Upgrading>
+- Satisfactory wiki, Milestones: <https://satisfactory.wiki.gg/wiki/Milestones>
+- Dyson Sphere Program wiki, Research: <https://dyson-sphere-program.fandom.com/wiki/Research>
+- Dyson Sphere Program calculator, Information Matrix: <https://dyson-calculator.com/en/items/detail/id/I_Matrix/name/Information+Matrix>
 - Hacker News, Factorio addiction thread: <https://news.ycombinator.com/item?id=24156475>
 - Fuseki.net, What Is Interesting About Factorio: <https://www.fuseki.net/What-Is-Interesting-About-Factorio>
 - LeadDev, Factorio and better software engineering: <https://leaddev.com/career-development/factorio-and-the-promise-of-better-software-engineering>

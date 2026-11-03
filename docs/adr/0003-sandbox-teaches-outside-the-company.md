@@ -8,7 +8,7 @@ and must do it again after each Exit.
 Quorum adds the Sandbox, a Board outside any Company. A guided Sandbox teaches one mechanic from a
 fixed Design through ordered objectives; its length varies with the mechanic, like a Factorio
 tutorial level. The guided Sandboxes for each Era form a Sandbox track, available from
-the start. Passing a track unlocks that Era's Challenges. The free Sandbox is a test bench with
+the start. Challenges follow a separate sequence across Eras. The free Sandbox is a test bench with
 everything unlocked and unlimited Cash.
 
 Considered options:

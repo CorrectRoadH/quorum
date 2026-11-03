@@ -181,10 +181,10 @@ cost (users lost, revenue lost). It is blameless, like the practice it models.
 A postmortem pays no Insight. A flat reward made incidents a source of income, so a weak design that
 failed often researched faster than a strong one. Instead, the postmortem opens one **action item**: the
 first research in the incident's prevention list that the player does not own and can study now.
-The card can research it at its normal price. Filing without it leaves the item open, and while any
+The card can put its Study first in the queue. Filing without it leaves the item open, and while any
 prevention of an incident is open and not owned, the director picks that incident twice as often. An
 unfixed root cause comes back. A player short on Insight is never blocked; the item stays open until
-they can pay. When the design already has every prevention, the card opens no action item.
+its Study completes. When the design already has every prevention, the card opens no action item.
 
 ## SLOs and error budgets
 

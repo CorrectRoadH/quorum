@@ -124,7 +124,7 @@ describe('Pre-seed incidents', () => {
   })
 
   test('a postmortem pays nothing and leaves its action item open until it is researched', () => {
-    const due = { ...preseedGame(), nextIncidentAt: Number.MAX_SAFE_INTEGER, insight: 100 }
+    const due = { ...preseedGame(), nextIncidentAt: Number.MAX_SAFE_INTEGER }
     const spiked = forceIncident(due, solve(due), 'spike') as Game
     // An unmitigated spike escalates halfway and runs 50% longer (11 "Escalation").
     const { game } = run(spiked, 50)
@@ -134,11 +134,13 @@ describe('Pre-seed incidents', () => {
     expect(game.openActions).toEqual(['caching'])
     const id = postmortem?.id ?? -1
     const filed = ok(filePostmortem(game, id, false))
-    expect(filed.insight).toBe(game.insight)
+    expect(filed.pools).toEqual(game.pools)
+    expect(filed.studies).toEqual(game.studies)
     expect(filed.openActions).toEqual(['caching'])
+    // Taking it puts its Study first in the queue.
     const taken = ok(filePostmortem(game, id, true))
-    expect(taken.insight).toBe(game.insight - 80)
-    expect(taken.researched).toContain('caching')
+    expect(taken.studies[0]).toEqual({ id: 'caching', progress: 0 })
+    expect(taken.researched).not.toContain('caching')
   })
 
   test('an open action item makes its incident come back more often', () => {
@@ -272,7 +274,7 @@ describe('alert fatigue', () => {
 })
 
 describe('Insight', () => {
-  test('the first served API write pays 20 Insight, once', () => {
+  test('the first served API write pays 20 write Insight, once', () => {
     const game: Game = {
       ...preseedGame(),
       nextIncidentAt: Number.MAX_SAFE_INTEGER,
@@ -281,7 +283,8 @@ describe('Insight', () => {
     expect(solve(game).kinds.write?.success ?? 0).toBeGreaterThan(0.5)
     const first = step(game, 0.25).game
     const second = step(first, 0.25).game
-    const earned = (from: Game, to: Game) => to.insight - from.insight - solve(from).insight * 0.25
+    const earned = (from: Game, to: Game) =>
+      to.pools.write - from.pools.write - solve(from).insight.write * 0.25
     expect(earned(game, first)).toBeCloseTo(20)
     expect(earned(first, second)).toBeCloseTo(0)
     expect(first.servedKinds).toContain('write')

@@ -63,23 +63,23 @@ time the game state makes it useful.
 
 ### Triggers
 
-| Element                            | Appears when                                                     |
-| ---------------------------------- | ---------------------------------------------------------------- |
-| Undo and redo                      | The player makes the first Board action                          |
-| Collect glow on Payments           | The drawer is half full for the first time                       |
-| Resize glow on a Node card         | The Node is the bottleneck for the first time                    |
-| Insight HUD row and Research (`R`) | Insight reaches the cost of the cheapest available Research item |
-| Errors HUD row                     | The first request fails                                          |
-| Team (`T`) and the Feature HUD row | The first Feature is built                                       |
-| Hiring in the Team panel           | The Pre-seed Era starts                                          |
-| Engineering in the Team panel      | The first memory leak or the first tech debt                     |
-| Autopilot in the Team panel        | The backlog holds two items                                      |
-| Glossary (`G`)                     | The first Tradeoff card opens                                    |
-| Dashboard (`D`)                    | Metrics is researched                                            |
-| The pager                          | Alerting is researched                                           |
-| Postmortems                        | The first incident ends                                          |
-| Playbooks (`P`)                    | The first Exit                                                   |
-| Region tabs                        | The Series C Era starts                                          |
+| Element                            | Appears when                                                      |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| Undo and redo                      | The player makes the first Board action                           |
+| Collect glow on Payments           | The drawer is half full for the first time                        |
+| Resize glow on a Node card         | The Node is the bottleneck for the first time                     |
+| Insight HUD row and Research (`R`) | Any pool reaches the cost of the cheapest available Research item |
+| Errors HUD row                     | The first request fails                                           |
+| Team (`T`) and the Feature HUD row | The first Feature is built                                        |
+| Hiring in the Team panel           | The Pre-seed Era starts                                           |
+| Engineering in the Team panel      | The first memory leak or the first tech debt                      |
+| Autopilot in the Team panel        | The backlog holds two items                                       |
+| Glossary (`G`)                     | The first Tradeoff card opens                                     |
+| Dashboard (`D`)                    | Metrics is researched                                             |
+| The pager                          | Alerting is researched                                            |
+| Postmortems                        | The first incident ends                                           |
+| Playbooks (`P`)                    | The first Exit                                                    |
+| Region tabs                        | The Series C Era starts                                           |
 
 ### The build dock
 
@@ -190,16 +190,16 @@ replication mode, a deploy strategy, a pricing model.
 
 The fix for Upload Labs click fatigue ([Influences](./02-influences.md#why-players-quit)).
 
-| Tool                 | Available from | Effect                                                                               |
-| -------------------- | -------------- | ------------------------------------------------------------------------------------ |
-| Buy ×1, ×10, Max     | Start          | Upgrade or place several at once                                                     |
-| Hold to repeat       | Start          | Holding Upgrade repeats it every 150 ms                                              |
-| Upgrade all of type  | Start          | One action for every selected Node                                                   |
-| Multi-select         | Start          | Drag a box; act on all                                                               |
-| Copy and paste       | Start          | Duplicate a selection with its links and settings                                    |
-| Autoscaler           | Series A       | Capacity follows demand ([Components](./05-components.md#autoscaler))                |
-| Policies (Autopilot) | Legacy         | Rules such as "keep App Servers below 70% at peak" and "research cheapest available" |
-| Playbooks            | Legacy         | Place a saved design in one action ([Exit and Legacy](./13-prestige.md#playbooks))   |
+| Tool                 | Available from | Effect                                                                             |
+| -------------------- | -------------- | ---------------------------------------------------------------------------------- |
+| Buy ×1, ×10, Max     | Start          | Upgrade or place several at once                                                   |
+| Hold to repeat       | Start          | Holding Upgrade repeats it every 150 ms                                            |
+| Upgrade all of type  | Start          | One action for every selected Node                                                 |
+| Multi-select         | Start          | Drag a box; act on all                                                             |
+| Copy and paste       | Start          | Duplicate a selection with its links and settings                                  |
+| Autoscaler           | Series A       | Capacity follows demand ([Components](./05-components.md#autoscaler))              |
+| Policies (Autopilot) | Legacy         | Rules such as "keep App Servers below 70% at peak" and "queue the cheapest Study"  |
+| Playbooks            | Legacy         | Place a saved design in one action ([Exit and Legacy](./13-prestige.md#playbooks)) |
 
 Rule: no action needs more than five repeated clicks without a bulk alternative.
 
@@ -223,8 +223,21 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
   band per Era. Items with no prerequisite in their track branch off the track's trunk.
 - Locked items are visible and greyed, with their requirements, so the player can plan ahead.
   Items beyond the next Era are faded. The screen opens scrolled to the focused item.
-- Each item shows its cost, its effect in one line, and what it unlocks.
-- A queue: the player can queue items, and they are bought automatically when Insight allows.
+- Each item shows its cost as one chip per recipe pool, with the pool's icon and amount, its
+  duration, its effect in one line, and what it unlocks.
+- A queue of up to 8 Studies. The running Study shows its progress, and the pool that limits it.
+
+### Insight pools
+
+Each Insight pool has its own icon, like a Factorio science pack, so the player reads a recipe at a
+glance instead of reading labels.
+
+- The icon's colour is the request kind's particle colour on the board, so a `buy` particle and
+  `buy` Insight look the same. Failure Insight has its own colour, which no request kind uses.
+- Each icon also has its own shape, so pools differ without colour. Its accessible name is the
+  pool's name, such as "Checkout Insight".
+- The same icon appears everywhere a pool appears: recipe chips, the HUD, the Analytics card, and
+  Mail.
 
 ## Notifications
 
@@ -238,7 +251,7 @@ Advice and offers are Mail ([Mail](./18-mail.md)). The rules below cover what st
 
 ## Offline return
 
-A single card: time away, users then and now, Cash, Insight, and Dev Hours earned, the peak hour and
+A single card: time away, users then and now, Cash and Dev Hours earned, the Studies that completed, the peak hour and
 its worst utilization, and one suggestion if users were lost at peak.
 
 ## Accessibility

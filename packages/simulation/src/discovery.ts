@@ -45,7 +45,8 @@ const BY_COMPONENT: Partial<Record<ComponentId, ReadonlyArray<string>>> = {
   waf: ['rate-limiting', 'waf-web-application-firewall'],
 }
 
-const BY_RESEARCH: Partial<Record<ResearchId, ReadonlyArray<string>>> = {
+/** The entries each Research item teaches; the Research detail links to them. */
+export const BY_RESEARCH: Partial<Record<ResearchId, ReadonlyArray<string>>> = {
   anycast: ['anycast', 'bgp-border-gateway-protocol'],
   'lang-node': ['async-io', 'blast-radius', 'event-loop'],
   'lang-csharp': ['async-io', 'jit-warmup'],
@@ -76,6 +77,8 @@ const BY_RESEARCH: Partial<Record<ResearchId, ReadonlyArray<string>>> = {
   'gdpr-residency': ['data-residency'],
   'dependency-scanning': ['dependency-scanning'],
   tracing: ['distributed-tracing', 'red-method'],
+  'trace-search': ['distributed-tracing'],
+  notebooks: ['observability'],
   metrics: [
     'annotation',
     'diurnal-traffic',

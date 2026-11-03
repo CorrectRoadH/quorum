@@ -1,8 +1,9 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { IconNode } from 'lucide'
-import type { BuildGroup } from '@quorum/simulation/catalog'
+import type { BuildGroup, InsightPool } from '@quorum/simulation/catalog'
 import { GROUP_SHAPES, type GroupShape, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
 import type { Message } from '@/game/message.ts'
+import { POOL_ICONS, poolColor, poolName } from '@/game/pools.ts'
 import type { Toast } from '@/game/model.ts'
 import { icon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -328,3 +329,38 @@ export const ring = (share: number, className: string, h: HtmlBuilder<Message>):
     ],
   )
 }
+
+/**
+ * One Insight pool and a figure: the pool's own icon in its colour, then the
+ * figure. `grey` draws it uncoloured; `tone` colours the figure.
+ */
+export const insightChip = (
+  pool: InsightPool,
+  figure: string,
+  h: HtmlBuilder<Message>,
+  grey = false,
+  tone: Tone = 'plain',
+): Html =>
+  h.span(
+    [
+      h.Title(`${poolName(pool)} ${figure}`),
+      h.AriaLabel(`${poolName(pool)} ${figure}`),
+      h.Class(cn(FIGURE, 'inline-flex items-center gap-[3px] whitespace-nowrap')),
+    ],
+    [
+      h.span(
+        [
+          h.Class('inline-flex'),
+          h.Style({ color: grey ? 'var(--muted-foreground)' : poolColor(pool) }),
+        ],
+        [icon(h, POOL_ICONS[pool], 'size-3 shrink-0')],
+      ),
+      h.span(
+        [
+          h.AriaHidden(true),
+          h.Class(grey ? 'text-muted-foreground' : tone === 'plain' ? '' : toneText(tone)),
+        ],
+        [figure],
+      ),
+    ],
+  )

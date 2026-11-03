@@ -1,4 +1,4 @@
-import { Listbox } from '@foldkit/ui'
+import { DragAndDrop, Listbox } from '@foldkit/ui'
 import { languageListbox } from '../i18n/listbox.ts'
 import { Option, Result, Schema } from 'effect'
 import { Update, type Runtime } from 'foldkit'
@@ -37,6 +37,7 @@ import {
   advanceRun,
   beginRun,
   challengeById,
+  challengeOpen,
   resultOf,
   stepsOf,
   type Challenge,
@@ -106,7 +107,7 @@ import {
 } from './mail.ts'
 import type { EventMail } from './copy/index.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
-import { eraOf, has, isFinalEra, nextEra } from '@quorum/simulation/lookups'
+import { eraOf, has, isFinalEra, nextEra, zoned } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
 import {
   advanceSandbox,
@@ -166,7 +167,7 @@ import {
 } from './feedback.ts'
 import { cueOf } from './cues.ts'
 import { stressBoard } from './stress.ts'
-import { CARD_W, boxOf, freeSpot, heightOf } from './geometry.ts'
+import { CARD_W, boxOf, freeSpot, heightOf, tidy } from './geometry.ts'
 import { alertText, duration } from './format.ts'
 import { Message } from './message.ts'
 import {
@@ -236,6 +237,7 @@ export const initialModel = (): Model =>
     exited: null,
     region: 'na',
     panel: 'none',
+    teamDrag: DragAndDrop.init({ id: 'team-drag' }),
     researchFocus: null,
     buildGroup: null,
     speed: 1,
@@ -258,6 +260,8 @@ export const initialModel = (): Model =>
     locale: 'en',
     languagePicker: Listbox.init({ id: 'interface-language' }),
     glossaryFocus: null,
+    glossaryReturn: 'none',
+    insightHelp: false,
     glossaryQuery: '',
     glossaryCategory: null,
     inbox: [],
@@ -873,6 +877,11 @@ const eventText = (event: StepEvent, game: Game): EventNote =>
           ]
         : [`Deployed ${names}.`, 'primary', { topic: 'deployed', vars: { features: names } }]
     },
+    StudyCompleted: ({ research }): EventNote => [
+      `${RESEARCH[research].name} is researched.`,
+      'ok',
+      { topic: 'finished', vars: { item: RESEARCH[research].name } },
+    ],
     MigrationShifted: ({ step }): EventNote => [
       `${percent(MIGRATION_STEPS[step - 1] ?? 0)} of App Servers moved to the new Stack.`,
       'primary',
@@ -893,6 +902,7 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
     WorkFinished: ({ item }) => ({ kind: item.kind, ref: item.ref, cost: item.cost }),
     Deployed: ({ features, bad }) => ({ features, bad }),
     MigrationShifted: ({ step }) => ({ step }),
+    StudyCompleted: ({ research }) => ({ research }),
   })
 
 /* ---------- the clock ---------- */
@@ -1045,7 +1055,7 @@ const tick = (model: Model): Result => {
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     }
   }
-  // Reaching an Era in a Company opens its Challenges (14 "Rules").
+  // The Founder records each Era reached in a Company.
   if (!offCompany(next) && !next.founder.erasReached.includes(game.stage)) {
     next = { ...next, founder: recordEra(next.founder, game.stage) }
     commands.push(WriteFounder({ founder: next.founder }))
@@ -1468,8 +1478,8 @@ const leaveBoard = (model: Model): Result => {
   return { model: next, commands: [WriteSandboxStore({ store: storeOf(next) })] }
 }
 
-/** Opens a route's screen. A board that cannot open (no Company to continue,
- *  an unknown Challenge) leaves the Model as it is. */
+/** Opens a route's screen. A board that cannot open (no Company to continue)
+ *  leaves the Model as it is; a locked Challenge lands on the Challenge list. */
 const open = (model: Model, route: AppRoute): Result =>
   AppRoute.match<Result>(route, {
     Title: () => ({ model: { ...model, route } }),
@@ -1479,7 +1489,13 @@ const open = (model: Model, route: AppRoute): Result =>
       sandbox === 'free'
         ? enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START })
         : enterSandbox(model, GUIDED[sandbox].start(), { id: sandbox, progress: START }),
-    Challenge: ({ challenge }) => enterChallenge(model, challenge),
+    Challenge: ({ challenge }) => {
+      const entry = challengeById(challenge)
+      if (!entry) return { model }
+      return challengeOpen(entry, model.founder.completed)
+        ? enterChallenge(model, challenge)
+        : { model: { ...model, route: AppRoute.Menu({ menu: 'challenges' }) } }
+    },
   })
 
 /** Follows a URL from back, forward, or a link: closes the open board, opens
@@ -1701,6 +1717,22 @@ const handle = (model: Model, message: Message): Result =>
     },
     FullscreenToggled: () => ({ model, commands: [ToggleFullscreen({})] }),
     BoardFitted: () => ({ model, commands: [FitBoard({})] }),
+    BoardTidied: () => {
+      const view = regionView(model.game, model.region)
+      const nodes = view.nodes.map((node) => ({
+        ...node,
+        group: zoned(node) ? node.zone : 'all',
+      }))
+      const spots = tidy(nodes, view.links, ['all', 'a', 'b', 'c'])
+      const game = [...spots].reduce(
+        (game, [id, spot]) => Actions.move(game, id, spot.x, spot.y),
+        model.game,
+      )
+      const tidied = act(model, 'Tidied the board by zone', Result.succeed(game), {
+        undoable: true,
+      })
+      return { ...tidied, commands: [...(tidied.commands ?? []), FitBoard({})] }
+    },
 
     KeyPressed: ({ key }) => {
       if (!onBoard(model.route)) return key === 'Escape' ? { model } : clockIn(model)
@@ -1713,6 +1745,7 @@ const handle = (model: Model, message: Message): Result =>
         case 'Escape': {
           if (model.exited) return leaveExited(model, 'found')
           if (model.tradeoff) return { model: { ...model, tradeoff: null } }
+          if (model.insightHelp) return { model: { ...model, insightHelp: false } }
           if (model.stamping !== null || model.selection.length > 0) {
             const cleared: Model = { ...model, stamping: null, selection: [] }
             return { model: cleared, commands: [sync(cleared)] }
@@ -1723,7 +1756,11 @@ const handle = (model: Model, message: Message): Result =>
               : model.buildGroup !== null
                 ? { ...model, buildGroup: null }
                 : model.panel !== 'none'
-                  ? { ...model, panel: 'none' }
+                  ? {
+                      ...model,
+                      panel: model.panel === 'glossary' ? model.glossaryReturn : 'none',
+                      glossaryReturn: 'none',
+                    }
                   : { ...model, selected: null }
           return { model: next, commands: [sync(next)] }
         }
@@ -2349,8 +2386,8 @@ const handle = (model: Model, message: Message): Result =>
     ResearchFocused: ({ id }) => ({ model: { ...model, researchFocus: id } }),
 
     ResearchBought: ({ id }) =>
-      act(model, `Researched ${RESEARCH[id].name}`, Actions.study(model.game, id), {
-        note: () => [`Researched ${RESEARCH[id].name}.`, 'primary'],
+      act(model, `Study ${RESEARCH[id].name}`, Actions.study(model.game, id), {
+        note: () => [`Study queued: ${RESEARCH[id].name}.`, 'primary'],
       }),
 
     HireChosen: () =>
@@ -2365,6 +2402,21 @@ const handle = (model: Model, message: Message): Result =>
     TeamRemoved: ({ teamId }) => act(model, 'Removed a team', Work.removeTeam(model.game, teamId)),
     EngineerAssigned: ({ engineerId, teamId }) =>
       act(model, 'Moved an engineer', Work.assign(model.game, engineerId, teamId)),
+    TeamDragChanged: ({ message }) =>
+      Update.foldChild({
+        update: DragAndDrop.update,
+        read: (parent: Model) => Option.some(parent.teamDrag),
+        write: (parent, teamDrag) => ({ ...parent, teamDrag }),
+        toParentMessage: (child) => Message.TeamDragChanged({ message: child }),
+        foldOutMessage: (out) => (parent) =>
+          out._tag === 'Reordered' && out.fromContainerId !== out.toContainerId
+            ? act(
+                parent,
+                'Moved an engineer',
+                Work.assign(parent.game, out.itemId, out.toContainerId),
+              )
+            : { model: parent },
+      })(model, message),
     TeamPolicyChosen: ({ teamId, policy }) =>
       act(
         model,
@@ -2423,7 +2475,7 @@ const handle = (model: Model, message: Message): Result =>
       const action = model.game.postmortems.find((entry) => entry.id === id)?.action
       return act(model, 'Postmortem', Actions.filePostmortem(model.game, id, take), {
         note: () =>
-          take && action ? [`Action item done: ${RESEARCH[action].name}.`, 'primary'] : null,
+          take && action ? [`Study queued: ${RESEARCH[action].name}.`, 'primary'] : null,
       })
     },
 
@@ -2529,6 +2581,7 @@ const handle = (model: Model, message: Message): Result =>
       const opened: Model = {
         ...model,
         panel,
+        teamDrag: DragAndDrop.init({ id: 'team-drag' }),
         placing: null,
         researchFocus: null,
         dashboardHover: null,
@@ -2537,7 +2590,15 @@ const handle = (model: Model, message: Message): Result =>
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () =>
-      model.exited ? leaveExited(model, 'found') : { model: { ...model, panel: 'none' } },
+      model.exited
+        ? leaveExited(model, 'found')
+        : {
+            model: {
+              ...model,
+              panel: model.panel === 'glossary' ? model.glossaryReturn : 'none',
+              glossaryReturn: 'none',
+            },
+          },
 
     LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
     LocaleChosen: ({ locale }) => {
@@ -2546,6 +2607,7 @@ const handle = (model: Model, message: Message): Result =>
       return { ...result, commands: [...(result.commands ?? []), sync(next)] }
     },
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
+    InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>
       settled({ ...model, motion: model.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
@@ -2557,6 +2619,8 @@ const handle = (model: Model, message: Message): Result =>
         panel: 'glossary',
         placing: null,
         glossaryFocus: id,
+        glossaryReturn:
+          model.panel === 'research' ? 'research' : browsing ? model.glossaryReturn : 'none',
         glossaryQuery: browsing ? model.glossaryQuery : '',
         glossaryCategory: browsing ? model.glossaryCategory : null,
         founder,
@@ -2636,7 +2700,15 @@ const handle = (model: Model, message: Message): Result =>
     CheatInsight: () => ({
       model: {
         ...model,
-        game: { ...model.game, insight: model.game.insight + cheatInsight(model.game) },
+        game: {
+          ...model.game,
+          pools: Object.fromEntries(
+            Object.entries(model.game.pools).map(([pool, held]) => [
+              pool,
+              held + cheatInsight(model.game),
+            ]),
+          ) as Game['pools'],
+        },
       },
     }),
     CheatLegacy: () => {

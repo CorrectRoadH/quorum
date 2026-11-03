@@ -46,7 +46,6 @@ import {
 import {
   COMPONENTS,
   FRAMEWORKS,
-  INSIGHT_YIELD,
   LB_POLICIES,
   KINDS,
   RUNTIMES,
@@ -54,12 +53,15 @@ import {
   SCAN_PRICE,
   SIZES,
   ZONES,
+  POOLS,
   type BuildGroup,
+  type InsightPool,
   type ComponentId,
   MSGP_PRICE,
   REGION_INFO,
   rttOf,
 } from '@quorum/simulation/catalog'
+import { POOL_ICONS, POOL_ORDER } from './pools'
 import type { Ledger } from '@quorum/simulation/ledger'
 import {
   burnOf,
@@ -765,6 +767,8 @@ type Row = Readonly<{
   value: string
   tone?: RowTone
   bar?: number
+  /** An Insight pool's icon, in its colour, in place of the row glyph. */
+  pool?: InsightPool
   /** A brand mark in place of the row glyph. */
   logo?: StackLogoId
   /** A brand mark just before the value. */
@@ -858,12 +862,17 @@ const rowsOf = (
           tone: own.inbound > own.capacity ? 'warn' : 'plain',
           bar: own.capacity > 0 ? Math.min(1, own.inbound / own.capacity) : 0,
         },
-        {
-          glyph: 'insight',
-          name: 'Insight',
-          value: `+${(sampled * INSIGHT_YIELD * (2 - ledger.apdex)).toFixed(2)}/s`,
-          tone: 'ok',
-        },
+        // The three pools it earns most, each with its own icon.
+        ...POOL_ORDER.filter((pool) => ledger.insight[pool] > 0)
+          .toSorted((a, b) => ledger.insight[b] - ledger.insight[a])
+          .slice(0, 3)
+          .map((pool): Row => ({
+            glyph: 'insight',
+            pool,
+            name: POOLS[pool].label,
+            value: `+${ledger.insight[pool].toFixed(1)}/s`,
+            tone: 'ok',
+          })),
       ]
     }
     case 'server': {
@@ -1541,6 +1550,7 @@ class NodeView {
       const valueMark = this.valueMarks[index]
       if (!mark || !name || !value || !valueMark) return
       if (row.logo) paintLogo(mark, row.logo, colors.ink)
+      else if (row.pool) paint(mark, POOL_ICONS[row.pool], POOLS[row.pool].color)
       else paint(mark, ROW_ICONS[row.glyph], colors.muted)
       name.style.fill = row.logo ? colors.ink : colors.muted
       value.text = translate(locale, row.value)
@@ -1725,6 +1735,8 @@ class BoardController {
   private state: BoardState | null = null
   private gesture: Gesture = null
   private hoverLink: Readonly<{ from: string; to: string }> | null = null
+  /** The link a click picked: Delete or its × badge cuts it. A click never cuts by itself. */
+  private selectedLink: Readonly<{ from: string; to: string }> | null = null
   private pointer: Pt = { x: 0, y: 0 }
   /** Fingers and pens on the board, in client coordinates. Two of them pinch. */
   private readonly touches = new Map<number, Pt>()
@@ -1980,6 +1992,23 @@ class BoardController {
     )
   }
 
+  private selectLink(link: Readonly<{ from: string; to: string }>): void {
+    this.selectedLink = link
+    this.events.onEmptyTap()
+  }
+
+  /** Whether the point is on the × badge in the middle of the selected link. */
+  private onBadge(point: Pt): boolean {
+    const link = this.selectedLink
+    const from = link && this.shown().get(link.from)
+    const to = link && this.shown().get(link.to)
+    if (!from || !to) return false
+    const mid = pointOn(this.wireOf(from, to).path, 0.5)
+    return (
+      Math.hypot(mid.x - point.x, mid.y - point.y) <= (this.coarse ? 16 : 11) / this.world.scale.x
+    )
+  }
+
   private linkAt(point: Pt): Readonly<{ from: string; to: string }> | null {
     const byId = new Map(this.nodes().map((node) => [node.id, node]))
     const reach = (this.coarse ? 14 : 7) / this.world.scale.x
@@ -2115,7 +2144,7 @@ class BoardController {
         this.pointer = point
         if (event.button === 2) {
           const link = this.linkAt(point)
-          if (link) this.events.onUnlink(link.from, link.to)
+          if (link) this.selectLink(link)
           return
         }
         if (event.button !== 0) return
@@ -2162,9 +2191,13 @@ class BoardController {
           this.gesture = { kind: 'box', from: point, at: point }
           return
         }
+        if (this.selectedLink && this.onBadge(point)) {
+          this.events.onUnlink(this.selectedLink.from, this.selectedLink.to)
+          this.selectedLink = null
+          return
+        }
         if (this.hoverLink) {
-          this.events.onUnlink(this.hoverLink.from, this.hoverLink.to)
-          this.hoverLink = null
+          this.selectLink(this.hoverLink)
           return
         }
         this.gesture = {
@@ -2290,8 +2323,11 @@ class BoardController {
       }
       const point = this.toWorld(event)
       if (gesture.kind === 'pan' && !gesture.moved) {
-        if (gesture.cut) this.events.onUnlink(gesture.cut.from, gesture.cut.to)
-        else this.events.onEmptyTap()
+        if (gesture.cut) this.selectLink(gesture.cut)
+        else {
+          this.selectedLink = null
+          this.events.onEmptyTap()
+        }
       }
       if (gesture.kind === 'node') {
         const node = this.nodes().find((entry) => entry.id === gesture.id)
@@ -2341,6 +2377,20 @@ class BoardController {
     canvas.addEventListener('pointerup', (event) => finish(event, false), { signal })
     canvas.addEventListener('pointercancel', (event) => finish(event, true), { signal })
     canvas.addEventListener('pointerleave', () => (this.hoverLink = null), { signal })
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        const link = this.selectedLink
+        if (!link) return
+        if (event.key === 'Escape') this.selectedLink = null
+        if (event.key !== 'Delete' && event.key !== 'Backspace') return
+        const target = event.target as HTMLElement | null
+        if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+        this.selectedLink = null
+        this.events.onUnlink(link.from, link.to)
+      },
+      { signal },
+    )
 
     canvas.addEventListener(
       'wheel',
@@ -2496,6 +2546,9 @@ class BoardController {
     this.packets.clear()
     this.overlay.clear()
     this.syncBelts(state.game.links)
+    const picked = this.selectedLink
+    if (picked && !state.game.links.some((l) => l.from === picked.from && l.to === picked.to))
+      this.selectedLink = null
     for (const link of state.game.links) {
       const belt = this.belts.get(`${link.from}>${link.to}`)
       const from = byId.get(link.from)
@@ -2511,7 +2564,9 @@ class BoardController {
       const pieces = drawn < 1 ? [path] : wire.pieces
       const flow = rates.get(`${link.from}>${link.to}`)
       const tap = COMPONENTS[to.type].tap
-      const hovered = this.hoverLink?.from === link.from && this.hoverLink.to === link.to
+      const picked = this.selectedLink?.from === link.from && this.selectedLink.to === link.to
+      const hovered =
+        picked || (this.hoverLink?.from === link.from && this.hoverLink.to === link.to)
       const busy = (flow?.rate ?? 0) > 0.01
       // The packets' colour; the pipe under them is a pale tint of it, with no outline.
       const packet =
@@ -2541,7 +2596,7 @@ class BoardController {
         busy ? mix(packet, colors.canvas, 0.35) : colors.edge,
         this.phase * speed,
       )
-      if (hovered) {
+      if (picked) {
         const mid = pointOn(path, 0.5)
         this.overlay.circle(mid.x, mid.y, 9).fill(colors.danger)
         this.overlay

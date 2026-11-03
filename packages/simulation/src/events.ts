@@ -1,5 +1,5 @@
 import { Data } from 'effect'
-import type { FeatureId } from './catalog.ts'
+import type { FeatureId, ResearchId } from './catalog.ts'
 import type { Incident, Postmortem, WorkItem } from './state.ts'
 
 /* What a Step reports besides the new Game: things the player should hear about. */
@@ -22,6 +22,8 @@ export type StepEvent = Data.TaggedEnum<{
   Deployed: { readonly features: ReadonlyArray<FeatureId>; readonly bad: boolean }
   /** The autopilot shifted a migration to its next step. */
   MigrationShifted: { readonly step: number }
+  /** A Study completed: its research is the Company's now. */
+  StudyCompleted: { readonly research: ResearchId }
 }>
 
 export const StepEvent = Data.taggedEnum<StepEvent>()

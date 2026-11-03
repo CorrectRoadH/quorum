@@ -156,9 +156,126 @@ The company is listed. The game becomes an endless series of quarters.
 
 ## Research
 
-Research costs Insight and takes effect at once. Each item belongs to a track, needs an Era, and may
-need other items. The research screen shows the tree by track, with the locked items of the next Era
-visible so that the player can plan ([Interface](./15-ui-ux.md#research-screen)).
+Research costs Insight of named request kinds and takes time: each item is a **Study**. Each item
+belongs to a track, needs an Era, and may need other items. The research screen shows the tree by
+track, with the locked items of the next Era visible so that the player can plan
+([Interface](./15-ui-ux.md#research-screen)).
+
+### Recipes
+
+The ◇ column in the track tables is an item's total cost. Its **recipe** says which Insight pools
+pay it ([Observability](./12-observability.md#earning-insight)). The cost is split equally across
+the pools in the recipe.
+
+Until Seed, the default recipe is the request kinds that the item's Era brings. From Series A, it is
+the kinds of the Era before. A Series A kind such as `buy` arrives only when its Feature ships, and
+the Checkout Feature itself needs research, so a Series A default of `buy` could never be paid.
+
+| Era      | Default recipe                  |
+| -------- | ------------------------------- |
+| Garage   | `page`, `read`                  |
+| Pre-seed | `write`, `login`                |
+| Seed     | `search`, `upload`              |
+| Series A | `search`, `upload`              |
+| Series B | `media`, `rt`, `buy`            |
+| Series C | `job`, `report`, `ai`           |
+| Pre-IPO  | Every request kind except `bot` |
+| Public   | Every request kind except `bot` |
+
+So the player cannot study Series B research before Series A's Features bring their traffic, and
+more `page` traffic never buys it. Items that teach a new kind's problem ask for that kind, so the
+player ships the Feature first: it is the production line for that kind's Insight. No item that a
+Feature needs costs the kind that Feature brings. A Venture's request mix changes which recipes are cheap: Fintech serves 4×
+`buy`, so its Series A research is fast. Every Venture serves every request kind, so every recipe
+can be paid.
+
+**Reliability track rule.** Half of every Reliability item's cost is Failure Insight. The other half
+uses the item's recipe.
+
+Items whose recipe is not the default:
+
+| Item                                                                    | Recipe                          | Why                                         |
+| ----------------------------------------------------------------------- | ------------------------------- | ------------------------------------------- |
+| `logs`                                                                  | `page`                          | The first traffic the player sees           |
+| `metrics`, `query-analysis`, `eager-loading`                            | `read`                          | Slow reads show the problem                 |
+| `percentiles`                                                           | `read`, `login`                 | bcrypt makes `login` the slow tail          |
+| `alerting`                                                              | Failure, `read`                 | An alert needs something to fire on         |
+| `health-checks`                                                         | Failure, `read`                 | A check needs a Node that fails             |
+| `caching`                                                               | `read`                          | A cache serves reads                        |
+| `pooling`, `pitr`, `online-migrations`                                  | `write`                         | Connections and data loss show under writes |
+| `replication`, `ryw-routing`, `sharding`, `denormalization`             | `read`, `write`                 | The read and write split                    |
+| `cache-strategies`                                                      | `read`, `write`                 | Each strategy differs on writes             |
+| `stampede-protection`                                                   | `read`, Failure                 | A stampede is a failure on cached reads     |
+| `full-text-search`                                                      | `search`                        |                                             |
+| `object-storage`                                                        | `upload`                        |                                             |
+| `cdn`, `http2`, `http3`                                                 | `page`, `upload`                | Static assets and payloads                  |
+| `waf`, `bot-management`                                                 | `bot`                           | Bots teach how bots behave                  |
+| `credential-protection`                                                 | `login`, `bot`                  | Credential stuffing is bot `login`          |
+| `funnels`                                                               | `page`, `login`                 | Sign-up is the funnel                       |
+| `auth-provider`                                                         | `login`                         |                                             |
+| `idempotency-keys`                                                      | `buy`                           | Retried charges                             |
+| `notifications`                                                         | `push`                          |                                             |
+| `websockets`                                                            | `rt`                            |                                             |
+| `tiered-caching`                                                        | `media`                         |                                             |
+| `esi`                                                                   | `page`, `media`                 |                                             |
+| `slo-dashboards`                                                        | Failure, `buy`                  | The budget protects the money path          |
+| `sync-replication`, `consensus`                                         | `write`, `buy`                  | Money cannot be lost                        |
+| `data-warehouse`, `precompute`                                          | `report`                        |                                             |
+| `cdc`                                                                   | `report`, `write`               |                                             |
+| `outbox`                                                                | `buy`, `job`                    | Dual writes between money and jobs          |
+| `embeddings`                                                            | `ai`, `search`                  |                                             |
+| `hosted-models`, `model-serving`, `quantization`, `continuous-batching` | `ai`                            |                                             |
+| `hybrid-fanout`, `leaderless`                                           | `feed`                          | Hot keys come from celebrity feeds          |
+| `rum`                                                                   | `page`, `feed`                  | Latency from the user's side                |
+| `tail-sampling`                                                         | Failure                         | It keeps the failed traces                  |
+| `anomaly-detection`                                                     | Failure, `feed`, `hook`, `push` |                                             |
+
+**Breadth.** Some Observability items also need their recipe kinds sampled at a number of
+Component types. A trace needs more than one hop.
+
+| Item        | Breadth              |
+| ----------- | -------------------- |
+| `tracing`   | 3 Component types    |
+| `profiling` | 4 Component types    |
+| `rum`       | Sampled in 2 regions |
+
+### Studies
+
+A Study runs one item. One Study runs at a time; the player queues up to 8, reorders them, and can
+switch the running Study. A switched Study keeps its progress, as in Factorio. The effect starts when
+the Study completes.
+
+| Era      | Base duration |
+| -------- | ------------- |
+| Garage   | 20 s          |
+| Pre-seed | 1 min         |
+| Seed     | 2 min         |
+| Series A | 4 min         |
+| Series B | 8 min         |
+| Series C | 15 min        |
+| Pre-IPO  | 30 min        |
+| Public   | 60 min        |
+
+A Study takes its Insight as it runs, like a Factorio lab takes packs. In each Step:
+
+```text
+draw(pool) = cost(pool) × speed × dt / base_duration
+progress  += speed × dt × min(1, min over recipe pools: balance(pool) / draw(pool))
+```
+
+Each pool pays `draw(pool)` times the same factor. When a pool is empty, the Study runs at the rate
+that pool earns, so the scarcest kind limits it. Traffic falls at night, so a `buy` Study slows at
+night. The player can start a Study with no Insight saved.
+
+`speed` is 1, and two things raise it:
+
+- **A Spike.** A Team takes the running Study as its backlog item
+  ([Team](./08-team-and-velocity.md#spikes)). While it does, `speed` × 2. A Spike whose Study is
+  not running waits, and no Team takes it.
+- **Study-speed research.** `trace-search` and `notebooks` add +25% each.
+
+Studies run offline ([Simulation](./04-simulation.md#offline-progress)). A postmortem's action item
+puts its Study first in the queue ([Incidents](./11-incidents.md#postmortems)).
 
 ### Cost bands
 
@@ -242,42 +359,44 @@ visible so that the player can plan ([Interface](./15-ui-ux.md#research-screen))
 
 ### Track: Reliability
 
-| ID                     | Name                     | Era      | ◇       | Requires                         | Effect                                                                |
-| ---------------------- | ------------------------ | -------- | ------- | -------------------------------- | --------------------------------------------------------------------- |
-| `timeouts`             | Timeouts and retries     | Pre-seed | 60      | —                                | Link timeout and naive retries                                        |
-| `ci`                   | Continuous delivery      | Pre-seed | 100     | —                                | CI/CD Pipeline (recreate, rolling)                                    |
-| `backoff-jitter`       | Backoff with jitter      | Seed     | 400     | `timeouts`                       | Retry policy option                                                   |
-| `cert-automation`      | Certificate automation   | Seed     | 300     | —                                | Secrets and Certificates                                              |
-| `blue-green`           | Blue-green deploys       | Seed     | 900     | `ci`                             | Deploy strategy                                                       |
-| `feature-flags`        | Feature flags            | Seed     | 800     | `ci`                             | Feature Flags                                                         |
-| `circuit-breakers`     | Circuit breakers         | Series A | 2,500   | `backoff-jitter`                 | Link option                                                           |
-| `bulkheads`            | Bulkheads                | Series A | 3,500   | `circuit-breakers`               | Link option                                                           |
-| `load-shedding`        | Priority load shedding   | Series A | 4,000   | `timeouts`                       | When saturated, drop the lowest-value kinds first                     |
-| `graceful-degradation` | Graceful degradation     | Series A | 3,000   | `feature-flags`                  | Turn off expensive features automatically during overload             |
-| `canary`               | Canary deploys           | Series A | 3,000   | `ci`, `percentiles`              | Deploy strategy                                                       |
-| `on-call`              | On-call rotation         | Series A | 2,000   | `alerting`                       | Faster triage; incidents page the player                              |
-| `error-budgets`        | Error budgets            | Series A | 3,000   | `slo-dashboards`                 | Velocity bonus with budget left, freeze when spent                    |
-| `runbooks`             | Runbooks                 | Series A | 5,000   | `on-call`                        | Automatic mitigation for known incident types                         |
-| `hedged-requests`      | Hedged requests          | Series C | 100,000 | `tracing`                        | Send a second request after the p95; cuts the tail, adds load         |
-| `chaos-engineering`    | Chaos engineering        | Pre-IPO  | 300,000 | `runbooks`                       | Scheduled failure injection that earns Insight and reveals weak spots |
-| `dr-drills`            | Disaster recovery drills | Pre-IPO  | 400,000 | `restore-drills`, `multi-region` | Run the DR drill for the IPO checklist                                |
+| ID                     | Name                     | Era      | ◇       | Requires                         | Effect                                                                        |
+| ---------------------- | ------------------------ | -------- | ------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| `timeouts`             | Timeouts and retries     | Pre-seed | 60      | —                                | Link timeout and naive retries                                                |
+| `ci`                   | Continuous delivery      | Pre-seed | 100     | —                                | CI/CD Pipeline (recreate, rolling)                                            |
+| `backoff-jitter`       | Backoff with jitter      | Seed     | 400     | `timeouts`                       | Retry policy option                                                           |
+| `cert-automation`      | Certificate automation   | Seed     | 300     | —                                | Secrets and Certificates                                                      |
+| `blue-green`           | Blue-green deploys       | Seed     | 900     | `ci`                             | Deploy strategy                                                               |
+| `feature-flags`        | Feature flags            | Seed     | 800     | `ci`                             | Feature Flags                                                                 |
+| `circuit-breakers`     | Circuit breakers         | Series A | 2,500   | `backoff-jitter`                 | Link option                                                                   |
+| `bulkheads`            | Bulkheads                | Series A | 3,500   | `circuit-breakers`               | Link option                                                                   |
+| `load-shedding`        | Priority load shedding   | Series A | 4,000   | `timeouts`                       | When saturated, drop the lowest-value kinds first                             |
+| `graceful-degradation` | Graceful degradation     | Series A | 3,000   | `feature-flags`                  | Turn off expensive features automatically during overload                     |
+| `canary`               | Canary deploys           | Series A | 3,000   | `ci`, `percentiles`              | Deploy strategy                                                               |
+| `on-call`              | On-call rotation         | Series A | 2,000   | `alerting`                       | Faster triage; incidents page the player                                      |
+| `error-budgets`        | Error budgets            | Series A | 3,000   | `slo-dashboards`                 | Velocity bonus with budget left, freeze when spent                            |
+| `runbooks`             | Runbooks                 | Series A | 5,000   | `on-call`                        | Automatic mitigation for known incident types                                 |
+| `hedged-requests`      | Hedged requests          | Series C | 100,000 | `tracing`                        | Send a second request after the p95; cuts the tail, adds load                 |
+| `chaos-engineering`    | Chaos engineering        | Pre-IPO  | 300,000 | `runbooks`                       | Scheduled failure injection that earns Failure Insight and reveals weak spots |
+| `dr-drills`            | Disaster recovery drills | Pre-IPO  | 400,000 | `restore-drills`, `multi-region` | Run the DR drill for the IPO checklist                                        |
 
 ### Track: Observability
 
 [Observability](./12-observability.md#the-visibility-ladder) explains what each step reveals.
 
-| ID                  | Name                 | Era      | ◇      | Requires      | Effect                                                 |
-| ------------------- | -------------------- | -------- | ------ | ------------- | ------------------------------------------------------ |
-| `logs`              | Structured logs      | Garage   | 20     | —             | Error breakdown by cause                               |
-| `metrics`           | Metrics              | Garage   | 50     | —             | History graphs per Node; the Dashboard                 |
-| `percentiles`       | Percentiles          | Pre-seed | 150    | `metrics`     | p50, p95, p99 on cards                                 |
-| `alerting`          | Alerting             | Pre-seed | 250    | `metrics`     | Pager banner before users notice                       |
-| `tracing`           | Distributed tracing  | Seed     | 800    | `percentiles` | Per-kind waterfalls; bottleneck per kind               |
-| `slo-dashboards`    | SLO dashboards       | Series A | 2,500  | `percentiles` | Error budget panel                                     |
-| `profiling`         | Continuous profiling | Series A | 3,000  | `tracing`     | CPU, wait, GC, and lock time per Node; names the limit |
-| `tail-sampling`     | Tail-based sampling  | Series B | 10,000 | `tracing`     | Keep slow and failed traces: ×2 Insight per sample     |
-| `rum`               | Real user monitoring | Series C | 50,000 | `tracing`     | Latency per region and device                          |
-| `anomaly-detection` | Anomaly detection    | Series C | 80,000 | `alerting`    | Early warnings before an incident peaks                |
+| ID                  | Name                 | Era      | ◇      | Requires       | Effect                                                 |
+| ------------------- | -------------------- | -------- | ------ | -------------- | ------------------------------------------------------ |
+| `logs`              | Structured logs      | Garage   | 20     | —              | Error breakdown by cause                               |
+| `metrics`           | Metrics              | Garage   | 50     | —              | History graphs per Node; the Dashboard                 |
+| `percentiles`       | Percentiles          | Pre-seed | 150    | `metrics`      | p50, p95, p99 on cards                                 |
+| `alerting`          | Alerting             | Pre-seed | 250    | `metrics`      | Pager banner before users notice                       |
+| `tracing`           | Distributed tracing  | Seed     | 800    | `percentiles`  | Per-kind waterfalls; bottleneck per kind               |
+| `slo-dashboards`    | SLO dashboards       | Series A | 2,500  | `percentiles`  | Error budget panel                                     |
+| `profiling`         | Continuous profiling | Series A | 3,000  | `tracing`      | CPU, wait, GC, and lock time per Node; names the limit |
+| `trace-search`      | Trace search         | Seed     | 600    | `tracing`      | Studies +25% speed                                     |
+| `tail-sampling`     | Tail-based sampling  | Series B | 10,000 | `tracing`      | Keep slow and failed traces: ×2 Failure Insight        |
+| `notebooks`         | Notebooks            | Series B | 12,000 | `trace-search` | Studies +25% speed                                     |
+| `rum`               | Real user monitoring | Series C | 50,000 | `tracing`      | Latency per region and device                          |
+| `anomaly-detection` | Anomaly detection    | Series C | 80,000 | `alerting`     | Early warnings before an incident peaks                |
 
 ### Track: Performance
 

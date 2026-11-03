@@ -106,7 +106,10 @@ const STEPS: ReadonlyArray<readonly [string, string]> = [
     'Collect',
     'Revenue waits in Payments. Click it before the drawer fills. Stripe Billing collects for you.',
   ],
-  ['Learn', 'Analytics samples linked Nodes. Sampled traffic becomes Insight ◆ for Research.'],
+  [
+    'Learn',
+    'Analytics samples linked Nodes. Each request kind it samples fills its own Insight pool.',
+  ],
   [
     'Find the limit',
     'The pulsing outline marks the bottleneck. Its card says if it is out of CPU, credits, RAM, workers or connections.',

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { Option } from 'effect'
+import { DragAndDrop } from '@foldkit/ui'
 import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { Message } from './message.ts'
@@ -18,6 +19,34 @@ const tick = (model: Model, times = 1): Model => {
 const at = (path: string) => Option.getOrThrow(fromString(`https://quorum.test${path}`))
 
 const inLab = (): Model => ({ ...initialModel(), route: AppRoute.Company(), game: newGame() })
+
+test('dropping an engineer on another team moves them', () => {
+  const game = preseedGame()
+  const start: Model = {
+    ...inLab(),
+    panel: 'team',
+    game: {
+      ...game,
+      teams: [
+        ...game.teams,
+        { id: 't2', name: 'Team 2', policy: 'balanced', previous: 'balanced', since: 0 },
+      ],
+      engineers: [{ id: 'e1', team: 'core', language: 'php', hiredAt: 0 }],
+    },
+  }
+  const send = (model: Model, message: DragAndDrop.Message) =>
+    update(model, Message.TeamDragChanged({ message })).model
+  const picked = send(
+    start,
+    DragAndDrop.Message.ActivatedKeyboardDrag({ itemId: 'e1', containerId: 'core', index: 0 }),
+  )
+  const moved = send(
+    picked,
+    DragAndDrop.Message.CompletedResolveKeyboardMove({ targetContainerId: 't2', targetIndex: 0 }),
+  )
+  const dropped = send(moved, DragAndDrop.Message.ConfirmedKeyboardDrop())
+  expect(dropped.game.engineers.find((engineer) => engineer.id === 'e1')?.team).toBe('t2')
+})
 
 describe('the clock', () => {
   test('four ticks at 1× run ten 0.1 s Steps: one sim second', () => {
@@ -220,6 +249,21 @@ describe('Challenges', () => {
     expect(offline.challenge?.verification).toBe('offline')
     expect(offline.challenge?.result?.passed).toBe(true)
   })
+
+  test('a locked Challenge URL lands on the Challenge list; a completed one opens', () => {
+    const locked = send(
+      initialModel(),
+      Message.ChangedUrl({ url: at('/challenges/split-the-box') }),
+    )
+    expect(locked.challenge).toBeNull()
+    expect(locked.route).toEqual(AppRoute.Menu({ menu: 'challenges' }))
+    const completed = {
+      ...initialModel(),
+      founder: { ...initialModel().founder, completed: ['hello-world'] },
+    }
+    const opened = send(completed, Message.ChangedUrl({ url: at('/challenges/split-the-box') }))
+    expect(opened.challenge?.id).toBe('split-the-box')
+  })
 })
 
 describe('M9: sound, achievements, glossary, keys', () => {
@@ -357,7 +401,7 @@ describe('progressive disclosure', () => {
     expect(start.panel).toBe('none')
     expect(start.revealed).not.toContain('research')
     expect(send(start, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
-    // The cheapest Garage item costs 15 ◆: 14 is not enough, 15 is.
+    // The cheapest Garage item costs 15 Insight: 14 is not enough, 15 is.
     const short = tick({ ...start, game: { ...start.game, insight: 14 } })
     expect(short.revealed).not.toContain('research')
     const enough = tick({ ...start, game: { ...start.game, insight: 15 } })
@@ -399,4 +443,25 @@ describe('progressive disclosure', () => {
     expect(kept.revealed).toEqual(['undo'])
     expect(kept.pending).toEqual(['team'])
   })
+})
+
+test('tidying the board groups nodes into a band per zone, in flow order', () => {
+  const game = newGame()
+  const [first, second, third] = game.nodes
+  const model: Model = {
+    ...inLab(),
+    game: {
+      ...game,
+      links: [{ ...game.links[0]!, from: 'p', to: 'q' }],
+      nodes: [
+        { ...first!, id: 'q', type: 'server', zone: 'a', x: 40, y: 500 },
+        { ...second!, id: 'p', type: 'server', zone: 'a', x: 400, y: 300 },
+        { ...third!, id: 'r', type: 'server', zone: 'b', x: 10, y: 50 },
+      ],
+    },
+  }
+  const [q, p, r] = update(model, Message.BoardTidied()).model.game.nodes
+  expect(p!.x).toBeLessThan(q!.x)
+  expect(p!.y).toBe(q!.y)
+  expect(r!.y).toBeGreaterThan(q!.y)
 })

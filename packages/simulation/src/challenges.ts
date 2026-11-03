@@ -5,7 +5,6 @@ import { company, link, node } from './company.ts'
 import { forceIncident } from './director.ts'
 import { hashGame } from './hash.ts'
 import { SHARED } from './playbook.ts'
-import { TRACKS, type SandboxId } from './sandbox.ts'
 import { nextRandom } from './random.ts'
 import { applyAction, applyDesign, type Replay } from './replay.ts'
 import { solveFlow } from './solve.ts'
@@ -569,15 +568,19 @@ export const bucketOf = (edges: ReadonlyArray<number>, value: number): number =>
   return index < 0 ? edges.length : index
 }
 
-/** An Era's Challenges open once the Era is reached in any Company or its Sandbox track is passed. */
-export const challengeOpen = (
-  challenge: Challenge,
-  erasReached: ReadonlyArray<number>,
-  passed: ReadonlyArray<SandboxId>,
-): boolean =>
-  challenge.id.startsWith('daily:') ||
-  erasReached.some((era) => era >= challenge.era) ||
-  (TRACKS.find((track) => track.stage === challenge.era)?.sandboxes.every((id) =>
-    passed.includes(id),
-  ) ??
-    false)
+/** The Challenge before this one in the global list, or undefined for the first. */
+const previousChallenge = (challenge: Challenge): Challenge | undefined => {
+  const index = CHALLENGES.findIndex((entry) => entry.id === challenge.id)
+  return index > 0 ? CHALLENGES[index - 1] : undefined
+}
+
+/**
+ * The first Challenge is open. Each later Challenge opens when the one before
+ * it in the global list is complete, across Era boundaries. A completed
+ * Challenge stays open for another run.
+ */
+export const challengeOpen = (challenge: Challenge, completed: ReadonlyArray<string>): boolean => {
+  if (challenge.id.startsWith('daily:') || completed.includes(challenge.id)) return true
+  const previous = previousChallenge(challenge)
+  return previous === undefined || completed.includes(previous.id)
+}

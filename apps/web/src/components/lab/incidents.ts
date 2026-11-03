@@ -5,7 +5,6 @@ import {
   Check,
   ChevronRight,
   FileBadge,
-  Gem,
   Lock,
   Timer,
   Undo2,
@@ -21,11 +20,12 @@ import type { Game, Postmortem } from '@quorum/simulation/state'
 import { alertText, compact, money } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
+import { recipeOf } from '@/game/pools.ts'
 import { icon } from '@/lib/icons'
 import { badge } from '@/components/ui/badge'
 import { button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, PANEL, WELL } from './bits.ts'
+import { EYEBROW, FIGURE, PANEL, WELL, insightChip } from './bits.ts'
 
 /* ==========================================================================
    The incident loop on screen: the pager, once Alerting is researched, and
@@ -182,22 +182,19 @@ const actionButtons = (game: Game, postmortem: Postmortem, h: HtmlBuilder<Messag
       ['File'],
       h,
     )
-  const price = RESEARCH[action].cost
   return h.div(
     [h.Class('flex items-center gap-1')],
     [
       button(
         {
           onClick: Message.PostmortemFiled({ id: postmortem.id, take: true }),
-          isDisabled: game.insight < price,
           size: 'sm',
           attributes: [h.Title(`Action item: ${RESEARCH[action].blurb}`)],
         },
         [
           icon(h, Check, 'size-3.5'),
           RESEARCH[action].name,
-          h.span([h.Class(cn(FIGURE, 'opacity-75'))], [`${price}`]),
-          icon(h, Gem, 'size-3'),
+          ...recipeOf(action).map(([pool, cost]) => insightChip(pool, compact(cost), h)),
         ],
         h,
       ),

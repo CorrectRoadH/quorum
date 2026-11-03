@@ -20,6 +20,7 @@ import {
   COMPONENTS,
   DIURNAL_AMPLITUDE,
   FRAMEWORKS,
+  FAILURE_YIELD,
   INSIGHT_YIELD,
   KINDS,
   LANGUAGES,
@@ -28,11 +29,14 @@ import {
   PROFILES,
   REQUEST_KINDS,
   RPS_PER_USER,
+  SAMPLE_LATENCY,
   SAMPLE_OVERHEAD,
   LINK_TIMEOUT,
   WEEKEND_FACTOR,
+  BACKEND_KINDS,
   isBackendKind,
   type BackendKind,
+  type InsightPool,
   type Kind,
   type RequestKind,
 } from './catalog.ts'
@@ -90,7 +94,7 @@ import {
   userRoutes,
   type UserRoute,
 } from './regions.ts'
-import type { Game, GameLink, GameNode } from './state.ts'
+import { NO_INSIGHT, type Game, type GameLink, type GameNode } from './state.ts'
 import { payrollOf } from './team.ts'
 
 /* ==========================================================================
@@ -289,6 +293,52 @@ const samplingOf = (game: Game, graph: Graph, node: GameNode): number => {
     if (tap) overhead = Math.max(overhead, SAMPLE_OVERHEAD[sampleIndex(tap)] ?? 0)
   }
   return overhead
+}
+
+/** Milliseconds sampling adds to a Node's hop: the highest rate of any tap on it. */
+const samplingMsOf = (graph: Graph, node: GameNode): number => {
+  let ms = 0
+  for (const [tapId, sources] of graph.taps) {
+    if (!sources.includes(node.id)) continue
+    const tap = graph.byId.get(tapId)
+    if (tap) ms = Math.max(ms, SAMPLE_LATENCY[sampleIndex(tap)] ?? 0)
+  }
+  return ms
+}
+
+/**
+ * The request kinds behind each Node's traffic, as shares. A request keeps its
+ * kind on every hop: the backend kinds a Node receives carry the mix of the
+ * Nodes that sent them.
+ */
+const originsOf = (
+  graph: Graph,
+  pass: Pass,
+): Map<string, ReadonlyArray<readonly [RequestKind, number]>> => {
+  const origins = new Map<string, ReadonlyArray<readonly [RequestKind, number]>>()
+  for (const node of graph.order) {
+    const mix = new Map<RequestKind, number>()
+    const arriving = pass.arriving.get(node.id) ?? {}
+    for (const kind of REQUEST_KINDS) {
+      const rate = arriving[kind] ?? 0
+      if (rate > 0) mix.set(kind, rate)
+    }
+    for (const parent of graph.parents.get(node.id) ?? []) {
+      const carried = pass.links.get(`${parent.id}>${node.id}`) ?? {}
+      let backend = 0
+      for (const kind of BACKEND_KINDS) backend += carried[kind] ?? 0
+      if (backend <= 0) continue
+      for (const [kind, share] of origins.get(parent.id) ?? [])
+        mix.set(kind, (mix.get(kind) ?? 0) + backend * share)
+    }
+    let total = 0
+    for (const rate of mix.values()) total += rate
+    origins.set(
+      node.id,
+      total > 0 ? [...mix].map(([kind, rate]) => [kind, rate / total] as const) : [],
+    )
+  }
+  return origins
 }
 
 /* ---------- one pass ---------- */
@@ -557,7 +607,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     const service = model?.service[kind] ?? { fixed: COMPONENTS[node.type].latency, variable: 0 }
     return hop({
       share: model?.shares?.[kind] ?? model?.share ?? 1,
-      fixed: service.fixed,
+      fixed: service.fixed + samplingMsOf(graph, node),
       variable: service.variable,
       tailP: model?.tailP ?? 0,
       tailMs: model?.tailMs ?? 0,
@@ -938,9 +988,11 @@ const ledgerOf = (
     }
   }
 
-  // Analytics turns sampled traffic into Insight.
+  // Analytics turns sampled traffic into Insight of each request kind (12 "Earning Insight").
   const apdex = rateTotal > 0 ? satisfied / rateTotal : 1
-  let insight = 0
+  const origins = originsOf(graph, pass)
+  const sampledBy = new Map<string, number>()
+  const failedBy = new Map<string, number>()
   for (const [tapId, sources] of graph.taps) {
     const tap = graph.byId.get(tapId)
     if (!tap) continue
@@ -950,8 +1002,27 @@ const ledgerOf = (
       return total + (entry ? entry.inbound - entry.dropped : 0)
     }, 0)
     const capacity = grown(ANALYTICS_CAPACITY, 2, tap.size - 1)
-    const sampled = isDown(tap) ? 0 : Math.min(volume * rate, capacity)
-    insight += sampled * INSIGHT_YIELD * (2 - apdex) * insightPerk(game)
+    // Samples beyond the tap's capacity are dropped, evenly.
+    const kept = isDown(tap) || volume * rate <= 0 ? 0 : Math.min(1, capacity / (volume * rate))
+    for (const source of sources) {
+      const entry = nodes[source]
+      const from = graph.byId.get(source)
+      if (!entry || !from || kept <= 0) continue
+      const done = (entry.inbound - entry.dropped) * rate * kept
+      for (const [kind, share] of origins.get(source) ?? []) {
+        const samples = done * share
+        if (samples <= 0) continue
+        const key = `${from.type}:${kind}`
+        sampledBy.set(key, (sampledBy.get(key) ?? 0) + samples)
+        // A request that fails or frustrates its user teaches Failure, a tolerated one half.
+        const answer = kinds[kind]
+        if (answer && PROFILES[kind].scored)
+          failedBy.set(
+            from.type,
+            (failedBy.get(from.type) ?? 0) + samples * (1 - answer.success * answer.apdex),
+          )
+      }
+    }
     nodes[tapId] = {
       ...(nodes[tapId] as NodeLedger),
       inbound: volume * rate,
@@ -961,6 +1032,17 @@ const ledgerOf = (
       status: statusOf(tap, volume, capacity > 0 ? (volume * rate) / capacity : 0, false),
     }
   }
+  // The square root per Component type and kind: a broad Design teaches more than a big one.
+  const perk = insightPerk(game)
+  const insight: Record<InsightPool, number> = { ...NO_INSIGHT }
+  const breadth: Partial<Record<RequestKind, number>> = {}
+  for (const [key, samples] of sampledBy) {
+    const kind = key.slice(key.indexOf(':') + 1) as RequestKind
+    insight[kind] += INSIGHT_YIELD * Math.sqrt(samples) * perk
+    breadth[kind] = (breadth[kind] ?? 0) + 1
+  }
+  for (const failed of failedBy.values())
+    insight.failure += INSIGHT_YIELD * FAILURE_YIELD * Math.sqrt(Math.max(0, failed)) * perk
 
   const links: Array<LinkLedger> = game.links.map((link) => {
     const to = graph.byId.get(link.to)
@@ -1079,6 +1161,7 @@ const ledgerOf = (
     revenue: revenue + subscriptions,
     subscriptions,
     insight,
+    breadth,
     burn:
       thirdParty > 0
         ? game.nodes.reduce((total, node) => total + burnOf(game, node), 0) +

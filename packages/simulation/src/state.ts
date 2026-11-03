@@ -8,6 +8,7 @@ import {
   FIXES,
   FRAMEWORK_IDS,
   INCIDENT_IDS,
+  INSIGHT_POOLS,
   LANGUAGE_IDS,
   POLICY_IDS,
   REQUEST_KINDS,
@@ -96,6 +97,8 @@ export const GameNode = Schema.Struct({
   sample: Schema.Finite,
   /** Share of requests Analytics samples. */
   sampleRate: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0.1))),
+  /** Seconds of traces Analytics keeps. */
+  retention: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(900))),
   /** Seconds left down. Minus one means down until replaced. */
   down: Schema.Finite,
   /** Why the Node is down: a restart, a failure, or an out-of-memory kill. */
@@ -359,10 +362,13 @@ export const Service = Schema.Struct({
 })
 export type Service = typeof Service.Type
 
-export const WorkKind = Schema.Literals(['feature', 'task', 'migration'])
+export const WorkKind = Schema.Literals(['feature', 'task', 'migration', 'spike'])
 export type WorkKind = typeof WorkKind.Type
 
-/** One backlog item. `ref` is a Feature or task id; a migration item names its step. */
+/**
+ * One backlog item. `ref` is a Feature or task id; a migration item names its
+ * step; a Spike names the research of the Study it speeds.
+ */
 export const WorkItem = Schema.Struct({
   id: Schema.Finite,
   kind: WorkKind,
@@ -446,6 +452,25 @@ export type Founding = typeof Founding.Type
 
 export const DEFAULT_FOUNDING: Founding = { venture: 'b2b-saas', mutators: [], perks: {} }
 
+/** Insight held in each pool (12 "Earning Insight"). */
+export const InsightPools = Schema.Struct(
+  Object.fromEntries(
+    INSIGHT_POOLS.map((pool) => [
+      pool,
+      Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+    ]),
+  ) as Record<(typeof INSIGHT_POOLS)[number], Schema.withDecodingDefaultKey<typeof Schema.Finite>>,
+)
+export type InsightPools = typeof InsightPools.Type
+
+export const NO_INSIGHT: InsightPools = Object.fromEntries(
+  INSIGHT_POOLS.map((pool) => [pool, 0]),
+) as InsightPools
+
+/** A queued Study: the research, and the share of its base duration done. */
+export const Study = Schema.Struct({ id: ResearchId, progress: Schema.Finite })
+export type Study = typeof Study.Type
+
 export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
 export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
@@ -454,7 +479,11 @@ export const Game = Schema.Struct({
   links: Schema.Array(GameLink),
   nextId: Schema.Finite,
   cash: Schema.Finite,
-  insight: Schema.Finite,
+  /** Old saves' single Insight balance. Unused: the first Step moves it into `pools`. */
+  insight: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  pools: InsightPools.pipe(Schema.withDecodingDefaultKey(Effect.succeed(NO_INSIGHT))),
+  /** Studies in order; the first one runs (10 "Studies"). */
+  studies: Schema.Array(Study).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   users: Schema.Finite,
   /** Revenue waiting in the Payments drawer. */
   pending: Schema.Finite,

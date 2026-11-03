@@ -1,6 +1,7 @@
 import { Listbox } from '@foldkit/ui'
 import { Locale } from '../i18n/index.ts'
 import { Effect, Schema } from 'effect'
+import { DragAndDrop } from '@foldkit/ui'
 import { BUILD_GROUPS, type BuildGroup } from '@quorum/simulation/catalog'
 import { Progress, SANDBOX_IDS } from '@quorum/simulation/sandbox'
 import type { Ledger } from '@quorum/simulation/ledger'
@@ -86,7 +87,7 @@ export const Away = Schema.Struct({
   usersBefore: Schema.Finite,
   usersAfter: Schema.Finite,
   cash: Schema.Finite,
-  insight: Schema.Finite,
+  studied: Schema.Array(ResearchId),
   devHours: Schema.Finite,
   peak: Schema.Finite,
   peakHour: Schema.Finite,
@@ -317,6 +318,8 @@ export const Model = Schema.Struct({
   /** The region tab the board shows. */
   region: Region,
   panel: Panel,
+  /** The transient drag gesture for moving engineers between teams. */
+  teamDrag: DragAndDrop.Model,
   /** The research item the Research panel shows in its side pane; null picks one. */
   researchFocus: Schema.NullOr(ResearchId),
   /** The open build tray, or null when the dock shows only its group icons. */
@@ -347,6 +350,10 @@ export const Model = Schema.Struct({
   languagePicker: Listbox.Model,
   /** The Glossary panel's open entry, search, and category filter. */
   glossaryFocus: Schema.NullOr(Schema.String),
+  /** The panel the Glossary closes back to: Research when a (?) link opened it. */
+  glossaryReturn: Panel,
+  /** The Insight card's help section is open. */
+  insightHelp: Schema.Boolean,
   glossaryQuery: Schema.String,
   glossaryCategory: Schema.NullOr(Schema.String),
   /** Advice the game has sent, oldest first, and the one the Inbox shows. */

@@ -27,7 +27,7 @@ export const layoutOf = (type: ComponentId): Layout => {
     case 'payments':
       return { rows: 2, inRow: null, outRow: null, footer: true }
     case 'analytics':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
+      return { rows: 5, inRow: 0, outRow: null, footer: true }
     case 'server':
       return { rows: 5, inRow: 0, outRow: 4, footer: true }
     case 'database':
@@ -216,4 +216,54 @@ export const freeSpot = (
     }
   }
   return best
+}
+
+/**
+ * Tidy positions: one band per group, top to bottom. Inside a band the cards form columns by
+ * how far they sit from the start of a Link chain, so traffic reads left to right, and each
+ * column stacks in its current vertical order. The result stays anchored at the top-left
+ * corner of the cards it replaces.
+ */
+export const tidy = <K extends string | number>(
+  nodes: ReadonlyArray<Placed & Readonly<{ id: string; group: K }>>,
+  links: ReadonlyArray<Readonly<{ from: string; to: string }>>,
+  order: ReadonlyArray<K>,
+): ReadonlyMap<string, Pt> => {
+  const spots = new Map<string, Pt>()
+  if (nodes.length === 0) return spots
+  const left = Math.min(...nodes.map((node) => node.x))
+  const top = Math.min(...nodes.map((node) => node.y))
+  const depth = new Map<string, number>()
+  const depthOf = (id: string, seen: ReadonlySet<string>): number => {
+    const known = depth.get(id)
+    if (known !== undefined) return known
+    const parents = links.filter((link) => link.to === id && !seen.has(link.from))
+    const value = Math.max(
+      0,
+      ...parents.map((link) => depthOf(link.from, new Set([...seen, id])) + 1),
+    )
+    depth.set(id, value)
+    return value
+  }
+  let y = top
+  for (const group of order) {
+    const members = nodes.filter((node) => node.group === group)
+    if (members.length === 0) continue
+    const levels = [...new Set(members.map((node) => depthOf(node.id, new Set())))].toSorted(
+      (a, b) => a - b,
+    )
+    let tallest = 0
+    for (const [column, level] of levels.entries()) {
+      let at = y
+      for (const node of members
+        .filter((entry) => depth.get(entry.id) === level)
+        .toSorted((a, b) => a.y - b.y || a.x - b.x)) {
+        spots.set(node.id, { x: left + column * (CARD_W + CLEARANCE * 3), y: at })
+        at += heightOf(node.type) + CLEARANCE
+      }
+      tallest = Math.max(tallest, at - CLEARANCE - y)
+    }
+    y += tallest + CLEARANCE * 4
+  }
+  return spots
 }

@@ -1,4 +1,4 @@
-import { Listbox } from '@foldkit/ui'
+import { DragAndDrop, Listbox } from '@foldkit/ui'
 import { Locale } from '../i18n/index.ts'
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
@@ -89,6 +89,7 @@ export const Message = defineMessageUnion({
   KeyPressed: { key: Schema.String },
   FullscreenToggled: {},
   BoardFitted: {},
+  BoardTidied: {},
 
   BuildGroupChosen: { group: BuildGroupKey },
   PlacingChosen: { type: Schema.NullOr(ComponentId) },
@@ -198,6 +199,7 @@ export const Message = defineMessageUnion({
   TeamCreated: {},
   TeamRemoved: { teamId: Schema.String },
   EngineerAssigned: { engineerId: Schema.String, teamId: Schema.String },
+  TeamDragChanged: { message: DragAndDrop.Message },
   TeamPolicyChosen: { teamId: Schema.String, policy: PolicyId },
   FeatureQueued: { id: FeatureId },
   TaskQueued: { id: Schema.Literals(TASK_IDS) },
@@ -238,6 +240,7 @@ export const Message = defineMessageUnion({
   MotionToggled: {},
   LocaleChosen: { locale: Locale },
   LanguagePickerChanged: { message: Listbox.Message },
+  InsightHelpToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
   GlossarySearched: { query: Schema.String },
   DashboardRangeChosen: { minutes: Schema.Finite },

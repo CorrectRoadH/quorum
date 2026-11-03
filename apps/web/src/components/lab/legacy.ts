@@ -253,7 +253,7 @@ export const awayPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
             [
               stat('Users', `${compact(away.usersBefore)} → ${compact(away.usersAfter)}`, h),
               stat('Cash', `${away.cash >= 0 ? '+' : ''}${money(away.cash)}`, h),
-              stat('Insight', `+${compact(away.insight)}`, h),
+              stat('Studies', `${away.studied.length}`, h),
               stat('Dev Hours', `+${compact(away.devHours)}`, h),
             ],
             h,

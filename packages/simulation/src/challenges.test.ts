@@ -5,6 +5,7 @@ import {
   CHALLENGES,
   bucketOf,
   challengeById,
+  challengeOpen,
   dailyDrill,
   runChallenge,
   type Challenge,
@@ -118,5 +119,48 @@ describe('Challenges', () => {
     const drill = dailyDrill('2026-11-02')
     const result = runChallenge(drill, replayOf(drill, drill.start()))
     expect(Result.isSuccess(result)).toBe(true)
+  })
+})
+
+describe('Challenge unlocks', () => {
+  test('only the first Challenge is open at the start', () => {
+    expect(challengeOpen(byId('hello-world'), [])).toBe(true)
+    expect(challengeOpen(byId('split-the-box'), [])).toBe(false)
+    expect(challengeOpen(byId('slashdotted'), [])).toBe(false)
+    expect(challengeOpen(byId('event-loop'), [])).toBe(false)
+    expect(challengeOpen(byId('too-many-connections'), [])).toBe(false)
+  })
+
+  test('each Challenge opens when the one before it in the list is complete', () => {
+    expect(challengeOpen(byId('split-the-box'), ['hello-world'])).toBe(true)
+    expect(challengeOpen(byId('slashdotted'), ['hello-world'])).toBe(false)
+    expect(challengeOpen(byId('slashdotted'), ['hello-world', 'split-the-box'])).toBe(true)
+    expect(challengeOpen(byId('event-loop'), ['hello-world', 'split-the-box', 'slashdotted'])).toBe(
+      true,
+    )
+    expect(
+      challengeOpen(byId('too-many-connections'), ['hello-world', 'split-the-box', 'slashdotted']),
+    ).toBe(false)
+    expect(
+      challengeOpen(byId('too-many-connections'), [
+        'hello-world',
+        'split-the-box',
+        'slashdotted',
+        'event-loop',
+      ]),
+    ).toBe(true)
+  })
+
+  test('the sequence crosses Era boundaries', () => {
+    expect(challengeOpen(byId('slashdotted'), ['hello-world', 'split-the-box'])).toBe(true)
+  })
+
+  test('a completed Challenge stays open for another run', () => {
+    expect(challengeOpen(byId('hello-world'), ['hello-world'])).toBe(true)
+    expect(challengeOpen(byId('event-loop'), ['event-loop'])).toBe(true)
+  })
+
+  test('the daily drill is always open', () => {
+    expect(challengeOpen(dailyDrill('2026-11-02'), [])).toBe(true)
   })
 })

@@ -1,5 +1,6 @@
-/* Research: what Insight buys, by track and Era. */
+/* Research: what Insight buys, by track and Era, and the Studies that run it. */
 
+import type { InsightPool } from './kinds.ts'
 import { FRAMEWORKS, RUNTIMES, type FrameworkId } from './runtimes.ts'
 
 export const RESEARCH_IDS = [
@@ -54,6 +55,8 @@ export const RESEARCH_IDS = [
   'fw-spring-boot',
   'fw-aspnet',
   'tracing',
+  'trace-search',
+  'notebooks',
   'cert-automation',
   'lang-elixir',
   'lang-rust',
@@ -600,6 +603,24 @@ const RESEARCH_LIST: ReadonlyArray<ResearchDef> = [
     blurb: 'Each request kind’s time, Node by Node. Names the slowest hop of each kind.',
   }),
   research({
+    id: 'trace-search',
+    name: 'Trace search',
+    track: 'observability',
+    cost: 600,
+    era: 2,
+    requires: ['tracing'],
+    blurb: 'Studies run 25% faster.',
+  }),
+  research({
+    id: 'notebooks',
+    name: 'Notebooks',
+    track: 'observability',
+    cost: 12_000,
+    era: 4,
+    requires: ['trace-search'],
+    blurb: 'Studies run 25% faster.',
+  }),
+  research({
     id: 'cert-automation',
     name: 'Certificate automation',
     track: 'reliability',
@@ -1028,3 +1049,115 @@ export const FRAMEWORK_RESEARCH: Record<FrameworkId, ResearchId | null> = {
   axum: 'fw-axum',
   actix: 'fw-actix',
 }
+
+/* ---------- recipes and Studies (10 "Recipes", "Studies") ---------- */
+
+/**
+ * Each Era's default recipe. Until Seed, the request kinds the Era brings. From
+ * Series A, the kinds of the Era before: a new Era's kinds arrive only with its
+ * Features, and some of those Features need research. Pre-IPO and Public take
+ * every kind but `bot`.
+ */
+const EVERY_KIND: ReadonlyArray<InsightPool> = [
+  'page',
+  'read',
+  'write',
+  'login',
+  'search',
+  'upload',
+  'media',
+  'rt',
+  'buy',
+  'job',
+  'report',
+  'ai',
+  'feed',
+  'hook',
+  'push',
+]
+export const ERA_RECIPES: ReadonlyArray<ReadonlyArray<InsightPool>> = [
+  ['page', 'read'],
+  ['write', 'login'],
+  ['search', 'upload'],
+  ['search', 'upload'],
+  ['media', 'rt', 'buy'],
+  ['job', 'report', 'ai'],
+  EVERY_KIND,
+  EVERY_KIND,
+]
+
+/** Items whose traces are not their Era's default. */
+const RECIPES: Partial<Record<ResearchId, ReadonlyArray<InsightPool>>> = {
+  logs: ['page'],
+  metrics: ['read'],
+  'query-analysis': ['read'],
+  'eager-loading': ['read'],
+  percentiles: ['read', 'login'],
+  alerting: ['failure', 'read'],
+  'health-checks': ['failure', 'read'],
+  'auth-provider': ['login'],
+  caching: ['read'],
+  pooling: ['write'],
+  pitr: ['write'],
+  replication: ['read', 'write'],
+  'ryw-routing': ['read', 'write'],
+  sharding: ['read', 'write'],
+  'stampede-protection': ['read', 'failure'],
+  'full-text-search': ['search'],
+  'object-storage': ['upload'],
+  cdn: ['page', 'upload'],
+  http2: ['page', 'upload'],
+  http3: ['page', 'upload'],
+  waf: ['bot'],
+  funnels: ['page', 'login'],
+  'tiered-caching': ['media'],
+  'idempotency-keys': ['buy'],
+  'slo-dashboards': ['failure', 'buy'],
+  'sync-replication': ['write', 'buy'],
+  consensus: ['write', 'buy'],
+  'data-warehouse': ['report'],
+  'hosted-models': ['ai'],
+  'model-serving': ['ai'],
+  notifications: ['push'],
+  'hybrid-fanout': ['feed'],
+  leaderless: ['feed'],
+}
+
+/** Component types an item's recipe kinds must be sampled at: a trace needs more than one hop. */
+export const BREADTH: Partial<Record<ResearchId, number>> = { tracing: 3 }
+
+/**
+ * Each Era's price scale: the ◇ prices keep their ratios, and this sets their
+ * scale against the square-root yield (16 "Insight by kind and Studies").
+ */
+export const PRICE_SCALE = [1, 1, 2, 1.5, 1, 1, 1, 1] as const
+
+/** Each Era's base Study duration, in seconds. */
+export const STUDY_SECONDS = [20, 60, 120, 240, 480, 900, 1_800, 3_600] as const
+/** Studies the queue holds, the running one included. */
+export const MAX_STUDIES = 8
+/** A Spike's speed (08 "Spikes"). */
+export const SPIKE_SPEED = 2
+/** Speed each study-speed research adds. */
+export const STUDY_SPEEDUP = 0.25
+export const STUDY_SPEED_RESEARCH: ReadonlyArray<ResearchId> = ['trace-search', 'notebooks']
+
+const recipeFor = (entry: ResearchDef): Readonly<Partial<Record<InsightPool, number>>> => {
+  const kinds = RECIPES[entry.id] ?? ERA_RECIPES[entry.era] ?? EVERY_KIND
+  const price = entry.cost * (PRICE_SCALE[entry.era] ?? 1)
+  const cost: Partial<Record<InsightPool, number>> = {}
+  // Half of every Reliability item's cost is Failure Insight.
+  const failure = entry.track === 'reliability' && !kinds.includes('failure') ? price / 2 : 0
+  if (failure > 0) cost.failure = failure
+  for (const kind of kinds) cost[kind] = (cost[kind] ?? 0) + (price - failure) / kinds.length
+  return cost
+}
+
+/** What each item costs, by pool. */
+export const RECIPE: Record<
+  ResearchId,
+  Readonly<Partial<Record<InsightPool, number>>>
+> = Object.fromEntries(RESEARCH_LIST.map((entry) => [entry.id, recipeFor(entry)])) as Record<
+  ResearchId,
+  Readonly<Partial<Record<InsightPool, number>>>
+>

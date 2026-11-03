@@ -105,6 +105,7 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
         ? gesture('close')
         : null
     case 'BoardFitted':
+    case 'BoardTidied':
     case 'FreeSandboxReset':
     case 'StressBoardLoaded':
     case 'CompanyCopied':
