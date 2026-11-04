@@ -12,7 +12,7 @@ import {
   offerPanel,
   settingsPanel,
 } from '@/components/lab/panels.ts'
-import { inboxButton, inboxPanel } from '@/components/lab/inbox.ts'
+import { inboxButton, inboxPanel, peek } from '@/components/lab/inbox.ts'
 import { glossaryPanel } from '@/components/lab/glossary.ts'
 import { dashboardPanel } from '@/components/lab/dashboard.ts'
 import { researchPanel } from '@/components/lab/research.ts'
@@ -50,6 +50,18 @@ const LANE = 'flex min-w-0 flex-1 flex-col items-center gap-2 compact:items-stre
 
 const BOTTOM =
   'pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2 compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[max(8px,env(safe-area-inset-bottom))] compact:left-[max(8px,env(safe-area-inset-left))] compact:translate-x-0 compact:items-stretch'
+
+/** On a phone the mail preview and postmortems share one stack above the bottom controls, so the
+ *  Inbox button and dock never cover an alert. On a desktop they keep their own corners. */
+const bottomNotices = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Class(
+        'contents compact:pointer-events-none compact:absolute compact:inset-x-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+144px)] compact:z-20 compact:flex compact:flex-col compact:gap-2',
+      ),
+    ],
+    [peek(model, h), postmortems(model, h)],
+  )
 
 export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
   const ledger = ledgerOf(model)
@@ -107,7 +119,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       inspector(model, ledger, h),
       tradeoffCard(model, h),
-      postmortems(model, h),
+      bottomNotices(model, h),
       // The inspector takes the Inbox's corner; the Inbox comes back when it closes.
       model.challenge || model.game.nodes.some((node) => node.id === model.selected)
         ? h.empty

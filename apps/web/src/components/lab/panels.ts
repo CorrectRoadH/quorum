@@ -33,7 +33,7 @@ export const shell = (
     [
       h.DataAttribute('exit', 'gesture'),
       h.Class(
-        'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] enter-backdrop compact:p-3 compact:pt-[max(12px,env(safe-area-inset-top))] compact:pb-[max(12px,env(safe-area-inset-bottom))]',
+        'absolute inset-0 z-30 grid place-items-center bg-foreground/10 p-6 backdrop-blur-[3px] enter-backdrop compact:p-3 compact:pt-[max(12px,env(safe-area-inset-top))] compact:pb-[max(12px,env(safe-area-inset-bottom))] short:[[data-toast=on]_&]:pt-12!',
       ),
     ],
     [
@@ -260,7 +260,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
     [],
     [
       h.div(
-        [h.Class('flex flex-col gap-4 px-5 pt-1 pb-5')],
+        [h.Class(`flex min-h-0 flex-col gap-4 px-5 pt-1 pb-5 ${SCROLL}`)],
         [
           switch_(
             {

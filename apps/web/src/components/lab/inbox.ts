@@ -92,7 +92,7 @@ const gist = (mail: Mail): string =>
  * player reads, answers or dismisses it, so new mail cannot slip past. A decision shows its first
  * button here, so a patch is one click away.
  */
-const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
+export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
   const mail = model.inbox.find((entry) => entry.id === model.mailPeek && !entry.trashed)
   if (!mail || model.panel === 'inbox') return h.empty
   const sender = senderOf(mail.sender)
@@ -104,7 +104,7 @@ const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.Role('status'),
       h.AriaLabel(`New mail from ${sender.name}: ${mail.subject}`),
       h.Class(
-        `enter-pop absolute right-3 bottom-[68px] z-20 flex w-[min(380px,calc(100%-24px))] flex-col gap-2.5 p-3 ${FLOAT} compact:right-[max(8px,env(safe-area-inset-right))] compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+136px)] compact:w-[calc(100%-16px)]`,
+        `enter-pop absolute right-3 bottom-[68px] z-20 flex w-[min(380px,calc(100%-24px))] flex-col gap-2.5 p-3 ${FLOAT} compact:static compact:w-auto compact:pointer-events-auto`,
       ),
     ],
     [
@@ -148,7 +148,7 @@ const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       // The clamp sits on the inner line, so the well's padding cannot show a third line.
       h.div(
-        [h.Class(cn(WELL, 'px-3 py-2'))],
+        [h.Class(cn(WELL, 'px-3 py-2 short:hidden'))],
         [
           h.p(
             [h.Class('line-clamp-2 text-[12px] leading-snug text-muted-foreground')],
@@ -192,10 +192,7 @@ export const inboxButton = (model: Model, h: HtmlBuilder<Message>): Html => {
   const unread = unreadIn(model, 'action') + unreadIn(model, 'fyi')
   // A decision waiting turns the badge red and rings the button; FYI mail keeps the quiet badge.
   const waiting = model.inbox.some((mail) => inFolder(mail, 'action') && !mail.read)
-  return h.div(
-    [h.Key('inbox-corner'), h.Class('contents')],
-    [peek(model, h), inboxToggle(model, unread, waiting, h)],
-  )
+  return inboxToggle(model, unread, waiting, h)
 }
 
 const inboxToggle = (

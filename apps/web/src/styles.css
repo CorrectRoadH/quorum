@@ -397,6 +397,13 @@
     opacity 250ms var(--ease-out),
     transform 250ms var(--ease-out);
 }
+/* A toast can raise a panel's top padding on a short screen; move the panel with it. */
+.enter-backdrop {
+  transition:
+    opacity 250ms var(--ease-out),
+    transform 250ms var(--ease-out),
+    padding 200ms var(--ease-out);
+}
 .enter-down,
 .enter-left {
   transition:
@@ -1270,6 +1277,9 @@ details.fold[open]::details-content {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .enter-backdrop {
+    transition-duration: 0.01ms;
+  }
   .title-wordmark path,
   .title-cable-edge,
   .title-cable {

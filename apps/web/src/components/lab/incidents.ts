@@ -292,7 +292,7 @@ export const postmortems = (model: Model, h: HtmlBuilder<Message>): Html =>
     [
       h.DataAttribute('flip', 'gesture'),
       h.Class(
-        'absolute bottom-3 left-3 z-20 flex flex-col gap-2 compact:right-2 compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+68px)] compact:left-2',
+        'absolute bottom-3 left-3 z-20 flex flex-col gap-2 compact:static compact:w-auto compact:pointer-events-auto short:[&>details:not(:last-child)]:hidden',
       ),
     ],
     model.game.postmortems.slice(-3).map((entry) => card(model.game, entry, h)),
