@@ -11,6 +11,7 @@ import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { COMPONENTS, researchList } from '@quorum/simulation/catalog'
 import { researchReady } from '@quorum/simulation/lookups'
+import { solveFlow } from '@quorum/simulation/solve'
 import { SHARED } from '@quorum/simulation/playbook'
 import { JOBS } from '@quorum/ui/board/jobs'
 import { Message } from './message.ts'
@@ -265,6 +266,74 @@ describe('the clock', () => {
     const acted = update(second, Message.ResizeChosen({ nodeId: 'server', direction: 1 })).model
     expect(acted.board.bottleneckAt).toBe(-1)
     expect(tick(acted).board.bottleneckAt).toBe(Math.floor(tick(acted).board.game.time))
+  })
+
+  test('component history captures traffic at its timestamp and stays pinned while live traffic changes', () => {
+    const lab = inLab()
+    const game = { ...preseedGame(), time: 9.9, autopilot: false }
+    const first = tick({ ...lab, board: { ...lab.board, game, selected: 'database' } })
+    const sample = first.board.nodeHistory.database![0]!
+    const own = solveFlow(first.board.game).nodes.database!
+    expect(sample.time).toBe(first.board.game.time)
+    expect(sample.traffic).toEqual(own.traffic)
+    expect(sample.traffic['q-read']).toBeGreaterThan(0)
+    expect(sample.sources).toEqual([{ id: 'server', name: 'App Server', rate: own.inbound }])
+    const chosen = update(
+      first,
+      Message.NodeSampleChosen({ nodeId: 'database', time: sample.time }),
+    ).model
+    expect(chosen.board.game).toBe(first.board.game)
+    const after = tick({
+      ...chosen,
+      board: { ...chosen.board, game: { ...chosen.board.game, time: 19.9, users: game.users * 5 } },
+    })
+    expect(after.board.nodeSample).toEqual({ nodeId: 'database', time: sample.time })
+    expect(after.board.nodeHistory.database![0]).toEqual(sample)
+    expect(after.board.nodeHistory.database!.at(-1)!.traffic['q-read']).toBeGreaterThan(
+      sample.traffic['q-read']!,
+    )
+    const live = update(after, Message.NodeSampleChosen({ nodeId: 'database', time: null })).model
+    expect(live.board.nodeSample).toBeNull()
+    expect(live.board.game).toBe(after.board.game)
+    expect(
+      update(after, Message.NodeTapped({ nodeId: 'server' })).model.board.nodeSample,
+    ).toBeNull()
+  })
+
+  test('expired samples and sold components leave the bounded session history', () => {
+    const lab = inLab()
+    const first = tick({
+      ...lab,
+      board: { ...lab.board, game: { ...preseedGame(), time: 9.9, autopilot: false } },
+    })
+    const sample = first.board.nodeHistory.database![0]!
+    const aged: Model = {
+      ...first,
+      board: {
+        ...first.board,
+        selected: 'database',
+        nodeSample: { nodeId: 'database', time: sample.time },
+        nodeHistory: {
+          database: Array.from({ length: 145 }, (_, index) => ({
+            ...sample,
+            time: sample.time + index * 10,
+          })),
+          removed: [sample],
+        },
+        game: { ...first.board.game, time: 1459.9 },
+      },
+    }
+    const after = tick(aged)
+    expect(after.board.nodeHistory.database!.length).toBeLessThanOrEqual(144)
+    expect(
+      after.board.nodeHistory.database!.every((entry) => entry.time > after.board.game.time - 1440),
+    ).toBe(true)
+    expect(after.board.nodeHistory.removed).toBeUndefined()
+    expect(after.board.nodeSample).toBeNull()
+    expect(
+      update(after, Message.NodeSampleChosen({ nodeId: 'database', time: sample.time })).model.board
+        .nodeSample,
+    ).toBeNull()
   })
 })
 

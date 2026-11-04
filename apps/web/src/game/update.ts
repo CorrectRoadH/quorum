@@ -67,6 +67,7 @@ import {
   shown,
 } from './reveal.ts'
 import { EMPTY_HISTORY, historyOfSave, newSamples, record } from './history.ts'
+import { HISTORY_EVERY, HISTORY_POINTS, sampleNode, type NodeSample } from './node-metrics.ts'
 import { ipoExit, takeExit } from '@quorum/simulation/exit'
 import {
   Founder,
@@ -247,9 +248,6 @@ export const TICK_MS = 250
 const STEPS_PER_TICK = 2.5
 const SAVE_EVERY = 5
 const SAMPLE_EVERY = 10
-/** One calendar day of load: a point every 10 sim seconds. */
-const HISTORY_POINTS = 144
-const HISTORY_EVERY = 10
 export const SPEEDS = [0.5, 1, 3, 10] as const
 
 /** The Company speeds: Time dilation adds 20× and 40× (plan M7.3). */
@@ -295,6 +293,7 @@ export const freshBoard = (game: Game): Board => ({
   bottleneck: null,
   bottleneckAt: -1,
   nodeHistory: {},
+  nodeSample: null,
   inbox: EMPTY_INBOX,
   dashboard: { history: EMPTY_HISTORY, range: 360, hover: null },
   lastGoal: '',
@@ -374,7 +373,12 @@ const sync = (model: Model, fit: boolean): AnyCommand =>
     selection: model.board.selection,
     placing: placingOf(model),
     stamp: stampOf(model),
-    history: model.board.nodeHistory,
+    history: Object.fromEntries(
+      Object.entries(model.board.nodeHistory).map(([id, samples]) => [
+        id,
+        samples.map((sample) => sample.utilization),
+      ]),
+    ),
     region: model.board.region,
     paused: halted(model),
     suspended: model.panel === 'research',
@@ -1308,14 +1312,27 @@ const tick = (model: Model): Result => {
     },
   }
 
-  // Utilization history, once per 10 sim seconds.
+  // Capture actual observations, not reconstructed samples across skipped time.
   if (Math.floor(game.time / HISTORY_EVERY) > Math.floor(model.board.game.time / HISTORY_EVERY)) {
-    const history: Record<string, ReadonlyArray<number>> = {}
+    const history: Record<string, ReadonlyArray<NodeSample>> = {}
     for (const node of game.nodes) {
       const past = next.board.nodeHistory[node.id] ?? []
-      history[node.id] = [...past, ledger.nodes[node.id]?.utilization ?? 0].slice(-HISTORY_POINTS)
+      history[node.id] = [...past, sampleNode(game, node, ledger)]
+        .filter((sample) => sample.time > game.time - HISTORY_EVERY * HISTORY_POINTS)
+        .slice(-HISTORY_POINTS)
     }
-    next = { ...next, board: { ...next.board, nodeHistory: history } }
+    const chosen = next.board.nodeSample
+    next = {
+      ...next,
+      board: {
+        ...next.board,
+        nodeHistory: history,
+        nodeSample:
+          chosen && history[chosen.nodeId]?.some((sample) => sample.time === chosen.time)
+            ? chosen
+            : null,
+      },
+    }
   }
 
   // The log records what the player was told and what limited the Design.
@@ -1480,6 +1497,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
       bottleneck: null,
       bottleneckAt: -1,
       nodeHistory: {},
+      nodeSample: null,
       dashboard: { ...model.board.dashboard, history: EMPTY_HISTORY },
       clock: { ...model.board.clock, savedAt: game.time, sampledAt: game.time },
     },
@@ -2426,6 +2444,17 @@ const handle = (model: Model, message: Message): Result =>
       )
     },
 
+    NodeSampleChosen: ({ nodeId, time }) => {
+      if (nodeId !== model.board.selected) return { model }
+      if (time !== null && !model.board.nodeHistory[nodeId]?.some((sample) => sample.time === time))
+        return { model }
+      return {
+        model: {
+          ...model,
+          board: { ...model.board, nodeSample: time === null ? null : { nodeId, time } },
+        },
+      }
+    },
     NodeTapped: ({ nodeId }) => {
       const next: Model = {
         ...model,
@@ -2433,6 +2462,7 @@ const handle = (model: Model, message: Message): Result =>
           ...model.board,
           selected: nodeId,
           selection: [],
+          nodeSample: model.board.selected === nodeId ? model.board.nodeSample : null,
           tradeoff: model.board.selected === nodeId ? model.board.tradeoff : null,
         },
       }
@@ -3552,6 +3582,7 @@ const QUIET = new Set([
   'Ticked',
   'Synced',
   'Navigated',
+  'NodeSampleChosen',
   'ToastCleared',
   'Saved',
   'SaveLoaded',

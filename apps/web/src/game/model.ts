@@ -15,6 +15,7 @@ import { Replay } from '@quorum/simulation/replay'
 import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
 import { History } from './history.ts'
+import { NodeSample } from './node-metrics.ts'
 import { AppRoute, MENU_PAGES } from './route.ts'
 import { ComponentId, Game, GameLink, GameNode, ResearchId, Region } from '@quorum/simulation/state'
 
@@ -401,8 +402,9 @@ export const Board = Schema.Struct({
   bottleneck: Schema.NullOr(Schema.String),
   /** The sim second of the last search; minus one searches again on the next tick. */
   bottleneckAt: Schema.Finite,
-  /** Utilization per Node over the last two minutes, for Metrics. */
-  nodeHistory: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
+  /** Recorded traffic and load per Node, at most one calendar day in this session. */
+  nodeHistory: Schema.Record(Schema.String, Schema.Array(NodeSample)),
+  nodeSample: Schema.NullOr(Schema.Struct({ nodeId: Schema.String, time: Schema.Finite })),
   inbox: Inbox,
   dashboard: Dashboard,
   /** The last goal and bottleneck logged, so the log records changes only. */

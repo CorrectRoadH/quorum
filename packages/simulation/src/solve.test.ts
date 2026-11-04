@@ -16,6 +16,8 @@ import {
 } from './actions.ts'
 import { newGame, preseedGame } from './company.ts'
 import { serverModel } from './capacity.ts'
+import { BACKEND_KINDS, REQUEST_KINDS, type Kind } from './catalog.ts'
+import type { Ledger } from './ledger.ts'
 import { restarted } from './lookups.ts'
 import { hitRatioOf } from './rules.ts'
 import { cosTurns, diurnal, solve, weekly } from './solve.ts'
@@ -42,6 +44,88 @@ const preseed = (users: number, researched: Game['researched'] = []): Game => ({
   shipped: ['password-login'],
   users,
   researched: [...preseedGame().researched, ...researched],
+})
+
+describe('operation traffic', () => {
+  const reconciles = (ledger: Ledger) => {
+    for (const node of Object.values(ledger.nodes))
+      expect(Object.values(node.traffic).reduce((total, rate) => total + rate, 0)).toBeCloseTo(
+        node.inbound,
+        8,
+      )
+    for (const link of ledger.links)
+      expect(Object.values(link.traffic).reduce((total, rate) => total + rate, 0)).toBeCloseTo(
+        link.rate,
+        8,
+      )
+  }
+
+  test('keeps asymmetric incoming reads and writes distinct from transformed backend calls', () => {
+    const ledger = solve(preseed(100))
+    const server = ledger.nodes.server
+    const database = ledger.nodes.database
+    if (!server || !database) throw new Error('Missing server or database ledger')
+    for (const kind of REQUEST_KINDS)
+      expect(server.traffic[kind] ?? 0).toBeCloseTo(ledger.kinds[kind]?.rate ?? 0, 8)
+    expect(server.traffic.read ?? 0).toBeGreaterThan(server.traffic.write ?? 0)
+    expect(server.traffic.write ?? 0).toBeGreaterThan(0)
+    expect(server.traffic['q-read']).toBeUndefined()
+    expect(server.out.page).toBeUndefined()
+    expect(server.out['q-read'] ?? 0).toBeGreaterThan(server.traffic.read ?? 0)
+    expect(database.traffic).toEqual(server.out)
+    expect(database.traffic['q-read'] ?? 0).toBeGreaterThan(database.traffic['q-write'] ?? 0)
+    expect(database.traffic.page).toBeUndefined()
+    expect(database.out).toEqual({})
+    expect(ledger.links.find((link) => link.from === 'users')?.traffic).toEqual(server.traffic)
+    expect(ledger.links.find((link) => link.to === 'database')?.traffic).toEqual(database.traffic)
+    expect(ledger.nodes.payments?.traffic).toEqual({})
+    reconciles(ledger)
+  })
+
+  test('reports offered arrivals at an overloaded server, not only the calls it can send', () => {
+    const game = tune(preseed(100_000), 'server', { credits: 0 })
+    const ledger = solve(game)
+    const server = ledger.nodes.server
+    if (!server) throw new Error('Missing server ledger')
+    expect(server.dropped).toBeGreaterThan(0)
+    expect(server.inbound).toBeGreaterThan(server.capacity)
+    expect(server.traffic.read).toBeCloseTo(ledger.kinds.read?.rate ?? 0, 8)
+    expect(server.traffic.write).toBeCloseTo(ledger.kinds.write?.rate ?? 0, 8)
+    expect(ledger.links.find((link) => link.from === 'users')?.traffic).toEqual(server.traffic)
+    expect(server.traffic['q-write']).toBeUndefined()
+    expect(server.out['q-write'] ?? 0).toBeLessThan(server.traffic.write ?? 0)
+    reconciles(ledger)
+  })
+
+  test('attributes Analytics samples to source operations while preserving tap volume semantics', () => {
+    let game = tune(preseed(100_000), 'server', { credits: 0 })
+    game = tune(game, 'analytics', { sampleRate: 0.5, size: 0 })
+    game = ok(connect(game, 'database', 'analytics'))
+    for (const down of [0, -1]) {
+      const ledger = solve(tune(game, 'analytics', { down }))
+      const tap = ledger.nodes.analytics
+      if (!tap) throw new Error('Missing Analytics ledger')
+      expect(tap.inbound).toBeGreaterThan(tap.capacity)
+      const expected: Partial<Record<Kind, number>> = {}
+      for (const id of ['server', 'database']) {
+        const source = ledger.nodes[id]
+        if (!source) throw new Error('Missing sample source')
+        const processed = source.inbound - source.dropped
+        const link = ledger.links.find((entry) => entry.from === id && entry.to === 'analytics')
+        expect(link?.rate).toBeCloseTo(processed * 0.15, 8)
+        for (const kind of [...REQUEST_KINDS, ...BACKEND_KINDS]) {
+          const done = ((source.traffic[kind] ?? 0) * processed) / source.inbound
+          expected[kind] = (expected[kind] ?? 0) + done * 0.5
+          expect(link?.traffic[kind] ?? 0).toBeCloseTo(done * 0.15, 8)
+        }
+      }
+      for (const kind of [...REQUEST_KINDS, ...BACKEND_KINDS])
+        expect(tap.traffic[kind] ?? 0).toBeCloseTo(expected[kind] ?? 0, 8)
+      expect(tap.traffic.read ?? 0).toBeGreaterThan(0)
+      expect(tap.traffic['q-read'] ?? 0).toBeGreaterThan(0)
+      reconciles(ledger)
+    }
+  })
 })
 
 describe('the daily cycle', () => {
@@ -145,6 +229,15 @@ describe('connections', () => {
     expect(database?.connections?.used).toBe(140)
     expect(database?.limit).toBe('connections')
     expect(ledger.errors.refused).toBeGreaterThan(0)
+    const parents = ledger.links.filter((link) => link.to === 'database')
+    expect(parents).toHaveLength(2)
+    for (const kind of ['q-read', 'q-write'] as const) {
+      expect(parents.every((link) => (link.traffic[kind] ?? 0) > 0)).toBe(true)
+      expect(database?.traffic[kind]).toBeCloseTo(
+        parents.reduce((total, link) => total + (link.traffic[kind] ?? 0), 0),
+        8,
+      )
+    }
   })
 
   test('a Connection Pooler keeps Postgres under its limit', () => {
@@ -500,6 +593,12 @@ describe('Load Balancer policies and health checks', () => {
     const carried = ledger.links.find((entry) => entry.from === lb && entry.to === small)
     expect(carried?.kind).toBe('login')
     expect(carried?.rate ?? 0).toBeCloseTo(ledger.kinds.login?.rate ?? 0)
+    expect(carried?.traffic).toEqual({ login: ledger.kinds.login?.rate })
+    expect(ledger.nodes[small]?.traffic).toEqual(carried?.traffic)
+    const other = ledger.links.find((entry) => entry.from === lb && entry.to === 'server')
+    expect(other?.traffic.login).toBeUndefined()
+    for (const kind of ['page', 'read', 'write'] as const)
+      expect(other?.traffic[kind]).toBeCloseTo(ledger.kinds[kind]?.rate ?? 0, 8)
     expect(ledger.kinds.login?.success).toBeCloseTo(1)
     expect(ledger.kinds.page?.success).toBeCloseTo(1)
   })

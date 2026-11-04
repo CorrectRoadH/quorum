@@ -21,6 +21,50 @@ export const zhCN: Readonly<Record<string, string>> = {
     '你的应用服务器已经使用 {0}，无需重写。',
   '{0} has no playable runtime. You can decline this proposal.':
     '{0} 暂无可用运行时。你可以拒绝此提案。',
+  'Traffic & load': '流量与负载',
+  'Live now': '实时状态',
+  'Live traffic': '实时流量',
+  'Recorded sample': '历史采样',
+  'Back to live': '返回实时',
+  'Earlier sample': '上一个采样',
+  'Later sample': '下一个采样',
+  'Incoming operations': '传入操作',
+  'Sent by': '流量来源',
+  Backlog: '积压任务',
+  Refused: '拒绝查询',
+  'Sent to Workers': '发送给 Worker',
+  'Queue wait': '排队等待',
+  'Day {0} · {1}': '第 {0} 天 · {1}',
+  'Load history. Select a point or use the sample buttons below.':
+    '负载历史。选择数据点或使用下方按钮。',
+  'History appears after two recorded samples.': '记录两个采样后显示历史。',
+  'Research Metrics to inspect past samples.': '研究指标后即可查看历史采样。',
+  'No incoming traffic at this sample.': '此采样没有传入流量。',
+  'Shares describe incoming traffic, not CPU usage.': '占比表示传入流量，而非 CPU 使用率。',
+  'This component is down. Check its incident or restart status before resizing it.':
+    '此组件已停止服务。扩容前请检查故障或重启状态。',
+  'RAM is exhausted and this component is swapping. Reduce resident memory or add RAM.':
+    '内存耗尽，此组件正在使用交换空间。请减少常驻内存或增加 RAM。',
+  'CPU credits are exhausted. Consider a non-burstable instance or reduce sustained CPU work.':
+    'CPU 积分耗尽。可考虑非突发型实例，或减少持续 CPU 工作。',
+  'The connection limit is refusing queries. Consider connection pooling or reduce database concurrency.':
+    '连接数达到上限，查询被拒绝。可考虑连接池，或减少数据库并发。',
+  'The working set exceeds RAM and reads hit disk. Consider more RAM, caching, or a read replica.':
+    '工作集超过内存，读取需要访问磁盘。可考虑增加 RAM、缓存或只读副本。',
+  'Queued work is stalled. Check that Workers are connected and their downstream calls can complete.':
+    '队列任务停滞。请检查 Worker 是否已连接，以及下游调用能否完成。',
+  'CPU limits capacity. Reduce CPU-heavy work or add compute capacity.':
+    'CPU 限制了容量。请减少 CPU 密集工作或增加算力。',
+  'Worker slots limit capacity. Check downstream latency before adding workers.':
+    '工作槽位限制了容量。增加 worker 前，请先检查下游延迟。',
+  'Memory limits capacity. Reduce per-request memory or add RAM.':
+    '内存限制了容量。请减少每个请求的内存使用或增加 RAM。',
+  'Network bandwidth limits capacity. Consider smaller payloads or more network capacity.':
+    '网络带宽限制了容量。可考虑缩小负载或增加网络容量。',
+  'Disk throughput limits capacity. Reduce disk work or increase storage throughput.':
+    '磁盘吞吐限制了容量。请减少磁盘工作或提高存储吞吐。',
+  'Throughput limits capacity. Reduce incoming work or increase this component’s capacity.':
+    '吞吐量限制了容量。请减少传入工作或提高此组件容量。',
   BOTTLENECK: '瓶颈',
   Language: '语言',
   'Clock in': '打卡上班',

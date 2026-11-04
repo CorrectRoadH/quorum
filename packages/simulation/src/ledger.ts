@@ -12,6 +12,8 @@ export type NodeStatus = 'idle' | 'ok' | 'warn' | 'danger' | 'down'
 export type NodeLedger = Readonly<{
   /** Requests per second that arrive. */
   inbound: number
+  /** Offered arrivals per second by operation, before drops; sums to inbound. */
+  traffic: Readonly<Partial<Record<Kind, number>>>
   /** Requests per second of the current mix the Node could take. */
   capacity: number
   utilization: number
@@ -49,6 +51,8 @@ export type LinkLedger = Readonly<{
   from: string
   to: string
   rate: number
+  /** Operations per second carried, or attributed samples on a tap; sums to rate. */
+  traffic: Readonly<Partial<Record<Kind, number>>>
   /** The kind carrying the most traffic, for the particle colour. */
   kind: Kind
   /** The far end fails what this link carries. */

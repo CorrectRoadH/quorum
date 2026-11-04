@@ -1158,6 +1158,16 @@ const completionsOf = (game: Game, pass: Pass, outcomes: ReturnType<typeof outco
 /** One region's answer to a request kind, with and without its users' hop. */
 type RouteAnswer = Readonly<{ entry: UserRoute; answer: Outcome; raw: Outcome }>
 
+/** Attribute a tap's sampled volume to its source's incoming operations, not routed calls. */
+const sampledTraffic = (source: NodeLedger | undefined, rate: number): Rates => {
+  const traffic: Rates = {}
+  if (!source || source.inbound <= 0) return traffic
+  const scale = ((source.inbound - source.dropped) / source.inbound) * rate
+  for (const kind of Object.keys(source.traffic) as Array<Kind>)
+    traffic[kind] = (source.traffic[kind] ?? 0) * scale
+  return traffic
+}
+
 const ledgerOf = (
   game: Game,
   graph: Graph,
@@ -1310,6 +1320,7 @@ const ledgerOf = (
         : (model?.utilization ?? 0)
     nodes[node.id] = {
       inbound,
+      traffic: rates,
       capacity: model && inbound > 0 ? model.capacity : 0,
       utilization,
       limit: refusedShare > 0 ? 'connections' : (model?.limit ?? 'none'),
@@ -1345,6 +1356,12 @@ const ledgerOf = (
       const entry = nodes[source]
       return total + (entry ? entry.inbound - entry.dropped : 0)
     }, 0)
+    const traffic: Rates = {}
+    for (const source of sources) {
+      const sampled = sampledTraffic(nodes[source], rate)
+      for (const kind of Object.keys(sampled) as Array<Kind>)
+        traffic[kind] = (traffic[kind] ?? 0) + (sampled[kind] ?? 0)
+    }
     const capacity = grown(ANALYTICS_CAPACITY, 2, tap.size - 1)
     // Samples beyond the tap's capacity are dropped, evenly.
     const kept = isDown(tap) || volume * rate <= 0 ? 0 : Math.min(1, capacity / (volume * rate))
@@ -1370,6 +1387,7 @@ const ledgerOf = (
     nodes[tapId] = {
       ...(nodes[tapId] as NodeLedger),
       inbound: volume * rate,
+      traffic,
       capacity,
       utilization: capacity > 0 ? (volume * rate) / capacity : 0,
       limit: volume * rate > capacity ? 'throughput' : 'none',
@@ -1395,6 +1413,7 @@ const ledgerOf = (
       return {
         ...link,
         rate: source ? (source.inbound - source.dropped) * 0.15 : 0,
+        traffic: sampledTraffic(source, 0.15),
         kind: 'page',
         failing: false,
         failure: 0,
@@ -1411,6 +1430,7 @@ const ledgerOf = (
     return {
       ...link,
       rate,
+      traffic: carried,
       kind: top[0],
       failing:
         !!target && (target.status === 'down' || target.refused > 0 || target.dropped > 0.01),

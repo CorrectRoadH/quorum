@@ -1,5 +1,16 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { ArrowUp, ChevronRight, Minus, Plus, RotateCcw, Trash2, X } from 'lucide'
+import {
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+  Minus,
+  Plus,
+  RotateCcw,
+  Trash2,
+  X,
+} from 'lucide'
+import { clockOf } from '@quorum/simulation/calendar'
 import {
   CACHE_ENGINES,
   CACHE_TTLS,
@@ -66,9 +77,10 @@ import type {
   LbPolicy,
   PmMode,
 } from '@quorum/simulation/state'
-import { compact, duration, money, ms, priceLabel, rate } from '@quorum/ui/game/format'
+import { compact, duration, money, ms, priceLabel, queueWait, rate } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
+import { hasTraffic, hintOf, sampleNode, TRAFFIC_KINDS } from '@/game/node-metrics.ts'
 import { COMPONENT_ICONS } from '@quorum/ui/game/icons'
 import { icon } from '@quorum/ui/primitives/icon'
 import { badge } from '@quorum/ui/primitives/badge'
@@ -264,12 +276,19 @@ const callout = (
   tone: 'danger' | 'warn',
   action: Html | null,
   h: HtmlBuilder<Message>,
+  className = '',
 ) =>
   h.div(
     [
       h.Key(text),
       h.Class(
-        `mx-4 mb-3 flex flex-col gap-2 rounded-xl px-3 py-2.5 text-[12px] leading-snug ${tone === 'danger' ? 'bg-danger/8 text-danger shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--danger)_25%,transparent)]' : 'bg-warn/10 text-warn shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--warn)_28%,transparent)]'}`,
+        cn(
+          'mx-4 mb-3 flex flex-col gap-2 rounded-xl px-3 py-2.5 text-[12px] leading-snug',
+          tone === 'danger'
+            ? 'bg-danger/8 text-danger shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--danger)_25%,transparent)]'
+            : 'bg-warn/10 text-warn shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--warn)_28%,transparent)]',
+          className,
+        ),
       ),
     ],
     [h.span([], [text]), ...(action ? [action] : [])],
@@ -606,22 +625,33 @@ const resources = (
   return list.length > 0 ? [section('Resources', list, h)] : []
 }
 
-const sparkline = (points: ReadonlyArray<number>, h: HtmlBuilder<Message>): Html => {
+const sparkline = (
+  points: ReadonlyArray<number>,
+  h: HtmlBuilder<Message>,
+  options: Readonly<{
+    selected?: number
+    onPick?: (index: number) => Message
+    label?: string
+  }> = {},
+): Html => {
   const width = 300
   const height = 44
   const top = Math.max(1, ...points)
-  const path = points
-    .map(
-      (value, index) =>
-        `${(index / Math.max(1, points.length - 1)) * width},${height - (Math.min(value, top) / top) * height}`,
-    )
-    .join(' ')
+  const x = (index: number) => (index / Math.max(1, points.length - 1)) * width
+  const y = (value: number) => height - (Math.min(value, top) / top) * height
+  const path = points.map((value, index) => `${x(index)},${y(value)}`).join(' ')
   const limit = height - (1 / top) * height
+  const selected =
+    options.selected !== undefined && options.selected >= 0 && options.selected < points.length
+      ? options.selected
+      : null
+  const onPick = options.onPick
   return h.svg(
     [
-      h.Class('h-11 w-full'),
+      h.Class(cn('h-11 w-full', selected !== null ? 'overflow-visible' : '')),
       h.Attribute('viewBox', `0 0 ${width} ${height}`),
       h.Attribute('preserveAspectRatio', 'none'),
+      ...(options.label ? [h.AriaLabel(options.label)] : []),
     ],
     [
       h.line([
@@ -639,6 +669,39 @@ const sparkline = (points: ReadonlyArray<number>, h: HtmlBuilder<Message>): Html
         h.Attribute('stroke', 'var(--primary-strong)'),
         h.Attribute('stroke-width', '1.5'),
       ]),
+      ...(selected !== null
+        ? [
+            h.line([
+              h.Attribute('x1', String(x(selected))),
+              h.Attribute('x2', String(x(selected))),
+              h.Attribute('y1', '0'),
+              h.Attribute('y2', String(height)),
+              h.Attribute('stroke', 'var(--muted-foreground)'),
+              h.Attribute('stroke-width', '1'),
+            ]),
+            h.circle([
+              h.Attribute('cx', String(x(selected))),
+              h.Attribute('cy', String(y(points[selected] ?? 0))),
+              h.Attribute('r', '2.5'),
+              h.Attribute('fill', 'var(--foreground)'),
+            ]),
+          ]
+        : []),
+      ...(onPick
+        ? points.map((_, index) => {
+            const left = index === 0 ? 0 : x(index - 0.5)
+            const right = index === points.length - 1 ? width : x(index + 0.5)
+            return h.rect([
+              h.Attribute('x', String(left)),
+              h.Attribute('y', '0'),
+              h.Attribute('width', String(right - left)),
+              h.Attribute('height', String(height)),
+              h.Attribute('fill', 'transparent'),
+              h.Class('cursor-crosshair'),
+              h.OnClick(onPick(index)),
+            ])
+          })
+        : []),
     ],
   )
 }
@@ -1630,6 +1693,264 @@ const traffic = (game: Game, ledger: Ledger, h: HtmlBuilder<Message>): ReadonlyA
   return list
 }
 
+/* ---------- traffic breakdown ---------- */
+
+const when = (time: number): string => {
+  const clock = clockOf(time)
+  return `Day ${clock.day} · ${String(clock.hour).padStart(2, '0')}:${String(clock.minute).padStart(2, '0')}`
+}
+
+const difference = (value: number): string =>
+  `${value > 0 ? '+' : value < 0 ? '−' : ''}${rate(Math.abs(value))}/s`
+
+/** A share of incoming traffic, with its change since the previous sample. */
+const breakdown = (
+  label: string,
+  value: number,
+  total: number,
+  previous: number | null,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [h.Key(label), h.Class('flex items-baseline justify-between gap-3 px-3 py-1.5')],
+    [
+      h.span([h.Class('min-w-0 break-words text-[12.5px] text-muted-foreground')], [label]),
+      h.span(
+        [
+          h.Class(
+            cn(FIGURE, 'flex items-baseline justify-end gap-1.5 text-[12px] whitespace-nowrap'),
+          ),
+        ],
+        [
+          `${rate(value)}/s · ${total > 0 ? percent(value / total) : '0%'}`,
+          ...(previous === null
+            ? []
+            : [
+                h.span(
+                  [h.Class('text-[11.5px] text-muted-foreground')],
+                  [difference(value - previous)],
+                ),
+              ]),
+        ],
+      ),
+    ],
+  )
+
+/** The live sample or a recorded one, broken down by operation and source. */
+const trafficBreakdown = (
+  model: Model,
+  node: GameNode,
+  ledger: Ledger,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const game = model.board.game
+  const history = model.board.nodeHistory[node.id] ?? []
+  const selection = model.board.nodeSample
+  const index =
+    selection?.nodeId === node.id
+      ? history.findIndex((sample) => sample.time === selection.time)
+      : -1
+  const sample = history[index] ?? sampleNode(game, node, ledger)
+  const previous = index > 0 ? history[index - 1] : index === -1 ? history.at(-1) : undefined
+  const hint = hintOf(sample)
+  const kinds = TRAFFIC_KINDS.filter(
+    (kind) => (sample.traffic[kind] ?? 0) > 0 || (previous?.traffic[kind] ?? 0) > 0,
+  ).sort((a, b) => (sample.traffic[b] ?? 0) - (sample.traffic[a] ?? 0))
+  const sources = [...sample.sources].sort((a, b) => b.rate - a.rate)
+  const load = sample.utilization >= 0.9 ? 'danger' : sample.utilization >= 0.7 ? 'warn' : 'plain'
+  const earlier = index === -1 ? history.at(-1) : history[index - 1]
+  return section(
+    'Traffic & load',
+    [
+      h.div(
+        [h.Class('flex items-center justify-between gap-2')],
+        [
+          caption(index >= 0 ? 'Recorded sample' : 'Live traffic', h),
+          ...(index >= 0
+            ? [
+                button(
+                  {
+                    onClick: Message.NodeSampleChosen({ nodeId: node.id, time: null }),
+                    variant: 'outline',
+                    size: 'xs',
+                  },
+                  [icon(h, ChevronsRight, 'size-3'), 'Back to live'],
+                  h,
+                ),
+              ]
+            : []),
+        ],
+      ),
+      ...(has(game, 'metrics') && history.length > 1
+        ? [
+            sparkline(
+              history.map((entry) => entry.utilization),
+              h,
+              {
+                selected: index >= 0 ? index : history.length - 1,
+                onPick: (at) =>
+                  Message.NodeSampleChosen({ nodeId: node.id, time: history[at]?.time ?? null }),
+                label: 'Load history. Select a point or use the sample buttons below.',
+              },
+            ),
+            h.div(
+              [h.Class(cn('flex items-center justify-between gap-2 p-1', WELL))],
+              [
+                smallButton(
+                  'Earlier sample',
+                  ChevronLeft,
+                  Message.NodeSampleChosen({ nodeId: node.id, time: earlier?.time ?? null }),
+                  earlier !== undefined,
+                  h,
+                ),
+                h.span(
+                  [h.Class(cn(FIGURE, 'flex-1 text-center text-[12.5px]'))],
+                  [when(sample.time)],
+                ),
+                smallButton(
+                  'Later sample',
+                  ChevronRight,
+                  Message.NodeSampleChosen({
+                    nodeId: node.id,
+                    time: history[index + 1]?.time ?? null,
+                  }),
+                  index >= 0 && index < history.length - 1,
+                  h,
+                ),
+              ],
+            ),
+          ]
+        : [
+            h.p(
+              [h.Class('text-[12px] leading-snug text-muted-foreground')],
+              [
+                has(game, 'metrics')
+                  ? 'History appears after two recorded samples.'
+                  : 'Research Metrics to inspect past samples.',
+              ],
+            ),
+          ]),
+      h.div(
+        [h.Class(NESTED)],
+        [
+          row('Inbound', `${rate(sample.inbound)}/s`, 'plain', h),
+          row(
+            'Load',
+            sample.inbound > 0
+              ? `${percent(sample.utilization)} of ${rate(sample.capacity)}/s`
+              : 'idle',
+            sample.inbound > 0 ? load : 'plain',
+            h,
+          ),
+          ...(sample.dropped > 0
+            ? [
+                row(
+                  node.type === 'worker' ? 'Requeued' : 'Dropped',
+                  `${rate(sample.dropped)}/s`,
+                  sample.dropped > 0.05 ? (node.type === 'worker' ? 'warn' : 'danger') : 'plain',
+                  h,
+                ),
+              ]
+            : []),
+          ...(sample.refused > 0
+            ? [
+                row(
+                  'Refused',
+                  `${rate(sample.refused)}/s`,
+                  sample.refused > 0.05 ? 'danger' : 'plain',
+                  h,
+                ),
+              ]
+            : []),
+          ...(sample.hitRatio !== null
+            ? [row('Hit ratio', percent(sample.hitRatio), 'plain', h)]
+            : []),
+          ...(sample.queue
+            ? [
+                row('Backlog', compact(sample.queue.depth), 'plain', h),
+                row('Sent to Workers', `${rate(sample.queue.out)}/s`, 'plain', h),
+                row(
+                  'Queue wait',
+                  queueWait(sample.queue.stalled ? Number.POSITIVE_INFINITY : sample.queue.wait),
+                  sample.queue.stalled ? 'warn' : 'plain',
+                  h,
+                ),
+              ]
+            : []),
+        ],
+      ),
+      h.div(
+        [h.Class('flex flex-col gap-1')],
+        [
+          caption('Incoming operations', h),
+          ...(kinds.length
+            ? [
+                h.div(
+                  [h.Class(NESTED)],
+                  kinds.map((kind) =>
+                    breakdown(
+                      KINDS[kind].label,
+                      sample.traffic[kind] ?? 0,
+                      sample.inbound,
+                      previous ? (previous.traffic[kind] ?? 0) : null,
+                      h,
+                    ),
+                  ),
+                ),
+              ]
+            : [
+                h.p(
+                  [h.Class('px-3 text-[12px] text-muted-foreground')],
+                  ['No incoming traffic at this sample.'],
+                ),
+              ]),
+          h.p(
+            [h.Class('px-3 text-[12px] leading-snug text-muted-foreground')],
+            ['Shares describe incoming traffic, not CPU usage.'],
+          ),
+        ],
+      ),
+      ...(sources.length
+        ? [
+            h.div(
+              [h.Class('flex flex-col gap-1')],
+              [
+                caption('Sent by', h),
+                h.div(
+                  [h.Class(NESTED)],
+                  sources.map((source) =>
+                    breakdown(
+                      `${source.name} · ${source.id}`,
+                      source.rate,
+                      sample.inbound,
+                      previous
+                        ? (previous.sources.find((entry) => entry.id === source.id)?.rate ?? 0)
+                        : null,
+                      h,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ]
+        : []),
+      ...(hint
+        ? [
+            callout(
+              hint,
+              sample.down || sample.swapping || sample.refused > 0 ? 'danger' : 'warn',
+              null,
+              h,
+              'mx-0 mb-0',
+            ),
+          ]
+        : []),
+    ],
+    h,
+    true,
+  )
+}
+
 /* ---------- the panel ---------- */
 
 export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
@@ -1686,10 +2007,27 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
         [
           h.div(
             [h.Class('px-4 pt-1 pb-2')],
-            [h.div([h.Class(NESTED)], stats(game, node, ledger, h))],
+            [
+              ...(hasTraffic(node)
+                ? [h.p([h.Class(`${EYEBROW} mb-2 text-muted-foreground`)], ['Live now'])]
+                : []),
+              h.div([h.Class(NESTED)], stats(game, node, ledger, h)),
+            ],
           ),
-          ...(has(game, 'metrics') && history.length > 1 && !def.fixed
-            ? [section('Load, last day', [sparkline(history, h)], h)]
+          ...(hasTraffic(node) ? [trafficBreakdown(model, node, ledger, h)] : []),
+          ...(has(game, 'metrics') && history.length > 1 && !def.fixed && !hasTraffic(node)
+            ? [
+                section(
+                  'Load, last day',
+                  [
+                    sparkline(
+                      history.map((sample) => sample.utilization),
+                      h,
+                    ),
+                  ],
+                  h,
+                ),
+              ]
             : []),
           ...resources(node, ledger, h),
           ...(node.type === 'users' ? traffic(game, ledger, h) : []),

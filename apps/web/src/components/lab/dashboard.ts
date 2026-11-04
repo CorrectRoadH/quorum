@@ -165,7 +165,7 @@ const tracksOf = (model: Model): ReadonlyArray<NodeTrack> => {
       return {
         id: node.id,
         name: count > 1 ? `${base} ${count}` : base,
-        values: model.board.nodeHistory[node.id] ?? [],
+        values: (model.board.nodeHistory[node.id] ?? []).map((sample) => sample.utilization),
       }
     })
 }
