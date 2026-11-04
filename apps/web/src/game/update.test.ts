@@ -3,7 +3,8 @@ import { Option } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
 import { fromString } from 'foldkit/url'
 import { newGame, preseedGame } from '@quorum/simulation/company'
-import { COMPONENTS } from '@quorum/simulation/catalog'
+import { COMPONENTS, researchList } from '@quorum/simulation/catalog'
+import { researchReady } from '@quorum/simulation/lookups'
 import { SHARED } from '@quorum/simulation/playbook'
 import { JOBS } from './jobs.ts'
 import { Message } from './message.ts'
@@ -679,4 +680,37 @@ test('tidying the board groups nodes into a band per zone, in flow order', () =>
   expect(p!.x).toBeLessThan(q!.x)
   expect(p!.y).toBe(q!.y)
   expect(r!.y).toBeGreaterThan(q!.y)
+})
+
+test('losing focus pauses the clock, unless the setting is off', () => {
+  const blurred = update(inLab(), Message.WindowBlurred()).model
+  expect(blurred.paused).toBe(true)
+  const off = update(inLab(), Message.BlurPauseToggled()).model
+  expect(update(off, Message.WindowBlurred()).model.paused).toBe(false)
+})
+
+test('a queued Study can run now, keeping the running one’s progress, and be cancelled', () => {
+  const ready = researchList.filter((entry) => researchReady(newGame(), entry.id))
+  const [first, second] = ready
+  if (!first || !second) throw new Error('needs two open items')
+  const lab = inLab()
+  const queued: Model = {
+    ...lab,
+    game: {
+      ...lab.game,
+      studies: [
+        { id: first.id, progress: 0.25 },
+        { id: second.id, progress: 0 },
+      ],
+    },
+  }
+  const now = update(queued, Message.StudyPrioritized({ id: second.id })).model
+  expect(now.game.studies).toEqual([
+    { id: second.id, progress: 0 },
+    { id: first.id, progress: 0.25 },
+  ])
+  const back = update(now, Message.StudyMoved({ id: first.id, direction: -1 })).model
+  expect(back.game.studies.map((item) => item.id)).toEqual([first.id, second.id])
+  const cancelled = update(back, Message.StudyCancelled({ id: first.id })).model
+  expect(cancelled.game.studies).toEqual([{ id: second.id, progress: 0 }])
 })

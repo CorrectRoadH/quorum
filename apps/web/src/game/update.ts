@@ -196,6 +196,7 @@ import {
   type ChallengeRun,
   type Menu,
 } from './model.ts'
+import { poolName, recipeOf } from './pools.ts'
 import { AppRoute, menuFor, onBoard, routeOfMenu, urlOf, urlToAppRoute } from './route.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
@@ -271,6 +272,7 @@ export const initialModel = (): Model =>
     cue: null,
     muted: false,
     autoPause: false,
+    blurPause: true,
     motion: 'system',
     agentAccess: false,
     locale: 'en',
@@ -693,6 +695,7 @@ const prefsOf = (model: Model): Prefs => ({
   seenTradeoffs: model.seenTradeoffs,
   muted: model.muted,
   autoPause: model.autoPause,
+  blurPause: model.blurPause,
   motion: model.motion,
   agentAccess: model.agentAccess,
   locale: model.locale,
@@ -1777,6 +1780,7 @@ const handle = (model: Model, message: Message): Result =>
             seenTradeoffs: prefs.seenTradeoffs,
             muted: prefs.muted,
             autoPause: prefs.autoPause,
+            blurPause: prefs.blurPause,
             motion: prefs.motion,
             agentAccess: prefs.agentAccess,
             locale: prefs.locale,
@@ -2755,7 +2759,28 @@ const handle = (model: Model, message: Message): Result =>
 
     ResearchBought: ({ id }) =>
       act(model, `Study ${RESEARCH[id].name}`, Actions.study(model.game, id), {
-        note: () => [`Study queued: ${RESEARCH[id].name}.`, 'primary'],
+        note: (game) => {
+          // Warn when the pools hold less than the recipe: the Study waits on their rates.
+          const short = recipeOf(id)
+            .filter(([pool, cost]) => game.pools[pool] < cost)
+            .map(([pool]) => poolName(pool))
+          return short.length > 0
+            ? [
+                `Study queued: ${RESEARCH[id].name}. Not enough ${short.join(', ')} yet: it runs at their earn rate.`,
+                'warn',
+              ]
+            : [`Study queued: ${RESEARCH[id].name}.`, 'primary']
+        },
+      }),
+    StudyMoved: ({ id, direction }) =>
+      act(model, 'Reordered research', Actions.moveStudy(model.game, id, direction)),
+    StudyPrioritized: ({ id }) =>
+      act(model, `Study ${RESEARCH[id].name} now`, Actions.study(model.game, id, true), {
+        note: () => [`Studying now: ${RESEARCH[id].name}.`, 'primary'],
+      }),
+    StudyCancelled: ({ id }) =>
+      act(model, `Cancelled ${RESEARCH[id].name}`, Actions.cancelStudy(model.game, id), {
+        note: () => [`Study cancelled: ${RESEARCH[id].name}.`, 'plain'],
       }),
 
     HireChosen: () =>
@@ -2975,6 +3000,12 @@ const handle = (model: Model, message: Message): Result =>
     },
     MuteToggled: () => settled({ ...model, muted: !model.muted }),
     AutoPauseToggled: () => settled({ ...model, autoPause: !model.autoPause }),
+    BlurPauseToggled: () => settled({ ...model, blurPause: !model.blurPause }),
+    WindowBlurred: () => {
+      if (!model.blurPause || halted(model) || !onBoard(model.route)) return { model }
+      const next: Model = { ...model, paused: true }
+      return withToast(next, 'Paused while you were away. Space resumes.', 'plain', [sync(next)])
+    },
     AgentAccessToggled: () => settled({ ...model, agentAccess: !model.agentAccess }),
     InsightHelpToggled: () => ({ model: { ...model, insightHelp: !model.insightHelp } }),
     MotionToggled: () =>

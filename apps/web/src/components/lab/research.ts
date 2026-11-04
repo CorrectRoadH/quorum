@@ -3,6 +3,8 @@ import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Antenna,
+  ArrowDown,
+  ArrowUp,
   ArchiveRestore,
   BadgeCheck,
   Boxes,
@@ -336,7 +338,11 @@ const costRows = (
           [
             insightChip(pool, compact(cost), h),
             h.span(
-              [h.Class('ml-auto text-muted-foreground')],
+              [
+                h.Class(
+                  cn('ml-auto', game.pools[pool] < cost ? 'text-warn' : 'text-muted-foreground'),
+                ),
+              ],
               [`${compact(game.pools[pool])} held`],
             ),
             h.span(
@@ -773,6 +779,90 @@ const terms = (entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
     : h.empty
 }
 
+/** A small icon button in the queue. */
+const queueButton = (
+  label: string,
+  glyph: IconNode,
+  message: Message,
+  enabled: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  button(
+    {
+      onClick: message,
+      isDisabled: !enabled,
+      variant: 'ghost',
+      size: 'icon-xs',
+      className: 'text-muted-foreground',
+      attributes: [h.AriaLabel(label), h.Title(label)],
+    },
+    icon(h, glyph, 'size-3.5'),
+    h,
+  )
+
+/** The Study queue, in order: the first one runs. */
+const queuePanel = (model: Model, focus: ResearchId, h: HtmlBuilder<Message>): Html => {
+  const studies = model.game.studies
+  if (studies.length === 0) return h.empty
+  return h.section(
+    [
+      h.Key('queue'),
+      h.AriaLabel('Study queue'),
+      h.Class(
+        'flex max-h-[40%] shrink-0 flex-col gap-0.5 border-b border-hairline p-1.5 ' + SCROLL,
+      ),
+    ],
+    [
+      h.span([h.Class(cn(EYEBROW, 'px-2 pt-1 pb-0.5'))], ['Queue']),
+      ...studies.map((item, index) => {
+        const entry = RESEARCH[item.id]
+        return h.div(
+          [
+            h.Key(item.id),
+            h.Class(
+              cn('flex items-center gap-1 rounded-lg pl-1', item.id === focus ? 'bg-nested' : ''),
+            ),
+          ],
+          [
+            h.button(
+              [
+                h.Type('button'),
+                h.OnClick(Message.ResearchFocused({ id: item.id })),
+                h.Class(
+                  'flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-left text-[12.5px] hover:text-foreground',
+                ),
+              ],
+              [
+                researchMark(entry, 'sm', false, h),
+                h.span([h.Class('truncate font-medium')], [entry.name]),
+                h.span(
+                  [h.Class(cn(FIGURE, 'ml-auto shrink-0 text-[11.5px] text-muted-foreground'))],
+                  [`${Math.floor(Math.min(1, item.progress) * 100)}%`],
+                ),
+              ],
+            ),
+            queueButton(
+              'Move up',
+              ArrowUp,
+              Message.StudyMoved({ id: item.id, direction: -1 }),
+              index > 0,
+              h,
+            ),
+            queueButton(
+              'Move down',
+              ArrowDown,
+              Message.StudyMoved({ id: item.id, direction: 1 }),
+              index < studies.length - 1,
+              h,
+            ),
+            queueButton('Cancel', X, Message.StudyCancelled({ id: item.id }), true, h),
+          ],
+        )
+      }),
+    ],
+  )
+}
+
 const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html => {
   const game = model.game
   const queued = game.studies.findIndex((item) => item.id === entry.id)
@@ -790,7 +880,7 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
           : missing.length > 0
             ? `Needs ${missing.map((id) => RESEARCH[id].name).join(', ')}`
             : queued > 0
-              ? `Queued · ${queued + 1} of ${game.studies.length}`
+              ? 'Study now'
               : `Studying · ${Math.floor((game.studies[0]?.progress ?? 0) * 100)}%`
   const follow = followUps(entry.id)
   return h.aside(
@@ -804,6 +894,7 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
       ),
     ],
     [
+      queuePanel(model, entry.id, h),
       h.div(
         [h.Key(entry.id), h.Class(`flex min-h-0 flex-1 flex-col gap-4 p-5 ${SCROLL} enter-pop`)],
         [
@@ -860,19 +951,33 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
         ],
       ),
       h.div(
-        [h.Class('border-t border-hairline p-3')],
+        [h.Class('flex gap-2 border-t border-hairline p-3')],
         [
           button(
             {
-              onClick: Message.ResearchBought({ id: entry.id }),
-              isDisabled: state !== 'buy',
+              onClick:
+                queued > 0
+                  ? Message.StudyPrioritized({ id: entry.id })
+                  : Message.ResearchBought({ id: entry.id }),
+              isDisabled: state !== 'buy' && !(state === 'saving' && queued > 0),
               size: 'lg',
-              variant: state === 'buy' ? 'default' : 'outline',
-              className: cn(FIGURE, 'w-full'),
+              variant: state === 'buy' || queued > 0 ? 'default' : 'outline',
+              className: cn(FIGURE, 'min-w-0 flex-1'),
             },
             [state === 'owned' ? icon(h, Check, 'size-4 text-ok') : h.empty, label],
             h,
           ),
+          queued >= 0
+            ? button(
+                {
+                  onClick: Message.StudyCancelled({ id: entry.id }),
+                  size: 'lg',
+                  variant: 'outline',
+                },
+                ['Cancel'],
+                h,
+              )
+            : h.empty,
         ],
       ),
     ],

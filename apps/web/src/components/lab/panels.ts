@@ -282,6 +282,15 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
           switch_(
             {
+              id: 'setting-blur-pause',
+              label: 'Pause when the window loses focus',
+              isChecked: model.blurPause,
+              onToggle: () => Message.BlurPauseToggled(),
+            },
+            h,
+          ),
+          switch_(
+            {
               id: 'setting-motion',
               label: 'Reduce motion',
               isChecked: model.motion === 'reduce',

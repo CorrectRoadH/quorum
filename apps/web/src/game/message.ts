@@ -226,6 +226,10 @@ export const Message = defineMessageUnion({
 
   ResearchFocused: { id: ResearchId },
   ResearchBought: { id: ResearchId },
+  /** The Study queue: move one, run one now, or take one off. */
+  StudyMoved: { id: ResearchId, direction: Schema.Literals([1, -1]) },
+  StudyPrioritized: { id: ResearchId },
+  StudyCancelled: { id: ResearchId },
   /** The Team panel: engineers, teams, the backlog, migrations, and deploys. */
   HireChosen: {},
   LayoffChosen: { engineerId: Schema.String },
@@ -272,6 +276,9 @@ export const Message = defineMessageUnion({
   /** Settings and the Glossary (15). */
   MuteToggled: {},
   AutoPauseToggled: {},
+  BlurPauseToggled: {},
+  /** The window lost focus. */
+  WindowBlurred: {},
   AgentAccessToggled: {},
   MotionToggled: {},
   LocaleChosen: { locale: Locale },

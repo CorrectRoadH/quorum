@@ -258,6 +258,7 @@ export const Prefs = Schema.Struct({
   seenTradeoffs: Schema.Array(TradeoffKind).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   muted: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   autoPause: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  blurPause: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
   motion: Motion.pipe(Schema.withDecodingDefaultKey(Effect.succeed('system' as const))),
   agentAccess: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 })
@@ -355,6 +356,8 @@ export const Model = Schema.Struct({
   muted: Schema.Boolean,
   /** Pause the clock when a SEV1 or SEV2 incident starts. */
   autoPause: Schema.Boolean,
+  /** Pause the clock when the window loses focus. */
+  blurPause: Schema.Boolean,
   motion: Motion,
   /** An agent relay on this machine may read the game (packages/mcp-relay). */
   agentAccess: Schema.Boolean,
