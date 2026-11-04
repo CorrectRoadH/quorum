@@ -10,6 +10,8 @@ import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'
 import { AppRoute } from './route.ts'
+import { CHALLENGES } from '@quorum/simulation/challenges'
+import { boxOf, crowds } from './geometry.ts'
 
 /* The clock: 100 ms Steps under a 250 ms UI tick, and the Bottleneck search once per sim second. */
 
@@ -438,6 +440,25 @@ describe('Challenges', () => {
     const opened = send(completed, Message.ChangedUrl({ url: at('/challenges/split-the-box') }))
     expect(opened.challenge?.id).toBe('split-the-box')
   })
+
+  test('every Challenge opens with its cards apart, and Run keeps them where they are', () => {
+    for (const challenge of CHALLENGES) {
+      const built = send(initialModel(), Message.ChallengeStarted({ id: challenge.id }))
+      const nodes = built.game.nodes
+      const crowded = nodes.flatMap((a, index) =>
+        nodes
+          .slice(index + 1)
+          .filter((b) => a.region === b.region && crowds(boxOf(a), boxOf(b)))
+          .map((b) => `${challenge.id}: ${a.id} and ${b.id}`),
+      )
+      expect(crowded).toEqual([])
+      const running = send(built, Message.ChallengeRan())
+      for (const node of running.game.nodes) {
+        const before = nodes.find((entry) => entry.id === node.id)
+        if (before) expect([node.x, node.y]).toEqual([before.x, before.y])
+      }
+    }
+  }, 60_000)
 })
 
 describe('M9: sound, achievements, glossary, keys', () => {

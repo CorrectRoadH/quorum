@@ -177,7 +177,7 @@ import {
 } from './feedback.ts'
 import { BIG_PURCHASE, cueOf } from './cues.ts'
 import { bigBoard, stressBoard } from './stress.ts'
-import { CARD_W, boxOf, crowds, freeSpot, heightOf, tidy } from './geometry.ts'
+import { CARD_W, boxOf, crowds, freeSpot, heightOf, tidy, type Box } from './geometry.ts'
 import { alertText, duration, money } from './format.ts'
 import { Message } from './message.ts'
 import {
@@ -1408,10 +1408,27 @@ const histograms = histogramQuery.lift<Model, Message>({
   toParentMessage: (message) => Message.GotHistograms({ message }),
 })
 
-const boardOf = (challenge: Challenge): Game => ({
-  ...challenge.start(),
-  users: challenge.demand[0]?.users ?? 0,
-})
+/**
+ * A Challenge's start with its cards apart: each card in board order moves to the nearest
+ * spot that keeps its clearance in its region. Fixed cards stay put, so the run's board,
+ * which takes the Design's positions, shows the same layout.
+ */
+const spreadOut = (game: Game): Game => {
+  const settled = new Map<string, Array<Box>>()
+  const taken = (region: string) => settled.get(region) ?? []
+  for (const node of game.nodes.filter((entry) => COMPONENTS[entry.type].fixed))
+    settled.set(node.region, [...taken(node.region), boxOf(node)])
+  let next = game
+  for (const node of game.nodes.filter((entry) => !COMPONENTS[entry.type].fixed)) {
+    const spot = freeSpot(taken(node.region), boxOf(node))
+    settled.set(node.region, [...taken(node.region), { ...boxOf(node), ...spot }])
+    if (spot.x !== node.x || spot.y !== node.y) next = Actions.move(next, node.id, spot.x, spot.y)
+  }
+  return next
+}
+
+const boardOf = (challenge: Challenge): Game =>
+  spreadOut({ ...challenge.start(), users: challenge.demand[0]?.users ?? 0 })
 
 /** Opens a Challenge's build board. The Company waits aside, as for a Sandbox. */
 const enterChallenge = (model: Model, id: string): Result => {
