@@ -12,6 +12,9 @@ const compatibility = { date: '2026-10-08' }
  */
 const PRODUCTION_DOMAIN = { name: 'playquorum.dev', redirects: ['quorum.elianiva.com'] }
 
+/** The wiki's public hostname in the `prod` stage, in the same zone (ADR 0009). */
+const WIKI_DOMAIN = 'wiki.playquorum.dev'
+
 /**
  * Cloudflare Workers Observability, configured on the host resources only.
  * Sampling at 1 records every request: lower both rates before real traffic.
@@ -56,9 +59,21 @@ export default Alchemy.Stack(
       observability,
     })
 
+    // The wiki: every page prerendered at build time. Foldkit's generated Worker answers the
+    // rest (the sitemap and 404s). Pages are folders, so serve them without a trailing slash.
+    const Wiki = Cloudflare.Website.Foldkit('Wiki', {
+      rootDir: 'apps/wiki',
+      assets: { htmlHandling: 'drop-trailing-slash' },
+      ...(stage === 'prod' && { domain: WIKI_DOMAIN }),
+      compatibility,
+      observability,
+    })
+
     yield* Results
     yield* ApiWorker
     const website = yield* Website
-    return { url: website.url }
+    if (stage === 'reference') return { url: website.url }
+    const wiki = yield* Wiki
+    return { url: website.url, wiki: wiki.url }
   }),
 )

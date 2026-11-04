@@ -1,0 +1,125 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@quorum/ui/theme.css';
+
+/* ==========================================================================
+   The wiki wears the game's Graphite theme (packages/ui/src/theme.css). It is
+   a page, not a game: it scrolls, and its backdrop is the board's dotted
+   canvas, so a reader knows where they are.
+   ========================================================================== */
+@layer base {
+  html {
+    scroll-padding-top: 88px;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--canvas);
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      color-mix(in oklch, var(--foreground) 9%, transparent) 1px,
+      transparent 0
+    );
+    background-size: 24px 24px;
+    font-size: 14px;
+  }
+}
+
+/* Prose: the body text of a page. */
+.prose {
+  font-size: 15px;
+  line-height: 1.7;
+  color: color-mix(in oklch, var(--foreground) 88%, transparent);
+}
+.prose > * + * {
+  margin-top: 0.9em;
+}
+.prose h2 {
+  margin-top: 2.2em;
+  font-size: 20px;
+  color: var(--foreground);
+}
+.prose h3 {
+  margin-top: 1.8em;
+  font-size: 16px;
+  color: var(--foreground);
+}
+.prose h2 + *,
+.prose h3 + * {
+  margin-top: 0.6em;
+}
+.prose a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--foreground) 30%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms var(--ease-out);
+}
+.prose a:hover {
+  text-decoration-color: var(--foreground);
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.3em;
+}
+.prose ul {
+  list-style: disc;
+}
+.prose ol {
+  list-style: decimal;
+}
+.prose li + li {
+  margin-top: 0.3em;
+}
+.prose li::marker {
+  color: var(--muted-foreground);
+}
+.prose strong {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+  background: var(--well);
+}
+.prose pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--well);
+  box-shadow: var(--elev-well);
+  overflow-x: auto;
+}
+.prose pre code {
+  padding: 0;
+  background: none;
+}
+.prose blockquote {
+  padding-left: 14px;
+  border-left: 2px solid var(--hairline);
+  color: var(--muted-foreground);
+}
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: 2em 0;
+}
+.prose .anchor {
+  margin-left: 0.4em;
+  color: transparent;
+  text-decoration: none;
+}
+.prose :is(h2, h3):hover .anchor,
+.prose .anchor:focus-visible {
+  color: var(--muted-foreground);
+}
+
+/* The search box clears with Escape; hide the browser's own clear button. */
+input[type='search']::-webkit-search-cancel-button {
+  appearance: none;
+}

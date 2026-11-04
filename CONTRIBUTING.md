@@ -21,6 +21,7 @@ Quorum is built on Cafe: **C**loudflare for the runtime, **A**lchemy for infrast
 | Path                  | Contents                                                                     |
 | --------------------- | ---------------------------------------------------------------------------- |
 | `apps/web`            | The Foldkit game client, the website Worker, and static assets.              |
+| `apps/wiki`           | The player wiki, prerendered at build time. Prose lives in `content/`.       |
 | `apps/backend`        | Effect RPC handlers and the API Worker entry.                                |
 | `packages/simulation` | The pure Simulation. The browser plays it; the API Worker replays it.        |
 | `packages/rpc`        | The wire contract: RPC groups, schemas, declared errors, and the API prefix. |
@@ -59,7 +60,7 @@ repository's Actions secrets. Alchemy keeps the stack state in a Cloudflare stat
 the same account, so CI needs no other credentials.
 
 `pnpm deploy` runs the same deployment from your machine. Only the `prod` stage attaches the
-custom domain; other stages use their `workers.dev` URL.
+custom domains (`playquorum.dev` and `wiki.playquorum.dev`); other stages use their `workers.dev` URL.
 
 The API Worker has no `workers.dev` URL. The website reaches it through its service binding, so
 the RPC endpoint has one public origin. Remove `workersDev: false` in `alchemy.run.ts` when the

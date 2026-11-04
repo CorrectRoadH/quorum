@@ -17,6 +17,8 @@ Website Worker ── service binding ──► API Worker
                                       packages/rpc
 ```
 
+`apps/wiki` is a third deployable application with no API. Foldkit prerenders every page at build time, and `Cloudflare.Website.Foldkit` serves the files; its generated Worker answers only the sitemap and 404s ([ADR 0009](adr/0009-the-wiki-is-a-prerendered-app.md)).
+
 The service binding is a deployment concern. Business handlers must not depend on Cloudflare types or bindings. The root `alchemy.run.ts` owns all resource declarations and selects the default website or reference example by Alchemy stage (`reference` selects the example). Each app exposes a plain `src/worker.ts` runtime entry module; these modules do not import Alchemy or declare infrastructure.
 
 ## Request routing
@@ -37,6 +39,7 @@ To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` fro
 
 - `apps/web/src/app` owns the Foldkit application. Remote data belongs in Foldkit Query submodels. Update handlers decide when to load or revalidate them.
 - `apps/backend/src/contexts` is the home for server-side bounded contexts as product vocabulary is discovered. Do not pre-invent product domains in the scaffold.
+- `apps/wiki` owns the wiki: `src/entry.server.ts` lists every page to prerender, `src/content.ts` reads the Markdown in `content/`, and `src/reference` builds catalog pages from `@quorum/simulation`. Islands in Markdown render views from `@quorum/ui`.
 - `packages/rpc` owns the public wire contract only: Effect RPC groups, request/response schemas, declared errors, and the API path prefix.
 - `packages/simulation` owns the Simulation: the catalog, the Game schema, the solver, the Step, actions, and the Sandboxes. The browser plays it and the API Worker will replay Challenges with it ([ADR 0004](adr/0004-simulation-package.md)). It imports only `effect` and its own files, and uses only exact math, so every runtime computes the same Game.
 - `packages/ui` (`@quorum/ui`) owns the design language and the views both apps show ([ADR 0010](adr/0010-ui-package.md)): the primitives under `src/primitives`, the Graphite theme in `src/theme.css` (each app imports it after Tailwind), the shared game views, number formats, and icons under `src/game`, and the Pixi board with its routing and compute worker under `src/board`. A view takes the data it shows, never an app's Model; the board takes a `BoardState` with a `translate` function and reports gestures and sounds through callbacks. It ships TypeScript source; each app's Vite build compiles it. `src/boundary.test.ts` checks its import rules.
@@ -48,6 +51,7 @@ To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` fro
 ```text
 apps/web ─────────► packages/rpc, packages/simulation, packages/ui
 apps/backend ─────► packages/rpc, packages/simulation
+apps/wiki ────────► packages/simulation, packages/ui
 examples/reference ► packages/rpc
 apps/web ─────────► packages/mcp-relay (tools, protocol only)
 packages/rpc ─────► effect
@@ -56,7 +60,7 @@ packages/mcp-relay ► ws
 packages/ui ───────► packages/simulation, foldkit, @foldkit/ui, lucide, pixi.js
 ```
 
-The web app must not import backend implementation modules. The RPC package must not import either app or the Simulation. The Simulation must not import either app, `packages/rpc`, or any UI, browser, or Cloudflare module. The relay must not import either app, `packages/rpc`, or the Simulation. The UI package must not import an app or `packages/rpc`, and its primitives must not import its game views, its board, or the Simulation. Share the wire contract, not internal backend models.
+The web app must not import backend implementation modules. The wiki must not import either other app or `packages/rpc`. The RPC package must not import either app or the Simulation. The Simulation must not import either app, `packages/rpc`, or any UI, browser, or Cloudflare module. The relay must not import either app, `packages/rpc`, or the Simulation. The UI package must not import an app or `packages/rpc`, and its primitives must not import its game views, its board, or the Simulation. Share the wire contract, not internal backend models.
 
 ## Cloudflare scope
 

@@ -5,6 +5,7 @@ This repository is a pnpm monorepo for an Effect + Foldkit application deployed 
 ## Package boundaries
 
 - `apps/web` is the Foldkit website and its website Worker.
+- `apps/wiki` is the player wiki at `wiki.playquorum.dev` (ADR 0009): a Foldkit app prerendered at build time. Its numbers come from the catalog; its prose is Markdown in `apps/wiki/content`.
 - `apps/backend` is the API Worker and owns server-side behavior.
 - `packages/rpc` contains only the typed wire contract shared by the browser and API Worker.
 - `packages/simulation` is the Simulation, played by the browser and replayed by the API Worker (ADR 0004). It imports only `effect` and its own files: no UI, browser, Node, or Cloudflare modules, and only exact math.
@@ -18,6 +19,7 @@ This repository is a pnpm monorepo for an Effect + Foldkit application deployed 
 
 - Keep the browser from importing `apps/backend` or platform-specific modules.
 - Keep game rules, the catalog, and the Game schema in `packages/simulation`; keep rendering, input, and storage in `apps/web`.
+- Keep wiki facts generated from `packages/simulation`; never type a catalog number into `apps/wiki/content`.
 - Keep design tokens in `packages/ui/src/theme.css` and shared views in `packages/ui`; keep screens that exist only in the game in `apps/web`.
 - Keep the agent tool names and wire protocol in `packages/mcp-relay`; keep their implementation over the Model in `apps/web/src/game/agent-tools.ts`. Agent tools only read.
 - Keep RPC schemas and errors in `packages/rpc`; keep handlers and internal models in `apps/backend`.
