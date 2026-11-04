@@ -147,13 +147,9 @@ const entity = (def: ComponentDef): Page => {
       h.div(
         [h.Class('flex flex-col gap-4')],
         [
-          // The card as it stands on the board, on the board's dotted canvas.
+          // The card as it stands on the board, drawn by the board itself.
           h.div(
-            [
-              h.Class(
-                'grid place-items-center rounded-2xl bg-canvas px-4 py-6 shadow-well [background-image:radial-gradient(circle_at_1px_1px,var(--canvas-grid)_1px,transparent_0)] [background-size:16px_16px]',
-              ),
-            ],
+            [h.Class('overflow-hidden rounded-2xl bg-canvas shadow-well')],
             [nodeCard(def.id, h)],
           ),
           factsBox(def.name, componentBadge(def.id, 'size-8', h), def.group, facts(def, h), h),
