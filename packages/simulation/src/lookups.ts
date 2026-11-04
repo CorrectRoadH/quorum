@@ -168,11 +168,15 @@ export const isDown = (node: GameNode): boolean => node.down !== 0
 
 /** The Node links into a live Kubernetes Cluster: it runs as pods. */
 export const inCluster = (game: Game, node: GameNode): boolean =>
-  (node.type === 'server' || node.type === 'worker') && clusteredOf(game).has(node.id)
+  clusterOf(game, node) !== undefined
 
-/** The ids of Nodes with a Link into a live Cluster, found once per Game. */
-const clustered = new WeakMap<Game, ReadonlySet<string>>()
-const clusteredOf = (game: Game): ReadonlySet<string> => {
+/** The id of the live Kubernetes Cluster an App Server or Worker runs in, if any. */
+export const clusterOf = (game: Game, node: GameNode): string | undefined =>
+  node.type === 'server' || node.type === 'worker' ? clusteredOf(game).get(node.id) : undefined
+
+/** The Nodes with a Link into a live Cluster, and that Cluster, found once per Game. */
+const clustered = new WeakMap<Game, ReadonlyMap<string, string>>()
+const clusteredOf = (game: Game): ReadonlyMap<string, string> => {
   let ids = clustered.get(game)
   if (!ids) {
     const live = new Set(
@@ -180,11 +184,18 @@ const clusteredOf = (game: Game): ReadonlySet<string> => {
         .filter((entry) => entry.type === 'cluster' && !isDown(entry))
         .map((entry) => entry.id),
     )
-    ids = new Set(game.links.filter((link) => live.has(link.to)).map((link) => link.from))
+    const found = new Map<string, string>()
+    for (const link of game.links)
+      if (live.has(link.to) && !found.has(link.from)) found.set(link.from, link.to)
+    ids = found
     clustered.set(game, ids)
   }
   return ids
 }
+
+/** The App Servers and Workers that run in a Cluster. */
+export const podsOf = (game: Game, cluster: GameNode): ReadonlyArray<GameNode> =>
+  game.nodes.filter((node) => clusterOf(game, node) === cluster.id)
 
 /** Copies of a Node that bill: the ones serving and the ones still booting. */
 export const copiesOf = (node: GameNode): number => node.replicas + node.pending

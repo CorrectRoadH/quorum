@@ -193,6 +193,7 @@ export const blankNode = (
     attempts: 25,
     maxLength: 0,
     prefetch: 10,
+    upgradedAt: game.time,
     coalesce: false,
     warming: false,
     paranoia: 2,

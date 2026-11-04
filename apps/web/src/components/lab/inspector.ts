@@ -32,12 +32,14 @@ import {
   SCALE_TARGETS,
   SIZES,
   STANDBY_TYPES,
+  TASKS,
   ZONES,
   type RequestKind,
   BACKUPS,
   REGION_INFO,
 } from '@quorum/simulation/catalog'
 import { isGlobal, openRegions, regional } from '@quorum/simulation/regions'
+import { platformTax, quartersBehind } from '@quorum/simulation/team'
 import type { Ledger } from '@quorum/simulation/ledger'
 import {
   burnOf,
@@ -323,6 +325,40 @@ const warnings = (
         h,
       ),
     )
+  }
+  if (node.type === 'cluster' && !game.sandbox) {
+    const upgrade = button(
+      {
+        onClick: Message.TaskQueued({ id: 'upgrade-cluster' }),
+        variant: 'outline',
+        size: 'sm',
+        className: 'self-start',
+      },
+      [`Upgrade clusters · ${TASKS['upgrade-cluster'].dh} DH`],
+      h,
+    )
+    if (game.incident?.kind === 'cluster-upgrade' && game.incident.nodeId === node.id)
+      list.push(
+        callout(
+          'The provider is forcing an upgrade. Pods that use removed APIs crash.',
+          'danger',
+          upgrade,
+          h,
+        ),
+      )
+    else if (quartersBehind(game, node) > 0)
+      list.push(
+        callout(
+          'Its Kubernetes version is out of support. The provider can force an upgrade.',
+          'warn',
+          upgrade,
+          h,
+        ),
+      )
+    if (platformTax(game) > 0)
+      list.push(
+        callout(`Clusters take ${platformTax(game)} engineers of Dev Hours.`, 'warn', null, h),
+      )
   }
   if (node.type === 'queue' && game.incident?.kind === 'poison' && game.incident.nodeId === node.id)
     list.push(

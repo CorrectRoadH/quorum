@@ -681,9 +681,18 @@ export const SCALE_MAXIMA = [4, 8, 16, 0] as const
 export const SCALE_IN = 0.6
 /** Kubernetes bin packing: members cost this share of their Burn (05 "Kubernetes Cluster"). */
 export const POD_BURN = 0.85
-/** Noisy neighbours: this share of a member's requests wait this long. Proposed. */
+/**
+ * Noisy neighbours: a share of a member's requests wait `NOISY_MS`. The share grows with how
+ * busy the shared nodes run: half of `NOISY_SHARE` when idle, twice it at full CPU. Proposed.
+ */
 export const NOISY_SHARE = 0.01
 export const NOISY_MS = 10
+/** Share of pod requests that fail while a forced Cluster upgrade breaks them. Proposed. */
+export const UPGRADE_CRASHES = 0.3
+/** Calendar quarters a Kubernetes version stays supported before the provider forces an upgrade. */
+export const SUPPORTED_QUARTERS = 1
+/** Engineers of Dev Hours each Cluster takes from the product teams without a Platform team (08). */
+export const PLATFORM_TAX = 0.5
 
 /** Data Warehouse price per scan (09 "Pricing models": per scan, BigQuery style). Proposed. */
 export const SCAN_PRICE = 0.02

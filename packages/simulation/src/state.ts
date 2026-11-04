@@ -137,6 +137,8 @@ export const GameNode = Schema.Struct({
   maxLength: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** Tasks each Worker process takes from its Queue ahead of time. */
   prefetch: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(10))),
+  /** Sim time a Kubernetes Cluster was last upgraded. */
+  upgradedAt: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** A Cache coalesces misses for the same key (Stampede protection). */
   coalesce: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   /** A Cache refills before it takes traffic after a restart (Cache warming). */

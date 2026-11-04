@@ -372,6 +372,7 @@ export const TASK_IDS = [
   'session-state',
   'refactor',
   'fix-bugs',
+  'upgrade-cluster',
 ] as const
 export type TaskId = (typeof TASK_IDS)[number]
 
@@ -436,7 +437,18 @@ export const TASKS: Record<TaskId, TaskDef> = {
     effect: 'The new Stack stops failing requests',
     internal: true,
   },
+  'upgrade-cluster': {
+    id: 'upgrade-cluster',
+    name: 'Upgrade clusters',
+    dh: 24,
+    research: 'containers',
+    effect: 'Every Kubernetes Cluster runs a supported version for a quarter',
+    internal: false,
+  },
 }
+
+/** Calendar days in a quarter, for how long a Kubernetes version stays supported. */
+export const QUARTER_DAYS = 90
 
 /** Fixes a task leaves on the service. Refactor and Fix bugs act once instead. */
 export const FIXES = ['eager-loading', 'fix-leak', 'session-state'] as const

@@ -22,14 +22,14 @@ import {
 import { StepEvent } from './events.ts'
 import { mutatorWeight, openActionWeight } from './founding.ts'
 import type { Ledger } from './ledger.ts'
-import { eraOf, has, isDown, ramOf, researchReady, restarted, zoned } from './lookups.ts'
+import { eraOf, has, isDown, podsOf, ramOf, researchReady, restarted, zoned } from './lookups.ts'
 
 export { zoned }
 import { nextRandom, pickWeighted } from './random.ts'
 import type { Game, GameLink, GameNode, Incident, Postmortem, Region, Zone } from './state.ts'
 import { isGlobal, survivesRegion } from './regions.ts'
 import { collectorOf } from './capacity.ts'
-import { fixed, serviceOf } from './team.ts'
+import { fixed, quartersBehind, serviceOf } from './team.ts'
 
 /* ==========================================================================
    The incident director. It attacks the Design, not the player: each
@@ -124,6 +124,18 @@ const hasNode = (game: Game, type: ComponentId): boolean =>
 
 const cacheTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
   game.nodes.filter((node) => node.type === 'cache' && !isDown(node) && busy(ledger, node))
+
+/** Clusters with pods that run past their version's support, weighted by how far. */
+const clusterTargets = (game: Game): ReadonlyArray<readonly [GameNode, number]> =>
+  game.nodes
+    .filter(
+      (node) =>
+        node.type === 'cluster' &&
+        !isDown(node) &&
+        podsOf(game, node).length > 0 &&
+        quartersBehind(game, node) > 0,
+    )
+    .map((node) => [node, Math.min(3, 1 + quartersBehind(game, node))] as const)
 
 const poisonTargets = (game: Game): ReadonlyArray<GameNode> =>
   game.nodes.filter((node) => node.type === 'queue' && !node.dlq)
@@ -309,6 +321,8 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number => {
     'dr-drill': () => 0,
     // Only an expired patch ticket starts one.
     breach: () => 0,
+    // A Cluster left on an unsupported version: likelier the further behind it is.
+    'cluster-upgrade': () => Math.max(0, ...clusterTargets(game).map(([, weight]) => weight)),
   }
   return weakness[kind]()
 }
@@ -359,6 +373,7 @@ export const startIncident = (
       ),
     ),
     Match.when('gpu-shortage', () => pickWeighted(gpuTargets(game, ledger), roll)),
+    Match.when('cluster-upgrade', () => pickWeighted(clusterTargets(game), roll)),
     Match.when('hot-key', () => {
       const targets = hotKeyTargets(game, ledger)
       return targets[Math.floor(roll * targets.length)]
@@ -384,6 +399,7 @@ export const startIncident = (
     'gc-storm',
     'gpu-shortage',
     'hot-key',
+    'cluster-upgrade',
   ] as const
   if ((targeted as ReadonlyArray<IncidentId>).includes(kind) && !target) return null
   // A Region outage strikes the region most of the Design depends on; the DR drill, home.

@@ -60,7 +60,7 @@ export const layoutOf = (type: ComponentId): Layout => {
     case 'autoscaler':
       return { rows: 3, inRow: 0, outRow: null, footer: false }
     case 'cluster':
-      return { rows: 2, inRow: 0, outRow: null, footer: false }
+      return { rows: 3, inRow: 0, outRow: null, footer: false }
     case 'warehouse':
       return { rows: 3, inRow: 0, outRow: null, footer: false }
     case 'gpu':

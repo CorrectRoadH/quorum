@@ -33,6 +33,7 @@ export const INCIDENT_IDS = [
   'audit',
   'dr-drill',
   'breach',
+  'cluster-upgrade',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -186,6 +187,19 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     cause: 'An attacker flooded the edge with 50 times normal traffic.',
     prevention: 'A WAF, with Under attack mode when it starts. A CDN takes the cacheable part.',
     actions: ['waf', 'cdn'],
+  },
+  'cluster-upgrade': {
+    id: 'cluster-upgrade',
+    name: 'Forced cluster upgrade',
+    era: 3,
+    severity: 2,
+    escalatesTo: 1,
+    duration: 60,
+    cause:
+      'The cloud provider upgraded a Kubernetes Cluster off a version it no longer supports. Pods that used removed APIs crash-looped.',
+    prevention:
+      'Upgrade clusters at least once a quarter, or let a Platform team keep them current.',
+    actions: [],
   },
   certificate: {
     id: 'certificate',

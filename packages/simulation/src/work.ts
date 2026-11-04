@@ -123,6 +123,8 @@ export const taskRefusal = (game: Game, id: TaskId): Refusal | null => {
     return Refusal.NotAllowed({ reason: 'Every query has an index.' })
   if (id === 'refactor' && serviceOf(game).debt <= 0)
     return Refusal.NotAllowed({ reason: 'There is no tech debt.' })
+  if (id === 'upgrade-cluster' && !game.nodes.some((node) => node.type === 'cluster'))
+    return Refusal.NotAllowed({ reason: 'There is no Kubernetes Cluster to upgrade.' })
   return null
 }
 
@@ -484,6 +486,16 @@ const complete = (game: Game, item: WorkItem): Game => {
       return withService(after, { debt: Math.max(0, service.debt - item.cost * REFACTOR_PER_DH) })
     case 'fix-bugs':
       return bugsFixed(after)
+    case 'upgrade-cluster': {
+      const nodes = after.nodes.map((node) =>
+        node.type === 'cluster' ? { ...node, upgradedAt: after.time } : node,
+      )
+      const incident =
+        after.incident?.kind === 'cluster-upgrade'
+          ? { ...after.incident, remaining: 0 }
+          : after.incident
+      return { ...after, nodes, incident }
+    }
   }
 }
 

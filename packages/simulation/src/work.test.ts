@@ -16,9 +16,17 @@ import { forceIncident } from './director.ts'
 import type { Ledger } from './ledger.ts'
 import { nextRandom } from './random.ts'
 import { solve, solveFlow } from './solve.ts'
-import { Game } from './state.ts'
+import { Game, type GameNode } from './state.ts'
 import { growthOf } from './step.ts'
-import { badDeployChance, deploysPerDay, serviceOf, teamOutputs, withService } from './team.ts'
+import {
+  badDeployChance,
+  deploysPerDay,
+  quarterSeconds,
+  quartersBehind,
+  serviceOf,
+  teamOutputs,
+  withService,
+} from './team.ts'
 import {
   addIndex,
   advanceTeam,
@@ -321,5 +329,61 @@ describe('Connection Pooler modes', () => {
     const transaction = solve(pooled('transaction')).nodes.database?.connections?.used ?? 0
     expect(transaction).toBe(POOLER_CONNECTIONS)
     expect(session).toBeGreaterThan(transaction)
+  })
+})
+
+describe('Kubernetes Clusters (08 "Teams")', () => {
+  /** Series A with three engineers on the founder's team and one Kubernetes Cluster. */
+  const clustered = (): Game => {
+    const base: Game = {
+      ...preseed(),
+      stage: 3,
+      researched: [...preseed().researched, 'containers'],
+      engineers: ['e1', 'e2', 'e3'].map((id) => ({
+        id,
+        team: 'core',
+        language: 'php' as const,
+        hiredAt: -1e6,
+      })),
+    }
+    return ok(place(base, 'cluster', 900, 80))
+  }
+
+  test('each Cluster takes half an engineer of Dev Hours from the teams', () => {
+    const game = clustered()
+    const without: Game = { ...game, nodes: game.nodes.filter((node) => node.type !== 'cluster') }
+    const effective = teamOutputs(without, at(without))[0]?.effective ?? 0
+    const rate = (current: Game) => teamOutputs(current, at(current))[0]?.rate ?? 0
+    expect(rate(game)).toBeCloseTo(rate(without) * (1 - 0.5 / effective), 9)
+  })
+
+  test('Upgrade clusters puts every Cluster on a supported version and ends a forced upgrade', () => {
+    const game = clustered()
+    const stale: Game = { ...game, time: game.time + 3 * quarterSeconds(DESIGN_TUNING) }
+    const cluster = stale.nodes.find((node) => node.type === 'cluster')
+    expect(quartersBehind(stale, cluster as GameNode, DESIGN_TUNING)).toBeCloseTo(2, 6)
+    const forced: Game = {
+      ...stale,
+      incident: {
+        kind: 'cluster-upgrade',
+        remaining: 60,
+        nodeId: cluster?.id ?? null,
+        startedAt: stale.time,
+        baseline: 0,
+        usersAtStart: stale.users,
+        impaired: 0,
+        lostRevenue: 0,
+        failed: 0,
+        severity: 2,
+        magnitude: 3,
+        zone: null,
+        region: null,
+      },
+    }
+    const upgraded = work(ok(queueTask(forced, 'upgrade-cluster')), 30 * 60)
+    const after = upgraded.nodes.find((node) => node.type === 'cluster') as GameNode
+    expect(quartersBehind(upgraded, after, DESIGN_TUNING)).toBe(0)
+    expect(upgraded.incident?.remaining ?? 0).toBeLessThanOrEqual(0)
+    expect(Result.isFailure(queueTask(preseed(), 'upgrade-cluster'))).toBe(true)
   })
 })

@@ -10,6 +10,7 @@ import {
   ChevronsUp,
   Coins,
   Copy,
+  Tag,
   Plus,
   Gauge,
   Gem,
@@ -79,6 +80,7 @@ import {
   zoneMs,
 } from '@quorum/simulation/lookups'
 import { isGlobal } from '@quorum/simulation/regions'
+import { quartersBehind } from '@quorum/simulation/team'
 import type { Game, GameNode, Region } from '@quorum/simulation/state'
 import { compact, money, ms, priceLabel, queueWait, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
@@ -791,6 +793,7 @@ const ROW_ICONS = {
   stored: HardDrive,
   blocked: ShieldBan,
   copies: Copy,
+  version: Tag,
 } as const
 
 const FOOT_ICONS = {
@@ -1071,12 +1074,21 @@ const rowsOf = (
     }
     case 'cluster': {
       const members = membersOf(game, node)
+      const behind = quartersBehind(game, node)
+      const upgrading =
+        game.incident?.kind === 'cluster-upgrade' && game.incident.nodeId === node.id
       return [
         { glyph: 'copies', name: 'Members', value: `${members.length}` },
         {
           glyph: 'cost',
           name: 'Burn',
           value: `${money(members.reduce((total, member) => total + burnOf(game, member), 0))}/s`,
+        },
+        {
+          glyph: 'version',
+          name: 'Version',
+          value: upgrading ? 'upgrading' : behind > 0 ? 'unsupported' : 'supported',
+          tone: upgrading ? 'danger' : behind > 0 ? 'warn' : 'plain',
         },
       ]
     }

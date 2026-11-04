@@ -6,17 +6,19 @@ import {
   ERAS,
   FAILOVER_SECONDS,
   INCIDENTS,
+  UPGRADE_CRASHES,
   VM_REACTION,
   type ResearchId,
   type RuntimeId,
 } from './catalog.ts'
 import { company, link, node } from './company.ts'
-import { forceIncident } from './director.ts'
+import { forceIncident, weaknessOf } from './director.ts'
 import { burnOf } from './lookups.ts'
 import { budgetOf, budgetVelocity, recordBudget } from './slo.ts'
 import { solve } from './solve.ts'
 import type { Game, GameNode } from './state.ts'
 import { step } from './step.ts'
+import { quarterSeconds } from './team.ts'
 
 /* Series A (10 "Era 3: Series A"): new runtimes, media, rt and buy, zones, the Autoscaler, and the SLO. */
 
@@ -222,6 +224,30 @@ describe('the Autoscaler', () => {
     const placed = ok(Actions.place(three, 'cluster', 440, 80))
     const pods = ok(Actions.connect(placed, 'server', placed.nodes.at(-1)?.id ?? ''))
     expect(burnOf(pods, serverOf(pods))).toBeCloseTo(burnOf(three, serverOf(three)) * 0.85, 9)
+  })
+})
+
+describe('the Kubernetes Cluster', () => {
+  /** A Series A board whose App Server runs as pods in a Cluster. */
+  const podded = (game: Game): Game => {
+    const placed = ok(Actions.place(game, 'cluster', 440, 80))
+    return ok(Actions.connect(placed, 'server', placed.nodes.at(-1)?.id ?? ''))
+  }
+
+  test('a Cluster past its supported quarter risks a forced upgrade that crashes its pods', () => {
+    const game = podded(seriesA(4_000, 'go'))
+    const cluster = game.nodes.find((entry) => entry.type === 'cluster') as GameNode
+    expect(weaknessOf(game, solve(game), 'cluster-upgrade')).toBe(0)
+    // Two quarters on: one past support, so the director can pick it, and likelier than the floor.
+    const stale = { ...game, time: cluster.upgradedAt + 2 * quarterSeconds() }
+    expect(weaknessOf(stale, solve(stale), 'cluster-upgrade')).toBeCloseTo(2, 6)
+    const forced = forceIncident(stale, solve(stale), 'cluster-upgrade')
+    if (!forced) throw new Error('no forced upgrade')
+    expect(forced.incident?.nodeId).toBe(cluster.id)
+    expect(solve(forced).kinds.page?.success).toBeCloseTo(1 - UPGRADE_CRASHES, 3)
+    // Off the Cluster, nothing crashes.
+    const vm = { ...forced, links: forced.links.filter((entry) => entry.to !== cluster.id) }
+    expect(solve(vm).kinds.page?.success).toBeCloseTo(1, 3)
   })
 })
 

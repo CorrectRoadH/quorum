@@ -42,6 +42,7 @@ import {
   REQUEST_KINDS,
   RUNTIMES,
   SESSION_STATE_CRASHES,
+  UPGRADE_CRASHES,
   type ComponentId,
   type Kind,
   type RequestKind,
@@ -68,7 +69,7 @@ import {
   type Outcome,
 } from './distribution.ts'
 import { mixOf, payloadFactor, queryFactor } from './features.ts'
-import { flatScale, grown, has, hopMs, inCluster, transferMs } from './lookups.ts'
+import { clusterOf, flatScale, grown, has, hopMs, inCluster, transferMs } from './lookups.ts'
 import { buggy } from './migration.ts'
 import { spreadRegions } from './regions.ts'
 import type { Game, GameNode } from './state.ts'
@@ -173,10 +174,19 @@ export const taskMixOf = (game: Game): Partial<Record<RequestKind, number>> => {
   return shares
 }
 
-/** Share of requests the code itself fails on an App Server or Worker: a bad deploy, or a migration's bugs. */
+/**
+ * Share of requests the code itself fails on an App Server or Worker: a bad
+ * deploy, a migration's bugs, or a Cluster upgrade gone wrong.
+ */
 export const codeCrashes = (game: Game, node: GameNode): number => {
-  const deploy = game.incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0
-  return deploy + (buggy(game, node) ? MIGRATION_BUGS : 0)
+  const incident = game.incident
+  const cluster = clusterOf(game, node)
+  const deploy = incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0
+  const upgrade =
+    incident?.kind === 'cluster-upgrade' && cluster !== undefined && cluster === incident.nodeId
+      ? UPGRADE_CRASHES
+      : 0
+  return deploy + upgrade + (buggy(game, node) ? MIGRATION_BUGS : 0)
 }
 
 /** What `outcome` may ask: this Node's own hop, and what its calls get back. */

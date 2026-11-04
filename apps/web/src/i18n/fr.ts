@@ -417,12 +417,32 @@ export const fr: Readonly<Record<string, string>> = {
   'No max length': 'Pas de longueur max.',
   'Prefetch {0}': 'Préchargement {0}',
   stalled: 'bloquée',
+  Version: 'Version',
+  upgrading: 'mise à niveau',
+  unsupported: 'non prise en charge',
+  supported: 'prise en charge',
+  'Forced cluster upgrade': 'Mise à niveau forcée du cluster',
+  'The cloud provider upgraded a Kubernetes Cluster off a version it no longer supports. Pods that used removed APIs crash-looped.':
+    'Le fournisseur cloud a mis à niveau un cluster Kubernetes depuis une version qu’il ne prend plus en charge. Les pods qui utilisaient des API supprimées ont planté en boucle.',
+  'Upgrade clusters at least once a quarter, or let a Platform team keep them current.':
+    'Mettez à niveau les clusters au moins une fois par trimestre, ou laissez une équipe Plateforme les tenir à jour.',
+  'Upgrade clusters': 'Mettre à niveau les clusters',
+  'Upgrade clusters · {0} DH': 'Mettre à niveau les clusters · {0} DH',
+  'Every Kubernetes Cluster runs a supported version for a quarter':
+    'Chaque cluster Kubernetes tourne sur une version prise en charge pendant un trimestre',
+  'The provider is forcing an upgrade. Pods that use removed APIs crash.':
+    'Le fournisseur force une mise à niveau. Les pods qui utilisent des API supprimées plantent.',
+  'Its Kubernetes version is out of support. The provider can force an upgrade.':
+    'Sa version de Kubernetes n’est plus prise en charge. Le fournisseur peut forcer une mise à niveau.',
+  'Clusters take {0} engineers of Dev Hours. A Platform team takes that work.':
+    'Les clusters prennent {0} ingénieurs d’heures de dev. Une équipe Plateforme reprend ce travail.',
   'Only a Queue retries tasks.': 'Seule une file réessaie les tâches.',
   'Max attempts are 1, 3, 10, 25.': 'Les tentatives max. sont 1, 3, 10, 25.',
   'Only a Queue has a max length.': 'Seule une file a une longueur max.',
   'That max length is not on offer.': 'Cette longueur max. n’est pas proposée.',
   'Only a Worker prefetches tasks.': 'Seul un Worker précharge des tâches.',
   'Prefetch is 1, 10, 100.': 'Le préchargement est de 1, 10, 100.',
+  'There is no Kubernetes Cluster to upgrade.': 'Aucun cluster Kubernetes à mettre à niveau.',
   Zone: 'Zone',
   'No standby': 'Sans secours',
   Standby: 'Secours',

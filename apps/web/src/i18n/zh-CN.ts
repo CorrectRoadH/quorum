@@ -518,6 +518,19 @@ export const zhCN: Readonly<Record<string, string>> = {
   Prefetch: '预取',
   '{0}×': '{0}×',
   stalled: '停滞',
+  Version: '版本',
+  upgrading: '升级中',
+  unsupported: '不受支持',
+  supported: '受支持',
+  'Forced cluster upgrade': '强制集群升级',
+  'Upgrade clusters': '升级集群',
+  'Upgrade clusters · {0} DH': '升级集群 · {0} 开发工时',
+  'The provider is forcing an upgrade. Pods that use removed APIs crash.':
+    '云服务商正在强制升级。使用已移除 API 的 Pod 会崩溃。',
+  'Its Kubernetes version is out of support. The provider can force an upgrade.':
+    '它的 Kubernetes 版本已不受支持。云服务商可能强制升级。',
+  'Clusters take {0} engineers of Dev Hours. A Platform team takes that work.':
+    '集群占用 {0} 名工程师的开发工时。平台团队可接手这项工作。',
   'No standby': '无备用节点',
   Standby: '备用节点',
   One: '单个',

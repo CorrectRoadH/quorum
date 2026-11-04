@@ -511,8 +511,14 @@ export const serverModel = (context: ServerContext, shed = true): NodeModel => {
     gcP > 0 && gc
       ? combineTail(stallP, stallMs, gcP, gc.pauseMs)
       : { tailP: stallP, tailMs: stallMs }
+  // Busy neighbours steal more: pods packed onto busy nodes wait more often.
   const { tailP, tailMs } = context.pod
-    ? combineTail(collected.tailP, collected.tailMs, NOISY_SHARE, NOISY_MS)
+    ? combineTail(
+        collected.tailP,
+        collected.tailMs,
+        NOISY_SHARE * (0.5 + 1.5 * Math.min(1, cpuUtilization)),
+        NOISY_MS,
+      )
     : collected
 
   const service = Object.fromEntries(

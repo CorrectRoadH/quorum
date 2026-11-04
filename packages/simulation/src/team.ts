@@ -16,13 +16,16 @@ import {
   MANUAL_DEPLOY_MINUTES,
   MORALE_DAYS,
   POLICIES,
+  PLATFORM_TAX,
   POLICY_SWITCH_DAYS,
+  QUARTER_DAYS,
   RAMP_DAYS,
   RAMP_OUTPUT,
   RETROGRADE,
   SALARY_BASE,
   SIGNING_BASE,
   STRUCTURED_COORDINATION,
+  SUPPORTED_QUARTERS,
   TESTS_FACTOR,
   VERIFY_MINUTES,
   WORK_MINUTES,
@@ -40,6 +43,7 @@ import {
   monolith,
   type Engineer,
   type Game,
+  type GameNode,
   type Service,
   type Team,
   type WorkItem,
@@ -121,6 +125,27 @@ export const hireSeconds = (language: LanguageId, tuning: Tuning = LIVE_TUNING):
 
 export const moraleSeconds = (tuning: Tuning = LIVE_TUNING): number => days(MORALE_DAYS, tuning)
 
+/* ---------- the platform (08 "Teams") ---------- */
+
+const liveClusters = (game: Game): number =>
+  game.nodes.filter((node) => node.type === 'cluster' && node.down === 0).length
+
+/** Sim seconds in a calendar quarter, on the Team's calendar. */
+export const quarterSeconds = (tuning: Tuning = LIVE_TUNING): number => days(QUARTER_DAYS, tuning)
+
+/** Calendar quarters a Cluster has run past its version's support; 0 while supported. */
+export const quartersBehind = (
+  game: Game,
+  cluster: GameNode,
+  tuning: Tuning = LIVE_TUNING,
+): number =>
+  Math.max(0, (game.time - cluster.upgradedAt) / quarterSeconds(tuning) - SUPPORTED_QUARTERS)
+
+/**
+ * Engineers of Dev Hours the Clusters take from the teams: 0.5 per Cluster.
+ */
+export const platformTax = (game: Game): number => PLATFORM_TAX * liveClusters(game)
+
 /* ---------- output ---------- */
 
 export type TeamOutput = Readonly<{
@@ -150,7 +175,7 @@ export const teamOutputs = (
   if (game.sandbox) return []
   const debt = serviceOf(game).debt
   const morale = game.time < game.moraleUntil ? LAYOFF_MORALE : 1
-  return game.teams.map((team, index) => {
+  const outputs = game.teams.map((team, index) => {
     const members = membersOf(game, team)
     const founder = index === 0 ? FOUNDER_OUTPUT : 0
     const headcount = members.length + (index === 0 ? 1 : 0)
@@ -169,6 +194,12 @@ export const teamOutputs = (
     const rate = (effective * velocity * DEV_HOURS_PER_DAY * tuning.calendarPace) / CALENDAR_DAY
     return { team, headcount, effective, velocity, rate }
   })
+  // Each Cluster takes engineers' worth of Dev Hours from the teams, in proportion.
+  const tax = platformTax(game)
+  if (tax <= 0) return outputs
+  const engineers = outputs.reduce((sum, entry) => sum + entry.effective, 0)
+  const kept = engineers > 0 ? Math.max(0, 1 - tax / engineers) : 0
+  return outputs.map((entry) => ({ ...entry, rate: entry.rate * kept }))
 }
 
 export const devHoursRate = (game: Game, ledger: Ledger, tuning: Tuning = LIVE_TUNING): number =>
