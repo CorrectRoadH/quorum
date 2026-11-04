@@ -2375,4 +2375,33 @@ export const frMail: Readonly<Record<string, string>> = {
   'Our dashboard says we typically reply in a few days. We suggest you reply sooner.':
     'Notre tableau de bord indique que nous répondons généralement dans quelques jours. Nous vous suggérons de répondre plus tôt.',
   'Warm regards,\n{0}': 'Cordialement,\n{0}',
+  '{0}: users are leaving': '{0} : des utilisateurs partent',
+  'Support queue: {0} is unhappy': 'File du support : mécontentement en {0}',
+  'Cancellations from {0} are up. You have {1} users there, and you lose {2} an hour. At this rate you will have {3} tomorrow.':
+    'Les résiliations augmentent en {0}. Vous y avez {1} utilisateurs et vous en perdez {2} par heure. À ce rythme, il vous en restera {3} demain.',
+  'What they complain about most:': 'Ce dont ils se plaignent le plus :',
+  '- {0}: {1}': '- {0} : {1}',
+  '- nothing one cause explains': '- aucune cause unique ne l’explique',
+  'The Churn breakdown lists every cause and the fix for each.':
+    'L’analyse de l’attrition liste chaque cause et le correctif de chacune.',
+  'The {0} queue doubled this hour. {1} users, down {2} an hour, {3} by this time tomorrow if nothing changes.':
+    'La file {0} a doublé cette heure-ci. {1} utilisateurs, {2} de moins par heure, {3} demain à la même heure si rien ne change.',
+  'Top tags:': 'Étiquettes principales :',
+  'Open the Churn breakdown to see what wins them back.':
+    'Ouvrez l’analyse de l’attrition pour voir ce qui les fera revenir.',
+  'Open Churn breakdown': 'Ouvrir l’analyse de l’attrition',
+  '{0} is growing again.': '{0} est de nouveau en croissance.',
+  'slow from far away': 'lent depuis l’étranger',
+  errors: 'erreurs',
+  'not available at all': 'pas disponible du tout',
+  'requests dropped': 'requêtes abandonnées',
+  'connection refused': 'connexion refusée',
+  'old data': 'données périmées',
+  'crashes (out of memory)': 'plantages (mémoire saturée)',
+  timeouts: 'délais dépassés',
+  crashes: 'plantages',
+  'blocked by the firewall': 'bloqué par le pare-feu',
+  'a provider is down': 'un fournisseur est en panne',
+  'rate limited': 'débit limité',
+  'charged twice': 'débité deux fois',
 }

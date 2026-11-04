@@ -100,6 +100,10 @@ describe('French presentation', () => {
       action: 'Restart',
       alert: 'Error rate above 5%',
       backlog: '12',
+      causes: '- API read: slow from far away\n\n- Checkout: timeouts',
+      inADay: '79',
+      perHour: '59',
+      region: 'Asia-Pacific',
       exposed: 'Server',
       features: 'Pagination',
       from: 'Pat Mutex',
@@ -150,9 +154,34 @@ describe('French presentation', () => {
       Copy.HIRE,
       Copy.REWRITES,
       Copy.TICKETS,
+      Copy.CHURN_LETTERS,
     ])
       visit(value)
     expect([...missing]).toEqual([])
+  })
+
+  test('the Churn breakdown and its Mail translate in French and Chinese', () => {
+    const cases: ReadonlyArray<readonly [string, string, string]> = [
+      ['Why users leave', 'Pourquoi les utilisateurs partent', '用户为何流失'],
+      ['−14.4%/h', '−14.4 %/h', '−14.4%/小时'],
+      ['1 day: 13.2k', 'Dans 1 jour : 13.2k', '1 天后：13.2k'],
+      ['Open Asia-Pacific', 'Ouvrir l’Asie-Pacifique', '开通亚太'],
+      ['Show Load Balancer', 'Afficher Répartiteur de charge', '查看负载均衡器'],
+      [
+        'Asia-Pacific: users are leaving',
+        'Asie-Pacifique : des utilisateurs partent',
+        '亚太：用户正在流失',
+      ],
+      [
+        '- API read: slow from far away',
+        '- Lecture API : lent depuis l’étranger',
+        '- API 读取：跨地域访问太慢',
+      ],
+    ]
+    for (const [english, french, chinese] of cases) {
+      expect(translate('fr', english)).toBe(french)
+      expect(translate('zh-CN', english)).toBe(chinese)
+    }
   })
 
   test('French glossary search respects categories', () => {

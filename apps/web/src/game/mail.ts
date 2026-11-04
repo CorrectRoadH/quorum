@@ -10,6 +10,7 @@ import type { Mail } from './model.ts'
 import {
   COMPONENTS,
   CVE_DEFS,
+  KINDS,
   REGION_INFO,
   patchCost,
   patchWindow,
@@ -259,8 +260,9 @@ export const churnFact = (game: Game, region: RegionChurn): Fact => {
   const sender = senderFor('customers', game, key)
   const causes = region.rows
     .slice(0, 2)
-    .map((row) => `- ${row.kind}: ${CAUSE_TEXT[row.cause]}`)
-    .join('\n')
+    .map((row) => `- ${KINDS[row.kind].label}: ${CAUSE_TEXT[row.cause]}`)
+    // One paragraph per cause, so each line translates on its own.
+    .join('\n\n')
   return fact(
     key,
     sender,

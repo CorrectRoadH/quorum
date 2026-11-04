@@ -1,6 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { churnOf, type ChurnFix, type ChurnRow, type RegionChurn } from '@quorum/simulation/churn'
-import { COMPONENTS, REGION_INFO, RESEARCH } from '@quorum/simulation/catalog'
+import { COMPONENTS, KINDS, REGION_INFO, RESEARCH } from '@quorum/simulation/catalog'
 import { openRegions } from '@quorum/simulation/regions'
 import type { Game } from '@quorum/simulation/state'
 import { compact, ms } from '@/game/format.ts'
@@ -54,13 +54,13 @@ const row = (
       h.Key(`${entry.kind}:${entry.cause}`),
       h.Class(
         cn(
-          'grid grid-cols-[56px_64px_1fr_44px_minmax(0,180px)] items-center gap-3 px-3 py-1.5 compact:grid-cols-[48px_56px_1fr_40px]',
+          'grid grid-cols-[88px_80px_1fr_44px_minmax(0,180px)] items-center gap-3 px-3 py-1.5 compact:grid-cols-[72px_64px_1fr_40px]',
           !entry.needed && 'opacity-60',
         ),
       ),
     ],
     [
-      h.span([h.Class('text-[12.5px] font-medium')], [entry.kind]),
+      h.span([h.Class('truncate text-[12.5px] font-medium')], [KINDS[entry.kind].label]),
       h.span(
         [
           h.Class(

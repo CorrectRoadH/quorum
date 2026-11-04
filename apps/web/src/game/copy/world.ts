@@ -217,10 +217,10 @@ export type ChurnVars = Readonly<{
 export const CHURN_LETTERS: Letters<ChurnVars> = [
   ({ from, region, users, perHour, inADay, causes }) => ({
     subject: `${region}: users are leaving`,
-    body: `Hi,\n\nCancellations from ${region} are up. You have ${users} users there, and you lose ${perHour} an hour. At this rate you will have ${inADay} tomorrow.\n\nWhat they complain about most:\n${causes}\n\nThe Churn breakdown lists every cause and the fix for each.\n\n${from}`,
+    body: `Hi,\n\nCancellations from ${region} are up. You have ${users} users there, and you lose ${perHour} an hour. At this rate you will have ${inADay} tomorrow.\n\nWhat they complain about most:\n\n${causes}\n\nThe Churn breakdown lists every cause and the fix for each.\n\n${from}`,
   }),
   ({ from, region, users, perHour, inADay, causes }) => ({
     subject: `Support queue: ${region} is unhappy`,
-    body: `Hello,\n\nThe ${region} queue doubled this hour. ${users} users, down ${perHour} an hour, ${inADay} by this time tomorrow if nothing changes.\n\nTop tags:\n${causes}\n\nOpen the Churn breakdown to see what wins them back.\n\n${from}`,
+    body: `Hello,\n\nThe ${region} queue doubled this hour. ${users} users, down ${perHour} an hour, ${inADay} by this time tomorrow if nothing changes.\n\nTop tags:\n\n${causes}\n\nOpen the Churn breakdown to see what wins them back.\n\n${from}`,
   }),
 ]
