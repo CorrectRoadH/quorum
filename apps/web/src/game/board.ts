@@ -150,6 +150,8 @@ export type BoardState = Readonly<{
   region: Region
   /** The company is paused: belts hold still. */
   paused: boolean
+  /** Research covers the board: stop rendering, not the Simulation. */
+  suspended: boolean
   /** The Node whose footer button glows: a disclosure cue (15 "Progressive disclosure"). */
   cue: string | null
 }>
@@ -2100,6 +2102,7 @@ class BoardController {
   async start(initial: BoardState | undefined): Promise<void> {
     this.state = initial ?? null
     await this.app.init({
+      autoStart: false,
       backgroundAlpha: 0,
       antialias: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
@@ -2143,6 +2146,7 @@ class BoardController {
     this.started = true
     this.resize.observe(this.host)
     this.onResize()
+    if (!this.state?.suspended) this.app.start()
   }
 
   draw(state: BoardState): void {
@@ -2156,9 +2160,14 @@ class BoardController {
       if (!node || (node.x === dragged.x && node.y === dragged.y) || stale) this.dragged = null
     }
     if (!this.started) return
+    if (state.suspended) {
+      this.app.stop()
+      return
+    }
     if (!this.fitted) this.fit()
     this.syncCards()
     this.syncGhost()
+    this.app.start()
   }
 
   /** New links draw in from their port; removed ones fade where they were. */

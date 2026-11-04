@@ -102,6 +102,34 @@ test('the menu button opens a menu over the board that holds the clock, and Esca
   expect(update(resumed.model, key).model.panel).toBe('menu')
 })
 
+test('Research suspends board rendering without holding the clock, and closing it resumes rendering', () => {
+  const opened = update(inLab(), Message.PanelOpened({ panel: 'research' }))
+  expect(opened.commands).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'SyncBoard',
+        args: expect.objectContaining({ suspended: true, paused: false }),
+      }),
+    ]),
+  )
+  const advanced = tick(opened.model)
+  expect(advanced.board.game.time).toBeGreaterThan(opened.model.board.game.time)
+  expect(advanced.panel).toBe('research')
+  for (const message of [Message.PanelClosed(), Message.KeyPressed({ key: 'Escape' })]) {
+    const closed = update(advanced, message)
+    expect(closed.model.panel).toBe('none')
+    expect(closed.model.board.game).toBe(advanced.board.game)
+    expect(closed.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'SyncBoard',
+          args: expect.objectContaining({ suspended: false, paused: false }),
+        }),
+      ]),
+    )
+  }
+})
+
 describe('copy, cut, paste, and select all', () => {
   const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
     messages.reduce((current, message) => update(current, message).model, model)

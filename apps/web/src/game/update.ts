@@ -367,6 +367,7 @@ const sync = (model: Model, fit: boolean): AnyCommand =>
     history: model.board.nodeHistory,
     region: model.board.region,
     paused: halted(model),
+    suspended: model.panel === 'research',
     cue: cueNode(model),
   })
 
@@ -3551,6 +3552,7 @@ const boardChanged = (before: Model, after: Model): boolean =>
   before.founder.playbooks !== after.founder.playbooks ||
   before.board.nodeHistory !== after.board.nodeHistory ||
   halted(before) !== halted(after) ||
+  (before.panel === 'research') !== (after.panel === 'research') ||
   cueNode(before) !== cueNode(after) ||
   (onBoard(after.route) && !onBoard(before.route))
 

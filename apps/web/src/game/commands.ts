@@ -52,6 +52,7 @@ export const SyncBoard = Command.define('SyncBoard', {
     history: Schema.Record(Schema.String, Schema.Array(Schema.Finite)),
     region: Region,
     paused: Schema.Boolean,
+    suspended: Schema.Boolean,
     /** The Node whose footer button glows: a disclosure cue. */
     cue: Schema.NullOr(Schema.String),
     /** Fit the view to the new Design once it is drawn. */
@@ -69,6 +70,7 @@ export const SyncBoard = Command.define('SyncBoard', {
     history,
     region,
     paused,
+    suspended,
     cue,
     fit,
   }) =>
@@ -84,6 +86,7 @@ export const SyncBoard = Command.define('SyncBoard', {
         history,
         region,
         paused,
+        suspended,
         cue,
       })
       if (fit) fitBoard('board')
