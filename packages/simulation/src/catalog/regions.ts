@@ -72,3 +72,78 @@ export const ABROAD_SEED = 0.05
  * adopt faster. Proposed.
  */
 export const BORDER_MIXING = 0.1
+
+/* ---------- Mirrors (05 "Mirror a region") ---------- */
+
+/**
+ * Calendar minutes from Apply until a Mirror's new Nodes serve (16 `mirror_time`). Proposed:
+ * about what `terraform apply` takes to boot instances and a replica.
+ */
+export const MIRROR_TIME = 30
+/** Calendar minutes GitOps Staged holds a change on the source before the Mirrors get it (16 `stage_wait`). Proposed. */
+export const STAGE_WAIT = 60
+/** Calendar minutes between GitOps syncs: Argo CD polls its repository every 3 minutes by default. */
+export const SYNC_POLL = 3
+/** Calendar minutes Mirrors do not sync while the Company moves to another IaC tool. Proposed: one calendar day. */
+export const IAC_SWITCH = 1_440
+
+export const IAC_TOOLS = ['terraform', 'pulumi', 'alchemy'] as const
+export type IacToolId = (typeof IAC_TOOLS)[number]
+
+export const SYNC_MODES = ['all', 'staged'] as const
+export type SyncModeId = (typeof SYNC_MODES)[number]
+
+/** How a Mirror copies a source data Node (05 "Mirror a region", 07 "Multi-region data"). */
+export const DATA_PATTERNS = ['replica', 'primary', 'replicate', 'call'] as const
+export type DataPatternId = (typeof DATA_PATTERNS)[number]
+
+/**
+ * Calendar minutes a plan spends reading one Node's live state before it diffs (05 "IaC tools").
+ * Terraform refreshes on every plan and apply; Pulumi documents the same round trip per resource
+ * as the reason `pulumi up` does not refresh by default. Proposed.
+ */
+export const REFRESH_TIME = 0.5
+
+export type IacToolDef = Readonly<{
+  name: string
+  /** What the code is written in. */
+  language: string
+  /**
+   * Every plan reads live state first, so it shows every hand change (`terraform plan` refreshes).
+   * When false, plans diff against the state the last Apply recorded, and hand changes show only
+   * after the player reads live state.
+   */
+  refreshOnPlan: boolean
+  /** The command that reads live state when plans do not: `pulumi refresh` or `alchemy drift`. */
+  refresh: string | null
+  /** Restores drifted Nodes to the last deployed state without taking source changes (`alchemy drift --repair`). */
+  repair: boolean
+}>
+
+/**
+ * The IaC tools (05 "IaC tools"). All three build every Component and can set any value per
+ * region. They differ in how a plan finds hand changes, as each tool's documented default workflow.
+ */
+export const IAC_TOOL_INFO: Record<IacToolId, IacToolDef> = {
+  terraform: {
+    name: 'Terraform',
+    language: 'HCL',
+    refreshOnPlan: true,
+    refresh: null,
+    repair: false,
+  },
+  pulumi: {
+    name: 'Pulumi',
+    language: 'TypeScript',
+    refreshOnPlan: false,
+    refresh: 'pulumi refresh',
+    repair: false,
+  },
+  alchemy: {
+    name: 'Alchemy',
+    language: 'TypeScript',
+    refreshOnPlan: false,
+    refresh: 'alchemy drift',
+    repair: true,
+  },
+}

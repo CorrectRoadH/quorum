@@ -195,6 +195,36 @@ const hotKeyTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
   )
 
 /** The region with the most region-bound live Nodes. */
+/** Nodes a config push reaches: the ones that run the Service. */
+const configured = (node: GameNode): boolean => node.type === 'server' || node.type === 'worker'
+
+/** Where a config push lands first: a Mirror's source, or else the region with the most App Servers. */
+const configRegion = (game: Game): Region | null => {
+  const source = (game.mirrors ?? [])[0]?.source
+  if (source) return source
+  const counts = new Map<Region, number>()
+  for (const node of game.nodes)
+    if (configured(node) && !isDown(node))
+      counts.set(node.region, (counts.get(node.region) ?? 0) + 1)
+  return (
+    [...counts.entries()].reduce<readonly [Region, number] | undefined>(
+      (best, entry) => (!best || entry[1] > best[1] ? entry : best),
+      undefined,
+    )?.[0] ?? null
+  )
+}
+
+/** Regions a Bad config push reaches: with GitOps all at once, every Mirror of its region too. */
+export const configReach = (game: Game, region: Region): ReadonlyArray<Region> =>
+  game.iac?.sync === 'all'
+    ? [
+        region,
+        ...(game.mirrors ?? [])
+          .filter((mirror) => mirror.source === region)
+          .map((mirror) => mirror.region),
+      ]
+    : [region]
+
 const busiestRegion = (game: Game): Region | undefined => {
   const counts = new Map<Region, number>()
   for (const node of game.nodes)
@@ -332,6 +362,8 @@ const rawWeakness = (game: Game, ledger: Ledger, kind: IncidentId): number => {
     },
     // Nothing prevents it: rare, and it ends with a rollback.
     bgp: () => 0.2,
+    // Infrastructure as code pushes config to every server at once (11 "Bad config push").
+    config: () => (has(game, 'infra-as-code') && configRegion(game) !== null ? 1 : 0),
     // An auditor resets the DR drill; a Security team fixes the gap first.
     audit: () => (game.drill?.passed && !has(game, 'security-team') ? 1.5 : 0),
     // Only the player starts a drill.
@@ -421,8 +453,16 @@ export const startIncident = (
   if ((targeted as ReadonlyArray<IncidentId>).includes(kind) && !target) return null
   // A Region outage strikes the region most of the Design depends on; the DR drill, home.
   const region =
-    kind === 'dr-drill' ? HOME_REGION : kind === 'region' ? (busiestRegion(game) ?? null) : null
-  if (kind === 'region' && region === null) return null
+    kind === 'dr-drill'
+      ? HOME_REGION
+      : kind === 'region'
+        ? (busiestRegion(game) ?? null)
+        : kind === 'config'
+          ? configRegion(game)
+          : null
+  if ((kind === 'region' || kind === 'config') && region === null) return null
+  // A bad config push crashes every App Server and Worker it reaches.
+  const pushed = kind === 'config' && region !== null ? configReach(game, region) : []
   const incident: Incident = {
     kind,
     remaining: incidentDuration(game, kind),
@@ -444,48 +484,59 @@ export const startIncident = (
   // A stampede: the Cache restarted empty, or mostly warm with Cache warming.
   // A zone outage downs its zone for the incident; a Node with a standby fails over.
   const nodes = game.nodes.map((node) =>
-    region !== null && node.region === region && !survivesRegion(game, node) && !isDown(node)
+    pushed.includes(node.region) && configured(node) && !isDown(node)
       ? {
           ...node,
           down: incidentDuration(game, kind),
           downCause: 'failure' as const,
           downAt: game.time,
         }
-      : zone !== null && zoned(node) && node.zone === zone && !isDown(node)
+      : kind !== 'config' &&
+          region !== null &&
+          node.region === region &&
+          !survivesRegion(game, node) &&
+          !isDown(node)
         ? {
             ...node,
-            down: node.standby ? failoverSeconds(game) : incidentDuration(game, 'zone'),
+            down: incidentDuration(game, kind),
             downCause: 'failure' as const,
             downAt: game.time,
           }
-        : node.id !== target?.id
-          ? node
-          : kind === 'instance' && node.type === 'wide'
-            ? // A Wide-column Store loses one replica and keeps serving the quorums it can still form.
-              { ...node, lost: incidentDuration(game, kind) }
-            : kind === 'instance'
-              ? {
-                  ...node,
-                  // A standby takes over: the Node is back once failover finishes. A Cluster
-                  // reschedules a pod on another host by itself (self-healing).
-                  down: node.standby
-                    ? failoverSeconds(game)
-                    : clusterOf(game, node) !== undefined
-                      ? rescheduleSeconds(game)
-                      : -1,
-                  downCause: 'failure' as const,
-                  downAt: game.time,
-                }
-              : kind === 'stampede'
-                ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
-                : kind === 'gpu-shortage'
-                  ? {
-                      ...node,
-                      down: incidentDuration(game, kind),
-                      downCause: 'failure' as const,
-                      downAt: game.time,
-                    }
-                  : node,
+        : zone !== null && zoned(node) && node.zone === zone && !isDown(node)
+          ? {
+              ...node,
+              down: node.standby ? failoverSeconds(game) : incidentDuration(game, 'zone'),
+              downCause: 'failure' as const,
+              downAt: game.time,
+            }
+          : node.id !== target?.id
+            ? node
+            : kind === 'instance' && node.type === 'wide'
+              ? // A Wide-column Store loses one replica and keeps serving the quorums it can still form.
+                { ...node, lost: incidentDuration(game, kind) }
+              : kind === 'instance'
+                ? {
+                    ...node,
+                    // A standby takes over: the Node is back once failover finishes. A Cluster
+                    // reschedules a pod on another host by itself (self-healing).
+                    down: node.standby
+                      ? failoverSeconds(game)
+                      : clusterOf(game, node) !== undefined
+                        ? rescheduleSeconds(game)
+                        : -1,
+                    downCause: 'failure' as const,
+                    downAt: game.time,
+                  }
+                : kind === 'stampede'
+                  ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
+                  : kind === 'gpu-shortage'
+                    ? {
+                        ...node,
+                        down: incidentDuration(game, kind),
+                        downCause: 'failure' as const,
+                        downAt: game.time,
+                      }
+                    : node,
   )
   // An audit finding resets the DR drill: it must pass again.
   const drill = kind === 'audit' ? null : game.drill
@@ -560,6 +611,15 @@ const resolve = (game: Game): Readonly<{ game: Game; events: ReadonlyArray<StepE
     (node) => node.id === incident.nodeId && incident.kind === 'leak' && node.leak > 0,
   )
   const nodes = game.nodes.map((node) => {
+    // A rolled-back config: the crashed servers restart on the old one.
+    if (
+      incident.kind === 'config' &&
+      configured(node) &&
+      node.downCause === 'failure' &&
+      node.downAt === incident.startedAt &&
+      node.down > 0
+    )
+      return { ...node, ...restarted(node) }
     if (node.id !== incident.nodeId) return node
     if (incident.kind === 'instance' && node.down === -1) return { ...node, ...restarted(node) }
     if (incident.kind === 'leak' && node.leak > 0)

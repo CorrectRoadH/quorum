@@ -892,6 +892,27 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     ],
   },
   {
+    id: 'drift',
+    term: 'Drift',
+    category: 'delivery',
+    definition:
+      'The difference between the infrastructure a tool such as Terraform or Pulumi last deployed and what runs now. Drift comes from changes made outside the tool, such as a resize in a cloud console, and from code changes that are not applied yet.',
+    inGame:
+      'A Mirror drifts in two ways: it is behind when its source region changed, and it has a hand change when you changed the Mirror directly. Apply brings the Mirror back to its source and reverts the hand changes its plan sees. Terraform plans see every hand change at once. Pulumi and Alchemy plan against the state they recorded, so a hand change shows only after Refresh or Check drift. Keep a correct regional difference as an override.',
+    related: ['iac-tool', 'mirror', 'blast-radius'],
+    links: [
+      {
+        label: 'Terraform tutorial: Use refresh-only mode to sync Terraform state',
+        url: 'https://developer.hashicorp.com/terraform/tutorials/state/refresh',
+      },
+      {
+        label: 'Pulumi docs: Detecting and reconciling drift',
+        url: 'https://www.pulumi.com/docs/iac/operations/stack-management/drift/',
+      },
+      { label: 'Alchemy docs: drift', url: 'https://alchemy.run/cli/drift' },
+    ],
+  },
+  {
     id: 'egress',
     term: 'Egress',
     category: 'network',
@@ -1288,6 +1309,31 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     ],
   },
   {
+    id: 'iac-tool',
+    term: 'IaC tool',
+    category: 'delivery',
+    definition:
+      'A tool that describes infrastructure as code and applies it: it compares the code with the recorded state, shows a plan, and makes the changes. Terraform uses HCL; Pulumi and Alchemy use general-purpose languages such as TypeScript. Each keeps a state file of what it deployed.',
+    inGame:
+      "Infrastructure as code Research asks you to pick Terraform, Pulumi, or Alchemy. All three build every Component and can set any value per region. They differ in how a plan finds hand changes, as in each tool's default workflow: Terraform refreshes live state on every plan, so its plans are complete and each Apply waits for the refresh. Pulumi plans against its recorded state until you Refresh. Alchemy also plans against recorded state; Check drift reads live state, and Repair restores hand changes without taking source changes. Moving to another tool stops every sync for a calendar day.",
+    related: ['drift', 'mirror', 'continuous-delivery'],
+    links: [
+      {
+        label: 'Terraform docs: What is Terraform?',
+        url: 'https://developer.hashicorp.com/terraform/intro',
+      },
+      { label: 'Pulumi docs: Infrastructure as code', url: 'https://www.pulumi.com/docs/iac/' },
+      {
+        label: 'Alchemy docs: Providers',
+        url: 'https://alchemy.run/infrastructure-as-code/provider/',
+      },
+      {
+        label: 'Wikipedia: Infrastructure as code',
+        url: 'https://en.wikipedia.org/wiki/Infrastructure_as_code',
+      },
+    ],
+  },
+  {
     id: 'idempotency',
     term: 'Idempotency',
     category: 'reliability',
@@ -1498,6 +1544,26 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
       {
         label: 'Marc Brooker: Metastability and distributed systems',
         url: 'https://brooker.co.za/blog/2021/05/24/metastable.html',
+      },
+    ],
+  },
+  {
+    id: 'mirror',
+    term: 'Mirror',
+    category: 'delivery',
+    definition:
+      'Running the same infrastructure code in another region, such as one Terraform module applied once per region or a CloudFormation StackSet. The servers copy easily. The data does not: each copy must decide where its writes go.',
+    inGame:
+      "After Infrastructure as code Research, the Mirror button beside the region tabs copies one region's Nodes and Links into another. For each Database you pick a read replica, an own primary, or calling the source, and for Object Storage, replicate or call the source. Apply pays at once and the new Nodes arrive cold after the build time. The region's Users get their Links only when the plan lands. The Mirror stays linked to its source, so it can drift; GitOps keeps it in sync on its own.",
+    related: ['drift', 'iac-tool', 'geodns', 'read-replica'],
+    links: [
+      {
+        label: 'Terraform docs: Modules overview',
+        url: 'https://developer.hashicorp.com/terraform/language/modules',
+      },
+      {
+        label: 'AWS docs: Working with CloudFormation StackSets',
+        url: 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/what-is-cfnstacksets.html',
       },
     ],
   },

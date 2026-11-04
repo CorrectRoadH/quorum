@@ -477,6 +477,18 @@ Storing old metrics at a coarser resolution, such as one point per 5 minutes or 
 
 **Learn more:** [Thanos docs: Compactor and downsampling](https://thanos.io/tip/components/compact.md/) · [Prometheus docs: Storage](https://prometheus.io/docs/prometheus/latest/storage/) · [Wikipedia: Downsampling](<https://en.wikipedia.org/wiki/Downsampling_(signal_processing)>)
 
+## Drift
+
+The difference between the infrastructure a tool such as Terraform or Pulumi last deployed and what runs now. Drift comes from changes made outside the tool, such as a resize in a cloud console, and from code changes that are not applied yet.
+
+**In the game:** A Mirror drifts in two ways: it is behind when its source region changed, and it has a hand change when you changed the Mirror directly. Apply brings the Mirror back to its source and reverts the hand changes its plan sees. Terraform plans see every hand change at once. Pulumi and Alchemy plan against the state they recorded, so a hand change shows only after Refresh or Check drift. Keep a correct regional difference as an override.
+
+**Design:** [Keeping a Mirror in sync](./05-components.md#keeping-a-mirror-in-sync).
+
+**Related:** [IaC tool](#iac-tool), [Mirror](#mirror), [Blast radius](#blast-radius)
+
+**Learn more:** [Terraform tutorial: Use refresh-only mode to sync Terraform state](https://developer.hashicorp.com/terraform/tutorials/state/refresh) · [Pulumi docs: Detecting and reconciling drift](https://www.pulumi.com/docs/iac/operations/stack-management/drift/) · [Alchemy docs: drift](https://alchemy.run/cli/drift)
+
 ## Egress
 
 Data that leaves a cloud provider's network, to the internet or to another zone or region. Providers charge per GB for it, while data coming in is usually free.
@@ -695,6 +707,18 @@ Newer versions of HTTP. HTTP/2 sends many requests at once over one TCP connecti
 
 **Learn more:** [MDN: Evolution of HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Evolution_of_HTTP) · [Cloudflare Learning Center: What is HTTP/3?](https://www.cloudflare.com/learning/performance/what-is-http3/) · [RFC 9114: HTTP/3](https://www.rfc-editor.org/rfc/rfc9114)
 
+## IaC tool
+
+A tool that describes infrastructure as code and applies it: it compares the code with the recorded state, shows a plan, and makes the changes. Terraform uses HCL; Pulumi and Alchemy use general-purpose languages such as TypeScript. Each keeps a state file of what it deployed.
+
+**In the game:** Infrastructure as code Research asks you to pick Terraform, Pulumi, or Alchemy. All three build every Component and can set any value per region. They differ in how a plan finds hand changes, as in each tool's default workflow: Terraform refreshes live state on every plan, so its plans are complete and each Apply waits for the refresh. Pulumi plans against its recorded state until you Refresh. Alchemy also plans against recorded state; Check drift reads live state, and Repair restores hand changes without taking source changes. Moving to another tool stops every sync for a calendar day.
+
+**Design:** [IaC tools](./05-components.md#iac-tools).
+
+**Related:** [Drift](#drift), [Mirror](#mirror), [Continuous delivery](#continuous-delivery)
+
+**Learn more:** [Terraform docs: What is Terraform?](https://developer.hashicorp.com/terraform/intro) · [Pulumi docs: Infrastructure as code](https://www.pulumi.com/docs/iac/) · [Alchemy docs: Providers](https://alchemy.run/infrastructure-as-code/provider/) · [Wikipedia: Infrastructure as code](https://en.wikipedia.org/wiki/Infrastructure_as_code)
+
 ## Idempotency
 
 An operation is idempotent when doing it twice has the same effect as doing it once. Reads are idempotent by nature; a card charge or an order is not. An idempotency key is a unique ID the client sends with a request, so the server can recognize a retry and return the first result instead of acting again.
@@ -796,6 +820,18 @@ A failure that keeps itself going after its trigger is gone. A short slowdown pu
 **Related:** [Retry with backoff and jitter](#retry-with-backoff-and-jitter), [Circuit breaker](#circuit-breaker), [Load shedding](#load-shedding), [Thundering herd](#thundering-herd)
 
 **Learn more:** [Bronson et al. (HotOS 2021): Metastable failures in distributed systems](https://sigops.org/s/conferences/hotos/2021/papers/hotos21-s11-bronson.pdf) · [Huang et al. (OSDI 2022): Metastable failures in the wild](https://www.usenix.org/conference/osdi22/presentation/huang-lexiang) · [Marc Brooker: Metastability and distributed systems](https://brooker.co.za/blog/2021/05/24/metastable.html)
+
+## Mirror
+
+Running the same infrastructure code in another region, such as one Terraform module applied once per region or a CloudFormation StackSet. The servers copy easily. The data does not: each copy must decide where its writes go.
+
+**In the game:** After Infrastructure as code Research, the Mirror button beside the region tabs copies one region's Nodes and Links into another. For each Database you pick a read replica, an own primary, or calling the source, and for Object Storage, replicate or call the source. Apply pays at once and the new Nodes arrive cold after the build time. The region's Users get their Links only when the plan lands. The Mirror stays linked to its source, so it can drift; GitOps keeps it in sync on its own.
+
+**Design:** [Mirror a region](./05-components.md#mirror-a-region).
+
+**Related:** [Drift](#drift), [IaC tool](#iac-tool), [GeoDNS](#geodns), [Read replica](#read-replica)
+
+**Learn more:** [Terraform docs: Modules overview](https://developer.hashicorp.com/terraform/language/modules) · [AWS docs: Working with CloudFormation StackSets](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/what-is-cfnstacksets.html)
 
 ## Model inference
 

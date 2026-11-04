@@ -30,6 +30,7 @@ import {
 } from './catalog.ts'
 import { advanceCves } from './cve.ts'
 import { advanceIncident, directIncidents } from './director.ts'
+import { advanceMirrors } from './mirror.ts'
 import { StepEvent, type AlertRule } from './events.ts'
 import { churnFactor, growthFactor } from './features.ts'
 import { growthPerk } from './founding.ts'
@@ -537,6 +538,7 @@ export const step = (
   next = running.game
   events.push(...running.events)
   next = advanceStudies(next, ledger, seconds, events)
+  next = advanceMirrors(next)
   const team = advanceTeam(next, ledger, seconds, tuning, offline)
   next = team.game
   events.push(...team.events)

@@ -827,6 +827,10 @@ export const setSplit = (game: Game, id: string, split: boolean): Action =>
 export const rollBackRoutes = (game: Game): Action =>
   endIncident(game, 'bgp', 'No routing change to roll back.')
 
+/** Rolls back the config push that crashed the servers: they restart on the old config. */
+export const rollBackConfig = (game: Game): Action =>
+  endIncident(game, 'config', 'No config push to roll back.')
+
 /** Fences the old leader: the partition's writes stop diverging. */
 export const fenceLeader = (game: Game): Action =>
   endIncident(game, 'partition', 'No partition to fence.')

@@ -34,6 +34,7 @@ export const INCIDENT_IDS = [
   'dr-drill',
   'breach',
   'cluster-upgrade',
+  'config',
 ] as const
 export type IncidentId = (typeof INCIDENT_IDS)[number]
 
@@ -357,6 +358,18 @@ export const INCIDENTS: Record<IncidentId, IncidentDef> = {
     cause: 'A celebrity posted. 30% of reads asked for one key, and its shard saturated.',
     prevention: 'Split hot keys across shards and cache them in the App Servers.',
     actions: ['hybrid-fanout'],
+  },
+  config: {
+    id: 'config',
+    name: 'Bad config push',
+    era: 5,
+    severity: 1,
+    escalatesTo: 1,
+    duration: 60,
+    cause:
+      'A config change reached every App Server and Worker at once, and they crashed together. GitOps all at once carried it to every Mirror too.',
+    prevention: 'Roll back to end it. GitOps Staged holds a change on one region first.',
+    actions: ['gitops'],
   },
   bgp: {
     id: 'bgp',

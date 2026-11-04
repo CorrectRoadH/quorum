@@ -3,6 +3,7 @@ import {
   MUTATOR_IDS,
   VENTURE_IDS,
   COMPONENT_IDS,
+  DATA_PATTERNS,
   FAMILY_IDS,
   FEATURE_IDS,
   FIXES,
@@ -16,6 +17,8 @@ import {
   RESEARCH_IDS,
   RUNTIME_IDS,
   START_KLOC,
+  IAC_TOOLS,
+  SYNC_MODES,
   ZONES,
 } from './catalog.ts'
 
@@ -514,6 +517,75 @@ export const Scenario = Schema.Struct({
 })
 export type Scenario = typeof Scenario.Type
 
+/* ---------- Mirrors (05 "Mirror a region") ---------- */
+
+export const IacTool = Schema.Literals(IAC_TOOLS)
+export type IacTool = typeof IacTool.Type
+
+export const SyncMode = Schema.Literals(SYNC_MODES)
+export type SyncMode = typeof SyncMode.Type
+
+export const DataPattern = Schema.Literals(DATA_PATTERNS)
+export type DataPattern = typeof DataPattern.Type
+
+/** The IaC tool the Company writes Mirrors in, and how GitOps syncs them. */
+export const Infra = Schema.Struct({
+  tool: IacTool,
+  /** Sim time a move to this tool ends; Mirrors do not sync before it. */
+  until: Schema.Finite,
+  /** GitOps sync mode, or null to apply plans by hand. */
+  sync: Schema.NullOr(SyncMode),
+})
+export type Infra = typeof Infra.Type
+
+/** One Node's managed settings, as the code says them. */
+export const NodeSpec = Schema.Record(
+  Schema.String,
+  Schema.Union([Schema.String, Schema.Finite, Schema.Boolean]),
+)
+export type NodeSpec = typeof NodeSpec.Type
+
+/** A Mirror's live state as a refresh read it. */
+export const Observed = Schema.Struct({
+  nodes: Schema.Record(Schema.String, NodeSpec),
+  links: Schema.Array(Schema.String),
+})
+export type Observed = typeof Observed.Type
+
+/**
+ * A region built from another region's Nodes and Links. `code` is what the last
+ * Apply wrote: the source as it was then. The source ahead of the code is behind;
+ * the Mirror away from the code is a hand change.
+ */
+export const Mirror = Schema.Struct({
+  region: Region,
+  source: Region,
+  /** Each source Node id, and the Mirror Node that copies it. */
+  nodes: Schema.Record(Schema.String, Schema.String),
+  /** Each source data Node id, and how the Mirror copies it. */
+  data: Schema.Record(Schema.String, DataPattern),
+  /** Each managed source Node id, and its settings at the last Apply. */
+  code: Schema.Record(Schema.String, NodeSpec),
+  /** The Mirror's managed Links at the last Apply, as `from>to` with Mirror ids. */
+  links: Schema.Array(Schema.String),
+  /**
+   * The Mirror's live state when the player last read it (`pulumi refresh`, `alchemy drift`):
+   * each Node's settings and the managed Links. Null until read, and after each Apply.
+   */
+  seen: Schema.NullOr(Observed),
+  /** Hand changes the last Apply did not see, so its landing leaves them alone. */
+  hold: Schema.Array(Schema.String),
+  /** Each Mirror Node id, and the settings it keeps as overrides. */
+  overrides: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+  /** Pulumi: sizes and Autoscaler bounds follow the region's share of users. */
+  computed: Schema.Boolean,
+  /** Sim time the last Apply lands, or null when none waits. */
+  readyAt: Schema.NullOr(Schema.Finite),
+  /** Sim time the Mirror first drifted since its last Apply, for GitOps; null when in sync. */
+  driftAt: Schema.NullOr(Schema.Finite),
+})
+export type Mirror = typeof Mirror.Type
+
 export const DEFAULT_ALERT_RULES: AlertRules = { errors: 0.01, latency: 4, saturation: 0.9 }
 export const NO_FALSE_ALARMS: FalseAlarms = { day: 0, errors: 0, latency: 0, saturation: 0 }
 
@@ -608,6 +680,10 @@ export const Game = Schema.Struct({
   banked: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** The most users the Company ever had. */
   peak: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  /** The IaC tool and GitOps mode. Absent until the Company picks a tool. */
+  iac: Schema.optionalKey(Infra),
+  /** Regions built from another region (05 "Mirror a region"). Absent until the first Mirror. */
+  mirrors: Schema.optionalKey(Schema.Array(Mirror)),
   /** Wall-clock milliseconds of the last save, written by the browser for offline progress. */
   wall: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
 })
