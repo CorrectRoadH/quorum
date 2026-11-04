@@ -112,6 +112,8 @@ export type Solver = Readonly<{
   offloads: (node: GameNode) => boolean
   /** This Worker pulls from a Queue a poison message is stuck in. */
   poisoned: (node: GameNode) => boolean
+  /** Share of the tasks a Queue or Worker gets that come from each request kind, in this pass. */
+  taskMix: (node: GameNode) => Partial<Record<RequestKind, number>>
   /** Attempts per task this Worker runs: failed tasks come back until the Queue parks them. */
   attempts: (node: GameNode) => number
   /** Tasks per second a Queue's live Workers could take, from the last pass; infinite before one. */
@@ -159,7 +161,10 @@ export type Serve = Readonly<{
 /** With Read-your-writes routing, this share of stale reads still reaches a lagging replica. */
 export const RYW_STALE = 0.2
 
-/** Share of the tasks a Worker gets that come from each kind: the kinds that can go async, by demand. */
+/**
+ * Share of the tasks that come from each kind when nothing says otherwise: the
+ * kinds that can go async, by demand. A Queue's own mix comes from its App Servers.
+ */
 export const taskMixOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const mix = mixOf(game)
   const shares: Partial<Record<RequestKind, number>> = {}
@@ -172,6 +177,19 @@ export const taskMixOf = (game: Game): Partial<Record<RequestKind, number>> => {
   if (total <= 0) return { upload: 1 }
   for (const kind of Object.keys(shares) as Array<RequestKind>)
     shares[kind] = (shares[kind] ?? 0) / total
+  return shares
+}
+
+/** A Queue's or Worker's task mix in a pass, or null when no task reached it. */
+export const mixIn = (pass: Pass, node: GameNode): Partial<Record<RequestKind, number>> | null => {
+  const tasks = pass.tasks[slotOf(pass, node)]
+  if (!tasks) return null
+  let total = 0
+  for (const kind of Object.keys(tasks) as Array<RequestKind>) total += tasks[kind] ?? 0
+  if (total <= 0) return null
+  const shares: Partial<Record<RequestKind, number>> = {}
+  for (const kind of Object.keys(tasks) as Array<RequestKind>)
+    shares[kind] = (tasks[kind] ?? 0) / total
   return shares
 }
 
@@ -562,7 +580,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       const tasks =
         ((arriving.task ?? 0) * solver.attempts(node)) /
         (solver.poisoned(node) ? 1 - POISON_SHARE : 1)
-      const mix = taskMixOf(solver.game)
+      const mix = solver.taskMix(node)
       const work: Partial<Record<RequestKind, number>> = {}
       for (const kind of Object.keys(mix) as Array<RequestKind>)
         work[kind] = tasks * (mix[kind] ?? 0)
@@ -585,7 +603,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     serve: (serve, node, rates, share) => {
       const tasks = (rates.task ?? 0) * share * serve.solver.attempts(node)
       if (tasks <= 0) return
-      const mix = taskMixOf(serve.solver.game)
+      const mix = serve.solver.taskMix(node)
       for (const kind of Object.keys(mix) as Array<RequestKind>) {
         const calls = asyncCallsOf(serve.solver.game, kind)
         for (const backend of BACKEND_KINDS)
@@ -595,7 +613,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
     // One attempt: its own time, its calls, and the code's own failures. Users never wait for it.
     outcome: (answer, node, kind) => {
       const { game } = answer
-      const mix = taskMixOf(game)
+      const mix = mixIn(answer.pass, node) ?? taskMixOf(game)
       const calls: Partial<Record<Kind, number>> = {}
       for (const origin of Object.keys(mix) as Array<RequestKind>) {
         const each = asyncCallsOf(game, origin)

@@ -86,6 +86,7 @@ import {
   accepts,
   cdnHitOf,
   flatCapacity,
+  taskMixOf,
   type Model,
   type Pass,
   type Rates,
@@ -474,8 +475,14 @@ const sharesOf = (
 
 const NO_CALLS: Calls = {}
 
-/** What the rules may ask about the Design in this pass. */
-const solverOf = (inputs: Inputs): Solver => {
+/**
+ * What the rules may ask about the Design in this pass. `tasks` holds what the
+ * pass has sent so far: Nodes walk in order, so a Worker sees its Queue's mix.
+ */
+const solverOf = (
+  inputs: Inputs,
+  tasks: ReadonlyArray<Partial<Record<RequestKind, number>> | undefined> = [],
+): Solver => {
   const { game, graph } = inputs
   return {
     game,
@@ -493,6 +500,7 @@ const solverOf = (inputs: Inputs): Solver => {
         (parent) => parent.id === incident.nodeId && !parent.dlq,
       )
     },
+    taskMix: (node) => sharesOf(tasks[graph.at.get(node.id) as number]) ?? taskMixOf(game),
     attempts: (node) => {
       const queue = queueOf(graph, node)
       if (!queue) return 1
@@ -537,7 +545,7 @@ const CALLOUT: Outcome = failSome(
 const forward = (inputs: Inputs): Pass => {
   const { game, graph, demand } = inputs
   const tasks: Array<Partial<Record<RequestKind, number>> | undefined> = []
-  const solver = solverOf(inputs)
+  const solver = solverOf(inputs, tasks)
   const at = graph.at
   const arriving: Array<Rates> = game.nodes.map(() => ({}))
   // The request kinds behind the tasks the Node now walking sends on.

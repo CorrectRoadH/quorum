@@ -56,10 +56,11 @@ export const GOLDEN_STEPS = 10_000
 // RAM instead of swapping, and a store spread across regions survives a zone.
 // The Company replay is unchanged.
 // SIM_VERSION 14: async work is scored on when it finishes, a Queue has a max
-// length and max attempts, a Worker prefetches, a backlog is offered only as fast
-// as Workers take it, and Kubernetes Clusters cost Dev Hours, roll deploys,
-// reschedule pods and need upgrades. The save gains each Node's attempts, max
-// length, prefetch and upgrade time, and each team's kind.
+// length and max attempts, a Worker prefetches and runs its own Queue's task mix,
+// a full backlog is offered only as fast as Workers take it, and Kubernetes
+// Clusters cost Dev Hours, roll deploys, reschedule pods and need upgrades. The
+// save gains each Node's attempts, max length, prefetch and upgrade time, and each
+// team's kind.
 export const GOLDEN_HASH = '2c6e4751'
 
 /**
@@ -88,8 +89,8 @@ export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
   'fail-whale': '100ef0de',
   'reports-at-noon': 'e641ca0d',
   'gpu-economics': 'b6ec6b80',
-  metastable: '2d20f430',
-  'regex-of-doom': '3f9d95e0',
+  metastable: '83f4e9a6',
+  'regex-of-doom': 'bf1afd1d',
   'forty-three-seconds': 'f78c012e',
   'follow-the-sun': '71b938f7',
   celebrity: '026c1e4e',

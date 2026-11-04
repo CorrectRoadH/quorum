@@ -2,7 +2,14 @@ import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import * as Actions from './actions.ts'
 import type { Action } from './actions.ts'
-import { CALENDAR_DURATION, ERAS, INCIDENTS, RESEARCH_IDS, type ResearchId } from './catalog.ts'
+import {
+  CALENDAR_DURATION,
+  ERAS,
+  INCIDENTS,
+  REQUEST_KINDS,
+  RESEARCH_IDS,
+  type ResearchId,
+} from './catalog.ts'
 import { company, link, node } from './company.ts'
 import { attemptsFor } from './distribution.ts'
 import { forceIncident, incidentDuration } from './director.ts'
@@ -116,6 +123,43 @@ describe('exports', () => {
     // The Worker sends the export's 50 reads.
     expect(queued.nodes.worker?.out['q-read'] ?? 0).toBeGreaterThan(0)
     expect(queued.nodes.worker?.stranded ?? 1).toBe(0)
+  })
+
+  test('each Worker runs the tasks of its own Queue: one that only gets uploads reads nothing', () => {
+    // A Load Balancer sends exports to one App Server and everything else to the other.
+    const base = seriesB(8_000, [
+      ...LLM,
+      node('lb', 'lb', 300, 280),
+      node('exports', 'server', 440, 520, { size: 4, runtime: 'go' }),
+      node('jobs', 'queue', 600, 520),
+      node('exporter', 'worker', 880, 520, { size: 3, runtime: 'go' }),
+      node('uploads', 'queue', 600, 60),
+      node('uploader', 'worker', 880, 60, { size: 3, runtime: 'go' }),
+    ])
+    const rest = REQUEST_KINDS.filter((kind) => kind !== 'job')
+    const game: Game = {
+      ...base,
+      links: [
+        link('users', 'lb'),
+        { ...link('lb', 'server'), kinds: rest },
+        { ...link('lb', 'exports'), kinds: ['job'] },
+        ...['server', 'exports'].flatMap((server) =>
+          ['database', 'storage', 'psp', 'llm'].map((to) => link(server, to)),
+        ),
+        link('server', 'uploads'),
+        link('uploads', 'uploader'),
+        link('exports', 'jobs'),
+        link('jobs', 'exporter'),
+        link('exporter', 'database'),
+      ],
+    }
+    const ledger = solve(game)
+    expect(ledger.nodes.exporter?.out['q-read'] ?? 0).toBeGreaterThan(0)
+    // The uploader has no Link to the data, and needs none: an upload's async part reads nothing.
+    expect(ledger.nodes.uploader?.inbound ?? 0).toBeGreaterThan(0)
+    expect(ledger.nodes.uploader?.stranded).toBe(0)
+    expect(ledger.kinds.upload?.completion).toBeGreaterThan(0.99)
+    expect(ledger.kinds.job?.completion).toBeGreaterThan(0.99)
   })
 })
 
