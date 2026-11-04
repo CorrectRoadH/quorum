@@ -485,7 +485,7 @@ The difference between the infrastructure a tool such as Terraform or Pulumi las
 
 **Design:** [Keeping a Mirror in sync](./05-components.md#keeping-a-mirror-in-sync).
 
-**Related:** [IaC tool](#iac-tool), [Mirror](#mirror), [Blast radius](#blast-radius)
+**Related:** [IaC tool](#iac-tool), [Mirror](#mirror), [GitOps](#gitops), [Blast radius](#blast-radius)
 
 **Learn more:** [Terraform tutorial: Use refresh-only mode to sync Terraform state](https://developer.hashicorp.com/terraform/tutorials/state/refresh) · [Pulumi docs: Detecting and reconciling drift](https://www.pulumi.com/docs/iac/operations/stack-management/drift/) · [Alchemy docs: drift](https://alchemy.run/cli/drift)
 
@@ -638,6 +638,18 @@ A lock in CPython's default build, and the GVL in CRuby, that lets only one thre
 **Related:** [Process per request](#process-per-request), [Green threads](#green-threads), [Vertical and horizontal scaling](#vertical-and-horizontal-scaling), [Pre-fork worker model](#pre-fork-worker-model)
 
 **Learn more:** [Python docs: Glossary (global interpreter lock)](https://docs.python.org/3/glossary.html#term-global-interpreter-lock) · [PEP 703: Making the GIL optional](https://peps.python.org/pep-0703/) · [Wikipedia](https://en.wikipedia.org/wiki/Global_interpreter_lock)
+
+## GitOps
+
+A way to run infrastructure where the desired state lives in Git as declarative code, and an agent such as Argo CD or Flux pulls it and keeps reconciling the live system to match. OpenGitOps lists four principles: declarative, versioned and immutable, pulled automatically, and continuously reconciled.
+
+**In the game:** GitOps is Series C Research after Infrastructure as code. It applies each source change to every Mirror on its own, so Mirrors stop falling behind. It also reverts hand changes at the next sync with every IaC tool, like Argo CD with self-heal on, so overrides are the only way to tune a region. All at once syncs within 3 calendar minutes, like Argo CD's default poll. Staged holds a change on the source for 60 minutes first. All at once trades drift for blast radius: a Bad config push reaches every Mirror together.
+
+**Design:** [GitOps](./05-components.md#gitops).
+
+**Related:** [Drift](#drift), [IaC tool](#iac-tool), [Mirror](#mirror), [Blast radius](#blast-radius), [Continuous delivery](#continuous-delivery)
+
+**Learn more:** [OpenGitOps: GitOps Principles](https://opengitops.dev/) · [Argo CD docs: Automated Sync Policy](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/) · [Flux docs: Core Concepts](https://fluxcd.io/flux/concepts/)
 
 ## Green threads
 
@@ -829,7 +841,7 @@ Running the same infrastructure code in another region, such as one Terraform mo
 
 **Design:** [Mirror a region](./05-components.md#mirror-a-region).
 
-**Related:** [Drift](#drift), [IaC tool](#iac-tool), [GeoDNS](#geodns), [Read replica](#read-replica)
+**Related:** [Drift](#drift), [IaC tool](#iac-tool), [GitOps](#gitops), [GeoDNS](#geodns), [Read replica](#read-replica)
 
 **Learn more:** [Terraform docs: Modules overview](https://developer.hashicorp.com/terraform/language/modules) · [AWS docs: Working with CloudFormation StackSets](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/what-is-cfnstacksets.html)
 

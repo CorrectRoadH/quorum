@@ -264,4 +264,12 @@ export const glossaryZhCN: Readonly<Record<string, string>> = {
   'Terraform docs: Modules overview': 'Terraform docs: Modules overview',
   'AWS docs: Working with CloudFormation StackSets':
     'AWS docs: Working with CloudFormation StackSets',
+  GitOps: 'GitOps',
+  'A way to run infrastructure where the desired state lives in Git as declarative code, and an agent such as Argo CD or Flux pulls it and keeps reconciling the live system to match. OpenGitOps lists four principles: declarative, versioned and immutable, pulled automatically, and continuously reconciled.':
+    '一种管理基础设施的方式：期望状态以声明式代码保存在 Git 中，由 Argo CD 或 Flux 等代理拉取，并持续让实际系统与之保持一致。OpenGitOps 列出四条原则：声明式、版本化且不可变、自动拉取、持续协调。',
+  "GitOps is Series C Research after Infrastructure as code. It applies each source change to every Mirror on its own, so Mirrors stop falling behind. It also reverts hand changes at the next sync with every IaC tool, like Argo CD with self-heal on, so overrides are the only way to tune a region. All at once syncs within 3 calendar minutes, like Argo CD's default poll. Staged holds a change on the source for 60 minutes first. All at once trades drift for blast radius: a Bad config push reaches every Mirror together.":
+    'GitOps 是 C 轮研究，需要先完成“基础设施即代码”。它会自动把源区域的每个变更应用到每个镜像，镜像不再落后。无论使用哪种 IaC 工具，它都会在下次同步时还原手动变更，相当于开启自愈的 Argo CD，因此覆盖项是调整区域的唯一方式。一次性同步最多在 3 个日历分钟内完成，与 Argo CD 的默认轮询一致。分阶段同步会先把变更在源区域保留 60 分钟。一次性同步以影响范围换取漂移：一次错误配置推送会同时到达所有镜像。',
+  'OpenGitOps: GitOps Principles': 'OpenGitOps: GitOps Principles',
+  'Argo CD docs: Automated Sync Policy': 'Argo CD docs: Automated Sync Policy',
+  'Flux docs: Core Concepts': 'Flux docs: Core Concepts',
 }

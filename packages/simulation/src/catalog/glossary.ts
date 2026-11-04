@@ -899,7 +899,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
       'The difference between the infrastructure a tool such as Terraform or Pulumi last deployed and what runs now. Drift comes from changes made outside the tool, such as a resize in a cloud console, and from code changes that are not applied yet.',
     inGame:
       'A Mirror drifts in two ways: it is behind when its source region changed, and it has a hand change when you changed the Mirror directly. Apply brings the Mirror back to its source and reverts the hand changes its plan sees. Terraform plans see every hand change at once. Pulumi and Alchemy plan against the state they recorded, so a hand change shows only after Refresh or Check drift. Keep a correct regional difference as an override.',
-    related: ['iac-tool', 'mirror', 'blast-radius'],
+    related: ['iac-tool', 'mirror', 'gitops', 'blast-radius'],
     links: [
       {
         label: 'Terraform tutorial: Use refresh-only mode to sync Terraform state',
@@ -1188,6 +1188,24 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
       },
       { label: 'PEP 703: Making the GIL optional', url: 'https://peps.python.org/pep-0703/' },
       { label: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Global_interpreter_lock' },
+    ],
+  },
+  {
+    id: 'gitops',
+    term: 'GitOps',
+    category: 'delivery',
+    definition:
+      'A way to run infrastructure where the desired state lives in Git as declarative code, and an agent such as Argo CD or Flux pulls it and keeps reconciling the live system to match. OpenGitOps lists four principles: declarative, versioned and immutable, pulled automatically, and continuously reconciled.',
+    inGame:
+      "GitOps is Series C Research after Infrastructure as code. It applies each source change to every Mirror on its own, so Mirrors stop falling behind. It also reverts hand changes at the next sync with every IaC tool, like Argo CD with self-heal on, so overrides are the only way to tune a region. All at once syncs within 3 calendar minutes, like Argo CD's default poll. Staged holds a change on the source for 60 minutes first. All at once trades drift for blast radius: a Bad config push reaches every Mirror together.",
+    related: ['drift', 'iac-tool', 'mirror', 'blast-radius', 'continuous-delivery'],
+    links: [
+      { label: 'OpenGitOps: GitOps Principles', url: 'https://opengitops.dev/' },
+      {
+        label: 'Argo CD docs: Automated Sync Policy',
+        url: 'https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/',
+      },
+      { label: 'Flux docs: Core Concepts', url: 'https://fluxcd.io/flux/concepts/' },
     ],
   },
   {
@@ -1555,7 +1573,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
       'Running the same infrastructure code in another region, such as one Terraform module applied once per region or a CloudFormation StackSet. The servers copy easily. The data does not: each copy must decide where its writes go.',
     inGame:
       "After Infrastructure as code Research, the Mirror button beside the region tabs copies one region's Nodes and Links into another. For each Database you pick a read replica, an own primary, or calling the source, and for Object Storage, replicate or call the source. Apply pays at once and the new Nodes arrive cold after the build time. The region's Users get their Links only when the plan lands. The Mirror stays linked to its source, so it can drift; GitOps keeps it in sync on its own.",
-    related: ['drift', 'iac-tool', 'geodns', 'read-replica'],
+    related: ['drift', 'iac-tool', 'gitops', 'geodns', 'read-replica'],
     links: [
       {
         label: 'Terraform docs: Modules overview',

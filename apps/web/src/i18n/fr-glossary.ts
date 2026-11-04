@@ -1045,4 +1045,12 @@ export const frGlossary: Readonly<Record<string, string>> = {
   'Terraform docs: Modules overview': 'Terraform docs: Modules overview',
   'AWS docs: Working with CloudFormation StackSets':
     'AWS docs: Working with CloudFormation StackSets',
+  GitOps: 'GitOps',
+  'A way to run infrastructure where the desired state lives in Git as declarative code, and an agent such as Argo CD or Flux pulls it and keeps reconciling the live system to match. OpenGitOps lists four principles: declarative, versioned and immutable, pulled automatically, and continuously reconciled.':
+    'Une façon de gérer l’infrastructure où l’état voulu vit dans Git sous forme de code déclaratif, et où un agent comme Argo CD ou Flux le récupère et réconcilie sans cesse le système réel avec lui. OpenGitOps liste quatre principes : déclaratif, versionné et immuable, récupéré automatiquement, et réconcilié en continu.',
+  "GitOps is Series C Research after Infrastructure as code. It applies each source change to every Mirror on its own, so Mirrors stop falling behind. It also reverts hand changes at the next sync with every IaC tool, like Argo CD with self-heal on, so overrides are the only way to tune a region. All at once syncs within 3 calendar minutes, like Argo CD's default poll. Staged holds a change on the source for 60 minutes first. All at once trades drift for blast radius: a Bad config push reaches every Mirror together.":
+    'GitOps est une recherche de la Série C après Infrastructure as code. Elle applique chaque changement de la source à chaque Miroir tout seul, donc les Miroirs ne prennent plus de retard. Elle annule aussi les modifications manuelles à la synchronisation suivante avec chaque outil IaC, comme Argo CD avec l’auto-réparation activée : les exceptions sont donc le seul moyen d’ajuster une région. En une fois synchronise en 3 minutes calendaires au plus, comme l’interrogation par défaut d’Argo CD. Par étapes garde d’abord un changement 60 minutes sur la source. En une fois échange la dérive contre le périmètre d’impact : un déploiement de configuration défectueux atteint tous les Miroirs ensemble.',
+  'OpenGitOps: GitOps Principles': 'OpenGitOps: GitOps Principles',
+  'Argo CD docs: Automated Sync Policy': 'Argo CD docs: Automated Sync Policy',
+  'Flux docs: Core Concepts': 'Flux docs: Core Concepts',
 }

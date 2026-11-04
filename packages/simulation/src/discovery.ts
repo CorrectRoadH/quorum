@@ -102,7 +102,7 @@ export const BY_RESEARCH: Partial<Record<ResearchId, ReadonlyArray<string>>> = {
   zgc: ['gc-pause'],
   'geo-dns': ['geodns'],
   'infra-as-code': ['iac-tool', 'mirror', 'drift'],
-  gitops: ['drift', 'blast-radius'],
+  gitops: ['gitops', 'drift', 'blast-radius'],
   'lang-python': ['gil-global-interpreter-lock', 'pre-fork-worker-model', 'process-per-request'],
   'lang-ruby': ['gil-global-interpreter-lock', 'thread-pool'],
   'lang-elixir': ['green-threads'],
