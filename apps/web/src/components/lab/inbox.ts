@@ -39,7 +39,7 @@ import {
 } from '@quorum/ui/primitives/native-select'
 import { folderHolds, folderList } from '@/game/inbox.ts'
 import { Message } from '@/game/message.ts'
-import type { Folder, Mail, Model } from '@/game/model.ts'
+import { boardSandbox, type Folder, type Mail, type Model } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
 import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, WELL, groupBadge } from '@quorum/ui/game/bits'
@@ -605,7 +605,7 @@ export const inboxPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
           ),
         ],
       ),
-      model.board.sandbox ? generator(model, h) : h.empty,
+      boardSandbox(model.board) ? generator(model, h) : h.empty,
       h.div(
         [
           h.Class(

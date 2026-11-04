@@ -33,7 +33,14 @@ import { challengeBar, challengeHud, challengePanel } from '@/components/lab/cha
 import { tradeoffCard } from '@/components/lab/tradeoff.ts'
 import { boardHost } from './board-mount.ts'
 import type { Message } from './message.ts'
-import { ledgerOf, type Model, offCompany, stampedPlaybook } from './model.ts'
+import {
+  boardChallenge,
+  ledgerOf,
+  type Model,
+  offCompany,
+  boardSandbox,
+  stampedPlaybook,
+} from './model.ts'
 
 /* ==========================================================================
    The lab is the game, fullscreen. The title screen is in title.ts.
@@ -75,9 +82,9 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(
         [h.Class(TOP)],
         [
-          model.board.challenge
+          boardChallenge(model.board)
             ? challengeHud(model, ledger, h)
-            : model.board.sandbox
+            : boardSandbox(model.board)
               ? sandboxHud(model, ledger, h)
               : hud(model, ledger, h),
           // On a desktop the top row runs from the HUD's right edge to the screen's: the lane
@@ -89,9 +96,9 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
                 [h.DataAttribute('flip', 'notice'), h.Class(LANE)],
                 [
                   regionTabs(model, h),
-                  model.board.challenge
+                  boardChallenge(model.board)
                     ? challengeBar(model, h)
-                    : model.board.sandbox
+                    : boardSandbox(model.board)
                       ? objectiveBar(model, h)
                       : h.empty,
                   pager(model, h),
@@ -123,7 +130,7 @@ export const labScreen = (model: Model, h: HtmlBuilder<Message>): Html => {
       tradeoffCard(model, h),
       bottomNotices(model, h),
       // The inspector takes the Inbox's corner; the Inbox comes back when it closes.
-      model.board.challenge ||
+      boardChallenge(model.board) ||
       model.board.game.nodes.some((node) => node.id === model.board.selected)
         ? h.empty
         : inboxButton(model, h),

@@ -25,7 +25,7 @@ import { GUIDED, TRACKS, type SandboxId } from '@quorum/simulation/sandbox'
 import { clock, money, ms, rate } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { isPhone } from '@/game/viewport.ts'
-import type { Model, SandboxRun } from '@/game/model.ts'
+import { boardSandbox, type Model, type SandboxRun } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
 import { nativeSelect, nativeSelectOption } from '@quorum/ui/primitives/native-select'
@@ -94,9 +94,8 @@ const figures = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html =>
   const errors = ledger.errorShare * 100
   const percentiles = has(model.board.game, 'percentiles')
   // A guided objective sets the Apdex and Burn it asks for, and may be measured on another figure.
-  const objective = model.board.sandbox?.id
-    ? GUIDED[model.board.sandbox.id].objectives[model.board.sandbox.progress.objective]
-    : undefined
+  const open = boardSandbox(model.board)
+  const objective = open?.id ? GUIDED[open.id].objectives[open.progress.objective] : undefined
   const apdex = objective?.apdex ?? 0.85
   const watch = objective?.watch
   const watched = watch?.value(ledger) ?? 0
@@ -205,7 +204,7 @@ const steps = (run: SandboxRun, id: SandboxId, h: HtmlBuilder<Message>): Html =>
 
 /** The current objective, in the goal slot, with how long it has held. */
 export const objectiveBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const run = model.board.sandbox
+  const run = boardSandbox(model.board)
   if (!run?.id) return h.empty
   const objective = GUIDED[run.id].objectives[run.progress.objective]
   if (!objective) return h.empty
@@ -403,7 +402,7 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
 /* ---------- the HUD ---------- */
 
 export const sandboxHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const run = model.board.sandbox
+  const run = boardSandbox(model.board)
   if (!run) return h.empty
   return h.header(
     [
@@ -424,7 +423,7 @@ export const sandboxHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>
 /* ---------- passed ---------- */
 
 export const passedPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const id = model.board.sandbox?.id
+  const id = boardSandbox(model.board)?.id
   if (!id) return h.empty
   const next = nextGuided(id)
   return shell(

@@ -1,3 +1,4 @@
+import { isDown } from '@quorum/simulation/life'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   ArrowUp,
@@ -303,7 +304,7 @@ const warnings = (
   const own = ledger.nodes[node.id]
   if (!own) return []
   const list: Array<Html> = []
-  if (node.down === -1) {
+  if (node.life._tag === 'Stopped') {
     const price = replacePrice(game, node)
     list.push(
       callout(
@@ -2082,7 +2083,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                 ['Collect', h.span([h.Class(FIGURE)], [money(game.pending)])],
               )
             : h.empty,
-          price !== null && node.down !== -1
+          price !== null && node.life._tag !== 'Stopped'
             ? button(
                 {
                   onClick: Message.ResizeChosen({ nodeId: node.id, direction: 1 }),
@@ -2108,7 +2109,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
                 h,
               )
             : h.empty,
-          (node.type === 'server' || node.type === 'worker') && node.down === 0
+          (node.type === 'server' || node.type === 'worker') && !isDown(node.life)
             ? button(
                 {
                   onClick: Message.RestartChosen({ nodeId: node.id }),

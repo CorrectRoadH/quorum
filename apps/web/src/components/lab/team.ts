@@ -61,6 +61,7 @@ import {
   teamOutputs,
 } from '@quorum/simulation/team'
 import { overdueBy } from '@quorum/simulation/cve'
+import { isReady, stepOf } from '@quorum/simulation/migration'
 import { PLATFORM_STAGE } from '@quorum/simulation/work'
 import { featureRefusal, itemName, MAX_TEAMS, taskRefusal } from '@quorum/simulation/work'
 import { describeRefusal } from '@quorum/simulation/actions'
@@ -708,9 +709,10 @@ const stackName = (runtime: RuntimeId, framework: FrameworkId): string =>
 const migrationCard = (game: Game, h: HtmlBuilder<Message>): Html => {
   const migration = serviceOf(game).migration
   if (!migration) return h.empty
-  const done = migration.step >= MIGRATION_STEPS.length
-  const current = migration.step > 0 ? (MIGRATION_STEPS[migration.step - 1] ?? 1) : 0
-  const next = MIGRATION_STEPS[migration.step] ?? 1
+  const shifted = stepOf(migration)
+  const done = migration._tag === 'Finishing'
+  const current = shifted > 0 ? (MIGRATION_STEPS[shifted - 1] ?? 1) : 0
+  const next = MIGRATION_STEPS[shifted] ?? 1
   const language = RUNTIMES[migration.runtime].language
   const brand = STACK_LOGOS[language].color ?? 'var(--group-compute)'
   const step = game.backlog.find((item) => item.kind === 'migration')
@@ -755,7 +757,7 @@ const migrationCard = (game: Game, h: HtmlBuilder<Message>): Html => {
                   h.span(
                     [h.Class(cn(FIGURE, 'text-[11.5px] text-muted-foreground'))],
                     [
-                      migration.ready
+                      isReady(migration)
                         ? 'Ready'
                         : step
                           ? `${codeOf('migration', step.ref)} · ${amount(step.spent)}/${dh(step.cost)}`
@@ -770,7 +772,7 @@ const migrationCard = (game: Game, h: HtmlBuilder<Message>): Html => {
                   button(
                     {
                       onClick: Message.MigrationShifted(),
-                      isDisabled: !migration.ready,
+                      isDisabled: !isReady(migration),
                       size: 'sm',
                     },
                     [icon(h, ArrowRight, 'size-3.5'), `Shift to ${percent(next)}`],
@@ -792,7 +794,7 @@ const migrationCard = (game: Game, h: HtmlBuilder<Message>): Html => {
                     [
                       h.Class('absolute inset-0 transition-[clip-path] duration-500 ease-out'),
                       h.Style({
-                        'background-color': `color-mix(in oklch, ${brand} ${migration.ready ? 45 : 18}%, transparent)`,
+                        'background-color': `color-mix(in oklch, ${brand} ${isReady(migration) ? 45 : 18}%, transparent)`,
                         'background-image': STRIPES,
                         'clip-path': `inset(0 ${(1 - next) * 100}% 0 0)`,
                       }),
@@ -844,7 +846,7 @@ const migrationCard = (game: Game, h: HtmlBuilder<Message>): Html => {
                     cn(
                       FIGURE,
                       'absolute top-0 text-[10px]',
-                      at < migration.step ? 'text-foreground' : 'text-muted-foreground',
+                      at < shifted ? 'text-foreground' : 'text-muted-foreground',
                       share >= 1 ? '-translate-x-full' : '-translate-x-1/2',
                     ),
                   ),

@@ -1,3 +1,4 @@
+import { RUNNING } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import { setRuntime } from './actions.ts'
@@ -105,7 +106,7 @@ describe('runtime balance targets', () => {
         return {
           ...next,
           nodes: next.nodes.map((entry) =>
-            entry.id === 'server' ? { ...entry, down: 0, warm: 1 } : entry,
+            entry.id === 'server' ? { ...entry, life: RUNNING } : entry,
           ),
         }
       }

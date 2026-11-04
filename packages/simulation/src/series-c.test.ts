@@ -195,7 +195,9 @@ describe('regions', () => {
     }
     const started = forceIncident(game, solve(game), 'region')
     expect(started?.incident?.region).toBe('na')
-    const down = started?.nodes.filter((entry) => entry.down !== 0).map((entry) => entry.id)
+    const down = started?.nodes
+      .filter((entry) => entry.life._tag === 'Restarting' || entry.life._tag === 'Stopped')
+      .map((entry) => entry.id)
     expect(down).toContain('server')
     expect(down).toContain('database')
     expect(down).not.toContain('wide')

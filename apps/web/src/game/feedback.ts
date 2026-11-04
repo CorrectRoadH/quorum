@@ -1,3 +1,4 @@
+import { causeOf, isDown, warmOf } from '@quorum/simulation/life'
 import type { Ledger } from '@quorum/simulation/ledger'
 import type { Game } from '@quorum/simulation/state'
 import { priceOf, refundOf } from '@quorum/simulation/lookups'
@@ -29,7 +30,8 @@ export const beginChange = (board: Board, label: string, before: Figures): Board
     : { label, count: 1, startedAt: board.game.time, before, recent: [], steady: 0 },
 })
 
-const warming = (game: Game): boolean => game.nodes.some((node) => node.down > 0 || node.warm < 1)
+const warming = (game: Game): boolean =>
+  game.nodes.some((node) => isDown(node.life) || warmOf(node.life) < 1)
 
 type Sample = Change['recent'][number]
 
@@ -123,12 +125,12 @@ const restore = (game: Game, entry: Undo, cash: number): Game => ({
   nodes: entry.nodes.map((node) => {
     const now = game.nodes.find((current) => current.id === node.id)
     if (!now) return node
-    const failed = now.down !== 0 && now.downCause !== 'restart'
+    const failed = isDown(now.life) && causeOf(now.life) !== 'restart'
     return {
       ...node,
       credits: now.credits,
       leak: now.leak,
-      ...(failed ? { down: now.down, downCause: now.downCause, downAt: now.downAt } : {}),
+      ...(failed ? { life: now.life, downAt: now.downAt } : {}),
     }
   }),
   links: entry.links,

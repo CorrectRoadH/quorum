@@ -33,9 +33,12 @@ import { has } from './lookups.ts'
 import {
   bugsFixed,
   cancelMigration,
+  isReady,
   shiftMigration,
   startMigration,
+  stepOf,
   targetOf,
+  trancheBuilt,
 } from './migration.ts'
 import { nextRandom } from './random.ts'
 import type { Game, TeamKind, WorkItem } from './state.ts'
@@ -434,11 +437,11 @@ export const nextFeature = (game: Game): FeatureId | undefined =>
 const autopilot = (game: Game, events: Array<StepEvent>): Game => {
   let next = game
   const migration = serviceOf(next).migration
-  if (migration?.ready) {
+  if (migration && isReady(migration)) {
     const shifted = shiftMigration(next)
     if (Result.isSuccess(shifted)) {
       next = shifted.success
-      events.push(StepEvent.MigrationShifted({ step: migration.step + 1 }))
+      events.push(StepEvent.MigrationShifted({ step: stepOf(migration) + 1 }))
     }
   }
   while (next.backlog.length < next.teams.length) {
@@ -463,7 +466,7 @@ const complete = (game: Game, item: WorkItem): Game => {
   const service = serviceOf(game)
   if (item.kind === 'migration') {
     const migration = service.migration
-    return migration ? withService(game, { migration: { ...migration, ready: true } }) : game
+    return migration ? withService(game, { migration: trancheBuilt(migration) }) : game
   }
   if (item.kind === 'feature') {
     const id = item.ref as FeatureId

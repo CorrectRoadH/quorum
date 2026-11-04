@@ -1,4 +1,5 @@
-import { Effect, Schema } from 'effect'
+import { Effect, Schema, SchemaGetter } from 'effect'
+import { DownCause, Life, lifeOf } from './life.ts'
 import {
   MUTATOR_IDS,
   VENTURE_IDS,
@@ -17,6 +18,7 @@ import {
   RESEARCH_IDS,
   RUNTIME_IDS,
   START_KLOC,
+  MIGRATION_STEPS,
   IAC_TOOLS,
   SYNC_MODES,
   ZONES,
@@ -51,8 +53,7 @@ export type PmMode = typeof PmMode.Type
 export const CacheEngine = Schema.Literals(['redis', 'memcached'])
 export type CacheEngine = typeof CacheEngine.Type
 
-export const DownCause = Schema.Literals(['restart', 'failure', 'oom'])
-export type DownCause = typeof DownCause.Type
+export { DownCause } from './life.ts'
 
 export const PoolerMode = Schema.Literals(['session', 'transaction'])
 export type PoolerMode = typeof PoolerMode.Type
@@ -90,8 +91,7 @@ export type Fanout = typeof Fanout.Type
 export const ScaleSignal = Schema.Literals(['cpu', 'load'])
 export type ScaleSignal = typeof ScaleSignal.Type
 
-/** One placed Component. */
-export const GameNode = Schema.Struct({
+const NODE_FIELDS = {
   id: Schema.String,
   type: ComponentId,
   x: Schema.Finite,
@@ -111,12 +111,6 @@ export const GameNode = Schema.Struct({
   sampleRate: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0.1))),
   /** Seconds of traces Analytics keeps. */
   retention: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(900))),
-  /** Seconds left down. Minus one means down until replaced. */
-  down: Schema.Finite,
-  /** Why the Node is down: a restart, a failure, or an out-of-memory kill. */
-  downCause: DownCause.pipe(Schema.withDecodingDefaultKey(Effect.succeed('restart' as const))),
-  /** 0 when cold, 1 when warm. */
-  warm: Schema.Finite,
   /** Burstable CPU credits, in core-seconds. */
   credits: Schema.Finite,
   /** GB leaked by a memory leak. */
@@ -197,7 +191,37 @@ export const GameNode = Schema.Struct({
   fanout: Fanout.pipe(Schema.withDecodingDefaultKey(Effect.succeed('pull' as const))),
   /** A Cache splits hot keys across its shards. */
   split: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+} as const
+
+/** A save from before the machine carries these three fields instead of `life`. */
+const GameNodeStored = Schema.Struct({
+  ...NODE_FIELDS,
+  down: Schema.optionalKey(Schema.Finite),
+  downCause: Schema.optionalKey(DownCause),
+  warm: Schema.optionalKey(Schema.Finite),
+  life: Schema.optionalKey(Life),
 })
+
+/** The live Node: one lifecycle state, never the three old fields. */
+const GameNodeLive = Schema.Struct({ ...NODE_FIELDS, life: Life }).pipe(Schema.toType)
+
+/**
+ * A Node keeps its lifecycle as one tagged state. Decoding derives it from the
+ * old fields, so a save from before the machine still opens; encoding writes
+ * the state, so the phase is explicit in the save too.
+ */
+export const GameNode = GameNodeStored.pipe(
+  Schema.decodeTo(GameNodeLive, {
+    decode: SchemaGetter.transform((stored) => {
+      const { down, downCause, warm, life, ...rest } = stored
+      return {
+        ...rest,
+        life: life ?? lifeOf(down ?? 0, warm ?? 1, downCause ?? 'restart'),
+      }
+    }),
+    encode: SchemaGetter.transform((live) => live),
+  }),
+)
 export type GameNode = typeof GameNode.Type
 
 export const Retries = Schema.Literals(['none', 'naive', 'backoff'])
@@ -352,21 +376,68 @@ export const Team = Schema.Struct({
 export type Team = typeof Team.Type
 
 /** A Stack change in progress (08 "Migrations"): the strangler moves App Servers over in steps. */
-export const Migration = Schema.Struct({
+/**
+ * A Stack migration, one state at a time. `Building` is there while the next
+ * tranche's Dev Hours are built; `Ready` means traffic can shift; `Finishing`
+ * means every App Server moved and only Fix bugs remains. The save from before
+ * the machine carried `step`, `ready` and `bugs`; decoding derives the state.
+ */
+const MIGRATION_FIELDS = {
   runtime: RuntimeId,
   framework: FrameworkId,
   fromRuntime: RuntimeId,
   fromFramework: FrameworkId,
   /** Dev Hours for the whole migration. */
   total: Schema.Finite,
-  /** Steps shifted so far, 0 to 4. */
-  step: Schema.Finite,
-  /** The next step's Dev Hours are built: traffic can shift. */
-  ready: Schema.Boolean,
   /** The new Stack fails some requests until Fix bugs ships. */
   bugs: Schema.Boolean,
-})
+} as const
+
+export const Migration = Schema.Union([
+  Schema.TaggedStruct('Building', {
+    ...MIGRATION_FIELDS,
+    /** Steps shifted so far, 0 to 3. */
+    step: Schema.Finite,
+  }),
+  Schema.TaggedStruct('Ready', {
+    ...MIGRATION_FIELDS,
+    /** Steps shifted so far, 0 to 3. */
+    step: Schema.Finite,
+  }),
+  /** Every App Server moved; only Fix bugs remains. */
+  Schema.TaggedStruct('Finishing', { ...MIGRATION_FIELDS }),
+]).pipe(Schema.toType)
 export type Migration = typeof Migration.Type
+
+/** A save from before the machine stored these three fields instead of a tag. */
+const MigrationStored = Schema.Struct({
+  ...MIGRATION_FIELDS,
+  step: Schema.optionalKey(Schema.Finite),
+  ready: Schema.optionalKey(Schema.Boolean),
+  bugs: Schema.optionalKey(Schema.Boolean),
+  _tag: Schema.optionalKey(Schema.Literals(['Building', 'Ready', 'Finishing'])),
+})
+
+/** Rebuilds the state from the old fields, so a save from before the machine opens. */
+const migrationOf = (stored: typeof MigrationStored.Type): Migration => {
+  const { runtime, framework, fromRuntime, fromFramework, total, step, ready, bugs } = stored
+  const base = { runtime, framework, fromRuntime, fromFramework, total, bugs: bugs ?? false }
+  if (stored._tag === 'Finishing') return { _tag: 'Finishing', ...base }
+  if (stored._tag === 'Ready') return { _tag: 'Ready', ...base, step: step ?? 0 }
+  if (stored._tag === 'Building') return { _tag: 'Building', ...base, step: step ?? 0 }
+  if ((step ?? 0) >= MIGRATION_STEPS.length) return { _tag: 'Finishing', ...base }
+  return ready
+    ? { _tag: 'Ready', ...base, step: step ?? 0 }
+    : { _tag: 'Building', ...base, step: step ?? 0 }
+}
+
+export const MigrationState = MigrationStored.pipe(
+  Schema.decodeTo(Migration, {
+    decode: SchemaGetter.transform((stored) => migrationOf(stored)),
+    encode: SchemaGetter.transform((live) => live),
+  }),
+)
+export type MigrationState = typeof MigrationState.Type
 
 /** A codebase with its own deploys. The slice has one: the monolith. */
 export const Service = Schema.Struct({
@@ -380,7 +451,7 @@ export const Service = Schema.Struct({
   fixes: Schema.Array(FixId),
   /** Query shapes with no index. */
   shapes: Schema.Finite,
-  migration: Schema.NullOr(Migration),
+  migration: Schema.NullOr(MigrationState),
   nextDeployAt: Schema.Finite,
   /** What the last deploy shipped, so a rollback can take it back. */
   lastDeploy: Schema.Array(FeatureId),

@@ -74,6 +74,7 @@ import { clusterOf, flatScale, grown, has, hopMs, inCluster, transferMs } from '
 import { buggy } from './migration.ts'
 import { spreadRegions } from './regions.ts'
 import type { Game, GameNode } from './state.ts'
+import { RUNNING, warmOf } from './life.ts'
 import { badDeployShare, fixed } from './team.ts'
 
 /* ==========================================================================
@@ -283,7 +284,10 @@ export const hitRatioOf = (game: Game, node: GameNode, writeShare: number): numb
   const hot = (game.users * HOT_KB_PER_USER) / 1_000_000
   const fits = hot > 0 ? Math.min(1, memory / hot) : 1
   return (
-    Math.sqrt(fits) * cacheTtlOf(node.ttl).factor * (1 - Math.min(0.5, 2 * writeShare)) * node.warm
+    Math.sqrt(fits) *
+    cacheTtlOf(node.ttl).factor *
+    (1 - Math.min(0.5, 2 * writeShare)) *
+    warmOf(node.life)
   )
 }
 
@@ -493,7 +497,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
       const hit = hitRatioOf(game, node, writeShare)
       serve.setHits(hit, cacheTtlOf(node.ttl).stale * writeShare)
       // Stampede protection: misses only a cold Cache has wait on one fetch per key.
-      const warmHit = hitRatioOf(game, { ...node, warm: 1 }, writeShare)
+      const warmHit = hitRatioOf(game, { ...node, life: RUNNING }, writeShare)
       const sent =
         node.coalesce && has(game, 'stampede-protection')
           ? 1 - warmHit + (warmHit - hit) * COALESCED
@@ -723,7 +727,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   gpu: {
     model: (solver, node, arriving) =>
       flatModel(
-        gpuCapacity(node) * Math.max(0.1, node.warm),
+        gpuCapacity(node) * Math.max(0.1, warmOf(node.life)),
         arriving,
         { fixed: GPU_FIRST_TOKEN_MS, variable: 100 },
         solver.boost(node),

@@ -1,3 +1,4 @@
+import { isDown, leftOf, warmOf } from '@quorum/simulation/life'
 import { type IconNode } from 'lucide'
 import {
   Application,
@@ -1027,8 +1028,8 @@ class NodeView {
       node.size,
       own.status,
       selected,
-      Math.ceil(node.down),
-      node.warm < 1,
+      Math.ceil(leftOf(node.life)),
+      warmOf(node.life) < 1,
       levelOf(game, node, region),
     ])
     if (digest === this.digest) return
@@ -1058,11 +1059,11 @@ class NodeView {
 
     const group = this.group
     const hue = colors.groups[group]
-    const badgeTone = node.down === -1 ? colors.muted : hue
+    const badgeTone = node.life._tag === 'Stopped' ? colors.muted : hue
     const rect = footerRect(node.type)
     const sink = footer && pressed && footer.enabled && footer.tone !== 'muted' ? 2 : 0
     // Each layer is redrawn only when what it shows changes; values change every tick.
-    const frameKey = `${edge}:${node.down !== 0}:${footer?.tone}:${sink}:${selected}`
+    const frameKey = `${edge}:${isDown(node.life)}:${footer?.tone}:${sink}:${selected}`
     if (frameKey !== this.frameKey) {
       this.frameKey = frameKey
       this.frame.clear()
@@ -1080,7 +1081,7 @@ class NodeView {
           .lineTo(CARD_W - 10, rowTop(index))
           .stroke({ color: colors.border, width: 1, alpha: 0.55 })
       }
-      if (node.down !== 0)
+      if (isDown(node.life))
         silhouette(this.frame, group, 0, 0, CARD_W, height).fill({
           color: colors.danger,
           alpha: 0.07,
@@ -1201,14 +1202,14 @@ class NodeView {
 
     paint(this.mark, COMPONENT_ICONS[node.type], 0xffffff)
     const title =
-      node.down === -1
+      node.life._tag === 'Stopped'
         ? `${def.name} · failed`
-        : node.down > 0
+        : node.life._tag === 'Restarting'
           ? `${def.name} · restart`
-          : node.warm < 1 && (def.sized || node.type === 'cache')
+          : warmOf(node.life) < 1 && (def.sized || node.type === 'cache')
             ? `${def.name} · cold`
             : def.name
-    this.title.style.fill = node.down !== 0 ? colors.danger : colors.ink
+    this.title.style.fill = isDown(node.life) ? colors.danger : colors.ink
     const size = sizePips(node)
     const barsKey = JSON.stringify([size, badgeTone, rows.map((row) => row.trend ?? row.bar)])
     const bars = barsKey !== this.barsKey

@@ -2,6 +2,7 @@ import { Result } from 'effect'
 import type { Action, Refusal } from './actions.ts'
 import type { Ledger } from './ledger.ts'
 import { solveFlow } from './solve.ts'
+import { causeOf, leftOf, RUNNING } from './life.ts'
 import type { Game, GameNode } from './state.ts'
 import { step } from './step.ts'
 
@@ -55,9 +56,9 @@ const settled = (before: Game, after: Game): readonly [Game, number] => {
   const old = new Map(before.nodes.map((node) => [node.id, node]))
   let restart = 0
   const nodes = after.nodes.map((node): GameNode => {
-    if (old.get(node.id) === node || node.downCause !== 'restart') return node
-    restart = Math.max(restart, node.down)
-    return { ...node, down: 0, warm: 1 }
+    if (old.get(node.id) === node || causeOf(node.life) !== 'restart') return node
+    restart = Math.max(restart, leftOf(node.life))
+    return { ...node, life: RUNNING }
   })
   return [{ ...after, nodes }, restart]
 }

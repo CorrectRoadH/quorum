@@ -1,3 +1,4 @@
+import { RUNNING, warming, withWarm } from './life.ts'
 import { Data, Result } from 'effect'
 import {
   ALERT_THRESHOLDS,
@@ -175,9 +176,7 @@ export const blankNode = (
     sample: 1,
     sampleRate: 0.1,
     retention: 900,
-    down: 0,
-    downCause: 'restart',
-    warm: COMPONENTS[type].coldStart ? 0 : 1,
+    life: COMPONENTS[type].coldStart ? warming(0) : RUNNING,
     credits: 0,
     leak: 0,
     compress: stack?.compress ?? false,
@@ -556,7 +555,9 @@ export const setPoolerMode = (game: Game, id: string, mode: PoolerMode): Action 
 export const setCacheEngine = (game: Game, id: string, engine: CacheEngine): Action =>
   withNode(game, id, (node) => {
     if (node.type !== 'cache') return notAllowed('Only a Cache has an engine.')
-    return ok(node.engine === engine ? game : patch(game, id, { engine, warm: 0 }))
+    return ok(
+      node.engine === engine ? game : patch(game, id, { engine, life: withWarm(node.life, 0) }),
+    )
   })
 
 /** Turns a Cache's stampede protection or warming on or off. Each needs its research. */
@@ -753,7 +754,7 @@ export const openRegion = (game: Game, region: Region): Action => {
   const id = `users-${region}`
   const users: GameNode = {
     ...blankNode(game, id, 'users', home?.x ?? 80, home?.y ?? 280, region),
-    warm: 1,
+    life: RUNNING,
   }
   return spend(
     game,
@@ -925,7 +926,7 @@ export const setRetention = (game: Game, id: string, retention: number): Action 
 /** Replaces a failed Node: it comes back cold after a restart. */
 export const replace = (game: Game, id: string): Action =>
   withNode(game, id, (node) =>
-    node.down !== -1
+    node.life._tag !== 'Stopped'
       ? notAllowed(`${COMPONENTS[node.type].name} has not failed.`)
       : spend(game, replacePrice(game, node), 'A replacement', (paid) =>
           patch(paid, id, restarted(node)),

@@ -2,7 +2,7 @@ import { PrefsMessage } from './prefs.ts'
 import { describe, expect, test } from 'vitest'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { Message } from './message.ts'
-import type { Model } from './model.ts'
+import { boardChallenge, type Model } from './model.ts'
 import { AppRoute } from './route.ts'
 import { initialModel, update } from './update.ts'
 import { publish, readTool, stateJson } from './agent-tools.ts'
@@ -28,7 +28,7 @@ describe('what an agent may read', () => {
 
   test('an open Challenge answers nothing, through the tools or the JSON button', () => {
     const challenge = withChallenge()
-    expect(challenge.board.challenge).not.toBeNull()
+    expect(boardChallenge(challenge.board)).not.toBeNull()
     publish(challenge)
     expect(() => readTool('get_design')).toThrow('Challenges are scored')
 

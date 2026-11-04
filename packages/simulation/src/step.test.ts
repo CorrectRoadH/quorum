@@ -1,3 +1,4 @@
+import { causeOf, leftOf, RUNNING } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import {
@@ -212,7 +213,7 @@ describe('restarts and memory', () => {
 
   test('each runtime boots in its own time: PHP about 1 s, Ruby 10 s', () => {
     const php = ok(restart(preseedGame(), 'server'))
-    expect(box(php)?.down).toBe(1)
+    expect(leftOf(box(php)?.life ?? RUNNING)).toBe(1)
     const ruby = ok(
       setRuntime(
         { ...preseedGame(), researched: [...preseedGame().researched, 'lang-ruby'] },
@@ -220,9 +221,9 @@ describe('restarts and memory', () => {
         'puma',
       ),
     )
-    expect(box(ruby)?.down).toBe(10)
-    expect(box(run(ruby, 9.5).game)?.down).toBeGreaterThan(0)
-    expect(box(run(ruby, 10.5).game)?.down).toBe(0)
+    expect(leftOf(box(ruby)?.life ?? RUNNING)).toBe(10)
+    expect(leftOf(box(run(ruby, 9.5).game)?.life ?? RUNNING)).toBeGreaterThan(0)
+    expect(leftOf(box(run(ruby, 10.5).game)?.life ?? RUNNING)).toBe(0)
   })
 
   test('a PHP-FPM pool twice what RAM holds swaps, then the kernel kills it', () => {
@@ -231,7 +232,7 @@ describe('restarts and memory', () => {
     expect(solve(oversized).nodes.server?.swapping).toBe(true)
     const { game, events } = run(oversized, 0.25)
     expect(events.some((event) => event._tag === 'OutOfMemory')).toBe(true)
-    expect(box(game)?.downCause).toBe('oom')
+    expect(causeOf(box(game)?.life ?? RUNNING)).toBe('oom')
     expect(solve(game).errors.oom).toBeGreaterThan(0)
     expect(solve(game).errors.down).toBe(0)
   })

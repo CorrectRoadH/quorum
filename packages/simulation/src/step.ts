@@ -46,6 +46,7 @@ import {
   vcpuOf,
   warmAfterRestart,
 } from './lookups.ts'
+import { causeOf, warming, warmOf, withWarm } from './life.ts'
 import { recordBudget, spendBudget } from './slo.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
 import { advanceDrill } from './ipo.ts'
@@ -244,7 +245,7 @@ const depthAfter = (game: Game, ledger: Ledger, queue: GameNode, seconds: number
 const lostOnCrash = (game: Game, from: number, seconds: number): number => {
   let lost = 0
   for (const node of game.nodes) {
-    if (node.type !== 'worker' || node.down === 0 || node.downCause === 'restart') continue
+    if (node.type !== 'worker' || !isDown(node) || causeOf(node.life) === 'restart') continue
     if (node.downAt < from || node.downAt >= from + seconds) continue
     const processes = RUNTIMES[node.runtime].pool ? node.workers : vcpuOf(node)
     lost += node.prefetch * Math.max(1, processes) * copiesOf(node)
@@ -282,7 +283,7 @@ const scale = (game: Game, node: GameNode, ledger: Ledger, seconds: number): Gam
       replicas,
       pending: 0,
       readyIn: 0,
-      warm: (node.warm * node.replicas) / replicas,
+      life: withWarm(node.life, (warmOf(node.life) * node.replicas) / replicas),
     }
   }
   const scaler = autoscalerOf(game, node)
@@ -323,17 +324,18 @@ const advanceNode = (
 ): GameNode => {
   const time = game.time
   let next = node
-  if (node.down > 0) {
-    const down = Math.max(0, node.down - seconds)
-    next = {
-      ...next,
-      down,
-      warm:
-        down === 0 ? warmAfterRestart(node, node.warming && has(game, 'cache-warming')) : node.warm,
-      downCause: down === 0 ? 'restart' : node.downCause,
-    }
-  } else if (node.down === 0 && node.warm < 1 && !refillsStall(game, ledger, node)) {
-    next = { ...next, warm: Math.min(1, node.warm + seconds / warmupOf(node)) }
+  const life = node.life
+  if (life._tag === 'Restarting') {
+    const left = Math.max(0, life.left - seconds)
+    next =
+      left > 0
+        ? { ...next, life: { ...life, left } }
+        : {
+            ...next,
+            life: warming(warmAfterRestart(node, node.warming && has(game, 'cache-warming'))),
+          }
+  } else if (life._tag === 'Warming' && !refillsStall(game, ledger, node)) {
+    next = { ...next, life: warming(Math.min(1, life.warm + seconds / warmupOf(node))) }
   }
   if (node.type === 'server' || node.type === 'worker') next = scale(game, next, ledger, seconds)
   if (node.type === 'queue') next = { ...next, depth: depthAfter(game, ledger, node, seconds) }
@@ -364,7 +366,7 @@ const advanceNode = (
   const killable = RUNTIMES[node.runtime].pool || node.leak > 0
   if (
     (node.type === 'server' || node.type === 'worker') &&
-    node.down === 0 &&
+    !isDown(node) &&
     killable &&
     ram &&
     ram.used > ram.total * OOM_RATIO

@@ -49,7 +49,10 @@ const cheapestResearch = (game: Game): number =>
 /** The Node whose footer the resize cue points at: the bottleneck, when it can grow. */
 const resizable = (game: Game, bottleneck: string | null): string | null => {
   const node = game.nodes.find((entry) => entry.id === bottleneck)
-  return node && node.type !== 'payments' && node.down !== -1 && resizePrice(game, node) !== null
+  return node &&
+    node.type !== 'payments' &&
+    node.life._tag !== 'Stopped' &&
+    resizePrice(game, node) !== null
     ? node.id
     : null
 }

@@ -1,6 +1,7 @@
 import { Schema } from 'effect'
 import { BACKEND_KINDS, COMPONENTS, REQUEST_KINDS } from '@quorum/simulation/catalog'
 import type { Ledger } from '@quorum/simulation/ledger'
+import { isDown } from '@quorum/simulation/lookups'
 import type { Game, GameNode } from '@quorum/simulation/state'
 
 const Rates = Schema.Record(Schema.String, Schema.Finite)
@@ -70,7 +71,7 @@ export const sampleNode = (game: Game, node: GameNode, ledger: Ledger): NodeSamp
     limit: own.limit,
     dropped: own.dropped,
     refused: own.refused,
-    down: node.down !== 0,
+    down: isDown(node),
     disk: own.disk,
     swapping: own.swapping,
     throttled: own.throttled,

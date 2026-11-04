@@ -1,3 +1,4 @@
+import { stopped, warmOf } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import * as Actions from './actions.ts'
@@ -346,7 +347,7 @@ describe('the Queue and the Worker', () => {
       }
       const running = settle(company, 2)
       const crashed = withNodes(running, {
-        worker0: { down: -1, downCause: 'failure', downAt: running.time },
+        worker0: { life: stopped('failure', 1), downAt: running.time },
       })
       const before = running.budget.at(-1)?.failed ?? 0
       return (settle(crashed, 2).budget.at(-1)?.failed ?? 0) - before
@@ -382,7 +383,8 @@ describe('a Cache stampede', () => {
       }
       const started = forceIncident(game, solveFlow(game), 'stampede')
       if (!started) throw new Error('no stampede')
-      return settle(started, 40).nodes.find((entry) => entry.id === 'cache')?.warm ?? 0
+      const cache = settle(started, 40).nodes.find((entry) => entry.id === 'cache')
+      return cache ? warmOf(cache.life) : 0
     }
     expect(coldAfter(false)).toBe(0)
     expect(coldAfter(true)).toBe(1)

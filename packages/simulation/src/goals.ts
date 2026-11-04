@@ -222,7 +222,7 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       'collect',
       {},
     )
-  const failed = game.nodes.find((node) => node.down === -1)
+  const failed = game.nodes.find((node) => node.life._tag === 'Stopped')
   if (failed)
     return advice(
       `monitoring:failed:${failed.id}`,
@@ -233,7 +233,7 @@ export const nextAdvice = (game: Game, ledger: Ledger): Advice => {
       { node: COMPONENTS[failed.type].name },
       [SHOW(failed.id)],
     )
-  const restarting = game.nodes.find((node) => node.down > 0)
+  const restarting = game.nodes.find((node) => node.life._tag === 'Restarting')
   if (restarting)
     return advice(
       `monitoring:restart:${restarting.id}`,

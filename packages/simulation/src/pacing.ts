@@ -584,7 +584,7 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   // Each action item's Study goes first: an unfixed root cause comes back.
   for (const postmortem of next.postmortems)
     next = tried(next, filePostmortem(next, postmortem.id, true))
-  for (const node of next.nodes.filter((entry) => entry.down === -1))
+  for (const node of next.nodes.filter((entry) => entry.life._tag === 'Stopped'))
     next = tried(next, replace(next, node.id))
   const incident = next.incident
   if (incident?.kind === 'leak' && incident.nodeId)
@@ -633,7 +633,11 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   }
   // A server the strangler just moved restarts with the default pool: size it to its RAM.
   for (const server of servers(next))
-    if (RUNTIMES[server.runtime].pool && server.down > 0 && server.workers < fittingWorkers(server))
+    if (
+      RUNTIMES[server.runtime].pool &&
+      server.life._tag === 'Restarting' &&
+      server.workers < fittingWorkers(server)
+    )
       next = tried(next, setWorkers(next, server.id, fittingWorkers(server)))
 
   // A CVE's patch ticket goes first: an expired one starts a Data breach.

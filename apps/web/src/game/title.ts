@@ -3,6 +3,7 @@ import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowUpRight, Check, Download, Lock, ScrollText, Settings, Store, Trophy } from 'lucide'
 import { icon } from '@quorum/ui/primitives/icon'
+import { connecting, titleIsOpen } from './boot-machine.ts'
 import {
   ACHIEVEMENTS,
   ACHIEVEMENT_IDS,
@@ -26,7 +27,7 @@ import { GUIDED, TRACKS, sandboxOpen } from '@quorum/simulation/sandbox'
 import { clock, compact } from '@quorum/ui/game/format'
 import { Message } from './message.ts'
 import { PrefsMessage } from './prefs.ts'
-import type { Model } from './model.ts'
+import { boardChallenge, boardSandbox, type Model } from './model.ts'
 import { menuOf, type MenuPage } from './route.ts'
 import { supportedLocales } from '../i18n/index.ts'
 import { play } from './sound.ts'
@@ -726,17 +727,19 @@ const taskbar = (model: Model, page: Page, h: HtmlBuilder<Message>): Html => {
 /** The host the monitor connects to, and what it restores there: the Company, a Sandbox, or a Challenge. */
 const sessionOf = (model: Model): readonly [string, string] => {
   const game = model.board.game
-  if (model.board.challenge) {
-    const challenge = challengeById(model.board.challenge.id)
+  const challengeRun = boardChallenge(model.board)
+  if (challengeRun) {
+    const challenge = challengeById(challengeRun.id)
     return [
-      `drill@${model.board.challenge.id.replace(':', '-')}`,
+      `drill@${challengeRun.id.replace(':', '-')}`,
       challenge ? `${challenge.name} · ${challenge.brief}` : '',
     ]
   }
-  if (model.board.sandbox)
+  const sandbox = boardSandbox(model.board)
+  if (sandbox)
     return [
-      `you@sandbox-${model.board.sandbox.id ?? 'free'}`,
-      model.board.sandbox.id ? GUIDED[model.board.sandbox.id].name : 'Free Sandbox',
+      `you@sandbox-${sandbox.id ?? 'free'}`,
+      sandbox.id ? GUIDED[sandbox.id].name : 'Free Sandbox',
     ]
   return ['oncall@prod', `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`]
 }
@@ -780,7 +783,7 @@ const screen = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       model.saved ? status(model, h) : h.empty,
       taskbar(model, page, h),
-      model.connecting ? terminal(model, h) : h.empty,
+      connecting(model.boot) ? terminal(model, h) : h.empty,
     ],
   )
 }
@@ -884,7 +887,7 @@ const booth = (model: Model, h: HtmlBuilder<Message>): Html =>
                       h.circle([h.Cx('89'), h.Cy('180'), h.R('14')]),
                     ],
                   ),
-                  h.span([h.Class(`booth-power ${model.connecting ? 'is-busy' : ''}`)], []),
+                  h.span([h.Class(`booth-power ${connecting(model.boot) ? 'is-busy' : ''}`)], []),
                 ],
               ),
             ],
@@ -903,7 +906,7 @@ const booth = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 const reader = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Key('reader'), h.Class(`reader ${model.gate === 'clocking' ? 'is-in' : ''}`)],
+    [h.Key('reader'), h.Class(`reader ${model.boot._tag === 'Clocking' ? 'is-in' : ''}`)],
     [
       h.div(
         [h.Class('reader-body')],
@@ -964,5 +967,5 @@ export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
         'title-screen dark relative grid h-full place-items-center overflow-hidden bg-page text-foreground',
       ),
     ],
-    [model.gate !== 'open' ? reader(model, h) : booth(model, h)],
+    [titleIsOpen(model.boot) ? booth(model, h) : reader(model, h)],
   )

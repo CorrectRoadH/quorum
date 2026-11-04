@@ -37,7 +37,7 @@ import {
   type Tuning,
 } from './catalog.ts'
 import type { Ledger } from './ledger.ts'
-import { eraOf, has, languageOf } from './lookups.ts'
+import { eraOf, has, isDown, languageOf } from './lookups.ts'
 import { budgetVelocity } from './slo.ts'
 import {
   monolith,
@@ -135,7 +135,7 @@ export const platformStaffed = (game: Game): boolean =>
   )
 
 const liveClusters = (game: Game): number =>
-  game.nodes.filter((node) => node.type === 'cluster' && node.down === 0).length
+  game.nodes.filter((node) => node.type === 'cluster' && !isDown(node)).length
 
 /** Sim seconds in a calendar quarter, on the Team's calendar. */
 export const quarterSeconds = (tuning: Tuning = LIVE_TUNING): number => days(QUARTER_DAYS, tuning)

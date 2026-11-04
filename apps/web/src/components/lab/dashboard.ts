@@ -17,7 +17,7 @@ import type { Sample } from '@quorum/simulation/state'
 import { type Field, TIERS, type Tier, startOf } from '@/game/history.ts'
 import { compact, money, ms } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
-import { type Model, ledgerOf } from '@/game/model.ts'
+import { type Model, ledgerOf, boardSandbox } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
 import { button } from '@quorum/ui/primitives/button'
@@ -1157,11 +1157,8 @@ const rangeLabel = (minutes: number): string =>
 /** Grafana's top bar: breadcrumb, time picker, and refresh. */
 const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
   const now = clockOf(model.board.game.time)
-  const place = model.board.sandbox
-    ? model.board.sandbox.id === null
-      ? 'Free Sandbox'
-      : 'Sandbox'
-    : 'Company'
+  const open = boardSandbox(model.board)
+  const place = open ? (open.id === null ? 'Free Sandbox' : 'Sandbox') : 'Company'
   return h.div(
     [h.Class('flex flex-wrap items-center gap-2 px-4 pt-4 compact:px-3')],
     [

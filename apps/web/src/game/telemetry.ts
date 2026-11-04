@@ -40,7 +40,7 @@ export const diffOf = (before: Game, after: Game): Record<string, unknown> => {
       if (old[field] !== node[field])
         changed.push({ id: node.id, type: node.type, field, from: old[field], to: node[field] })
     }
-    if (old.down !== -1 && node.down === -1)
+    if (old.life._tag !== 'Stopped' && node.life._tag === 'Stopped')
       changed.push({ id: node.id, type: node.type, field: 'failed' })
   }
   const diff: Record<string, unknown> = {

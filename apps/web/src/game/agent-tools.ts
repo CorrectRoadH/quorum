@@ -1,5 +1,5 @@
 import type { ToolName } from 'quorum-mcp-relay/tools'
-import { ledgerOf, offCompany, type Model } from './model.ts'
+import { boardChallenge, ledgerOf, offCompany, boardSandbox, type Model } from './model.ts'
 
 /* ==========================================================================
    The read-only tools an agent can call: the agent relay for a terminal agent,
@@ -23,7 +23,7 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
   get_company: (m) => {
     const ledger = ledgerOf(m)
     return {
-      mode: m.board.challenge ? 'challenge' : m.board.sandbox ? 'sandbox' : 'company',
+      mode: boardChallenge(m.board) ? 'challenge' : boardSandbox(m.board) ? 'sandbox' : 'company',
       offCompany: offCompany(m),
       screen: {
         route: m.route._tag,
@@ -105,7 +105,7 @@ const runs: Record<ToolName, (model: Model, input: Input) => unknown> = {
 export const refusal = (model: Model | null): string | null =>
   model === null
     ? 'No Company is open. Ask the player to open one.'
-    : model.board.challenge
+    : boardChallenge(model.board)
       ? 'A Challenge is open. Challenges are scored, so agents cannot read them.'
       : null
 

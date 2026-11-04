@@ -1,3 +1,4 @@
+import { leftOf, RUNNING } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import { connect, decline, place, raise, resize, sell, study, type Action } from './actions.ts'
@@ -34,7 +35,7 @@ describe('money and research', () => {
     const box = game.nodes.find((node) => node.id === 'server')
     expect(game.cash).toBe(newGame().cash - 240)
     expect(box?.size).toBe(2)
-    expect(box?.down).toBeGreaterThan(0)
+    expect(leftOf(box?.life ?? RUNNING)).toBeGreaterThan(0)
   })
 
   test('selling refunds half of what that copy cost to place', () => {

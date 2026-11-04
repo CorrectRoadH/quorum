@@ -17,6 +17,7 @@ import {
 import { newGame, preseedGame } from './company.ts'
 import { serverModel } from './capacity.ts'
 import { BACKEND_KINDS, REQUEST_KINDS, type Kind } from './catalog.ts'
+import { RUNNING, stopped, warmOf } from './life.ts'
 import type { Ledger } from './ledger.ts'
 import { restarted } from './lookups.ts'
 import { hitRatioOf } from './rules.ts'
@@ -101,8 +102,8 @@ describe('operation traffic', () => {
     let game = tune(preseed(100_000), 'server', { credits: 0 })
     game = tune(game, 'analytics', { sampleRate: 0.5, size: 0 })
     game = ok(connect(game, 'database', 'analytics'))
-    for (const down of [0, -1]) {
-      const ledger = solve(tune(game, 'analytics', { down }))
+    for (const life of [RUNNING, stopped('restart', 1)]) {
+      const ledger = solve(tune(game, 'analytics', { life }))
       const tap = ledger.nodes.analytics
       if (!tap) throw new Error('Missing Analytics ledger')
       expect(tap.inbound).toBeGreaterThan(tap.capacity)
@@ -185,7 +186,7 @@ describe('the latency coupling', () => {
   const slowDatabase = (runtime: 'php_fpm' | 'node'): Game => {
     let game = tune(preseed(2_200, ['lang-node']), 'database', { size: 0 })
     game = ok(setRuntime(game, 'server', runtime))
-    return tune(game, 'server', { warm: 1, down: 0, workers: 8, size: 3 })
+    return tune(game, 'server', { life: RUNNING, workers: 8, size: 3 })
   }
 
   test('a slow database fills PHP-FPM workers while the CPU idles', () => {
@@ -204,10 +205,10 @@ describe('the latency coupling', () => {
 
 describe('connections', () => {
   const twoServers = (pooled: boolean): Game => {
-    let game = tune(preseed(2_000, ['pooling']), 'server', { workers: 70, warm: 1 })
+    let game = tune(preseed(2_000, ['pooling']), 'server', { workers: 70, life: RUNNING })
     game = ok(place(game, 'server', 440, 120))
     const second = last(game)
-    game = tune(game, second, { runtime: 'php_fpm', workers: 70, warm: 1, size: 2 })
+    game = tune(game, second, { runtime: 'php_fpm', workers: 70, life: RUNNING, size: 2 })
     game = ok(place(game, 'lb', 280, 200))
     const lb = last(game)
     game = disconnect(game, 'users', 'server')
@@ -365,7 +366,7 @@ describe('the event loop', () => {
   // runs at about ρ = 0.57 at the 20:00 peak, behind a Database big enough to stay out of the way.
   const nodeServer = (researched: Game['researched']): Game => {
     const game = ok(setRuntime(preseed(2_500, ['lang-node', ...researched]), 'server', 'node'))
-    return tune(tune({ ...game, time: 6 * 60 }, 'server', { warm: 1, down: 0 }), 'database', {
+    return tune(tune({ ...game, time: 6 * 60 }, 'server', { life: RUNNING }), 'database', {
       size: 4,
     })
   }
@@ -398,7 +399,7 @@ describe('routing', () => {
     expect(reads).toEqual({})
     game = ok(place(game, 'cache', 600, 160))
     const cache = last(game)
-    game = tune(game, cache, { warm: 1 })
+    game = tune(game, cache, { life: RUNNING })
     game = disconnect(game, 'server', 'database')
     game = ok(connect(game, 'server', cache))
     game = ok(connect(game, cache, 'database'))
@@ -418,7 +419,7 @@ describe('routing', () => {
     let game = preseed(users, ['caching'])
     game = ok(place(game, 'cache', 600, 160))
     const cache = last(game)
-    game = tune(game, cache, { warm: 1, ...change })
+    game = tune(game, cache, { life: RUNNING, ...change })
     game = disconnect(game, 'server', 'database')
     game = ok(connect(game, 'server', cache))
     game = ok(connect(game, cache, 'database'))
@@ -463,15 +464,15 @@ describe('routing', () => {
   test('Redis comes back half warm from a restart; Memcached comes back empty', () => {
     const { game, cache } = cached(1_500)
     const node = game.nodes.find((entry) => entry.id === cache) as GameNode
-    expect(restarted(node).warm).toBe(0.5)
-    expect(restarted({ ...node, engine: 'memcached' }).warm).toBe(0)
+    expect(warmOf(restarted(node).life)).toBe(0.5)
+    expect(warmOf(restarted({ ...node, engine: 'memcached' }).life)).toBe(0)
   })
 
   const behind = (front: 'dns' | 'lb'): Game => {
     let game = preseed(1_500, ['dns-rr'])
     game = ok(place(game, 'server', 440, 120))
     const second = last(game)
-    game = tune(game, second, { warm: 1, size: 2, runtime: 'php_fpm', workers: 16 })
+    game = tune(game, second, { life: RUNNING, size: 2, runtime: 'php_fpm', workers: 16 })
     game = ok(connect(game, second, 'database'))
     game = ok(place(game, front, 280, 200))
     const edge = last(game)
@@ -479,7 +480,7 @@ describe('routing', () => {
     game = ok(connect(game, 'users', edge))
     game = ok(connect(game, edge, 'server'))
     game = ok(connect(game, edge, second))
-    return tune(game, second, { down: -1 })
+    return tune(game, second, { life: stopped('restart', 1) })
   }
 
   test('DNS keeps sending half the users to a dead host', () => {
@@ -495,7 +496,7 @@ describe('routing', () => {
     let game = preseed(1_500, ['replication'])
     game = ok(place(game, 'replica', 760, 120))
     const replica = last(game)
-    game = tune(game, replica, { warm: 1 })
+    game = tune(game, replica, { life: RUNNING })
     game = ok(connect(game, 'server', replica))
     const ledger = solve(game)
     expect(ledger.nodes[replica]?.inbound ?? 0).toBeGreaterThan(0)
@@ -513,7 +514,7 @@ describe('Load Balancer policies and health checks', () => {
   // A big and a small App Server behind one Load Balancer, on a Database that stays out of the way.
   const pair = (users: number, researched: Game['researched'] = []) => {
     let game = tune(
-      tune(preseed(users, researched), 'server', { size: 4, workers: 64, warm: 1 }),
+      tune(preseed(users, researched), 'server', { size: 4, workers: 64, life: RUNNING }),
       'database',
       {
         size: 5,
@@ -521,7 +522,7 @@ describe('Load Balancer policies and health checks', () => {
     )
     game = ok(place(game, 'server', 440, 120))
     const small = last(game)
-    game = tune(game, small, { warm: 1, size: 1, runtime: 'php_fpm', workers: 8 })
+    game = tune(game, small, { life: RUNNING, size: 1, runtime: 'php_fpm', workers: 8 })
     game = ok(connect(game, small, 'database'))
     game = ok(place(game, 'lb', 280, 200))
     const lb = last(game)
@@ -553,7 +554,7 @@ describe('Load Balancer policies and health checks', () => {
   test('a dead server keeps half the traffic until the next health check', () => {
     const { game, lb, small } = pair(1_000)
     const equal = ok(setPolicy(tune(game, small, { size: 4, workers: 64 }), lb, 'round-robin'))
-    const dead = tune(equal, small, { down: -1, downCause: 'failure', downAt: equal.time })
+    const dead = tune(equal, small, { life: stopped('failure', 1), downAt: equal.time })
     const at = (seconds: number) => {
       const ledger = solve({ ...dead, time: dead.time + seconds })
       return ledger.errors.down / ledger.demand
@@ -566,7 +567,7 @@ describe('Load Balancer policies and health checks', () => {
     const { game, lb, small } = pair(1_000, ['health-checks'])
     expect(Result.isFailure(setHealthCheck(pair(1_000).game, lb, { checkEvery: 2 }))).toBe(true)
     const quick = ok(setHealthCheck(game, lb, { checkEvery: 2 }))
-    const dead = tune(quick, small, { down: -1, downCause: 'failure', downAt: quick.time })
+    const dead = tune(quick, small, { life: stopped('failure', 1), downAt: quick.time })
     expect(solve({ ...dead, time: dead.time + 3 }).errors.down).toBeCloseTo(0)
   })
 
@@ -609,7 +610,7 @@ describe('DNS TTL', () => {
     let game = preseed(1_500, ['dns-rr', 'health-checks'])
     game = ok(place(game, 'server', 440, 120))
     const second = last(game)
-    game = tune(game, second, { warm: 1, size: 2, runtime: 'php_fpm', workers: 16 })
+    game = tune(game, second, { life: RUNNING, size: 2, runtime: 'php_fpm', workers: 16 })
     game = ok(connect(game, second, 'database'))
     game = ok(place(game, 'dns', 280, 200))
     const edge = last(game)
@@ -618,7 +619,7 @@ describe('DNS TTL', () => {
     game = ok(connect(game, edge, 'server'))
     game = ok(connect(game, edge, second))
     game = ok(setTtl(game, edge, 30))
-    return tune(game, second, { down: -1, downCause: 'failure', downAt: game.time })
+    return tune(game, second, { life: stopped('failure', 1), downAt: game.time })
   }
 
   test('with health checks, a dead host leaves DNS once its TTL runs out', () => {
@@ -647,11 +648,11 @@ describe('the bottleneck marker', () => {
     game = tune(game, 'server', { credits: 0 })
     expect(solve(game).bottleneck).toBe('server')
     const fixed = ok(setFamily(game, 'server', 'general'))
-    expect(solve(tune(fixed, 'server', { down: 0, warm: 1 })).bottleneck).toBeNull()
+    expect(solve(tune(fixed, 'server', { life: RUNNING })).bottleneck).toBeNull()
   })
 
   test('raising the pool moves the limit from workers to CPU', () => {
-    let game = tune(tune(preseed(3_000), 'server', { workers: 3, warm: 1 }), 'database', {
+    let game = tune(tune(preseed(3_000), 'server', { workers: 3, life: RUNNING }), 'database', {
       size: 3,
     })
     expect(solve(game).nodes.server?.limit).toBe('workers')

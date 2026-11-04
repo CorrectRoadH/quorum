@@ -36,6 +36,7 @@ import {
 } from './lookups.ts'
 
 export { zoned }
+import { causeOf, down as takeDown, withWarm } from './life.ts'
 import { nextRandom, pickWeighted } from './random.ts'
 import type { Game, GameLink, GameNode, Incident, Postmortem, Region, Zone } from './state.ts'
 import { isGlobal, survivesRegion } from './regions.ts'
@@ -487,8 +488,7 @@ export const startIncident = (
     pushed.includes(node.region) && configured(node) && !isDown(node)
       ? {
           ...node,
-          down: incidentDuration(game, kind),
-          downCause: 'failure' as const,
+          ...takeDown(node.life, incidentDuration(game, kind), 'failure'),
           downAt: game.time,
         }
       : kind !== 'config' &&
@@ -498,15 +498,17 @@ export const startIncident = (
           !isDown(node)
         ? {
             ...node,
-            down: incidentDuration(game, kind),
-            downCause: 'failure' as const,
+            ...takeDown(node.life, incidentDuration(game, kind), 'failure'),
             downAt: game.time,
           }
         : zone !== null && zoned(node) && node.zone === zone && !isDown(node)
           ? {
               ...node,
-              down: node.standby ? failoverSeconds(game) : incidentDuration(game, 'zone'),
-              downCause: 'failure' as const,
+              ...takeDown(
+                node.life,
+                node.standby ? failoverSeconds(game) : incidentDuration(game, 'zone'),
+                'failure',
+              ),
               downAt: game.time,
             }
           : node.id !== target?.id
@@ -519,21 +521,29 @@ export const startIncident = (
                     ...node,
                     // A standby takes over: the Node is back once failover finishes. A Cluster
                     // reschedules a pod on another host by itself (self-healing).
-                    down: node.standby
-                      ? failoverSeconds(game)
-                      : clusterOf(game, node) !== undefined
-                        ? rescheduleSeconds(game)
-                        : -1,
-                    downCause: 'failure' as const,
+                    ...takeDown(
+                      node.life,
+                      node.standby
+                        ? failoverSeconds(game)
+                        : clusterOf(game, node) !== undefined
+                          ? rescheduleSeconds(game)
+                          : -1,
+                      'failure',
+                    ),
                     downAt: game.time,
                   }
                 : kind === 'stampede'
-                  ? { ...node, warm: node.warming && has(game, 'cache-warming') ? WARMED : 0 }
+                  ? {
+                      ...node,
+                      life: withWarm(
+                        node.life,
+                        node.warming && has(game, 'cache-warming') ? WARMED : 0,
+                      ),
+                    }
                   : kind === 'gpu-shortage'
                     ? {
                         ...node,
-                        down: incidentDuration(game, kind),
-                        downCause: 'failure' as const,
+                        ...takeDown(node.life, incidentDuration(game, kind), 'failure'),
                         downAt: game.time,
                       }
                     : node,
@@ -615,13 +625,14 @@ const resolve = (game: Game): Readonly<{ game: Game; events: ReadonlyArray<StepE
     if (
       incident.kind === 'config' &&
       configured(node) &&
-      node.downCause === 'failure' &&
+      causeOf(node.life) === 'failure' &&
       node.downAt === incident.startedAt &&
-      node.down > 0
+      node.life._tag === 'Restarting'
     )
       return { ...node, ...restarted(node) }
     if (node.id !== incident.nodeId) return node
-    if (incident.kind === 'instance' && node.down === -1) return { ...node, ...restarted(node) }
+    if (incident.kind === 'instance' && node.life._tag === 'Stopped')
+      return { ...node, ...restarted(node) }
     if (incident.kind === 'leak' && node.leak > 0)
       return { ...node, ...restarted(node, 'oom'), leak: 0, downAt: game.time }
     if (incident.kind === 'retry-storm' && node.depth > 0) return { ...node, depth: 0 }
@@ -691,11 +702,11 @@ export const advanceIncident = (
   const next: Game = { ...game, nodes, incident: tracked }
   const elapsedAfter = game.time - incident.startedAt
   const fixed =
-    (incident.kind === 'instance' && (!target || target.down !== -1)) ||
+    (incident.kind === 'instance' && (!target || target.life._tag !== 'Stopped')) ||
     (incident.kind === 'leak' &&
       (!target || (target.leak === 0 && incident.remaining < incidentDuration(game, 'leak')))) ||
     // A restart clears the heap.
-    (incident.kind === 'gc-storm' && (!target || target.down > 0)) ||
+    (incident.kind === 'gc-storm' && (!target || target.life._tag === 'Restarting')) ||
     // The storm is over once the trigger has passed and the backlog has drained.
     (incident.kind === 'retry-storm' &&
       elapsedAfter >= STORM_TRIGGER &&

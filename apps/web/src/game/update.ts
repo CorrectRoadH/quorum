@@ -227,8 +227,14 @@ import {
   stampedPlaybook,
   type ChallengeRun,
   type Menu,
+  boardChallenge,
+  boardSandbox,
 } from './model.ts'
 import { poolName, recipeOf } from '@quorum/ui/game/pools'
+import { bootStep } from './boot-machine.ts'
+import { sessionStep } from './session-machine.ts'
+import { stepOf } from '@quorum/simulation/migration'
+import { challengeStep } from './challenge-machine.ts'
 import { AppRoute, menuFor, onBoard, routeOfMenu, urlOf, urlToAppRoute } from './route.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
@@ -261,8 +267,7 @@ export const speedsOf = (game: Game): ReadonlyArray<number> => [
 /** A board that starts on `game`: nothing selected, nothing measured yet, and an empty Inbox. */
 export const freshBoard = (game: Game): Board => ({
   game,
-  sandbox: null,
-  challenge: null,
+  session: { _tag: 'Company' },
   exited: null,
   away: null,
   region: 'na',
@@ -303,14 +308,13 @@ export const freshBoard = (game: Game): Board => ({
 export const initialModel = (): Model =>
   Model.make({
     route: AppRoute.Title(),
-    gate: 'open',
+    boot: { _tag: 'Ready' },
     panel: 'none',
     toast: null,
     toastSeq: 0,
     board: freshBoard(newGame()),
     company: null,
     saved: false,
-    connecting: false,
     founder: emptyFounder(),
     passed: [],
     freeBoard: null,
@@ -335,7 +339,7 @@ export const initialModel = (): Model =>
 export const init: Runtime.RoutingApplicationInit<Model, Message, void, ApiRpc> = (url) => {
   const route = menuFor(urlToAppRoute(url))
   return {
-    model: { ...initialModel(), route, gate: 'shut' },
+    model: { ...initialModel(), route, boot: { _tag: 'Shut' } },
     commands: [
       LoadSave({}),
       LoadSandboxStore({}),
@@ -506,7 +510,8 @@ const act = (
     onSuccess: (game) => {
       if (game === model.board.game) return { model }
       // A run replays the Design it started with: only logged run actions may change it.
-      if (model.board.challenge && model.board.challenge.phase !== 'build')
+      const challenge = boardChallenge(model.board)
+      if (challenge && challenge._tag !== 'Building')
         return withToast(model, 'Rebuild to change the Design.', 'warn')
       const measured = beginChange(model.board, label, figuresOf(solveFlow(model.board.game)))
       const next: Model = {
@@ -539,7 +544,8 @@ const act = (
 /** Applies an undo or a redo, or says why it cannot. */
 const reverse = (model: Model, reversal: Reversal | string, verb: string): Result => {
   if (typeof reversal === 'string') return withToast(model, reversal, 'plain')
-  if (model.board.challenge && model.board.challenge.phase !== 'build')
+  const challenge = boardChallenge(model.board)
+  if (challenge && challenge._tag !== 'Building')
     return withToast(model, 'Rebuild to change the Design.', 'warn')
   const measured = beginChange(
     model.board,
@@ -893,10 +899,10 @@ const foldInbox = (model: Model, message: InboxMessage): Result =>
 
 /** Puts the badge in the reader, once: it beeps, and the title follows. */
 const clockIn = (model: Model): Result =>
-  model.gate !== 'shut'
+  model.boot._tag !== 'Shut'
     ? { model }
     : {
-        model: { ...model, gate: 'clocking' },
+        model: { ...model, boot: bootStep(model.boot, { _tag: 'ClockedIn' }) },
         commands: [
           ...(model.prefs.muted ? [] : [PlaySound({ sound: 'clockin', pitch: 1, spatial: false })]),
           RevealTitle({}),
@@ -1144,7 +1150,8 @@ const eventLog = (event: StepEvent): Record<string, unknown> =>
 /* ---------- the clock ---------- */
 
 const tick = (model: Model): Result => {
-  if (model.board.challenge?.phase === 'running') return runTick(model, model.board.challenge)
+  const challenge = boardChallenge(model.board)
+  if (challenge?._tag === 'Running') return runTick(model, challenge)
   const owed = model.board.clock.carry + STEPS_PER_TICK * model.board.clock.speed
   const steps = Math.floor(owed)
   let game = model.board.game
@@ -1155,8 +1162,9 @@ const tick = (model: Model): Result => {
     events.push(...result.events)
   }
   // A guided Sandbox checks its objective, and may script an incident or change demand.
-  const guided = model.board.sandbox?.id ? GUIDED[model.board.sandbox.id] : null
-  let run = model.board.sandbox
+  const open = boardSandbox(model.board)
+  const guided = open?.id ? GUIDED[open.id] : null
+  let run = open
   let advanced = false
   if (run && guided && !passedAll(guided, run.progress)) {
     const advance = advanceSandbox(
@@ -1191,7 +1199,9 @@ const tick = (model: Model): Result => {
     board: {
       ...model.board,
       game,
-      sandbox: run,
+      session: run
+        ? sessionStep(model.board.session, { _tag: 'SandboxUpdated', run })
+        : model.board.session,
       bottleneck,
       bottleneckAt: search ? second : model.board.bottleneckAt,
       clock: {
@@ -1240,7 +1250,7 @@ const tick = (model: Model): Result => {
   for (const event of events) {
     logs.push(line(game.time, event._tag, eventLog(event)))
     // The Simulation files a CVE as a ticket; Security writes the advisory, and a thread closes with its ticket.
-    if (!next.board.challenge && event._tag === 'CveDisclosed') {
+    if (!boardChallenge(next.board) && event._tag === 'CveDisclosed') {
       next = mailedTo(next, disclosureFact(event.item, game), game.time)
       continue
     }
@@ -1273,7 +1283,7 @@ const tick = (model: Model): Result => {
     const text = eventText(event, game)
     if (!text) continue
     // What happened in the Design is Mail (GDD 18); a Challenge has no Inbox, so it keeps the toast.
-    if (next.board.challenge) {
+    if (boardChallenge(next.board)) {
       const [raised, clear] = toasted(next, text[0], text[1])
       next = raised
       commands.push(clear)
@@ -1401,7 +1411,7 @@ const tick = (model: Model): Result => {
   if (game.time - model.board.clock.savedAt >= SAVE_EVERY) {
     next = { ...next, board: { ...next.board, clock: { ...next.board.clock, savedAt: game.time } } }
     if (!offCompany(next)) commands.push(saveOf(next))
-    else if (next.board.sandbox?.id === null) {
+    else if (boardSandbox(next.board)?.id === null) {
       next = { ...next, freeBoard: game }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
     }
@@ -1462,13 +1472,17 @@ const startCompany = (model: Model, game: Game, panel: Model['panel']): Result =
 
 /** Opens a Sandbox on the board. The Company waits aside until the title screen. */
 const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
+  const board = freshBoard(game)
   const next: Model = {
     ...model,
     route: AppRoute.Sandbox({ sandbox: run.id ?? 'free' }),
     toast: null,
     panel: 'none',
     company: offCompany(model) ? model.company : model.board,
-    board: { ...freshBoard(game), sandbox: run },
+    board: {
+      ...board,
+      session: sessionStep(board.session, { _tag: 'SandboxOpened', run }),
+    },
   }
   return {
     model: next,
@@ -1481,7 +1495,7 @@ const enterSandbox = (model: Model, game: Game, run: SandboxRun): Result => {
 
 /** Swaps the free Sandbox's Game, keeping the player's view. */
 const replaceFree = (model: Model, game: Game, text: string): Result => {
-  if (model.board.sandbox?.id !== null) return { model }
+  if (boardSandbox(model.board)?.id !== null) return { model }
   const next: Model = {
     ...model,
     freeBoard: game,
@@ -1507,7 +1521,7 @@ const replaceFree = (model: Model, game: Game, text: string): Result => {
 
 /** Changes the free Sandbox's demand or mix in place. */
 const tuneFree = (model: Model, game: Game): Result => {
-  if (model.board.sandbox?.id !== null) return { model }
+  if (boardSandbox(model.board)?.id !== null) return { model }
   const next: Model = { ...model, board: { ...model.board, game, bottleneckAt: -1 } }
   return { model: next }
 }
@@ -1650,17 +1664,10 @@ const enterChallenge = (model: Model, id: string): Result => {
     company: offCompany(model) ? model.company : model.board,
     board: {
       ...freshBoard(game),
-      challenge: {
-        id,
-        phase: 'build',
-        board: null,
-        replay: null,
-        totals: NO_TOTALS,
-        result: null,
-        verdict: null,
-        verification: 'local',
-        note: null,
-      },
+      session: sessionStep(freshBoard(game).session, {
+        _tag: 'ChallengeOpened',
+        run: { _tag: 'Building', id, totals: NO_TOTALS },
+      }),
     },
   }
   const loaded = histograms.loadIfMissing(next, { challengeId: id, simVersion: SIM_VERSION })
@@ -1677,7 +1684,7 @@ const enterChallenge = (model: Model, id: string): Result => {
 /** Run: the Design restarts from t = 0 on the Challenge's seed. Only this run is scored. */
 const startRun = (model: Model, run: ChallengeRun): Result => {
   const challenge = challengeById(run.id)
-  if (!challenge || run.phase !== 'build') return { model }
+  if (!challenge || run._tag !== 'Building') return { model }
   const replay = {
     v: 1 as const,
     challenge: run.id,
@@ -1694,13 +1701,10 @@ const startRun = (model: Model, run: ChallengeRun): Result => {
         board: {
           ...model.board,
           game,
-          challenge: {
-            ...run,
-            phase: 'running',
-            board: model.board.game,
-            replay,
-            totals: NO_TOTALS,
-          },
+          session: sessionStep(model.board.session, {
+            _tag: 'ChallengeUpdated',
+            run: challengeStep(run, { _tag: 'Run', board: model.board.game, replay }),
+          }),
           tool: null,
           selected: null,
           bottleneckAt: -1,
@@ -1719,7 +1723,7 @@ const runSteps = (
   all: boolean,
 ): Readonly<{ model: Model; done: boolean }> => {
   const challenge = challengeById(run.id)
-  if (!challenge || !run.replay) return { model, done: false }
+  if (!challenge || run._tag !== 'Running') return { model, done: false }
   const owed = all
     ? Number.POSITIVE_INFINITY
     : model.board.clock.carry +
@@ -1740,7 +1744,10 @@ const runSteps = (
       board: {
         ...model.board,
         game,
-        challenge: { ...run, totals },
+        session: sessionStep(model.board.session, {
+          _tag: 'ChallengeUpdated',
+          run: challengeStep(run, { _tag: 'Ticked', totals }),
+        }),
         clock: { ...model.board.clock, carry: all ? 0 : owed - taken },
       },
     },
@@ -1750,9 +1757,9 @@ const runSteps = (
 
 /** The run is over: the provisional result shows, and the server is asked to confirm it. */
 const finishRun = (model: Model): Result => {
-  const run = model.board.challenge
+  const run = boardChallenge(model.board)
   const challenge = run ? challengeById(run.id) : undefined
-  if (!run || !challenge || !run.replay) return { model }
+  if (!run || !challenge || run._tag !== 'Running') return { model }
   const result = resultOf(challenge, model.board.game, run.totals)
   const first = result.passed && !model.founder.completed.includes(run.id)
   const founder = result.passed
@@ -1764,7 +1771,10 @@ const finishRun = (model: Model): Result => {
     panel: 'challenge',
     board: {
       ...model.board,
-      challenge: { ...run, phase: 'result', result, verification: 'sending' },
+      session: sessionStep(model.board.session, {
+        _tag: 'ChallengeUpdated',
+        run: challengeStep(run, { _tag: 'Finished', result }),
+      }),
     },
   }
   const commands: Array<AnyCommand> = [
@@ -1793,19 +1803,26 @@ const runTick = (model: Model, run: ChallengeRun): Result => {
 
 /** A run action is logged at the next Step and applied there, as the server will apply it. */
 const logRunAction = (model: Model, action: ReplayAction): Result | null => {
-  const run = model.board.challenge
-  if (run?.phase !== 'running' || !run.replay) return null
-  const replay = {
-    ...run.replay,
-    actions: [...run.replay.actions, { step: run.totals.step, action }],
+  const run = boardChallenge(model.board)
+  if (run?._tag !== 'Running') return null
+  return {
+    model: {
+      ...model,
+      board: {
+        ...model.board,
+        session: sessionStep(model.board.session, {
+          _tag: 'ChallengeUpdated',
+          run: challengeStep(run, { _tag: 'ActionLogged', action }),
+        }),
+      },
+    },
   }
-  return { model: { ...model, board: { ...model.board, challenge: { ...run, replay } } } }
 }
 
 /** An incident response during a run: logged like any run action, or refused when the Challenge forbids it. */
 const logResponse = (model: Model, response: Response): Result | null => {
-  const run = model.board.challenge
-  if (run?.phase !== 'running') return null
+  const run = boardChallenge(model.board)
+  if (run?._tag !== 'Running') return null
   const challenge = challengeById(run.id)
   const action: ReplayAction = { _tag: 'Respond', response }
   if (challenge && !responseAllowed(challenge, action))
@@ -1823,7 +1840,10 @@ const leaveChallenge = (model: Model): Result => ({
     ...model,
     route: AppRoute.Menu({ menu: 'challenges' }),
     panel: 'none',
-    board: companyBoard(model),
+    board: {
+      ...companyBoard(model),
+      session: sessionStep(model.board.session, { _tag: 'Closed' }),
+    },
     company: null,
   },
 })
@@ -1846,8 +1866,8 @@ const continued = (model: Model): Result => {
 /** Closes the board for the title screen. A Sandbox or Challenge gives the Company back. */
 const leaveBoard = (model: Model): Result => {
   if (model.board.exited) return leaveExited(model, 'found')
-  if (model.board.challenge) return leaveChallenge(model)
-  if (!model.board.sandbox)
+  if (boardChallenge(model.board)) return leaveChallenge(model)
+  if (!boardSandbox(model.board))
     return {
       model: {
         ...model,
@@ -1857,12 +1877,16 @@ const leaveBoard = (model: Model): Result => {
       },
       commands: [saveOf(model)],
     }
-  const freeBoard = model.board.sandbox.id === null ? model.board.game : model.freeBoard
+  const free = boardSandbox(model.board)
+  const freeBoard = free?.id === null ? model.board.game : model.freeBoard
   const next: Model = {
     ...model,
     route: AppRoute.Menu({ menu: 'sandbox' }),
     panel: 'none',
-    board: companyBoard(model),
+    board: {
+      ...companyBoard(model),
+      session: sessionStep(model.board.session, { _tag: 'Closed' }),
+    },
     company: null,
     freeBoard,
   }
@@ -1972,7 +1996,7 @@ const handle = (model: Model, message: Message): Result =>
     Saved: () => ({ model: model.saved ? model : { ...model, saved: true } }),
 
     Continued: () => continued(model),
-    Connected: () => ({ model: { ...model, connecting: false } }),
+    Connected: () => ({ model: { ...model, boot: bootStep(model.boot, { _tag: 'Connected' }) } }),
 
     NewCompanyStarted: () => found(model),
     CompanyFounded: () => found(model),
@@ -1988,7 +2012,9 @@ const handle = (model: Model, message: Message): Result =>
 
     TitleOpened: () => leaveBoard(model),
     ClockedIn: () => clockIn(model),
-    TitleRevealed: () => ({ model: { ...model, gate: 'open' } }),
+    TitleRevealed: () => ({
+      model: { ...model, boot: bootStep(model.boot, { _tag: 'TitleRevealed' }) },
+    }),
     MenuChosen: ({ menu }) =>
       model.board.exited
         ? leaveExited(model, menu)
@@ -2071,11 +2097,13 @@ const handle = (model: Model, message: Message): Result =>
         onSome: (store) => ({ model: { ...model, passed: store.passed, freeBoard: store.free } }),
       }),
     ChallengeStarted: ({ id }) => enterChallenge(model, id),
-    ChallengeRan: () =>
-      model.board.challenge ? startRun(model, model.board.challenge) : { model },
+    ChallengeRan: () => {
+      const run = boardChallenge(model.board)
+      return run ? startRun(model, run) : { model }
+    },
     ChallengeFinished: () => {
-      const run = model.board.challenge
-      if (run?.phase !== 'running') return { model }
+      const run = boardChallenge(model.board)
+      if (run?._tag !== 'Running') return { model }
       return finishRun(runSteps(model, run, true).model)
     },
     FixChosen: ({ fix, on }) =>
@@ -2088,8 +2116,8 @@ const handle = (model: Model, message: Message): Result =>
         },
       ),
     ChallengeRebuilt: () => {
-      const run = model.board.challenge
-      if (!run?.board) return { model }
+      const run = boardChallenge(model.board)
+      if (!run || run._tag === 'Building') return { model }
       const next: Model = {
         ...model,
         panel: 'none',
@@ -2097,31 +2125,27 @@ const handle = (model: Model, message: Message): Result =>
           ...model.board,
           game: run.board,
           bottleneckAt: -1,
-          challenge: {
-            ...run,
-            phase: 'build',
-            board: null,
-            replay: null,
-            totals: NO_TOTALS,
-            result: null,
-            verdict: null,
-            verification: 'local',
-            note: null,
-          },
+          session: sessionStep(model.board.session, {
+            _tag: 'ChallengeUpdated',
+            run: challengeStep(run, { _tag: 'Rebuilt' }),
+          }),
         },
       }
       return { model: next }
     },
     ChallengeVerified: ({ verdict }) => {
-      const run = model.board.challenge
-      if (!run) return { model }
+      const run = boardChallenge(model.board)
+      if (run?._tag !== 'Result') return { model }
       const percentiles = verdict.percentiles
       const [next, earned] = achieve(
         {
           ...model,
           board: {
             ...model.board,
-            challenge: { ...run, verdict, verification: 'verified', note: null },
+            session: sessionStep(model.board.session, {
+              _tag: 'ChallengeUpdated',
+              run: challengeStep(run, { _tag: 'Verified', verdict }),
+            }),
           },
         },
         percentiles
@@ -2132,14 +2156,17 @@ const handle = (model: Model, message: Message): Result =>
       return { ...fetched, commands: [...(fetched.commands ?? []), ...earned] }
     },
     ChallengeUnverified: ({ message, offline }) => {
-      const run = model.board.challenge
-      if (!run) return { model }
+      const run = boardChallenge(model.board)
+      if (run?._tag !== 'Result') return { model }
       return {
         model: {
           ...model,
           board: {
             ...model.board,
-            challenge: { ...run, verification: offline ? 'offline' : 'unverified', note: message },
+            session: sessionStep(model.board.session, {
+              _tag: 'ChallengeUpdated',
+              run: challengeStep(run, { _tag: 'Unverified', message, offline }),
+            }),
           },
         },
       }
@@ -2686,7 +2713,7 @@ const handle = (model: Model, message: Message): Result =>
       const node = model.board.game.nodes.find((entry) => entry.id === nodeId)
       if (!node) return { model }
       if (node.type === 'payments') return route(model, Message.Collected())
-      if (node.down === -1) return route(model, Message.ReplaceBought({ nodeId }))
+      if (node.life._tag === 'Stopped') return route(model, Message.ReplaceBought({ nodeId }))
       return route(model, Message.ResizeChosen({ nodeId, direction: 1 }))
     },
 
@@ -3219,7 +3246,10 @@ const handle = (model: Model, message: Message): Result =>
         note: (game) => {
           const migration = serviceOf(game).migration
           return migration
-            ? [`${percent(MIGRATION_STEPS[migration.step - 1] ?? 0)} of App Servers moved.`, 'ok']
+            ? [
+                `${percent(MIGRATION_STEPS[stepOf(migration) - 1] ?? 0)} of App Servers moved.`,
+                'ok',
+              ]
             : ['Migration done.', 'ok']
         },
       }),
@@ -3672,17 +3702,17 @@ const withBoard = (model: Model, result: Result): Result => {
 }
 
 /** Leaving the title for a board plays the monitor's connect sequence first, unless motion is reduced. */
-const connecting = (model: Model, result: Result): Result =>
+const connect = (model: Model, result: Result): Result =>
   onBoard(model.route) || !onBoard(result.model.route) || model.prefs.motion === 'reduce'
     ? result
     : {
-        model: { ...result.model, connecting: true },
+        model: { ...result.model, boot: bootStep(result.model.boot, { _tag: 'BoardOpened' }) },
         commands: [...(result.commands ?? []), ConnectBoard({})],
       }
 
 export const update = (model: Model, message: Message): Result => {
-  if (model.connecting && message._tag === 'KeyPressed') return { model }
-  const result = connecting(model, withUrl(model, message, route(model, message)))
+  if (model.boot._tag === 'Connecting' && message._tag === 'KeyPressed') return { model }
+  const result = connect(model, withUrl(model, message, route(model, message)))
   const moved = ROUNDS.has(message._tag) && result.model.board.game.stage !== model.board.game.stage
   return logged(
     model,

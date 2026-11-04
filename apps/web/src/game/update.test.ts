@@ -15,7 +15,8 @@ import { solveFlow } from '@quorum/simulation/solve'
 import { SHARED } from '@quorum/simulation/playbook'
 import { JOBS } from '@quorum/ui/board/jobs'
 import { Message } from './message.ts'
-import type { Model } from './model.ts'
+import { titleIsOpen } from './boot-machine.ts'
+import { boardChallenge, boardSandbox, type Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'
 import { AppRoute } from './route.ts'
 import { CHALLENGES } from '@quorum/simulation/challenges'
@@ -596,6 +597,20 @@ describe('Challenges', () => {
       Message.ChallengeFinished(),
     )
 
+  /** The scored run, or a failed expectation when there is none. */
+  const scoredRun = (model: Model) => {
+    const run = boardChallenge(model.board)
+    if (run?._tag !== 'Result') throw new Error('Expected a scored run.')
+    return run
+  }
+
+  /** The run in progress, or a failed expectation when there is none. */
+  const runningRun = (model: Model) => {
+    const run = boardChallenge(model.board)
+    if (run?._tag !== 'Running') throw new Error('Expected a run in progress.')
+    return run
+  }
+
   test('Run scores a provisional result, and the server confirms it', () => {
     const company = {
       ...initialModel(),
@@ -603,16 +618,22 @@ describe('Challenges', () => {
       board: { ...initialModel().board, game: preseedGame() },
     }
     const done = solved(company)
-    expect(done.board.challenge?.phase).toBe('result')
-    expect(done.board.challenge?.result?.passed).toBe(true)
-    expect(done.board.challenge?.verification).toBe('sending')
+    expect(boardChallenge(done.board)?._tag).toBe('Result')
+    expect(scoredRun(done).result.passed).toBe(true)
+    expect(scoredRun(done).verification).toBe('sending')
     expect(done.panel).toBe('challenge')
     const verified = send(done, Message.ChallengeVerified({ verdict }))
-    expect(verified.board.challenge?.verification).toBe('verified')
+    expect(scoredRun(verified).verification).toBe('verified')
     // Leaving brings the Company back untouched.
     const left = send(verified, Message.TitleOpened())
-    expect(left.board.challenge).toBeNull()
+    expect(boardChallenge(left.board)).toBeNull()
     expect(left.board.game).toBe(company.board.game)
+  })
+
+  test('a server reply that arrives after Rebuild leaves the build board alone', () => {
+    const building = send(initialModel(), Message.ChallengeStarted({ id: 'hello-world' }))
+    const late = send(building, Message.ChallengeVerified({ verdict }))
+    expect(boardChallenge(late.board)).toEqual(boardChallenge(building.board))
   })
 
   test('a first completion pays Legacy once, and perks do not reach the board', () => {
@@ -641,7 +662,7 @@ describe('Challenges', () => {
     )
     expect(send(built, Message.UndoChosen()).board.game.nodes).toEqual(built.board.game.nodes)
     const restarted = send(running, Message.RestartChosen({ nodeId: 'server' }))
-    expect(restarted.board.challenge?.replay?.actions).toEqual([
+    expect(runningRun(restarted).replay.actions).toEqual([
       { step: 0, action: { _tag: 'Restart', node: 'server' } },
     ])
   })
@@ -652,8 +673,8 @@ describe('Challenges', () => {
       done,
       Message.ChallengeUnverified({ message: 'Failed to fetch', offline: true }),
     )
-    expect(offline.board.challenge?.verification).toBe('offline')
-    expect(offline.board.challenge?.result?.passed).toBe(true)
+    expect(scoredRun(offline).verification).toBe('offline')
+    expect(scoredRun(offline).result.passed).toBe(true)
   })
 
   test('a locked Challenge URL lands on the Challenge list; a completed one opens', () => {
@@ -661,14 +682,14 @@ describe('Challenges', () => {
       initialModel(),
       Message.ChangedUrl({ url: at('/challenges/split-the-box') }),
     )
-    expect(locked.board.challenge).toBeNull()
+    expect(boardChallenge(locked.board)).toBeNull()
     expect(locked.route).toEqual(AppRoute.Menu({ menu: 'challenges' }))
     const completed = {
       ...initialModel(),
       founder: { ...initialModel().founder, completed: ['hello-world'] },
     }
     const opened = send(completed, Message.ChangedUrl({ url: at('/challenges/split-the-box') }))
-    expect(opened.board.challenge?.id).toBe('split-the-box')
+    expect(boardChallenge(opened.board)?.id).toBe('split-the-box')
   })
 
   test('every Challenge opens with its cards apart, and Run keeps them where they are', () => {
@@ -711,17 +732,17 @@ describe('M9: sound, achievements, glossary, keys', () => {
 
   test('a fresh load waits for one clock-in before the title, and a return skips it', () => {
     const shut = init(at('/')).model
-    expect(shut.gate).toBe('shut')
-    expect(update(shut, Message.KeyPressed({ key: 'Escape' })).model.gate).toBe('shut')
+    expect(shut.boot._tag).toBe('Shut')
+    expect(update(shut, Message.KeyPressed({ key: 'Escape' })).model.boot._tag).toBe('Shut')
     const clocking = update(shut, Message.KeyPressed({ key: 'a' }))
-    expect(clocking.model.gate).toBe('clocking')
+    expect(clocking.model.boot._tag).toBe('Clocking')
     expect(names(clocking.commands).map((command) => command.args['sound'])).toContain('clockin')
     const again = names(update(clocking.model, Message.ClockedIn()).commands)
     expect(again.filter((command) => command.name !== 'AppendLog')).toEqual([])
     const open = update(clocking.model, Message.TitleRevealed()).model
-    expect(open.gate).toBe('open')
+    expect(open.boot._tag).toBe('Ready')
     const lab = update(open, Message.NewCompanyStarted()).model
-    expect(update(lab, Message.TitleOpened()).model.gate).toBe('open')
+    expect(titleIsOpen(update(lab, Message.TitleOpened()).model.boot)).toBe(true)
   })
 
   test('an incident plays its sound, unless muted', () => {
@@ -766,7 +787,10 @@ describe('M9: sound, achievements, glossary, keys', () => {
       board: {
         ...inLab().board,
         game: { ...newGame(), sandbox: true },
-        sandbox: { id: null, progress: { objective: 0, held: 0, scripted: false } } as never,
+        session: {
+          _tag: 'Sandbox',
+          run: { id: null, progress: { objective: 0, held: 0, fired: false } },
+        },
       },
     }
     const after = update(sandbox, Message.Ticked()).model
@@ -826,12 +850,12 @@ describe('URL routing', () => {
 
     const back = update(opened.model, Message.ChangedUrl({ url: at('/') }))
     expect(back.model.route).toEqual(AppRoute.Title())
-    expect(back.model.board.sandbox).toBeNull()
+    expect(boardSandbox(back.model.board)).toBeNull()
     expect(back.model.board.game).toBe(company.board.game)
     expect(pushed(back.commands)).toEqual([])
 
     const forward = update(back.model, Message.ChangedUrl({ url: at('/sandbox/second-server') }))
-    expect(forward.model.board.sandbox?.id).toBe('second-server')
+    expect(boardSandbox(forward.model.board)?.id).toBe('second-server')
     expect(pushed(forward.commands)).toEqual([])
   })
 
@@ -851,10 +875,10 @@ describe('progressive disclosure', () => {
   /** Founding from the title plays the monitor's connect sequence; the board takes keys once it ends. */
   const founded = (): Model => {
     const connecting = send(initialModel(), Message.CompanyFounded())
-    expect(connecting.connecting).toBe(true)
+    expect(connecting.boot._tag).toBe('Connecting')
     expect(send(connecting, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
     const open = send(connecting, Message.Connected())
-    expect(open.connecting).toBe(false)
+    expect(open.boot._tag).toBe('Ready')
     return open
   }
 

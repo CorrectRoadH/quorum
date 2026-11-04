@@ -43,6 +43,7 @@ import { mixOf, payloadFactor, queryFactor } from './features.ts'
 import { asLogin, has, networkOf, payloadOf, profileOf, ramOf, vcpuOf } from './lookups.ts'
 import { fixed } from './team.ts'
 import type { Game, GameNode } from './state.ts'
+import { warmOf } from './life.ts'
 
 /* ==========================================================================
    The capacity model: what one Node can do with the work that reaches it.
@@ -220,10 +221,15 @@ export type ServerContext = Readonly<{
 export const speedOf = (game: Game, node: GameNode): number => {
   const runtime = RUNTIMES[node.runtime]
   const opcache =
-    runtime.language === 'php' && has(game, 'opcache') ? 1 + (OPCACHE_SPEED - 1) * node.warm : 1
+    runtime.language === 'php' && has(game, 'opcache')
+      ? 1 + (OPCACHE_SPEED - 1) * warmOf(node.life)
+      : 1
   const collector = runtime.language === 'java' ? COLLECTORS[node.collector].speed : 1
   return (
-    runtime.speed * collector * opcache * (runtime.warmFrom + (1 - runtime.warmFrom) * node.warm)
+    runtime.speed *
+    collector *
+    opcache *
+    (runtime.warmFrom + (1 - runtime.warmFrom) * warmOf(node.life))
   )
 }
 
@@ -601,7 +607,7 @@ export const databaseModel = (context: DatabaseContext): NodeModel & { disk: boo
     game.time - incident.startedAt < STORM_TRIGGER
   const cores = (throttled ? BURST_BASELINE * vcpu : vcpu) * (slowed ? STORM_SLOWDOWN : 1)
   const perRequest = Math.min(1, cores)
-  const warmth = 0.5 + 0.5 * node.warm
+  const warmth = 0.5 + 0.5 * warmOf(node.life)
   // A Slow query incident: every read scans the table until someone adds the index.
   const scan =
     game.incident?.kind === 'slow-query' ? game.users * ROWS_PER_USER * UNINDEXED_MS_PER_ROW : 0

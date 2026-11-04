@@ -2,6 +2,7 @@ import { Effect, Result, Schema } from 'effect'
 import type { ComponentId, IncidentId, RequestKind, ResearchId } from './catalog.ts'
 import { COMPONENTS, DESIGN_TUNING, KINDS, REQUEST_KINDS, TASKS } from './catalog.ts'
 import type { Ledger } from './ledger.ts'
+import { stopped, warmOf } from './life.ts'
 import { isDown } from './lookups.ts'
 import { migrationCost } from './migration.ts'
 import { serviceOf, stackOf, withService } from './team.ts'
@@ -1839,7 +1840,7 @@ const outage = (game: Game, type: ComponentId, count: number, region?: RegionId)
     ...game,
     nodes: game.nodes.map((node) =>
       hit.has(node.id)
-        ? { ...node, down: -1, downCause: 'failure' as const, downAt: game.time }
+        ? { ...node, life: stopped('failure', warmOf(node.life)), downAt: game.time }
         : node,
     ),
   }
@@ -1906,7 +1907,8 @@ export const advanceRun = (
   // that notices a dead App Server in 2 s costs 2 s of errors, not a whole Step.
   const fine =
     challenge.stepSeconds > 1 &&
-    (current.incident !== null || current.nodes.some((entry) => entry.down !== 0))
+    (current.incident !== null ||
+      current.nodes.some((entry) => entry.life._tag !== 'Running' && entry.life._tag !== 'Warming'))
   const parts = fine ? challenge.stepSeconds : 1
   const scored = time >= WARMUP - 1e-9
   let next = totals

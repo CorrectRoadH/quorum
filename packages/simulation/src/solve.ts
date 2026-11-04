@@ -109,6 +109,7 @@ import {
   userSharesOf,
   type UserRoute,
 } from './regions.ts'
+import { causeOf } from './life.ts'
 import { NO_INSIGHT, type Game, type GameLink, type GameNode } from './state.ts'
 import { payrollOf } from './team.ts'
 
@@ -695,7 +696,7 @@ const forward = (inputs: Inputs): Pass => {
 
 /** Whether a Node is down and the router in front of it has noticed. Planned restarts drain first. */
 const noticed = (graph: Graph, child: GameNode, after: number): boolean =>
-  isDown(child) && (child.downCause === 'restart' || graph.time - child.downAt >= after)
+  isDown(child) && (causeOf(child.life) === 'restart' || graph.time - child.downAt >= after)
 
 /** The kinds a Link carries: an L7 Load Balancer Link can carry only some. */
 const carries = (node: GameNode, edge: Edge, kind: Kind): boolean => {
@@ -912,7 +913,7 @@ const outcomesOf = (inputs: Inputs, pass: Pass) => {
     if (cached) return cached
     // A Node the kernel killed for memory fails as `oom` until it is back.
     const result = isDown(node)
-      ? failed(node.downCause === 'oom' ? 'oom' : 'down')
+      ? failed(causeOf(node.life) === 'oom' ? 'oom' : 'down')
       : RULES[node.type].outcome(
           {
             game,

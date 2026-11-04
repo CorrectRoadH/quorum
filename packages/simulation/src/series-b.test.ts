@@ -1,3 +1,4 @@
+import { leftOf, RUNNING } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import * as Actions from './actions.ts'
@@ -195,7 +196,9 @@ describe('AI prompts', () => {
       [['server', 'gpu']],
     )
     const hit = forceIncident(game, solve(game), 'gpu-shortage') as Game
-    expect(hit.nodes.find((entry) => entry.id === 'gpu')?.down ?? 0).toBeGreaterThan(0)
+    expect(leftOf(hit.nodes.find((entry) => entry.id === 'gpu')?.life ?? RUNNING)).toBeGreaterThan(
+      0,
+    )
     expect(Result.isFailure(Actions.setGpuType(hit, 'gpu', 'h100'))).toBe(true)
   })
 })
@@ -289,7 +292,7 @@ describe('the SLO is winnable', () => {
       ),
     }
     const hit = forceIncident(game, solve(game), 'instance', 'database') as Game
-    const down = hit.nodes.find((entry) => entry.id === 'database')?.down ?? 0
+    const down = leftOf(hit.nodes.find((entry) => entry.id === 'database')?.life ?? RUNNING)
     expect(down).toBeGreaterThan(0)
     expect(down).toBeLessThan(CALENDAR_DURATION[3] + 1)
   })

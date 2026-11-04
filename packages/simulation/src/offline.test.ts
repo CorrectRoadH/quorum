@@ -1,3 +1,4 @@
+import { stopped, warmOf } from './life.ts'
 import { describe, expect, test } from 'vitest'
 import { OFFLINE_CAP } from './catalog.ts'
 import { preseedGame } from './company.ts'
@@ -48,7 +49,7 @@ describe('offline progress', { timeout: 30_000 }, () => {
     const failing: Game = {
       ...company(),
       nodes: company().nodes.map((node) =>
-        node.type === 'database' ? { ...node, down: -1 } : node,
+        node.type === 'database' ? { ...node, life: stopped('failure', warmOf(node.life)) } : node,
       ),
     }
     expect(simulateAway(failing, 3_600).game.users).toBeLessThanOrEqual(failing.users)

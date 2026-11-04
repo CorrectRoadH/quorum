@@ -6,6 +6,7 @@ import { labScreen } from './screens.ts'
 import { titleScreen } from './title.ts'
 import type { Message } from './message.ts'
 import type { Model } from './model.ts'
+import { connecting } from './boot-machine.ts'
 import { onBoard } from './route.ts'
 
 /* ==========================================================================
@@ -15,7 +16,7 @@ import { onBoard } from './route.ts'
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
   // The title stays up while its monitor connects to the board.
-  const board = onBoard(model.route) && !model.connecting
+  const board = onBoard(model.route) && !connecting(model.boot)
   return {
     title: 'Quorum',
     body: localizeHtml(

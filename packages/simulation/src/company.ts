@@ -1,3 +1,4 @@
+import { RUNNING } from './life.ts'
 import {
   CREDIT_CAP,
   ERAS,
@@ -42,9 +43,7 @@ export const node = (
   sample: 1,
   sampleRate: 0.1,
   retention: 900,
-  down: 0,
-  downCause: 'restart',
-  warm: 1,
+  life: RUNNING,
   credits: 0,
   leak: 0,
   compress: false,

@@ -1,7 +1,7 @@
 import { canRaise } from '@quorum/simulation/actions'
 import { senderOf } from './mail.ts'
 import type { Message } from './message.ts'
-import { placingOf, type Model, type Tone } from './model.ts'
+import { placingOf, boardSandbox, type Model, type Tone } from './model.ts'
 import { onBoard } from './route.ts'
 import type { Sound } from './sound.ts'
 
@@ -126,7 +126,7 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
 /** The cue for what the clock brought: a passed Sandbox, a round to raise, a settled change. */
 const tickCue = (before: Model, after: Model): Cue | null => {
   if (after.panel === 'passed' && before.panel !== 'passed') return event('fanfare')
-  if (!before.board.sandbox && canRaise(after.board.game) && !canRaise(before.board.game))
+  if (!boardSandbox(before.board) && canRaise(after.board.game) && !canRaise(before.board.game))
     return event('ready')
   // Mail that wants attention: a provider, an alarm, or an advisory. It is new when this tick
   // added it or a line to it; the clock cannot tell, because a reset winds it back under old Mail.

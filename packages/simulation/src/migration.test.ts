@@ -1,3 +1,4 @@
+import { RUNNING } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import { connect, disconnect, place, type Action } from './actions.ts'
@@ -11,7 +12,7 @@ import {
 } from './catalog.ts'
 import { preseedGame } from './company.ts'
 import type { Ledger } from './ledger.ts'
-import { migrationCost } from './migration.ts'
+import { migrationCost, stepOf } from './migration.ts'
 import { GUIDED } from './sandbox.ts'
 import { solveFlow } from './solve.ts'
 import type { Game } from './state.ts'
@@ -106,7 +107,7 @@ describe('migrations', () => {
         // Once the moved server is back from its restart, it fails some of its requests.
         const up: Game = {
           ...game,
-          nodes: game.nodes.map((node) => ({ ...node, down: 0, warm: 1 })),
+          nodes: game.nodes.map((node) => ({ ...node, life: RUNNING })),
         }
         const errors = solveFlow(up).errors.crash
         expect(errors).toBeGreaterThan(0)
@@ -115,7 +116,8 @@ describe('migrations', () => {
     }
     expect(moved).toEqual([0, 1, 2, 4])
     // Fix bugs ends it.
-    expect(serviceOf(game).migration?.step).toBe(4)
+    const running = serviceOf(game).migration
+    expect(running && stepOf(running)).toBe(4)
     const fixedUp = work(game, 60 * 60)
     expect(fixedUp.backlog.some((item) => item.ref === 'fix-bugs')).toBe(false)
     expect(serviceOf(fixedUp).migration).toBeNull()

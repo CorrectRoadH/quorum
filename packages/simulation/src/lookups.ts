@@ -44,6 +44,7 @@ import {
   BACKUPS,
   SPREAD_REGIONS,
 } from './catalog.ts'
+import { restarting, type DownCause } from './life.ts'
 import type { Game, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -164,7 +165,8 @@ export const networkOf = (node: GameNode): number => (SIZES[node.size]?.gbps ?? 
 /** GB of RAM. */
 export const ramOf = (node: GameNode): number => vcpuOf(node) * FAMILIES[node.family].ram
 
-export const isDown = (node: GameNode): boolean => node.down !== 0
+export const isDown = (node: GameNode): boolean =>
+  node.life._tag === 'Restarting' || node.life._tag === 'Stopped'
 
 /** The Node links into a live Kubernetes Cluster: it runs as pods. */
 export const inCluster = (game: Game, node: GameNode): boolean =>
@@ -216,14 +218,8 @@ export const warmAfterRestart = (node: GameNode, warming = false): number =>
     ? Math.max(CACHE_ENGINES[node.engine].warmAfterRestart, warming ? WARMED : 0)
     : 0
 
-export const restarted = (
-  node: GameNode,
-  cause: GameNode['downCause'] = 'restart',
-  warming = false,
-) => ({
-  down: restartSeconds(node),
-  downCause: cause,
-  warm: warmAfterRestart(node, warming),
+export const restarted = (node: GameNode, cause: DownCause = 'restart', warming = false) => ({
+  life: restarting(restartSeconds(node), cause, warmAfterRestart(node, warming)),
 })
 
 export const languageOf = (node: GameNode) => RUNTIMES[node.runtime].language

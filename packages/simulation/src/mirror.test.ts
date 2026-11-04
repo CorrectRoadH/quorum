@@ -1,3 +1,4 @@
+import { leftOf } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import * as Actions from './actions.ts'
@@ -258,7 +259,8 @@ describe('GitOps', () => {
     }
     const downIn = (game: Game, region: string): number =>
       game.nodes.filter(
-        (entry) => entry.type === 'server' && entry.region === region && entry.down > 0,
+        (entry) =>
+          entry.type === 'server' && entry.region === region && entry.life._tag === 'Restarting',
       ).length
     const all = push('all')
     expect([downIn(all, 'na'), downIn(all, 'eu')]).toEqual([2, 2])
@@ -269,7 +271,9 @@ describe('GitOps', () => {
     expect(rolled.incident).toBeNull()
     expect(
       Math.max(
-        ...rolled.nodes.filter((entry) => entry.type === 'server').map((entry) => entry.down),
+        ...rolled.nodes
+          .filter((entry) => entry.type === 'server')
+          .map((entry) => leftOf(entry.life)),
       ),
     ).toBeLessThan(60)
   })

@@ -31,7 +31,12 @@ import { SIM_VERSION } from '@quorum/simulation/version'
 import { histogramQuery } from '@/game/challenge-query.ts'
 import { clock, money, ms } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
-import type { ChallengeRun, Model } from '@/game/model.ts'
+import {
+  boardChallenge,
+  type ChallengeResultRun,
+  type ChallengeRun,
+  type Model,
+} from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
@@ -198,7 +203,7 @@ const fixes = (model: Model, h: HtmlBuilder<Message>): Html => {
 const actions = (run: ChallengeRun, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('flex gap-1.5 px-1 pt-1')],
-    run.phase === 'build'
+    run._tag === 'Building'
       ? [
           button(
             { onClick: Message.ChallengeRan(), size: 'sm', className: 'flex-1' },
@@ -206,7 +211,7 @@ const actions = (run: ChallengeRun, h: HtmlBuilder<Message>): Html =>
             h,
           ),
         ]
-      : run.phase === 'running'
+      : run._tag === 'Running'
         ? [
             button(
               { onClick: Message.ChallengeFinished(), size: 'sm', className: 'flex-1' },
@@ -238,7 +243,7 @@ const actions = (run: ChallengeRun, h: HtmlBuilder<Message>): Html =>
   )
 
 export const challengeHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html => {
-  const run = model.board.challenge
+  const run = boardChallenge(model.board)
   const challenge = run ? challengeById(run.id) : undefined
   if (!run || !challenge) return h.empty
   return h.header(
@@ -269,7 +274,7 @@ export const challengeHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Messag
         ],
       ),
       figures(model, challenge, ledger, h),
-      run.phase === 'build' ? fixes(model, h) : h.empty,
+      run._tag === 'Building' ? fixes(model, h) : h.empty,
       actions(run, h),
     ],
   )
@@ -277,14 +282,14 @@ export const challengeHud = (model: Model, ledger: Ledger, h: HtmlBuilder<Messag
 
 /** The brief and targets in the goal slot; while running, how far the run is. */
 export const challengeBar = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const run = model.board.challenge
+  const run = boardChallenge(model.board)
   const challenge = run ? challengeById(run.id) : undefined
   if (!run || !challenge) return h.empty
-  const running = run.phase !== 'build'
+  const running = run._tag !== 'Building'
   const elapsed = run.totals.step * challenge.stepSeconds
   return h.div(
     [
-      h.Key(`challenge-${run.phase}`),
+      h.Key(`challenge-${run._tag}`),
       h.Class(
         'enter-down flex w-[420px] flex-col gap-2 compact:w-auto rounded-xl bg-surface px-3 py-2.5 text-[12.5px] shadow-card',
       ),
@@ -335,7 +340,7 @@ const strip = (histogram: Histogram, value: number, h: HtmlBuilder<Message>): Ht
 
 const axisRow = (
   axis: ScoreAxis,
-  run: ChallengeRun,
+  run: ChallengeResultRun,
   data: ChallengeHistograms | null,
   h: HtmlBuilder<Message>,
 ): Html => {
@@ -362,7 +367,7 @@ const axisRow = (
   )
 }
 
-const VERIFICATION: Record<ChallengeRun['verification'], string> = {
+const VERIFICATION: Record<ChallengeResultRun['verification'], string> = {
   local: 'Provisional',
   sending: 'Provisional · checking',
   verified: 'Verified',
@@ -371,9 +376,9 @@ const VERIFICATION: Record<ChallengeRun['verification'], string> = {
 }
 
 export const challengePanel = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const run = model.board.challenge
+  const run = boardChallenge(model.board)
   const challenge = run ? challengeById(run.id) : undefined
-  if (!run?.result || !challenge) return h.empty
+  if (run?._tag !== 'Result' || !challenge) return h.empty
   const result = run.result
   const passed = run.verdict?.passed ?? result.passed
   const histograms = AsyncData.matchData(

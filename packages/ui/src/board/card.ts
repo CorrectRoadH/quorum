@@ -496,7 +496,7 @@ export const footerOf = (game: Game, node: GameNode): Footer | null => {
       ? { glyph: 'collect', text: `Collect  ${money(game.pending)}`, enabled: true, tone: 'ok' }
       : { glyph: 'empty', text: 'Drawer empty', enabled: false, tone: 'muted' }
   }
-  if (node.down === -1) {
+  if (node.life._tag === 'Stopped') {
     const price = replacePrice(game, node)
     return {
       glyph: 'replace',

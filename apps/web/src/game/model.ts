@@ -4,15 +4,13 @@ import { Locale } from '../i18n/index.ts'
 import { Effect, Schema } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
 import { BUILD_GROUPS, type BuildGroup } from '@quorum/simulation/catalog'
-import { Progress, SANDBOX_IDS } from '@quorum/simulation/sandbox'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { solveFlow } from '@quorum/simulation/solve'
 import { HistoryRow, exitOffers } from '@quorum/simulation/exit'
 import { Founder } from '@quorum/simulation/founder'
 import { Playbook } from '@quorum/simulation/playbook'
-import { ChallengeResult, RunTotals } from '@quorum/simulation/challenges'
-import { Replay } from '@quorum/simulation/replay'
-import { ChallengeVerdict } from '@quorum/rpc'
+import { Boot } from './boot-machine.ts'
+import { SandboxId, SandboxRun, Session } from './session-machine.ts'
 import { histogramQuery } from './challenge-query.ts'
 import { History } from './history.ts'
 import { NodeSample } from './node-metrics.ts'
@@ -24,8 +22,6 @@ import { ComponentId, Game, GameLink, GameNode, ResearchId, Region } from '@quor
    is the player's view of it. The Ledger is never stored: views derive it
    from the Game with `ledgerOf`.
    ========================================================================== */
-
-export const Gate = Schema.Literals(['shut', 'clocking', 'open'])
 
 export const Panel = Schema.Literals([
   'none',
@@ -60,14 +56,7 @@ export const BuildGroupKey = Schema.Literals(
 export const Menu = Schema.Literals(['main', ...MENU_PAGES])
 export type Menu = typeof Menu.Type
 
-export const SandboxId = Schema.Literals(SANDBOX_IDS)
-
-/** The Sandbox on the board: a guided one and its progress, or the free one when `id` is null. */
-export const SandboxRun = Schema.Struct({
-  id: Schema.NullOr(SandboxId),
-  progress: Progress,
-})
-export type SandboxRun = typeof SandboxRun.Type
+export { SandboxId, SandboxRun } from './session-machine.ts'
 
 /** What the Sandbox keeps in localStorage, apart from the Company save. */
 export const SandboxStore = Schema.Struct({
@@ -99,35 +88,13 @@ export const Exited = Schema.Struct({
 })
 export type Exited = typeof Exited.Type
 
-/** Where a Challenge result stands with the server: provisional until it confirms. */
-export const Verification = Schema.Literals([
-  'local',
-  'sending',
-  'verified',
-  'unverified',
-  'offline',
-])
-export type Verification = typeof Verification.Type
-
-/**
- * The open Challenge. The player builds on a live preview, then Run replays
- * the Design from t = 0 on the Challenge's seed; only that run is scored.
- */
-export const ChallengeRun = Schema.Struct({
-  id: Schema.String,
-  phase: Schema.Literals(['build', 'running', 'result']),
-  /** The build board at Run, restored by Rebuild. */
-  board: Schema.NullOr(Game),
-  /** The run's replay: the Design at Run, and the actions logged since. */
-  replay: Schema.NullOr(Replay),
-  totals: RunTotals,
-  result: Schema.NullOr(ChallengeResult),
-  verdict: Schema.NullOr(ChallengeVerdict),
-  verification: Verification,
-  /** Why the server did not confirm, when it did not. */
-  note: Schema.NullOr(Schema.String),
-})
-export type ChallengeRun = typeof ChallengeRun.Type
+/** The open Challenge: a Build, a Run, or a scored Result. */
+import { ChallengeRun } from './challenge-machine.ts'
+export {
+  ChallengeRun,
+  type ChallengeResultRun,
+  type ChallengeRunningRun,
+} from './challenge-machine.ts'
 
 export const Tone = Schema.Literals(['plain', 'ok', 'warn', 'danger', 'primary'])
 export type Tone = typeof Tone.Type
@@ -362,10 +329,8 @@ export type Clock = typeof Clock.Type
 export const Board = Schema.Struct({
   /** The Company, or the Sandbox or Challenge while one is open. */
   game: Game,
-  /** The open Sandbox, or null. */
-  sandbox: Schema.NullOr(SandboxRun),
-  /** The open Challenge, or null. */
-  challenge: Schema.NullOr(ChallengeRun),
+  /** What the board plays. Exactly one of the three, never two at once. */
+  session: Session,
   /** What the Company earned when it exited, until the player leaves it. */
   exited: Schema.NullOr(Exited),
   /** What happened while the player was away. */
@@ -413,12 +378,20 @@ export const Board = Schema.Struct({
 })
 export type Board = typeof Board.Type
 
+/** The open Sandbox, or null when the board plays the Company or a Challenge. */
+export const boardSandbox = (board: Board): SandboxRun | null =>
+  board.session._tag === 'Sandbox' ? board.session.run : null
+
+/** The open Challenge, or null when the board plays the Company or a Sandbox. */
+export const boardChallenge = (board: Board): ChallengeRun | null =>
+  board.session._tag === 'Challenge' ? board.session.run : null
+
 /** The session: what lasts while the page is open, and the board being played. */
 export const Model = Schema.Struct({
   /** The screen, parsed from the URL. */
   route: AppRoute,
-  /** The clock-in splash before the title: shut until the first click or key press, which lets the title play sound. */
-  gate: Gate,
+  /** Where the app is in its boot sequence: the clock-in splash, the title, or a board opening. */
+  boot: Boot,
   panel: Panel,
   toast: Schema.NullOr(Toast),
   toastSeq: Schema.Finite,
@@ -427,8 +400,6 @@ export const Model = Schema.Struct({
   company: Schema.NullOr(Board),
   /** A saved company exists, so the title screen offers Continue. */
   saved: Schema.Boolean,
-  /** The board route is set, but the title screen's monitor plays its connect sequence first. */
-  connecting: Schema.Boolean,
   /** The player across Companies, kept apart from the Company save. */
   founder: Founder,
   /** Guided Sandboxes the player has passed. */
@@ -455,8 +426,7 @@ export const ledgerOf = (model: Model): Ledger => ({
 })
 
 /** The board is not the Company: a Sandbox or a Challenge is open. */
-export const offCompany = (model: Model): boolean =>
-  model.board.sandbox !== null || model.board.challenge !== null
+export const offCompany = (model: Model): boolean => model.board.session._tag !== 'Company'
 
 /** The most Legacy an Exit pays now, or null while no Exit is on the table. */
 export const exitLegacy = (model: Model): number | null => {
@@ -471,7 +441,7 @@ export const inMenu = (model: Model): boolean =>
 
 /** The clock holds still: the player paused it, or the game menu is open. */
 export const halted = (model: Model): boolean =>
-  model.board.clock.paused || inMenu(model) || model.connecting
+  model.board.clock.paused || inMenu(model) || model.boot._tag === 'Connecting'
 
 /** The Playbook that follows the pointer, if any. */
 export const stampedPlaybook = (model: Model): Playbook | null =>

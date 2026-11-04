@@ -1,3 +1,4 @@
+import { leftOf, warming, warmOf } from './life.ts'
 import { Result } from 'effect'
 import { describe, expect, test } from 'vitest'
 import * as Actions from './actions.ts'
@@ -107,14 +108,14 @@ describe('the Series A Era', () => {
 describe('runtimes', () => {
   test('a cold JVM runs at 30% and is warm once 30 seconds pass', () => {
     const warm = solve(seriesA(4_000, 'tomcat')).nodes.server?.capacity ?? 0
-    const cold = seriesA(4_000, 'tomcat', [], [], { warm: 0 })
+    const cold = seriesA(4_000, 'tomcat', [], [], { life: warming(0) })
     // A cold JVM's CPU runs at 30%; its thread pool still bounds it, so the loss is less than 70%.
     expect(solve(cold).nodes.server?.capacity ?? 0).toBeLessThan(warm * 0.7)
     const warmed = settle(cold, 31)
-    expect(serverOf(warmed).warm).toBe(1)
+    expect(warmOf(serverOf(warmed).life)).toBe(1)
     expect(solve(warmed).nodes.server?.capacity ?? 0).toBeCloseTo(warm, 6)
     // Go has no JIT: it starts at full speed.
-    const go = seriesA(4_000, 'go', [], [], { warm: 0 })
+    const go = seriesA(4_000, 'go', [], [], { life: warming(0) })
     expect(solve(go).nodes.server?.capacity ?? 0).toBeCloseTo(
       solve(seriesA(4_000, 'go')).nodes.server?.capacity ?? 0,
       6,
@@ -184,7 +185,10 @@ describe('zones', () => {
     const hit = forceIncident(wired, solve(wired), 'zone')
     const zone = hit?.incident?.zone
     const nodes = hit?.nodes ?? []
-    const down = (id: string): number => nodes.find((entry) => entry.id === id)?.down ?? 0
+    const down = (id: string): number => {
+      const node = nodes.find((entry) => entry.id === id)
+      return node ? leftOf(node.life) : 0
+    }
     // Each App Server goes down with its own zone, and only then.
     expect(down('server') > 0).toBe(zone === 'a')
     expect(down('server2') > 0).toBe(zone === 'b')
@@ -251,7 +255,8 @@ describe('the Kubernetes Cluster', () => {
     const downAfter = (game: Game) => {
       const hit = forceIncident(game, solve(game), 'instance', 'server')
       if (!hit) throw new Error('no instance failure')
-      return settle(hit, POD_RESCHEDULE + 1).nodes.find((entry) => entry.id === 'server')?.down
+      const node = settle(hit, POD_RESCHEDULE + 1).nodes.find((entry) => entry.id === 'server')
+      return node ? leftOf(node.life) : 0
     }
     expect(downAfter(seriesA(4_000, 'go'))).toBe(-1)
     expect(downAfter(podded(seriesA(4_000, 'go')))).toBe(0)
