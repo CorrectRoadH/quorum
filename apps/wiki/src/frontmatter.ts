@@ -4,7 +4,7 @@ import { Schema } from 'effect'
    build rejects an unknown field. An entity's prose file (content/components/lb.md) has none:
    its title and facts come from the catalog. */
 
-export const SECTIONS = ['start', 'guides', 'mechanics', 'reference', 'about'] as const
+export const SECTIONS = ['tutorials', 'guides', 'explanation', 'reference', 'about'] as const
 export type Section = (typeof SECTIONS)[number]
 
 export const Frontmatter = Schema.Struct({

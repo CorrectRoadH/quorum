@@ -6,6 +6,7 @@ import {
   COPY_PRICE_GROWTH,
   CVE_DEFS,
   KINDS,
+  REQUEST_KINDS,
   RESEARCH,
   SELL_REFUND,
   SIZES,
@@ -47,7 +48,11 @@ export const componentBadge = (id: ComponentId, size: string, h: H): Html =>
   groupBadge(COMPONENTS[id].group, COMPONENT_ICONS[id], size, h)
 
 const kinds = (list: ReadonlyArray<keyof typeof KINDS>): string =>
-  list.length ? list.map((kind) => KINDS[kind].label).join(', ') : '—'
+  list.length === REQUEST_KINDS.length
+    ? 'Every kind'
+    : list.length
+      ? list.map((kind) => KINDS[kind].label).join(', ')
+      : '—'
 
 const facts = (def: ComponentDef, h: H): ReadonlyArray<Fact> => [
   { name: 'Code', value: def.code },

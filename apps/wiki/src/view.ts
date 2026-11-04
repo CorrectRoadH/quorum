@@ -7,7 +7,9 @@ import { icon } from '@quorum/ui/primitives/icon'
 import { homeView } from './home.ts'
 import { ALL_ERAS, Message, type Model } from './main.ts'
 import type { Page } from './page.ts'
-import { PAGES, SECTION_LABELS, SECTION_ORDER, childrenOf, navOf, pageAt } from './pages.ts'
+import { PAGES, SECTION_ORDER, childrenOf, navOf, pageAt } from './pages.ts'
+import { QUADRANTS, quadrantBadge, quadrantColor } from './quadrant.ts'
+import { eraPath } from './reference/shared.ts'
 import { indexOf, search } from './search.ts'
 import { GAME_ORIGIN, VERSION, WIKI_ORIGIN, editUrl, sourceUrl } from './site.ts'
 
@@ -112,7 +114,7 @@ const searchBox = (model: Model, h: H): Html => {
                             [h.Class('text-[13.5px] font-medium text-foreground')],
                             [page.title],
                           ),
-                          h.span([h.Class(EYEBROW)], [SECTION_LABELS[page.section]]),
+                          h.span([h.Class(EYEBROW)], [QUADRANTS[page.section].label]),
                         ],
                       ),
                       h.p(
@@ -266,7 +268,13 @@ const sidebar = (model: Model, h: H): Html => {
           h.div(
             [h.Key(section), h.Class('mt-4')],
             [
-              h.div([h.Class(cn(EYEBROW, 'mb-1 px-2.5'))], [SECTION_LABELS[section]]),
+              h.div(
+                [h.Class('mb-1.5 flex items-center gap-2 px-2.5')],
+                [
+                  quadrantBadge(section, 'size-[18px]', h),
+                  h.span([h.Class(EYEBROW)], [QUADRANTS[section].label]),
+                ],
+              ),
               ...pages.flatMap((hub) => [
                 navLink(hub, model.path, h),
                 ...(hub.path === open
@@ -409,35 +417,70 @@ const spoiler = (page: Page, model: Model, body: Html, h: H): Html => {
 
 const article = (page: Page, model: Model, h: H): Html => {
   const parent = page.parent ? pageAt(page.parent) : null
+  const color = quadrantColor(page.section)
   return h.article(
-    [h.Class(cn(PANEL, 'min-w-0 px-5 py-7 sm:px-10 sm:py-9'))],
+    [h.Class(cn(PANEL, 'min-w-0 overflow-clip')), h.DataAttribute('kind', page.section)],
     [
-      h.div(
-        [h.Class(cn(EYEBROW, 'flex flex-wrap items-center gap-1.5'))],
+      h.header(
         [
-          h.span([], [SECTION_LABELS[page.section]]),
-          ...(parent
-            ? [
-                h.span([h.AriaHidden(true)], ['/']),
-                h.a([h.Href(parent.path), h.Class('hover:text-foreground')], [parent.title]),
-              ]
-            : []),
-          ...(page.era !== null
-            ? [h.span([h.AriaHidden(true)], ['·']), h.span([], [ERAS[page.era]?.name ?? ''])]
-            : []),
+          h.Class('relative border-b border-hairline px-5 pt-7 pb-7 sm:px-10 sm:pt-9'),
+          h.Style({
+            background: `linear-gradient(160deg, color-mix(in oklch, ${color} 20%, var(--card)) 0%, var(--card) 70%)`,
+          }),
         ],
-      ),
-      h.h1([h.Class('mt-2 text-[30px] font-semibold tracking-tight text-balance')], [page.title]),
-      h.p(
         [
-          h.Class(
-            'mt-2 max-w-[62ch] text-[15.5px] leading-relaxed text-muted-foreground text-pretty',
+          h.div(
+            [h.Class('flex flex-wrap items-center gap-2.5')],
+            [
+              quadrantBadge(page.section, 'size-7', h),
+              h.span([h.Class(cn(EYEBROW, 'text-foreground/70'))], [QUADRANTS[page.section].label]),
+              ...(parent
+                ? [
+                    h.span([h.AriaHidden(true), h.Class('text-muted-foreground/50')], ['/']),
+                    h.a(
+                      [h.Href(parent.path), h.Class(cn(EYEBROW, 'hover:text-foreground'))],
+                      [parent.title],
+                    ),
+                  ]
+                : []),
+              ...(page.era !== null
+                ? [
+                    h.a(
+                      [
+                        h.Href(eraPath(page.era)),
+                        h.Class(
+                          cn(
+                            FIGURE,
+                            'ml-auto rounded-full bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground shadow-[inset_0_0_0_1px_var(--hairline)] hover:text-foreground',
+                          ),
+                        ),
+                      ],
+                      [`Era ${page.era} · ${ERAS[page.era]?.name ?? ''}`],
+                    ),
+                  ]
+                : []),
+            ],
+          ),
+          h.h1(
+            [
+              h.Class(
+                'mt-4 text-[34px] leading-[1.08] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]',
+              ),
+            ],
+            [page.title],
+          ),
+          h.p(
+            [
+              h.Class(
+                'mt-3 max-w-[62ch] text-[16px] leading-relaxed text-pretty text-muted-foreground',
+              ),
+            ],
+            [page.summary],
           ),
         ],
-        [page.summary],
       ),
       h.div(
-        [h.Class('mt-8')],
+        [h.Class('px-5 py-8 sm:px-10')],
         [
           spoiler(
             page,
@@ -453,9 +496,9 @@ const article = (page: Page, model: Model, h: H): Html => {
               : page.body(model, h),
             h,
           ),
+          footer(page, h),
         ],
       ),
-      footer(page, h),
     ],
   )
 }

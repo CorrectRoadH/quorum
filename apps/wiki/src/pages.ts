@@ -14,19 +14,11 @@ const byPath = new Map(PAGES.map((page) => [page.path, page]))
 
 export const pageAt = (path: string): Page | null => byPath.get(path) ?? null
 
-/** The top level of the navigation, in the order a new player needs it (Diátaxis). */
-export const SECTION_LABELS: Readonly<Record<Section, string>> = {
-  start: 'Start here',
-  guides: 'Guides',
-  reference: 'Reference',
-  mechanics: 'Mechanics',
-  about: 'About',
-}
-
+/** The top level of the navigation: the four Diátaxis kinds, in the order a new player needs them. */
 export const SECTION_ORDER: ReadonlyArray<Section> = [
-  'start',
+  'tutorials',
   'guides',
-  'mechanics',
+  'explanation',
   'reference',
   'about',
 ]

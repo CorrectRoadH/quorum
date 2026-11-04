@@ -1,7 +1,7 @@
 ---
 title: Quorum Wiki
 summary: The player's guide to Quorum. Learn what each Component does, why your Design breaks, and how to fix it, with live views from the game.
-section: start
+section: tutorials
 order: 0
 ---
 

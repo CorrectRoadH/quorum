@@ -123,3 +123,31 @@
 input[type='search']::-webkit-search-cancel-button {
   appearance: none;
 }
+
+/* A request riding a wire in the home page's Design. */
+.packet {
+  offset-rotate: 0deg;
+  animation: packet 2.4s linear infinite both;
+}
+@keyframes packet {
+  from {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  to {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .packet {
+    animation: none;
+    opacity: 0;
+  }
+}
