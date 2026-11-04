@@ -2,6 +2,7 @@ import { Runtime } from 'foldkit'
 import { Message, Model, init, update } from './main.ts'
 import { subscriptions } from './subscriptions.ts'
 import { view } from './view.ts'
+import { startAnalytics } from './platform/analytics.ts'
 import './styles.css'
 
 const application = Runtime.makeApplication({
@@ -20,3 +21,4 @@ const application = Runtime.makeApplication({
 
 // Every page was rendered at build time; the client adopts it (ADR 0009).
 Runtime.hydrate(application)
+startAnalytics()

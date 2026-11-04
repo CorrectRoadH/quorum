@@ -8,7 +8,7 @@ export {
   Histogram,
 } from './challenges.ts'
 export { ApiError } from './errors.ts'
-export { API_PREFIX, RPC_PATH } from './paths.ts'
+export { API_PREFIX, INGEST_PREFIX, RPC_PATH } from './paths.ts'
 export { SystemRpc, SystemStatus } from './system.ts'
 
 import { ChallengeRpc } from './challenges.ts'

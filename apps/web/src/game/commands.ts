@@ -16,6 +16,7 @@ import { History } from './history.ts'
 import { play, setMuted, SOUND_NAMES } from './sound.ts'
 import { setAgentAccess } from './agent-relay.ts'
 import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
+import { forward, setAnalyticsEnabled } from '../platform/analytics.ts'
 import { ChallengeSubmission } from '@quorum/rpc'
 import { ApiRpc } from '@/platform/rpc.ts'
 
@@ -342,14 +343,21 @@ export const WritePrefs = Command.define('WritePrefs', {
     }),
 })
 
-/** Applies the settings: mute for every sound, and reduced motion as `data-motion` on the root. */
+/** Applies the settings: mute for every sound, reduced motion on the root, and analytics consent. */
 export const ApplySettings = Command.define('ApplySettings', {
-  args: { muted: Schema.Boolean, motion: Motion, locale: Locale, agentAccess: Schema.Boolean },
+  args: {
+    muted: Schema.Boolean,
+    motion: Motion,
+    locale: Locale,
+    agentAccess: Schema.Boolean,
+    analytics: Schema.Boolean,
+  },
   messages: [Message.Synced],
-  execute: ({ muted, motion, locale, agentAccess }) =>
+  execute: ({ muted, motion, locale, agentAccess, analytics }) =>
     Effect.sync(() => {
       setMuted(muted)
       setAgentAccess(agentAccess)
+      setAnalyticsEnabled(analytics)
       document.documentElement.lang = locale
       if (motion === 'reduce') document.documentElement.dataset.motion = 'reduce'
       else delete document.documentElement.dataset.motion
@@ -410,7 +418,11 @@ export const ConnectBoard = Command.define('ConnectBoard', {
 export const AppendLog = Command.define('AppendLog', {
   args: { entries: Schema.Array(LogEntry) },
   messages: [Message.Synced],
-  execute: ({ entries }) => Effect.sync(() => appendLog(entries)).pipe(Effect.as(Message.Synced())),
+  execute: ({ entries }) =>
+    Effect.sync(() => {
+      appendLog(entries)
+      forward(entries)
+    }).pipe(Effect.as(Message.Synced())),
 })
 
 export const ExportLog = Command.define('ExportLog', {

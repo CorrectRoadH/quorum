@@ -1,5 +1,7 @@
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
+import { UrlRequest } from 'foldkit/navigation'
+import { PRIVACY_URL } from '@/platform/analytics.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   ArrowUpRight,
@@ -750,6 +752,20 @@ const settingsRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html
       'Agent access',
       model.prefs.agentAccess,
       Message.PrefsChanged({ message: PrefsMessage.AgentAccessToggled() }),
+    ),
+    toggle(
+      'analytics',
+      'Share anonymous usage data',
+      model.prefs.analytics,
+      Message.PrefsChanged({ message: PrefsMessage.AnalyticsToggled() }),
+    ),
+    row(
+      {
+        key: 'privacy',
+        label: 'Privacy policy',
+        message: Message.ClickedLink({ request: UrlRequest.External({ href: PRIVACY_URL }) }),
+      },
+      h,
     ),
     row(
       {

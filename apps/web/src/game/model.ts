@@ -219,6 +219,8 @@ export const Prefs = Schema.Struct({
   blurPause: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
   motion: Motion.pipe(Schema.withDecodingDefaultKey(Effect.succeed('system' as const))),
   agentAccess: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Share anonymous usage data. Off stops capture and persists the choice. */
+  analytics: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
 })
 export type Prefs = typeof Prefs.Type
 

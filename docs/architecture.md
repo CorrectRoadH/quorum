@@ -35,6 +35,17 @@ Observability is configured on the host resources in `alchemy.run.ts`, never in 
 
 To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` from Alchemy. That layer is a binding, so it needs the inline Worker form: the entry module must default-export `Cloudflare.Worker(...)` with an init effect. This template keeps `src/worker.ts` as a plain module, so Effect spans are not mirrored today. If you adopt the layer, omit `observability.traces` on that Worker: the binding contributes it, and an explicit value wins.
 
+## Product analytics
+
+The browser sends anonymous PostHog events through the website Worker at `/q` (`INGEST_PREFIX` in `packages/rpc/src/paths.ts`). The Worker forwards them to PostHog Cloud US; the browser never calls PostHog directly, so ad blockers do not match the hostname.
+
+- `apps/web/src/platform/analytics.ts` owns the SDK, the session, and the heartbeat.
+- `apps/web/src/game/analytics-bridge.ts` maps the playtest log to the nine events the plan keeps.
+- `apps/web/src/game/analytics-budget.ts` caps a session at 80 events and a device at 600 a month. Funnel events bypass the session cap, never the month cap.
+- `apps/wiki/src/platform/analytics.ts` sends `$pageview` for the wiki in the same project.
+- `VITE_POSTHOG_KEY` is required at build time for both apps. Without it, the SDK never loads and nothing is sent.
+- Settings has **Share anonymous usage data**. The policy is `apps/wiki/content/about/privacy.md`.
+
 ## Code ownership
 
 - `apps/web/src/app` owns the Foldkit application. Remote data belongs in Foldkit Query submodels. Update handlers decide when to load or revalidate them. A flow with exclusive phases is a `foldkit/experimental/machine` definition beside its tagged state union, not a set of nullable fields ([ADR 0011](adr/0011-state-machines-are-for-flows.md)); [State machines](state-machines.md) lists every machine and the properties it holds.

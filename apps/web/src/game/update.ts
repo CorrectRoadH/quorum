@@ -257,7 +257,7 @@ import { stepOf } from '@quorum/simulation/migration'
 import { challengeStep } from './challenge-machine.ts'
 import { AppRoute, menuFor, onBoard, routeOfMenu, urlOf, urlToAppRoute } from './route.ts'
 import type { LogEntry } from './playlog.ts'
-import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
+import { contextOf, diffOf, eraReachedOf, line, sampleOf } from './telemetry.ts'
 import { nearestNode, type Direction } from './viewport.ts'
 import { openRegions, regionApdexOf, regionView } from '@quorum/simulation/regions'
 import { churnOf } from '@quorum/simulation/churn'
@@ -353,6 +353,7 @@ export const initialModel = (): Model =>
       blurPause: true,
       motion: 'system',
       agentAccess: false,
+      analytics: true,
     },
     glossary: { focus: null, returnTo: 'none', query: '', category: null },
     languagePicker: Listbox.init({ id: 'interface-language' }),
@@ -727,6 +728,7 @@ const savePrefs = (model: Model): Result => ({
       motion: model.prefs.motion,
       locale: model.prefs.locale,
       agentAccess: model.prefs.agentAccess,
+      analytics: model.prefs.analytics,
     }),
   ],
 })
@@ -1004,6 +1006,20 @@ const milestones = (
     else if (events.some((event) => event._tag === 'IncidentStarted'))
       commands.push(PlaySound({ sound: 'incident', pitch: 1, spatial: false }))
   }
+  const time = after.board.game.time
+  if (after.board.game.stage > before.board.game.stage)
+    commands.push(AppendLog({ entries: [line(time, 'EraReached', eraReachedOf(after, ledger))] }))
+  const researched = after.board.game.researched.filter(
+    (id) => !before.board.game.researched.includes(id),
+  )
+  if (researched.length > 0)
+    commands.push(
+      AppendLog({
+        entries: [
+          line(time, 'ResearchCompleted', { ids: researched, era: after.board.game.stage }),
+        ],
+      }),
+    )
   return next === after && commands.length === (result.commands ?? []).length
     ? result
     : { model: next, commands }
@@ -1504,6 +1520,9 @@ const startCompany = (
           line(game.time, 'CompanyStarted', {
             stage: game.stage,
             seed: game.seed,
+            venture: game.founding.venture,
+            mutators: game.founding.mutators,
+            first: model.saves.companies.length === 0,
             viewport:
               typeof window === 'undefined' ? null : [window.innerWidth, window.innerHeight],
             agent: typeof navigator === 'undefined' ? null : navigator.userAgent,
@@ -2276,6 +2295,7 @@ const handle = (model: Model, message: Message): Result =>
               motion: prefs.motion,
               locale: prefs.locale,
               agentAccess: prefs.agentAccess,
+              analytics: prefs.analytics,
             }),
           ],
         }),
@@ -3572,6 +3592,7 @@ const handle = (model: Model, message: Message): Result =>
                       exit: EXITS[exit].name,
                       payout: result.row.payout,
                       legacy: result.legacy,
+                      era: model.board.game.stage,
                     }),
                   ],
                 }),

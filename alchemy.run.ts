@@ -2,9 +2,16 @@ import * as Alchemy from 'alchemy'
 import * as Cloudflare from '@alchemy.run/cloudflare'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import { API_PREFIX } from '@quorum/rpc'
+import { API_PREFIX, INGEST_PREFIX } from '@quorum/rpc'
 
 const compatibility = { date: '2026-10-08' }
+
+/**
+ * The PostHog project token. It is a build-time Vite variable, not a Worker
+ * binding: the app inlines it at build time and the Worker only proxies the
+ * requests. The deploy environment must set it.
+ */
+const posthogKey = process.env.VITE_POSTHOG_KEY ?? ''
 
 /**
  * The public hostnames of the `prod` stage. The old hostname 301s to the new one, path and query
@@ -38,6 +45,14 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state },
   Effect.gen(function* () {
     const stage = yield* Alchemy.Stack.use((stack) => Effect.succeed(stack.stage))
+    // A prod deploy without the token would ship a site that silently collects
+    // nothing. Fail here instead.
+    if (stage === 'prod' && posthogKey === '')
+      return yield* Effect.die(
+        new Error(
+          'VITE_POSTHOG_KEY is required for the prod stage. Set it in the deploy environment.',
+        ),
+      )
     // Verified Challenge results: per-axis bests and histograms (docs/architecture.md).
     const Results = Cloudflare.D1.Database('Results', { migrations: './apps/backend/migrations' })
     const ApiWorker = Cloudflare.Worker('Api', {
@@ -53,7 +68,10 @@ export default Alchemy.Stack(
       rootDir: stage === 'reference' ? 'examples/reference' : 'apps/web',
       main: 'src/worker.ts',
       env: { API: ApiWorker },
-      assets: { runWorkerFirst: [`${API_PREFIX}/*`], notFoundHandling: 'single-page-application' },
+      assets: {
+        runWorkerFirst: [`${API_PREFIX}/*`, `${INGEST_PREFIX}/*`],
+        notFoundHandling: 'single-page-application',
+      },
       ...(stage === 'prod' && { domain: PRODUCTION_DOMAIN }),
       compatibility,
       observability,

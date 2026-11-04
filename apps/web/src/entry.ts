@@ -2,6 +2,7 @@ import { Runtime } from 'foldkit'
 import { init, Message, Model, subscriptions, update, view } from './app/main.ts'
 import { startMotion } from './game/motion.ts'
 import { publish } from './game/agent-tools.ts'
+import { observe } from './platform/analytics.ts'
 import { ApiRpc } from './platform/rpc.ts'
 import './styles.css'
 
@@ -11,6 +12,7 @@ const application = Runtime.makeApplication({
   update: (model, message) => {
     const result = update(model, message)
     publish(result.model)
+    observe(result.model)
     return result
   },
   view,

@@ -1,9 +1,9 @@
 import { COMPONENTS } from '@quorum/simulation/catalog'
-import { insightTotal } from '@quorum/simulation/lookups'
+import { eraOf, insightTotal } from '@quorum/simulation/lookups'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { clockOf } from '@quorum/simulation/solve'
 import type { Game, GameNode } from '@quorum/simulation/state'
-import type { Model } from './model.ts'
+import { currentFile, type Model } from './model.ts'
 import type { LogEntry } from './playlog.ts'
 
 /* ==========================================================================
@@ -48,7 +48,12 @@ export const diffOf = (before: Game, after: Game): Record<string, unknown> => {
     insight: round(insightTotal(after.pools) - insightTotal(before.pools)),
     added: after.nodes
       .filter((node) => !ids.has(node.id))
-      .map((node) => ({ id: node.id, type: node.type })),
+      .map((node) => ({
+        id: node.id,
+        type: node.type,
+        size: node.size,
+        region: node.region,
+      })),
     removed: before.nodes
       .filter((node) => !afterIds.has(node.id))
       .map((node) => ({ id: node.id, type: node.type })),
@@ -91,6 +96,35 @@ export const contextOf = (model: Model, ledger: Ledger): Record<string, unknown>
   speed: model.board.clock.speed,
   selected: model.board.game.nodes.find((node) => node.id === model.board.selected)?.type ?? null,
 })
+
+/** The Company at the moment it reaches an Era: the progression funnel's row. */
+export const eraReachedOf = (model: Model, ledger: Ledger): Record<string, unknown> => {
+  const game = model.board.game
+  const file = currentFile(model)
+  const counts = new Map<string, number>()
+  for (const node of game.nodes) counts.set(node.type, (counts.get(node.type) ?? 0) + 1)
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+  return {
+    era: game.stage,
+    era_name: eraOf(game).name,
+    users: Math.round(game.users),
+    cash: round(game.cash),
+    revenue: round(ledger.revenue),
+    burn: round(ledger.burn),
+    apdex: round(ledger.apdex, 3),
+    error_share: round(ledger.errorShare, 4),
+    sim_seconds: Math.round(game.time),
+    real_seconds_since_founded:
+      file === null ? null : Math.round((Date.now() - file.createdAt) / 1_000),
+    node_count: game.nodes.length,
+    link_count: game.links.length,
+    research_count: game.researched.length,
+    team_size: game.engineers.length,
+    region_count: new Set(game.nodes.map((node) => node.region)).size,
+    incidents_survived: game.postmortems.length,
+    top_component: top?.[0] ?? null,
+  }
+}
 
 /** A full sample of the company, every 10 sim seconds. */
 export const sampleOf = (model: Model, ledger: Ledger): Record<string, unknown> => {

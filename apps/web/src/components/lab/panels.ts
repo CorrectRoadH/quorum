@@ -1,6 +1,8 @@
 import { PrefsMessage } from '@/game/prefs.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { Copy, DoorOpen, Download, House, Play, Settings, Trash2, X } from 'lucide'
+import { ArrowUpRight, Copy, DoorOpen, Download, House, Play, Settings, Trash2, X } from 'lucide'
+import { UrlRequest } from 'foldkit/navigation'
+import { PRIVACY_URL } from '@/platform/analytics.ts'
 import { offer } from '@quorum/simulation/actions'
 import { PRE_IPO_STAGE } from '@quorum/simulation/ipo'
 import { INCIDENTS, INCIDENT_IDS, VENTURES } from '@quorum/simulation/catalog'
@@ -331,12 +333,27 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
             },
             h,
           ),
+          switch_(
+            {
+              id: 'setting-analytics',
+              label: 'Share anonymous usage data',
+              isChecked: model.prefs.analytics,
+              onToggle: () => Message.PrefsChanged({ message: PrefsMessage.AnalyticsToggled() }),
+            },
+            h,
+          ),
           h.div(
             [h.Class('flex items-center justify-between gap-3')],
             [
               h.span([h.Class('text-sm font-medium')], ['Language']),
               languagePicker(model.prefs.locale, model.languagePicker, h),
             ],
+          ),
+          secondaryButton(
+            'Privacy policy',
+            Message.ClickedLink({ request: UrlRequest.External({ href: PRIVACY_URL }) }),
+            h,
+            ArrowUpRight,
           ),
           secondaryButton('Copy state as JSON', Message.StateCopied(), h, Copy),
         ],

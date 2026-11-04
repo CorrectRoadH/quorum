@@ -6,6 +6,7 @@ allowBuilds:
   lefthook: true
   workerd: true
   esbuild: true
+  core-js: false
 overrides:
   effect: 4.0.0
   workerd: 1.20261008.1
