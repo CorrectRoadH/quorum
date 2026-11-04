@@ -1,6 +1,7 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { churnOf, type ChurnFix, type ChurnRow, type RegionChurn } from '@quorum/simulation/churn'
 import { COMPONENTS, KINDS, REGION_INFO, RESEARCH } from '@quorum/simulation/catalog'
+import { has } from '@quorum/simulation/lookups'
 import { openRegions } from '@quorum/simulation/regions'
 import type { Game } from '@quorum/simulation/state'
 import { compact, ms } from '@/game/format.ts'
@@ -23,7 +24,14 @@ const fixOf = (game: Game, fix: ChurnFix, h: HtmlBuilder<Message>): Html => {
   const [label, message] =
     fix._tag === 'region'
       ? [
-          `${openRegions(game).includes(fix.region) ? 'Build in' : 'Open'} ${REGION_INFO[fix.region].name}`,
+          `${
+            has(game, 'infra-as-code') &&
+            !game.nodes.some((node) => node.region === fix.region && node.type !== 'users')
+              ? 'Mirror into'
+              : openRegions(game).includes(fix.region)
+                ? 'Build in'
+                : 'Open'
+          } ${REGION_INFO[fix.region].name}`,
           Message.ChurnFixTaken({ fix: 'region', target: fix.region }),
         ]
       : fix._tag === 'research'

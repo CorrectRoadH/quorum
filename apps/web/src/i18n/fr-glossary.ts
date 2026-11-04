@@ -1019,4 +1019,30 @@ export const frGlossary: Readonly<Record<string, string>> = {
   'Amazon ElastiCache docs: Caching strategies':
     'Documentation Amazon ElastiCache : Stratégies de mise en cache',
   'Wikipedia: Cache write policies': "Wikipédia : politiques d'écriture du cache",
+  Drift: 'Dérive',
+  'The difference between the infrastructure a tool such as Terraform or Pulumi last deployed and what runs now. Drift comes from changes made outside the tool, such as a resize in a cloud console, and from code changes that are not applied yet.':
+    'La différence entre l’infrastructure qu’un outil comme Terraform ou Pulumi a déployée la dernière fois et ce qui tourne maintenant. La dérive vient de modifications faites hors de l’outil, comme un redimensionnement dans une console cloud, et de modifications du code pas encore appliquées.',
+  'A Mirror drifts in two ways: it is behind when its source region changed, and it has a hand change when you changed the Mirror directly. Apply brings the Mirror back to its source and reverts the hand changes its plan sees. Terraform plans see every hand change at once. Pulumi and Alchemy plan against the state they recorded, so a hand change shows only after Refresh or Check drift. Keep a correct regional difference as an override.':
+    'Un Miroir dérive de deux façons : il est en retard quand sa région source a changé, et il a une modification manuelle quand vous avez modifié le Miroir directement. Appliquer ramène le Miroir à sa source et annule les modifications manuelles que son plan voit. Les plans Terraform voient toute modification manuelle tout de suite. Pulumi et Alchemy comparent à l’état qu’ils ont enregistré, donc une modification manuelle n’apparaît qu’après Relire ou Vérifier la dérive. Gardez une différence régionale voulue comme exception.',
+  'IaC tool': 'Outil IaC',
+  'A tool that describes infrastructure as code and applies it: it compares the code with the recorded state, shows a plan, and makes the changes. Terraform uses HCL; Pulumi and Alchemy use general-purpose languages such as TypeScript. Each keeps a state file of what it deployed.':
+    'Un outil qui décrit l’infrastructure sous forme de code et l’applique : il compare le code à l’état enregistré, montre un plan et effectue les changements. Terraform utilise HCL ; Pulumi et Alchemy utilisent des langages généralistes comme TypeScript. Chacun garde un fichier d’état de ce qu’il a déployé.',
+  "Infrastructure as code Research asks you to pick Terraform, Pulumi, or Alchemy. All three build every Component and can set any value per region. They differ in how a plan finds hand changes, as in each tool's default workflow: Terraform refreshes live state on every plan, so its plans are complete and each Apply waits for the refresh. Pulumi plans against its recorded state until you Refresh. Alchemy also plans against recorded state; Check drift reads live state, and Repair restores hand changes without taking source changes. Moving to another tool stops every sync for a calendar day.":
+    'La recherche Infrastructure as code vous fait choisir Terraform, Pulumi ou Alchemy. Les trois construisent tous les Composants et peuvent régler toute valeur par région. Ils diffèrent dans la façon dont un plan trouve les modifications manuelles, comme dans le flux par défaut de chaque outil : Terraform relit l’état réel à chaque plan, donc ses plans sont complets et chaque application attend cette relecture. Pulumi compare à son état enregistré jusqu’à ce que vous relisiez. Alchemy compare aussi à l’état enregistré ; Vérifier la dérive relit l’état réel, et Réparer annule les modifications manuelles sans prendre les changements de la source. Passer à un autre outil arrête toute synchronisation pendant un jour calendaire.',
+  Mirror: 'Miroir',
+  'Running the same infrastructure code in another region, such as one Terraform module applied once per region or a CloudFormation StackSet. The servers copy easily. The data does not: each copy must decide where its writes go.':
+    'Exécuter le même code d’infrastructure dans une autre région, comme un module Terraform appliqué une fois par région ou un StackSet CloudFormation. Les serveurs se copient facilement. Pas les données : chaque copie doit décider où vont ses écritures.',
+  "After Infrastructure as code Research, the Mirror button beside the region tabs copies one region's Nodes and Links into another. For each Database you pick a read replica, an own primary, or calling the source, and for Object Storage, replicate or call the source. Apply pays at once and the new Nodes arrive cold after the build time. The region's Users get their Links only when the plan lands. The Mirror stays linked to its source, so it can drift; GitOps keeps it in sync on its own.":
+    'Après la recherche Infrastructure as code, le bouton Miroir à côté des onglets de région copie les Nœuds et Liens d’une région dans une autre. Pour chaque Base de données, choisissez une réplique en lecture, une primaire propre ou l’appel à la source ; pour le Stockage objet, répliquer ou appeler la source. Appliquer paie tout de suite, et les nouveaux Nœuds arrivent froids après le temps de construction. Les Utilisateurs de la région n’ont leurs Liens qu’à l’arrivée du plan. Le Miroir reste lié à sa source, donc il peut dériver ; GitOps le garde synchronisé tout seul.',
+  'Terraform tutorial: Use refresh-only mode to sync Terraform state':
+    'Terraform tutorial: Use refresh-only mode to sync Terraform state',
+  'Pulumi docs: Detecting and reconciling drift': 'Pulumi docs: Detecting and reconciling drift',
+  'Alchemy docs: drift': 'Alchemy docs: drift',
+  'Terraform docs: What is Terraform?': 'Terraform docs: What is Terraform?',
+  'Pulumi docs: Infrastructure as code': 'Pulumi docs: Infrastructure as code',
+  'Alchemy docs: Providers': 'Alchemy docs: Providers',
+  'Wikipedia: Infrastructure as code': 'Wikipedia: Infrastructure as code',
+  'Terraform docs: Modules overview': 'Terraform docs: Modules overview',
+  'AWS docs: Working with CloudFormation StackSets':
+    'AWS docs: Working with CloudFormation StackSets',
 }

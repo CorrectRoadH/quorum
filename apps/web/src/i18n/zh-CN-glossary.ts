@@ -238,4 +238,30 @@ export const glossaryZhCN: Readonly<Record<string, string>> = {
   'Write-through cache': '直写缓存',
   'Every write goes to the cache and the database together, so cached reads are never stale for those keys.':
     '每次写入同时更新缓存和数据库，保证这些键的缓存读取不会过时。',
+  Drift: '漂移',
+  'The difference between the infrastructure a tool such as Terraform or Pulumi last deployed and what runs now. Drift comes from changes made outside the tool, such as a resize in a cloud console, and from code changes that are not applied yet.':
+    'Terraform 或 Pulumi 等工具上次部署的基础设施与当前实际运行状态之间的差异。漂移来自工具之外的变更（例如在云控制台中调整规格），以及尚未应用的代码变更。',
+  'A Mirror drifts in two ways: it is behind when its source region changed, and it has a hand change when you changed the Mirror directly. Apply brings the Mirror back to its source and reverts the hand changes its plan sees. Terraform plans see every hand change at once. Pulumi and Alchemy plan against the state they recorded, so a hand change shows only after Refresh or Check drift. Keep a correct regional difference as an override.':
+    '镜像有两种漂移：源区域变更后它会落后；你直接修改镜像则产生手动变更。应用会让镜像回到源区域的状态，并还原计划看到的手动变更。Terraform 的计划会立即看到所有手动变更。Pulumi 和 Alchemy 与其记录的状态比较，因此手动变更只有在刷新或检查漂移之后才会显示。把合理的区域差异保留为覆盖项。',
+  'IaC tool': 'IaC 工具',
+  'A tool that describes infrastructure as code and applies it: it compares the code with the recorded state, shows a plan, and makes the changes. Terraform uses HCL; Pulumi and Alchemy use general-purpose languages such as TypeScript. Each keeps a state file of what it deployed.':
+    '以代码描述基础设施并加以应用的工具：它将代码与已记录的状态比较，展示计划，然后执行变更。Terraform 使用 HCL；Pulumi 和 Alchemy 使用 TypeScript 等通用语言。每个工具都会保存一份已部署内容的状态文件。',
+  "Infrastructure as code Research asks you to pick Terraform, Pulumi, or Alchemy. All three build every Component and can set any value per region. They differ in how a plan finds hand changes, as in each tool's default workflow: Terraform refreshes live state on every plan, so its plans are complete and each Apply waits for the refresh. Pulumi plans against its recorded state until you Refresh. Alchemy also plans against recorded state; Check drift reads live state, and Repair restores hand changes without taking source changes. Moving to another tool stops every sync for a calendar day.":
+    '“基础设施即代码”研究会让你选择 Terraform、Pulumi 或 Alchemy。三者都能构建所有组件，并能为每个区域设置任意值。它们的区别在于计划如何发现手动变更，与各工具的默认工作流一致：Terraform 每次计划都会读取实时状态，因此计划完整，每次应用都要等待刷新。Pulumi 与已记录的状态比较，直到你刷新。Alchemy 同样与已记录的状态比较；检查漂移会读取实时状态，修复会还原手动变更但不采用源区域的变更。更换工具会让所有同步暂停一个日历日。',
+  Mirror: '镜像',
+  'Running the same infrastructure code in another region, such as one Terraform module applied once per region or a CloudFormation StackSet. The servers copy easily. The data does not: each copy must decide where its writes go.':
+    '在另一个区域运行同一份基础设施代码，例如每个区域各应用一次的 Terraform 模块，或 CloudFormation StackSet。服务器很容易复制，数据却不然：每个副本都必须决定写入去向。',
+  "After Infrastructure as code Research, the Mirror button beside the region tabs copies one region's Nodes and Links into another. For each Database you pick a read replica, an own primary, or calling the source, and for Object Storage, replicate or call the source. Apply pays at once and the new Nodes arrive cold after the build time. The region's Users get their Links only when the plan lands. The Mirror stays linked to its source, so it can drift; GitOps keeps it in sync on its own.":
+    '完成“基础设施即代码”研究后，区域标签旁的“镜像”按钮可以把一个区域的节点和链路复制到另一个区域。每个数据库可选择只读副本、独立主库或调用源区域；对象存储可选择复制或调用源区域。应用会立即付款，新节点在构建时间结束后以冷启动状态上线。该区域的用户只有在计划落地时才会获得链路。镜像与源区域保持关联，因此可能漂移；GitOps 会自动保持同步。',
+  'Terraform tutorial: Use refresh-only mode to sync Terraform state':
+    'Terraform tutorial: Use refresh-only mode to sync Terraform state',
+  'Pulumi docs: Detecting and reconciling drift': 'Pulumi docs: Detecting and reconciling drift',
+  'Alchemy docs: drift': 'Alchemy docs: drift',
+  'Terraform docs: What is Terraform?': 'Terraform docs: What is Terraform?',
+  'Pulumi docs: Infrastructure as code': 'Pulumi docs: Infrastructure as code',
+  'Alchemy docs: Providers': 'Alchemy docs: Providers',
+  'Wikipedia: Infrastructure as code': 'Wikipedia: Infrastructure as code',
+  'Terraform docs: Modules overview': 'Terraform docs: Modules overview',
+  'AWS docs: Working with CloudFormation StackSets':
+    'AWS docs: Working with CloudFormation StackSets',
 }

@@ -43,6 +43,7 @@ import {
   type InsightPool,
 } from '@quorum/simulation/catalog'
 import { openRegions, regional } from '@quorum/simulation/regions'
+import { tabDrift } from './mirror.ts'
 import { canRaise } from '@quorum/simulation/actions'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, nextEra, researchReady } from '@quorum/simulation/lookups'
@@ -1263,8 +1264,41 @@ export const regionTabs = (model: Model, h: HtmlBuilder<Message>): Html => {
             ),
           ),
         ],
-        [isOpen ? info.short : `+ ${info.short}`],
+        [
+          isOpen ? info.short : `+ ${info.short}`,
+          tabDrift(game, region) > 0
+            ? h.span(
+                [
+                  h.Key('drift'),
+                  h.Class('ml-1 inline-block size-1.5 rounded-full bg-warn align-middle'),
+                ],
+                [],
+              )
+            : h.empty,
+        ],
       )
-    }),
+    }).concat(
+      has(game, 'infra-as-code')
+        ? [
+            h.button(
+              [
+                h.Key('mirror'),
+                h.Type('button'),
+                h.AriaPressed(model.panel === 'mirror' ? 'true' : 'false'),
+                h.OnClick(
+                  Message.PanelOpened({ panel: model.panel === 'mirror' ? 'none' : 'mirror' }),
+                ),
+                h.Class(
+                  cn(
+                    'ml-0.5 h-7 rounded-lg px-2.5 text-[11.5px] font-medium shadow-[inset_1px_0_0_var(--hairline-soft)] hover:bg-foreground/5',
+                    model.panel === 'mirror' && 'bg-foreground/5',
+                  ),
+                ),
+              ],
+              ['Mirror'],
+            ),
+          ]
+        : [],
+    ),
   )
 }

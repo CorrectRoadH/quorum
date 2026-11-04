@@ -7,6 +7,7 @@ import { Update, type Runtime } from 'foldkit'
 import { UrlRequest } from 'foldkit/navigation'
 import { toString as urlToString, type Url } from 'foldkit/url'
 import * as Actions from '@quorum/simulation/actions'
+import * as Mirrors from '@quorum/simulation/mirror'
 import {
   ACHIEVEMENTS,
   ALERT_RULES,
@@ -22,6 +23,7 @@ import {
   BACKUPS,
   COLLECTORS,
   REGION_INFO,
+  IAC_TOOL_INFO,
   MIGRATION_STEPS,
   POLICIES,
   KINDS,
@@ -2979,6 +2981,73 @@ const handle = (model: Model, message: Message): Result =>
       logResponse(model, 'roll-back-routes') ??
       act(model, 'Rolled back the routes', Actions.rollBackRoutes(model.board.game)),
 
+    ConfigRolledBack: () =>
+      logResponse(model, 'roll-back-config') ??
+      act(model, 'Rolled back the config', Actions.rollBackConfig(model.board.game)),
+
+    IacToolPicked: ({ tool }) =>
+      act(
+        model,
+        `IaC tool: ${IAC_TOOL_INFO[tool].name}`,
+        Mirrors.pickIacTool(model.board.game, tool),
+        { undoable: true },
+      ),
+
+    SyncModePicked: ({ sync }) =>
+      act(
+        model,
+        sync === null ? 'GitOps off' : sync === 'all' ? 'GitOps all at once' : 'GitOps staged',
+        Mirrors.setSyncMode(model.board.game, sync),
+        { undoable: true },
+      ),
+
+    MirrorStarted: ({ target, source }) =>
+      act(
+        model,
+        `Mirror of ${REGION_INFO[source].name}`,
+        Mirrors.startMirror(model.board.game, target, source),
+        { undoable: true, patch: () => ({ region: target, selected: null }) },
+      ),
+
+    MirrorApplied: ({ region, destroy }) =>
+      act(model, 'Applied the plan', Mirrors.applyMirror(model.board.game, region, destroy), {
+        undoable: true,
+      }),
+
+    MirrorDataPicked: ({ region, source, pattern }) =>
+      act(model, 'Data pattern', Mirrors.setMirrorData(model.board.game, region, source, pattern), {
+        undoable: true,
+      }),
+
+    MirrorOverrideSet: ({ region, nodeId, field, keep }) =>
+      act(
+        model,
+        keep ? 'Kept as override' : 'Override removed',
+        Mirrors.setOverride(model.board.game, region, nodeId, field, keep),
+        { undoable: true },
+      ),
+
+    MirrorComputedSet: ({ region, computed }) =>
+      act(
+        model,
+        computed ? 'Computed sizes on' : 'Computed sizes off',
+        Mirrors.setComputed(model.board.game, region, computed),
+        { undoable: true },
+      ),
+
+    MirrorRefreshed: ({ region }) =>
+      act(model, 'Read live state', Mirrors.refreshMirror(model.board.game, region)),
+
+    MirrorRepaired: ({ region }) =>
+      act(model, 'Repaired drift', Mirrors.repairMirror(model.board.game, region), {
+        undoable: true,
+      }),
+
+    MirrorStopped: ({ region }) =>
+      act(model, 'Stopped mirroring', Mirrors.stopMirror(model.board.game, region), {
+        undoable: true,
+      }),
+
     LeaderFenced: () =>
       logResponse(model, 'fence-leader') ??
       act(model, 'Fenced the old leader', Actions.fenceLeader(model.board.game)),
@@ -3231,12 +3300,17 @@ const handle = (model: Model, message: Message): Result =>
         )
       }
       const region = target as Region
-      return route(
+      const shown = route(
         board,
         openRegions(game).includes(region)
           ? Message.RegionPicked({ region })
           : Message.RegionOpened({ region }),
       )
+      // With Infrastructure as code, an empty region is built by mirroring one that works.
+      const empty = !game.nodes.some((node) => node.region === region && node.type !== 'users')
+      return has(game, 'infra-as-code') && empty && shown.model.board.region === region
+        ? { ...shown, model: { ...shown.model, panel: 'mirror' } }
+        : shown
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () => {

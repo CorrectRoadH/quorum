@@ -144,12 +144,14 @@ export const badDeploy = (model: Model, h: HtmlBuilder<Message>): Html => {
 const BANNERS = {
   certificate: { label: 'Renew', message: Message.CertificateRenewed() },
   bgp: { label: 'Roll back', message: Message.RoutesRolledBack() },
+  config: { label: 'Roll back', message: Message.ConfigRolledBack() },
   partition: { label: 'Fence leader', message: Message.LeaderFenced() },
 } as const
 
 export const expiredCertificate = (model: Model, h: HtmlBuilder<Message>): Html => {
   const kind = model.board.game.incident?.kind
-  if (kind !== 'certificate' && kind !== 'bgp' && kind !== 'partition') return h.empty
+  if (kind !== 'certificate' && kind !== 'bgp' && kind !== 'partition' && kind !== 'config')
+    return h.empty
   const banner = BANNERS[kind]
   return h.div(
     [
