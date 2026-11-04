@@ -1832,6 +1832,78 @@ export const fr: Readonly<Record<string, string>> = {
   'Split the Box': 'Divisez la boîte',
   'App and database share a box. Reach 100 rps.':
     "L'application et la base de données partagent une boîte. Atteignez 100 rps.",
+  'App and database share a box. Reach 100 rps with p99 under 300 ms.':
+    "L'application et la base de données partagent une boîte. Atteignez 100 rps avec un p99 sous 300 ms.",
+  C10k: 'C10k',
+  '10,000 open connections. Process-per-request servers refuse them.':
+    '10 000 connexions ouvertes. Les serveurs à un processus par requête les refusent.',
+  'Stack Overflow on a Shoestring': 'Stack Overflow avec trois fois rien',
+  'Serve 800 rps with at most 12 Nodes.': 'Servez 800 rps avec au plus 12 nœuds.',
+  'The N+1': 'Le N+1',
+  'Rails with N+1 queries. 12 Dev Hours to fix it.':
+    'Rails avec des requêtes N+1. 12 heures de dev pour le corriger.',
+  'Thirteen Engineers': 'Treize ingénieurs',
+  'Rails at 400 rps. 13 engineers have one day: 104 Dev Hours.':
+    'Rails à 400 rps. 13 ingénieurs ont une journée : 104 heures de dev.',
+  'Credential Stuffing': 'Bourrage d’identifiants',
+  'Bots try leaked passwords on login. Keep real users signing in.':
+    'Des bots essaient des mots de passe divulgués à la connexion. Gardez les vrais utilisateurs connectés.',
+  'Black Friday': 'Black Friday',
+  'us-east-1': 'us-east-1',
+  'Exactly Once': 'Exactement une fois',
+  'The Payment Provider slows to 2 s, twice. Charge each checkout once.':
+    'Le prestataire de paiement ralentit à 2 s, deux fois. Débitez chaque achat une seule fois.',
+  'Two Million Sockets': 'Deux millions de sockets',
+  'Two million open chat connections. Hold them for the fewest dollars.':
+    'Deux millions de connexions de chat ouvertes. Maintenez-les pour le moins de dollars possible.',
+  'Pokémon GO': 'Pokémon GO',
+  'Launch day: demand reaches 50× the forecast within 10 minutes.':
+    'Jour du lancement : la demande atteint 50× la prévision en 10 minutes.',
+  'Healthcare Launch Day': 'Lancement du portail santé',
+  'Launch is at minute 2, and this Design has many faults. Find them.':
+    'Le lancement est à la minute 2, et ce design a beaucoup de défauts. Trouvez-les.',
+  'Thundering Herd': 'Troupeau tonitruant',
+  'The chat servers restart at minute 2. A million clients reconnect and log in at once.':
+    'Les serveurs de chat redémarrent à la minute 2. Un million de clients se reconnectent et se connectent en même temps.',
+  'Read States': 'États de lecture',
+  'The heap fills twice. Keep the p99 under 90 ms. Any runtime.':
+    'Le tas se remplit deux fois. Gardez le p99 sous 90 ms. Tout runtime.',
+  'The Fail Whale': 'La baleine de l’échec',
+  'Serve feeds under 200 ms at the p99. Some accounts have 10 million followers.':
+    'Servez les fils sous 200 ms au p99. Certains comptes ont 10 millions d’abonnés.',
+  'Reports at Noon': 'Rapports à midi',
+  'Finance runs its reports on the primary at minute 2 and 5, and they may not be cancelled. Keep checkouts fast.':
+    'La finance lance ses rapports sur le primaire aux minutes 2 et 5, et ils ne peuvent pas être annulés. Gardez les achats rapides.',
+  'GPU Economics': 'Économie des GPU',
+  'A retry storm is running. Recover with the fewest changes.':
+    'Une tempête de nouvelles tentatives est en cours. Rétablissez le service avec le moins de changements.',
+  'Regex of Doom': 'La regex fatale',
+  'A new WAF rule pins every WAF at 100% CPU at minute 2. Restore service.':
+    'Une nouvelle règle WAF bloque chaque WAF à 100 % de CPU à la minute 2. Rétablissez le service.',
+  '43 Seconds': '43 secondes',
+  'The link between regions drops at minute 2. Keep one leader.':
+    'Le lien entre les régions tombe à la minute 2. Gardez un seul leader.',
+  'Follow the Sun': 'Suivre le soleil',
+  Celebrity: 'Célébrité',
+  'Gone From the Internet': 'Disparu d’Internet',
+  'A routing change at minute 2 removes every region from the internet. Restore it.':
+    'Un changement de routage à la minute 2 retire toutes les régions d’Internet. Rétablissez-les.',
+  'The Typo': 'La faute de frappe',
+  'At minute 2 a command meant to remove one server removes the Search tier.':
+    'À la minute 2, une commande censée retirer un serveur retire tout le niveau Recherche.',
+  'Leap Second': 'Seconde intercalaire',
+  'At minute 2 the clock in Asia-Pacific repeats a second. Every App Server there spins at 100% CPU. Keep the p99 under 380 ms.':
+    'À la minute 2, l’horloge en Asie-Pacifique répète une seconde. Chaque serveur d’application y tourne à 100 % de CPU. Gardez le p99 sous 380 ms.',
+  'Users grow 25% over the run. Reach growth plus margin of 40: keep a 15% margin.':
+    'Les utilisateurs augmentent de 25 % pendant la partie. Atteignez une croissance plus marge de 40 : gardez une marge de 15 %.',
+  'Serve every kind with Postgres as the only data store, at a p99 under 800 ms.':
+    'Servez chaque type avec Postgres comme seul stockage de données, avec un p99 sous 800 ms.',
+  'Five Nines': 'Cinq neuf',
+  'Four weeks: two servers and a region fail, and traffic triples once. Serve 99.999%.':
+    'Quatre semaines : deux serveurs et une région tombent, et le trafic triple une fois. Servez 99,999 %.',
+  'Read p99': 'p99 en lecture',
+  'Read mean': 'Moyenne en lecture',
+  'Fresh reads': 'Lectures fraîches',
   Slashdotted: 'Barre oblique',
   '×10 traffic for 3 minutes on a fixed budget.':
     'Trafic ×10 pendant 3 minutes avec un budget fixe.',
