@@ -17,7 +17,7 @@ import { BY_COMPONENT } from '@quorum/simulation/discovery'
 import { groupBadge } from '@quorum/ui/game/bits'
 import { money, ms } from '@quorum/ui/game/format'
 import { COMPONENT_ICONS } from '@quorum/ui/game/icons'
-import { nodeCard } from '../node-card.ts'
+import { nodeCard } from '../components/node-card.ts'
 import type { Page } from '../page.ts'
 import {
   authored,
@@ -149,7 +149,7 @@ const entity = (def: ComponentDef): Page => {
         [
           // The card as it stands on the board, drawn by the board itself.
           h.div(
-            [h.Class('overflow-hidden rounded-2xl bg-canvas shadow-well')],
+            [h.Class('overflow-hidden rounded-lg border border-border bg-canvas')],
             [nodeCard(def.id, h)],
           ),
           factsBox(def.name, componentBadge(def.id, 'size-8', h), def.group, facts(def, h), h),

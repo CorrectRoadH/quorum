@@ -4,6 +4,7 @@ import * as Stream from 'effect/Stream'
 import { Schema } from 'effect'
 import { Subscription } from 'foldkit'
 import { Message, type Model } from './main.ts'
+import * as Search from './submodels/search.ts'
 
 /* "/" focuses the search, as on most documentation sites; Escape closes the results. */
 
@@ -16,9 +17,10 @@ const keys = Stream.callback<Message>((queue) =>
           const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
           if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey) {
             event.preventDefault()
-            Queue.offerUnsafe(queue, Message.SearchFocused())
+            Queue.offerUnsafe(queue, Message.SearchChanged({ message: Search.Message.Focused() }))
           }
-          if (event.key === 'Escape') Queue.offerUnsafe(queue, Message.SearchClosed())
+          if (event.key === 'Escape')
+            Queue.offerUnsafe(queue, Message.SearchChanged({ message: Search.Message.Closed() }))
         }
         window.addEventListener('keydown', listener)
         return listener

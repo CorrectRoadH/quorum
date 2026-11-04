@@ -2,7 +2,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { BookOpen, GraduationCap, Info, Lightbulb, Wrench, type IconNode } from 'lucide'
 import type { BuildGroup } from '@quorum/simulation/catalog'
 import { groupBadge } from '@quorum/ui/game/bits'
-import type { Section } from './frontmatter.ts'
+import type { Section } from '../frontmatter.ts'
 
 /* ==========================================================================
    The wiki's four kinds of page (Diátaxis), each worn as one of the game's

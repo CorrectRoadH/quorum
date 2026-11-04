@@ -14,13 +14,7 @@
 
   body {
     margin: 0;
-    background-color: var(--canvas);
-    background-image: radial-gradient(
-      circle at 1px 1px,
-      color-mix(in oklch, var(--foreground) 9%, transparent) 1px,
-      transparent 0
-    );
-    background-size: 24px 24px;
+    background-color: var(--background);
     font-size: 14px;
   }
 }
@@ -124,30 +118,20 @@ input[type='search']::-webkit-search-cancel-button {
   appearance: none;
 }
 
-/* A request riding a wire in the home page's Design. */
-.packet {
-  offset-rotate: 0deg;
-  animation: packet 2.4s linear infinite both;
+/* Reading width for running text; grids, tables, and figures may use the full column. */
+.prose :is(p, ul, ol, blockquote):not(.not-prose *) {
+  max-width: 72ch;
 }
-@keyframes packet {
-  from {
-    offset-distance: 0%;
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  88% {
-    opacity: 1;
-  }
-  to {
-    offset-distance: 100%;
-    opacity: 0;
-  }
+
+/* Blocks marked not-prose keep their own list and link styles. */
+.prose :is(ul, ol).not-prose,
+.prose .not-prose :is(ul, ol) {
+  padding-left: 0;
+  list-style: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .packet {
-    animation: none;
-    opacity: 0;
-  }
+.prose .not-prose li + li {
+  margin-top: 0;
+}
+.prose .not-prose a {
+  text-decoration: none;
 }

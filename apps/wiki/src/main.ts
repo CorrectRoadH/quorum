@@ -1,29 +1,30 @@
-import { Effect, Schema } from 'effect'
-import { Command, Runtime } from 'foldkit'
+import { Effect, Option, Schema } from 'effect'
+import { Command, Runtime, Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
 import { Url, toString as urlToString } from 'foldkit/url'
+import * as Progress from './submodels/progress.ts'
+import * as Quiz from './submodels/quiz.ts'
+import * as Search from './submodels/search.ts'
+import * as Spoilers from './submodels/spoilers.ts'
 
 /* ==========================================================================
    The wiki as one Foldkit application. The server prerenders every page from
-   the same init and view, and the browser hydrates it. The Model holds only
-   what a reader changes: the page, the search, the Era filter, and the state
-   of live islands.
+   the same init and view, and the browser hydrates it. The root owns the
+   page and the phone menu; each thing a reader changes is a Submodel under
+   src/submodels: the search, the spoiler filter, reading progress, and the
+   quizzes.
    ========================================================================== */
-
-/** Every Era: content from any Era shows. */
-export const ALL_ERAS = -1
 
 export const Model = Schema.Struct({
   /** The page path, without a trailing slash. */
   path: Schema.String,
-  query: Schema.String,
-  /** The search results are open. */
-  searching: Schema.Boolean,
-  /** The last Era the reader reached; later content folds. */
-  era: Schema.Finite,
   /** The navigation drawer is open on a phone. */
   menu: Schema.Boolean,
+  search: Search.Model,
+  spoilers: Spoilers.Model,
+  progress: Progress.Model,
+  quiz: Quiz.Model,
 })
 export type Model = typeof Model.Type
 
@@ -31,12 +32,11 @@ export const Message = defineMessageUnion({
   ClickedLink: { request: UrlRequest },
   ChangedUrl: { url: Url },
   Navigated: {},
-  QueryChanged: { query: Schema.String },
-  SearchClosed: {},
-  SearchFocused: {},
-  EraChosen: { era: Schema.Finite },
-  EraLoaded: { era: Schema.Finite },
   MenuToggled: {},
+  SearchChanged: { message: Search.Message },
+  SpoilersChanged: { message: Spoilers.Message },
+  ProgressChanged: { message: Progress.Message },
+  QuizChanged: { message: Quiz.Message },
 })
 export type Message = typeof Message.Type
 
@@ -45,26 +45,6 @@ export const normalize = (pathname: string): string => {
   const trimmed = pathname.replace(/\/+$/, '')
   return trimmed === '' ? '/' : trimmed
 }
-
-const ERA_KEY = 'quorum.wiki.era'
-
-const LoadEra = Command.define('LoadEra', {
-  messages: [Message.EraLoaded],
-  execute: Effect.sync(() => {
-    const stored = Number(globalThis.localStorage?.getItem(ERA_KEY) ?? ALL_ERAS)
-    return Message.EraLoaded({ era: Number.isInteger(stored) ? stored : ALL_ERAS })
-  }),
-})
-
-const SaveEra = Command.define('SaveEra', {
-  args: { era: Schema.Finite },
-  messages: [Message.Navigated],
-  execute: ({ era }) =>
-    Effect.sync(() => {
-      globalThis.localStorage?.setItem(ERA_KEY, String(era))
-      return Message.Navigated()
-    }),
-})
 
 const Navigate = Command.define('Navigate', {
   args: { url: Schema.String },
@@ -93,20 +73,55 @@ const ScrollTo = Command.define('ScrollTo', {
     }),
 })
 
-const FocusSearch = Command.define('FocusSearch', {
-  messages: [Message.Navigated],
-  execute: Effect.sync(() => {
-    document.querySelector<HTMLInputElement>('#search')?.focus()
-    return Message.Navigated()
-  }),
+const foldSearch = Update.foldChild({
+  update: Search.update,
+  read: (model: Model) => Option.some(model.search),
+  write: (model, search) => ({ ...model, search }),
+  toParentMessage: (message) => Message.SearchChanged({ message }),
 })
 
-export const init: Runtime.RoutingApplicationInit<Model, Message> = (url) => ({
-  model: { path: normalize(url.pathname), query: '', searching: false, era: ALL_ERAS, menu: false },
-  commands: [LoadEra()],
+const foldSpoilers = Update.foldChild({
+  update: Spoilers.update,
+  read: (model: Model) => Option.some(model.spoilers),
+  write: (model, spoilers) => ({ ...model, spoilers }),
+  toParentMessage: (message) => Message.SpoilersChanged({ message }),
 })
 
-type Return = Readonly<{ model: Model; commands?: ReadonlyArray<Command.Command<Message>> }>
+const foldProgress = Update.foldChild({
+  update: Progress.update,
+  read: (model: Model) => Option.some(model.progress),
+  write: (model, progress) => ({ ...model, progress }),
+  toParentMessage: (message) => Message.ProgressChanged({ message }),
+})
+
+const foldQuiz = Update.foldChild({
+  update: Quiz.update,
+  read: (model: Model) => Option.some(model.quiz),
+  write: (model, quiz) => ({ ...model, quiz }),
+  toParentMessage: (message) => Message.QuizChanged({ message }),
+})
+
+export const init: Runtime.RoutingApplicationInit<Model, Message> = (url) => {
+  const path = normalize(url.pathname)
+  return {
+    model: {
+      path,
+      menu: false,
+      search: Search.init,
+      spoilers: Spoilers.init,
+      progress: Progress.init,
+      quiz: Quiz.init,
+    },
+    commands: [
+      ...Command.mapMessages([Spoilers.Load()], (message) => Message.SpoilersChanged({ message })),
+      ...Command.mapMessages([Progress.Load({ path })], (message) =>
+        Message.ProgressChanged({ message }),
+      ),
+    ],
+  }
+}
+
+type Return = Update.Return<Model, Message>
 
 export const update = (model: Model, message: Message): Return =>
   Message.match<Return>(message, {
@@ -118,17 +133,18 @@ export const update = (model: Model, message: Message): Return =>
     ChangedUrl: ({ url }) => {
       const path = normalize(url.pathname)
       const hash = url.hash._tag === 'Some' ? url.hash.value.replace(/^#/, '') : ''
-      const samePage = path === model.path
-      return {
-        model: { ...model, path, query: '', searching: false, menu: false },
-        commands: samePage && !hash ? [] : [ScrollTo({ hash })],
-      }
+      const scroll = path === model.path && !hash ? [] : [ScrollTo({ hash })]
+      // A new page closes the search and the menu, and counts as read.
+      const visited = foldProgress(
+        { ...model, path, menu: false, search: Search.init },
+        Progress.Message.Visited({ path }),
+      )
+      return { model: visited.model, commands: [...scroll, ...(visited.commands ?? [])] }
     },
     Navigated: () => ({ model }),
-    QueryChanged: ({ query }) => ({ model: { ...model, query, searching: query.trim() !== '' } }),
-    SearchClosed: () => ({ model: { ...model, searching: false } }),
-    SearchFocused: () => ({ model, commands: [FocusSearch()] }),
-    EraChosen: ({ era }) => ({ model: { ...model, era }, commands: [SaveEra({ era })] }),
-    EraLoaded: ({ era }) => ({ model: { ...model, era } }),
     MenuToggled: () => ({ model: { ...model, menu: !model.menu } }),
+    SearchChanged: ({ message }) => foldSearch(model, message),
+    SpoilersChanged: ({ message }) => foldSpoilers(model, message),
+    ProgressChanged: ({ message }) => foldProgress(model, message),
+    QuizChanged: ({ message }) => foldQuiz(model, message),
   })

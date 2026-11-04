@@ -16,7 +16,7 @@ import {
 import { EYEBROW, FIGURE } from '@quorum/ui/game/bits'
 import { compact, money } from '@quorum/ui/game/format'
 import type { Page } from '../page.ts'
-import { mixBar } from '../mix.ts'
+import { mixBar } from '../components/mix.ts'
 import { componentEra, componentPath } from './components.ts'
 import { incidentPath } from './incidents.ts'
 import {
@@ -156,39 +156,80 @@ const entity = (def: EraDef, index: number): Page => {
 
 const entities = ERAS.map(entity)
 
-/** The Eras left to right: name, question, and the users it takes to raise. */
+/** What arrives in an Era, counted. */
+const arrivals = (index: number): string => {
+  const parts = [
+    [COMPONENT_IDS.filter((id) => componentEra(COMPONENTS[id]) === index).length, 'Components'],
+    [researchList.filter((entry) => entry.era === index).length, 'Research items'],
+    [INCIDENT_IDS.filter((id) => INCIDENTS[id].era === index).length, 'incidents'],
+  ] as const
+  return parts
+    .filter(([count]) => count > 0)
+    .map(([count, label]) => `${count} ${label}`)
+    .join(' · ')
+}
+
+/** The Eras top to bottom, on one line: each with its question, its numbers, and its traffic. */
 const timeline = (h: H): Html =>
   h.ol(
-    [h.Class('not-prose my-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4')],
-    ERAS.map((def, index) =>
-      h.li(
-        [h.Key(def.name)],
+    [h.Class('not-prose relative my-8 border-l border-border')],
+    ERAS.map((def, index) => {
+      const next = ERAS[index + 1]
+      const figures: ReadonlyArray<readonly [string, string]> = [
+        ['Market', `${compact(def.market)} users`],
+        ['Apdex target', def.apdexTarget.toFixed(2)],
+        ...(next
+          ? ([
+              ['Raise at', `${compact(def.raiseAt)} users`],
+              ['Round pays', money(def.grant)],
+            ] as const)
+          : []),
+      ]
+      return h.li(
+        [h.Key(def.name), h.Class('relative pb-10 pl-8 last:pb-0')],
         [
-          h.a(
+          h.span(
             [
-              h.Href(eraPath(index)),
+              h.AriaHidden(true),
               h.Class(
-                'group flex h-full flex-col gap-2 rounded-xl bg-nested p-3.5 shadow-[inset_0_0_0_1px_var(--hairline-soft)] transition-colors hover:bg-well',
+                cn(
+                  FIGURE,
+                  'absolute top-0 -left-3 grid size-6 place-items-center rounded-full border border-border bg-background text-[11px] text-muted-foreground',
+                ),
               ),
             ],
+            [String(index + 1)],
+          ),
+          h.div(
+            [h.Class('flex flex-wrap items-baseline gap-x-3 gap-y-1')],
             [
-              h.span(
-                [h.Class('flex items-center justify-between')],
+              h.a(
                 [
-                  h.span([h.Class(EYEBROW)], [`Era ${index}`]),
-                  h.span(
-                    [h.Class(cn(FIGURE, 'text-[11px] text-muted-foreground'))],
-                    [`${compact(def.market)} market`],
-                  ),
+                  h.Href(eraPath(index)),
+                  h.Class('text-[18px] font-semibold tracking-tight hover:underline'),
                 ],
+                [def.name],
               ),
-              h.span([h.Class('text-[17px] font-semibold tracking-tight')], [def.name]),
-              h.span([h.Class('text-[13px] leading-snug text-muted-foreground')], [def.question]),
+              h.span([h.Class('text-[14.5px] text-muted-foreground')], [def.question]),
             ],
           ),
+          h.dl(
+            [h.Class('mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]')],
+            figures.map(([name, value]) =>
+              h.div(
+                [h.Key(name), h.Class('flex items-baseline gap-1.5')],
+                [
+                  h.dt([h.Class('text-muted-foreground')], [name]),
+                  h.dd([h.Class(cn(FIGURE, 'text-[12.5px]'))], [value]),
+                ],
+              ),
+            ),
+          ),
+          h.div([h.Class('mt-3 max-w-md')], [mixBar(def.mix, h, false)]),
+          h.p([h.Class('mt-2 text-[13px] text-muted-foreground')], [arrivals(index)]),
         ],
-      ),
-    ),
+      )
+    }),
   )
 
 const hub = page({
@@ -205,7 +246,7 @@ const hub = page({
       [h.Class('prose')],
       [
         paragraph(
-          'Each Era ends when you raise the next round. A new Era brings a bigger market, new kinds of traffic, worse incidents, and new Research. Use the Spoilers menu to hide what comes after the Era you play in.',
+          'Each Era ends when you raise the next round. A new Era brings a bigger market, new kinds of traffic, worse incidents, and new Research. To hide what comes after the Era you play in, pick it in the header.',
           h,
         ),
         section('The climb', [timeline(h)], h),

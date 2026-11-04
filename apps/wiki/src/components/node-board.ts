@@ -30,6 +30,7 @@ export const drawNodeCard = (key: string, type: ComponentId, host: HTMLElement):
     history: {},
     region: HOME_REGION,
     paused: true,
+    suspended: false,
     cue: null,
     readOnly: true,
     inset: { top: 24, bottom: 16, left: 0 },

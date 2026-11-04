@@ -9,7 +9,7 @@ import type { Page } from './page.ts'
 
 export type Hit = Readonly<{ page: Page; heading: string | null }>
 
-type Entry = Readonly<{
+export type Entry = Readonly<{
   page: Page
   title: string
   aliases: ReadonlyArray<string>

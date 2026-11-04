@@ -1,7 +1,7 @@
 import * as Markdown from '@foldkit/markdown'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { Message, Model } from './main.ts'
-import { islandViews } from './island-views.ts'
+import { islandViews } from './components/islands.ts'
 import { type Heading, slug } from './page.ts'
 
 /* ==========================================================================
@@ -78,15 +78,11 @@ export const prose = (
           ),
         Table: (_table, header, rows) =>
           h.div(
-            [
-              h.Class(
-                'overflow-x-auto rounded-xl bg-nested shadow-[inset_0_0_0_1px_var(--hairline-soft)]',
-              ),
-            ],
+            [h.Class('overflow-x-auto rounded-lg border border-border')],
             [
               h.table(
                 [h.Class('w-full border-collapse text-[13.5px] leading-snug')],
-                [h.thead([], [header]), h.tbody([h.Class('divide-y divide-hairline')], rows)],
+                [h.thead([], [header]), h.tbody([h.Class('divide-y divide-border')], rows)],
               ),
             ],
           ),
@@ -95,7 +91,7 @@ export const prose = (
             ? h.th(
                 [
                   h.Class(
-                    'border-b border-hairline px-3 py-2 text-left font-mono text-[10.5px] font-medium tracking-[0.08em] text-muted-foreground uppercase',
+                    'border-b border-border bg-muted/50 px-3 py-2 text-left text-[12.5px] font-medium text-muted-foreground',
                   ),
                   ...(alignment === 'Right' ? [h.Style({ textAlign: 'right' })] : []),
                 ],

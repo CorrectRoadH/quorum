@@ -7,7 +7,7 @@ import {
   type BuildGroup,
   type ResearchId,
 } from '@quorum/simulation/catalog'
-import { EYEBROW, FIGURE, NESTED, PANEL } from '@quorum/ui/game/bits'
+import { FIGURE } from '@quorum/ui/game/bits'
 import type { Message } from '../main.ts'
 import { proseAt } from '../content.ts'
 import { headingsOf, prose } from '../prose.ts'
@@ -58,39 +58,30 @@ export const linkList = (items: ReadonlyArray<Html>, h: H): Html =>
 
 export type Fact = Readonly<{ name: string; value: Html | string }>
 
-/** The facts box beside a page: a header in the group's tint, then one fact per row. */
+/** The facts box beside a page: the name with its mark, then one fact per row. */
 export const factsBox = (
   title: string,
   badge: Html | null,
-  group: BuildGroup | null,
+  _group: BuildGroup | null,
   facts: ReadonlyArray<Fact>,
   h: H,
 ): Html =>
   h.aside(
-    [h.AriaLabel(`${title} facts`), h.Class(cn(PANEL, 'overflow-hidden'))],
+    [h.AriaLabel(`${title} facts`), h.Class('rounded-lg border border-border')],
     [
       h.div(
-        [
-          h.Class('flex items-center gap-2.5 border-b border-hairline px-4 py-3'),
-          ...(group
-            ? [
-                h.Style({
-                  background: `linear-gradient(to right, color-mix(in oklch, var(--group-${group}) 16%, var(--card)), color-mix(in oklch, var(--group-${group}) 6%, var(--card)))`,
-                }),
-              ]
-            : []),
-        ],
-        [badge ?? h.empty, h.span([h.Class('text-[15px] font-semibold tracking-tight')], [title])],
+        [h.Class('flex items-center gap-2.5 border-b border-border px-4 py-3')],
+        [badge ?? h.empty, h.span([h.Class('text-[14px] font-semibold')], [title])],
       ),
       h.dl(
-        [h.Class(cn(NESTED, 'm-2.5'))],
+        [h.Class('divide-y divide-border')],
         facts.map((fact) =>
           h.div(
-            [h.Key(fact.name), h.Class('flex items-baseline justify-between gap-3 px-3 py-1.5')],
+            [h.Key(fact.name), h.Class('flex items-baseline justify-between gap-3 px-4 py-2')],
             [
-              h.dt([h.Class('shrink-0 text-[12.5px] text-muted-foreground')], [fact.name]),
+              h.dt([h.Class('shrink-0 text-[13px] text-muted-foreground')], [fact.name]),
               h.dd(
-                [h.Class(cn(FIGURE, 'min-w-0 text-right text-[12px] [overflow-wrap:anywhere]'))],
+                [h.Class(cn(FIGURE, 'min-w-0 text-right text-[12.5px] [overflow-wrap:anywhere]'))],
                 [fact.value],
               ),
             ],
@@ -152,15 +143,13 @@ export const authored = (
   }
 }
 
-/** A card on a hub page: mark, title, a line of facts, and the summary. */
+/** A tile on a hub page: mark, title, a line of facts, and the summary. */
 export const hubCard = (page: Page, mark: Html, meta: string, h: H): Html =>
   h.a(
     [
       h.Key(page.path),
       h.Href(page.path),
-      h.Class(
-        'group flex gap-3 rounded-xl bg-nested p-3 shadow-[inset_0_0_0_1px_var(--hairline-soft)] transition-colors hover:bg-well',
-      ),
+      h.Class('group flex gap-3 bg-background p-4 transition-colors hover:bg-muted/60'),
     ],
     [
       mark,
@@ -170,12 +159,12 @@ export const hubCard = (page: Page, mark: Html, meta: string, h: H): Html =>
           h.div(
             [h.Class('flex items-baseline gap-2')],
             [
-              h.span([h.Class('text-[14px] font-semibold tracking-tight')], [page.title]),
-              h.span([h.Class(cn(EYEBROW, 'truncate text-[9.5px]'))], [meta]),
+              h.span([h.Class('text-[14px] font-medium')], [page.title]),
+              h.span([h.Class('truncate text-[12px] text-muted-foreground')], [meta]),
             ],
           ),
           h.p(
-            [h.Class('mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-muted-foreground')],
+            [h.Class('mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted-foreground')],
             [page.summary],
           ),
         ],
@@ -193,11 +182,7 @@ export const table = (
   figures: ReadonlyArray<number> = [],
 ): Html =>
   h.div(
-    [
-      h.Class(
-        'not-prose my-5 overflow-x-auto rounded-xl bg-nested shadow-[inset_0_0_0_1px_var(--hairline-soft)]',
-      ),
-    ],
+    [h.Class('not-prose my-6 overflow-x-auto rounded-lg border border-border')],
     [
       h.table(
         [h.Class('w-full border-collapse text-[13.5px] leading-snug')],
@@ -213,7 +198,7 @@ export const table = (
                       h.Key(header),
                       h.Class(
                         cn(
-                          'border-b border-hairline px-3 py-2 text-left font-mono text-[10.5px] font-medium tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase',
+                          'border-b border-border bg-muted/50 px-3 py-2 text-left text-[12.5px] font-medium whitespace-nowrap text-muted-foreground',
                           figures.includes(index) && 'text-right',
                         ),
                       ),
@@ -225,7 +210,7 @@ export const table = (
             ],
           ),
           h.tbody(
-            [h.Class('divide-y divide-hairline')],
+            [h.Class('divide-y divide-border')],
             rows.map((row) =>
               h.tr(
                 [h.Key(row.key)],
@@ -253,8 +238,16 @@ export const table = (
 
 export const percent = (share: number): string => `${Math.round(share * 1000) / 10}%`
 
+/** Tiles in a grid, separated by hairlines. */
 export const cardGrid = (cards: ReadonlyArray<Html>, h: H): Html =>
-  h.div([h.Class('not-prose grid gap-2 sm:grid-cols-2')], cards)
+  h.div(
+    [
+      h.Class(
+        'not-prose my-6 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 sm:[&>:last-child:nth-child(odd)]:col-span-2',
+      ),
+    ],
+    cards,
+  )
 
 /** A page's defaults, so each generator states only what differs. */
 export const page = (

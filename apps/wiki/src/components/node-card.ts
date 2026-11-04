@@ -4,7 +4,7 @@ import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { COMPONENTS, COMPONENT_IDS, type ComponentId } from '@quorum/simulation/catalog'
 import { heightOf } from '@quorum/ui/board/geometry'
-import { Message } from './main.ts'
+import { Message } from '../main.ts'
 
 /* ==========================================================================
    A Component's Node card in a page. The build prerenders an empty canvas
@@ -15,20 +15,24 @@ import { Message } from './main.ts'
 /** The smallest zoom the board fits to (MIN_FIT_SCALE in board.ts). */
 const SCALE = 0.85
 
-const CardMounted = Mount.define('CardMounted', {
-  args: { type: Schema.Literals(COMPONENT_IDS) },
-  messages: [Message.Navigated],
-  execute: ({ element, type }) =>
-    Effect.gen(function* () {
-      // Pixi loads only on pages that show a card.
-      const { drawNodeCard } = yield* Effect.promise(() => import('./node-board.ts'))
-      yield* Effect.acquireRelease(
-        Effect.sync(() => drawNodeCard(`card-${type}`, type, element as HTMLElement)),
-        (detach) => Effect.sync(detach),
-      )
-      return Message.Navigated()
-    }),
-})
+// Defined on first use: this module is imported while main.ts is still loading.
+const defineCardMounted = () =>
+  Mount.define('CardMounted', {
+    args: { type: Schema.Literals(COMPONENT_IDS) },
+    messages: [Message.Navigated],
+    execute: ({ element, type }) =>
+      Effect.gen(function* () {
+        // Pixi loads only on pages that show a card.
+        const { drawNodeCard } = yield* Effect.promise(() => import('./node-board.ts'))
+        yield* Effect.acquireRelease(
+          Effect.sync(() => drawNodeCard(`card-${type}`, type, element as HTMLElement)),
+          (detach) => Effect.sync(detach),
+        )
+        return Message.Navigated()
+      }),
+  })
+
+let cardMounted: ReturnType<typeof defineCardMounted> | null = null
 
 export const nodeCard = (type: ComponentId, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -39,7 +43,7 @@ export const nodeCard = (type: ComponentId, h: HtmlBuilder<Message>): Html =>
       // The card is a picture here: the page scrolls, the board does not pan.
       h.Class('pointer-events-none relative w-full'),
       h.Style({ height: `${Math.round(heightOf(type) * SCALE) + 64}px` }),
-      h.OnMount(CardMounted({ type })),
+      h.OnMount((cardMounted ??= defineCardMounted())({ type })),
     ],
     [],
   )

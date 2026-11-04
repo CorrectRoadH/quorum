@@ -203,7 +203,7 @@ const tree = (h: H): Html => {
       h.Class(
         cn(
           SCROLL,
-          'not-prose -mx-5 flex max-h-[72vh] flex-col-reverse overflow-auto rounded-xl bg-canvas sm:-mx-2',
+          'not-prose flex max-h-[72vh] flex-col-reverse overflow-auto rounded-lg border border-border bg-canvas',
         ),
       ),
       h.AriaLabel('Research tree'),
@@ -249,7 +249,11 @@ const tree = (h: H): Html => {
               ],
               [
                 h.span(
-                  [h.Class('grid size-14 place-items-center rounded-2xl bg-surface shadow-card')],
+                  [
+                    h.Class(
+                      'grid size-14 place-items-center rounded-xl border border-border bg-background',
+                    ),
+                  ],
                   [icon(h, TRACK_ICONS[track.track], 'size-6')],
                 ),
                 h.span([h.Class('text-[14px] font-semibold')], [track.label]),
@@ -317,6 +321,67 @@ const tree = (h: H): Html => {
   )
 }
 
+/** Every track side by side, its items grouped under the Era they open in. */
+const byTrack = (h: H): Html =>
+  h.div(
+    [
+      h.Class(
+        'not-prose my-6 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-2 xl:grid-cols-3 md:max-xl:[&>:last-child:nth-child(odd)]:col-span-2',
+      ),
+    ],
+    RESEARCH_TRACKS.map((track) => {
+      const items = researchList.filter((entry) => entry.track === track.key)
+      const eras = [...new Set(items.map((entry) => entry.era))].sort((a, b) => a - b)
+      return h.section(
+        [h.Key(track.key), h.Class('bg-background p-4')],
+        [
+          h.h3(
+            [h.Class('flex items-center gap-2 text-[14.5px] font-semibold')],
+            [
+              icon(h, TRACK_ICONS[track.key], 'size-4 text-muted-foreground'),
+              track.label,
+              h.span(
+                [h.Class(cn(FIGURE, 'ml-auto text-[12px] font-normal text-muted-foreground'))],
+                [String(items.length)],
+              ),
+            ],
+          ),
+          h.dl(
+            [h.Class('mt-3 flex flex-col gap-3')],
+            eras.flatMap((era) => [
+              h.dt(
+                [
+                  h.Key(`${era}-t`),
+                  h.Class(
+                    'text-[11.5px] font-medium tracking-wide text-muted-foreground uppercase',
+                  ),
+                ],
+                [h.a([h.Href(eraPath(era)), h.Class('hover:text-foreground')], [eraName(era)])],
+              ),
+              h.dd(
+                [h.Key(`${era}-d`), h.Class('mt-1 flex flex-col gap-1')],
+                items
+                  .filter((entry) => entry.era === era)
+                  .map((entry) =>
+                    h.a(
+                      [
+                        h.Key(entry.id),
+                        h.Href(researchPath(entry.id)),
+                        h.Class(
+                          'flex items-center gap-2 text-[13.5px] leading-snug hover:underline',
+                        ),
+                      ],
+                      [researchMark(entry, 'sm', false, h), entry.name],
+                    ),
+                  ),
+              ),
+            ]),
+          ),
+        ],
+      )
+    }),
+  )
+
 const hub = page({
   path: '/research',
   title: 'Research tree',
@@ -335,38 +400,7 @@ const hub = page({
           h,
         ),
         section('The tree', [tree(h)], h),
-        section(
-          'By track',
-          RESEARCH_TRACKS.map((track) =>
-            h.div(
-              [h.Key(track.key)],
-              [
-                h.h3(
-                  [h.Class('flex items-center gap-2')],
-                  [icon(h, TRACK_ICONS[track.key], 'size-4'), track.label],
-                ),
-                h.ul(
-                  [],
-                  researchList
-                    .filter((entry) => entry.track === track.key)
-                    .map((entry) =>
-                      h.li(
-                        [h.Key(entry.id)],
-                        [
-                          researchLink(entry.id, h),
-                          h.span(
-                            [h.Class(cn(FIGURE, 'ml-2 text-[12px] text-muted-foreground'))],
-                            [eraName(entry.era)],
-                          ),
-                        ],
-                      ),
-                    ),
-                ),
-              ],
-            ),
-          ),
-          h,
-        ),
+        section('By track', [byTrack(h)], h),
       ],
     ),
 })
