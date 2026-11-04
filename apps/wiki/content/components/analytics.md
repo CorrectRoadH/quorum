@@ -4,7 +4,7 @@ Analytics stands for an OpenTelemetry collector with a tracing backend: the syst
 
 Analytics is a tap. Link any Node into it, and it receives a copy of that Node's traffic, not a share of it. It samples that copy at the sample rate you set. Each sample earns Insight in the pool of its request kind. A request that fails or frustrates its user also earns Failure Insight, and it teaches more than a healthy one.
 
-Insight grows with the square root of samples, counted per Component type and kind. So tapping many different Components teaches more than tapping one large one. [Insight and observability](/explanation/observability) covers the full model.
+Insight grows with the square root of samples, counted per Component type and kind. So tapping many different Components teaches more than tapping one large one.
 
 Analytics keeps a limited number of samples per second. Each size step doubles it. Beyond that, it drops samples evenly. Retention sets how long it keeps traces, and a longer window costs more Burn.
 

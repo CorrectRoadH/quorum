@@ -14,7 +14,7 @@ import { icon } from '@quorum/ui/primitives/icon'
 import type { Section } from '../frontmatter.ts'
 import type { Message, Model } from '../main.ts'
 import type { Page } from '../page.ts'
-import { navOf } from '../pages.ts'
+import { navOf, pageAt } from '../pages.ts'
 import { PATHS, stepsOf } from '../paths.ts'
 import { pathCard } from './path-nav.ts'
 import { QUADRANTS, quadrantBadge } from './quadrant.ts'
@@ -87,6 +87,8 @@ const counts = (h: H): Html =>
     ),
   )
 
+const FIRST_TUTORIAL = '/tutorials/first-company'
+
 const grid = (columns: string, items: ReadonlyArray<Html>, h: H): Html =>
   h.div(
     [h.Class(cn('grid gap-px overflow-hidden rounded-lg border border-border bg-border', columns))],
@@ -108,15 +110,18 @@ export const homeView = (page: Page, model: Model, h: H): Html =>
             [h.Class('mt-3 text-[16.5px] leading-relaxed text-pretty text-muted-foreground')],
             [page.summary],
           ),
-          h.a(
-            [
-              h.Href('/tutorials/first-company'),
-              h.Class(
-                'mt-5 inline-flex items-center gap-1.5 text-[14.5px] font-medium hover:underline',
-              ),
-            ],
-            ['New to Quorum? Start with your first Company', icon(h, ArrowRight, 'size-4')],
-          ),
+          // The link shows once the first tutorial is written.
+          pageAt(FIRST_TUTORIAL)
+            ? h.a(
+                [
+                  h.Href(FIRST_TUTORIAL),
+                  h.Class(
+                    'mt-5 inline-flex items-center gap-1.5 text-[14.5px] font-medium hover:underline',
+                  ),
+                ],
+                ['New to Quorum? Start with your first Company', icon(h, ArrowRight, 'size-4')],
+              )
+            : h.empty,
         ],
       ),
       h.section(

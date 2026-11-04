@@ -4,7 +4,7 @@ Payments stands for the invoices and payouts that turn your users' activity into
 
 Every successful request earns revenue, and that revenue waits in the Payments drawer. Click Payments to collect it into Cash. The drawer holds about a minute of revenue at your current rate. Each size step doubles what it holds.
 
-Payments takes no links and sends nothing. It does not slow requests and it cannot fail. The [Stripe Billing](/research/stripe) Research collects revenue for you, so the drawer stops mattering. See [Cash, Burn, and funding](/explanation/money) for how revenue and Burn meet in the Ledger.
+Payments takes no links and sends nothing. It does not slow requests and it cannot fail. The [Stripe Billing](/research/stripe) Research collects revenue for you, so the drawer stops mattering.
 
 Payments is not the [Payment Provider](/components/psp). The Payment Provider charges cards for checkouts. Payments only holds the money you already earned.
 

@@ -10,7 +10,7 @@ A CDN does not cache API reads, writes, logins, or checkouts. Those always reach
 
 ## When to place it
 
-Place it when page views or video load your App Servers, or when egress is a large line in the Ledger. See [Cut the cloud bill](/guides/cut-the-cloud-bill). It unlocks with [Content delivery](/research/cdn).
+Place it when page views or video load your App Servers, or when egress is a large line in the Ledger. It unlocks with [Content delivery](/research/cdn).
 
 ## How it fails
 

@@ -23,14 +23,20 @@ test('every page has one path, without a trailing slash', () => {
   expect(paths.filter((path) => normalize(path) !== path)).toEqual([])
 })
 
-test('every prerendered path renders its own page', async () => {
+test('every prerendered path renders its own page, and every link in it reaches a page', async () => {
+  const broken: Array<string> = []
   for (const path of prerenderPaths) {
     const result = await renderPage(new Request(`https://wiki.playquorum.dev${path}`))
     expect(result._tag, path).toBe('Rendered')
     if (result._tag !== 'Rendered') continue
     expect(result.status, path).toBeUndefined()
     expect(result.application.title, path).toContain(pageAt(path)?.title ?? '')
+    for (const [, href] of result.application.html.matchAll(/href="(\/[^"#?]*)/g)) {
+      if (href && href !== '/sitemap.xml' && !pageAt(normalize(href)))
+        broken.push(`${path} → ${href}`)
+    }
   }
+  expect(broken).toEqual([])
 }, 120_000)
 
 test('every catalog entry has its own page', () => {
