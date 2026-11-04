@@ -127,6 +127,20 @@ Blast radius is what a poison request (a request that triggers a crash) takes do
 only that request fails. "Process" means every in-flight request on that process fails and the
 process restarts. Node.js exits on an unhandled exception or rejection by default.
 
+### Zig and Haskell profiles
+
+Series A research also unlocks two configured servers. Their numeric values are game-balance
+choices, not measured language rankings. [Research sources and model limits](../research/zig-haskell.md)
+describe the assumptions.
+
+- **Zig threaded server:** native code, explicit allocators, no GC, and 64 OS-thread slots across
+  cores. Waiting requests occupy slots. Manual lifetimes and persistent state can still cause leaks.
+  The profile has 24 MB base memory, 1.3 CPU speed, 0.7 feature velocity, and specialist hiring.
+- **Haskell (GHC + Warp):** lightweight threads with multicore GHC enabled. Socket waits release OS
+  threads, but the shared heap has GC pauses. The profile has 80 MB base memory, 0.85 CPU speed,
+  and 1.15 feature velocity, paid for through slower builds, specialist hiring, and a 1.4 salary
+  factor. WAI is the application interface, not an extra framework unlock.
+
 ### Hiring and salaries
 
 | Language                  | Hiring pool | Time to hire | Salary |

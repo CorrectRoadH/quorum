@@ -5,6 +5,25 @@ import { frMail } from './fr-mail.ts'
 export const fr: Readonly<Record<string, string>> = {
   ...frGlossary,
   ...frMail,
+  'Review {0} migration': 'Examiner la migration vers {0}',
+  'Start migration': 'Démarrer la migration',
+  Proposed: 'Proposé',
+  'Zig threaded server': 'Serveur Zig multithread',
+  'Haskell (GHC + Warp)': 'Haskell (GHC + Warp)',
+  'Native code with explicit allocators and no GC. A 64-thread server uses every core, but each waiting request holds a thread. Persistent state can leak.':
+    'Du code natif avec des allocateurs explicites, sans GC. Un serveur de 64 threads utilise tous les cœurs, mais chaque requête en attente occupe un thread. L’état persistant peut fuir.',
+  'Warp runs lightweight GHC threads across cores. Productive specialists, but slower builds and hiring. I/O waits hold no OS thread; shared-heap GC adds pauses and CPU cost.':
+    'Warp répartit des threads GHC légers sur les cœurs. Des spécialistes productifs, mais une compilation et un recrutement plus lents. Les attentes d’E/S n’occupent aucun thread système ; le GC du tas partagé ajoute des pauses et un coût CPU.',
+  'Migration: {0} DH across all App Servers. Feature work slows and rollout can expose bugs. Manage work and shift traffic in Team after starting.':
+    'Migration : {0} DH pour tous les serveurs applicatifs. Le développement ralentit et le déploiement peut révéler des bugs. Après le démarrage, gérez le travail et le trafic dans Équipe.',
+  'Research {0}, then review the proposal again in Inbox.':
+    'Recherchez {0}, puis réexaminez la proposition dans la boîte de réception.',
+  'Add an App Server before reviewing a migration.':
+    'Ajoutez un serveur applicatif avant d’examiner une migration.',
+  'Your App Servers already run {0}. No rewrite is needed.':
+    'Vos serveurs applicatifs utilisent déjà {0}. Aucune réécriture n’est nécessaire.',
+  '{0} has no playable runtime. You can decline this proposal.':
+    '{0} n’a pas de runtime jouable. Vous pouvez refuser cette proposition.',
   'text-muted-foreground hover:bg-well hover:text-foreground':
     'survol du texte en sourdine : bg-well survol : texte-avant-plan',
   'text-[10.5px]': 'texte-[10.5px]',

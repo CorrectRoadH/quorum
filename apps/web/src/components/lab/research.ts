@@ -193,6 +193,8 @@ const LOOKS: Record<ResearchId, Look> = {
   'lang-csharp': { group: 'compute', logo: 'csharp' },
   'lang-elixir': { group: 'compute', logo: 'elixir' },
   'lang-rust': { group: 'compute', logo: 'rust' },
+  'lang-zig': { group: 'compute', logo: 'zig' },
+  'lang-haskell': { group: 'compute', logo: 'haskell' },
   'fw-gin': { group: 'compute', logo: 'gin' },
   'fw-spring-boot': { group: 'compute', logo: 'spring-boot' },
   'fw-aspnet': { group: 'compute', logo: 'aspnet' },

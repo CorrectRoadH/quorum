@@ -129,6 +129,8 @@ describe('migrations', () => {
       ['kestrel', 'lang-csharp'],
       ['beam', 'lang-elixir'],
       ['tokio', 'lang-rust'],
+      ['zig', 'lang-zig'],
+      ['warp', 'lang-haskell'],
     ]
     for (const [runtime, research] of targets) {
       const start = { ...four(), researched: [...four().researched, research] }

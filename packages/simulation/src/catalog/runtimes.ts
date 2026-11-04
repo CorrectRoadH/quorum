@@ -13,6 +13,8 @@ export const LANGUAGE_IDS = [
   'csharp',
   'elixir',
   'rust',
+  'zig',
+  'haskell',
 ] as const
 export type LanguageId = (typeof LANGUAGE_IDS)[number]
 
@@ -53,6 +55,15 @@ export const LANGUAGES: Record<LanguageId, LanguageDef> = {
     buildMinutes: 2,
   },
   rust: { id: 'rust', name: 'Rust', velocity: 0.6, salary: 1.25, hireTime: 2, buildMinutes: 12 },
+  zig: { id: 'zig', name: 'Zig', velocity: 0.7, salary: 1.25, hireTime: 3, buildMinutes: 6 },
+  haskell: {
+    id: 'haskell',
+    name: 'Haskell',
+    velocity: 1.15,
+    salary: 1.4,
+    hireTime: 2.5,
+    buildMinutes: 8,
+  },
 }
 
 export const RUNTIME_IDS = [
@@ -67,6 +78,8 @@ export const RUNTIME_IDS = [
   'kestrel',
   'beam',
   'tokio',
+  'zig',
+  'warp',
 ] as const
 export type RuntimeId = (typeof RUNTIME_IDS)[number]
 
@@ -390,6 +403,54 @@ export const RUNTIMES: Record<RuntimeId, RuntimeDef> = {
     research: 'lang-rust',
     blurb:
       'Async tasks on every core, no GC, little memory. A CPU-heavy task blocks one worker thread.',
+  },
+  zig: {
+    id: 'zig',
+    axes: { throughput: 5, tail: 4, memory: 4, velocity: 2, resilience: 2, operability: 2 },
+    glossary: ['thread-pool', 'blast-radius'],
+    language: 'zig',
+    name: 'Zig threaded server',
+    model: 'threads',
+    speed: 1.3,
+    memory: 24,
+    pool: false,
+    threads: 64,
+    connections: 10,
+    persistent: true,
+    startup: 0,
+    warmFrom: 1,
+    warmup: 0,
+    parallel: true,
+    blocking: null,
+    gc: null,
+    connectionKB: 256,
+    research: 'lang-zig',
+    blurb:
+      'Native code with explicit allocators and no GC. A 64-thread server uses every core, but each waiting request holds a thread. Persistent state can leak.',
+  },
+  warp: {
+    id: 'warp',
+    axes: { throughput: 4, tail: 3, memory: 3, velocity: 4, resilience: 4, operability: 1 },
+    glossary: ['green-threads', 'gc-pause'],
+    language: 'haskell',
+    name: 'Haskell (GHC + Warp)',
+    model: 'green',
+    speed: 0.85,
+    memory: 80,
+    pool: false,
+    threads: 1,
+    connections: 10,
+    persistent: true,
+    startup: 1,
+    warmFrom: 1,
+    warmup: 0,
+    parallel: true,
+    blocking: null,
+    gc: { pauseMs: 12, cpu: 0.15 },
+    connectionKB: 16,
+    research: 'lang-haskell',
+    blurb:
+      'Warp runs lightweight GHC threads across cores. Productive specialists, but slower builds and hiring. I/O waits hold no OS thread; shared-heap GC adds pauses and CPU cost.',
   },
 }
 

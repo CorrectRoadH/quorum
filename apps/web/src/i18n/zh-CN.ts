@@ -3,6 +3,24 @@ import { glossaryZhCN } from './zh-CN-glossary.ts'
 /** English source messages are stable lookup keys; technical names remain recognizable. */
 export const zhCN: Readonly<Record<string, string>> = {
   ...glossaryZhCN,
+  'Review {0} migration': '评估迁移到 {0}',
+  'Start migration': '开始迁移',
+  Proposed: '提议',
+  'Zig threaded server': 'Zig 多线程服务器',
+  'Haskell (GHC + Warp)': 'Haskell（GHC + Warp）',
+  'Native code with explicit allocators and no GC. A 64-thread server uses every core, but each waiting request holds a thread. Persistent state can leak.':
+    '使用显式分配器的原生代码，无 GC。64 线程服务器使用所有核心，但每个等待中的请求占用一个线程。持久状态仍可能泄漏内存。',
+  'Warp runs lightweight GHC threads across cores. Productive specialists, but slower builds and hiring. I/O waits hold no OS thread; shared-heap GC adds pauses and CPU cost.':
+    'Warp 在多个核心上运行轻量 GHC 线程。专家开发效率高，但编译和招聘较慢。I/O 等待不占用系统线程；共享堆 GC 会带来暂停和 CPU 开销。',
+  'Migration: {0} DH across all App Servers. Feature work slows and rollout can expose bugs. Manage work and shift traffic in Team after starting.':
+    '迁移所有应用服务器需要 {0} DH。功能开发会减慢，逐步上线可能暴露错误。开始后，请在团队中管理工作并切换流量。',
+  'Research {0}, then review the proposal again in Inbox.':
+    '先研究 {0}，然后回到收件箱重新评估提案。',
+  'Add an App Server before reviewing a migration.': '请先添加应用服务器，再评估迁移。',
+  'Your App Servers already run {0}. No rewrite is needed.':
+    '你的应用服务器已经使用 {0}，无需重写。',
+  '{0} has no playable runtime. You can decline this proposal.':
+    '{0} 暂无可用运行时。你可以拒绝此提案。',
   BOTTLENECK: '瓶颈',
   Language: '语言',
   'Clock in': '打卡上班',

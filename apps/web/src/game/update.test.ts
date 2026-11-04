@@ -390,6 +390,87 @@ describe('Tradeoff cards', () => {
       locked.board.game.nodes,
     )
   })
+
+  test.each([
+    ['Go', 'go', 'lang-go'],
+    ['Zig', 'zig', 'lang-zig'],
+    ['Haskell', 'warp', 'lang-haskell'],
+  ] as const)(
+    '%s mail reviews the proposed Stack even after runtime tradeoffs were seen',
+    (language, runtime, research) => {
+      const start = ready()
+      const prepared: Model = {
+        ...start,
+        panel: 'inbox',
+        prefs: { ...start.prefs, seenTradeoffs: ['runtime'] },
+        board: {
+          ...start.board,
+          selected: 'database',
+          selection: ['database'],
+          game: { ...start.board.game, researched: [...start.board.game.researched, research] },
+        },
+      }
+      const mailed = send(
+        prepared,
+        Message.InboxChanged({ message: InboxMessage.SampleChosen({ id: `rewrite:${language}` }) }),
+        Message.InboxChanged({ message: InboxMessage.Generated({ count: 1 }) }),
+      )
+      const mail = mailed.board.inbox.mail.at(-1)!
+      expect(mail.actions[0]).toEqual({
+        id: `rewrite:${language}`,
+        label: `Review ${language} migration`,
+      })
+      const reviewed = send(
+        mailed,
+        Message.InboxChanged({
+          message: InboxMessage.Acted({ id: mail.id, action: mail.actions[0]!.id }),
+        }),
+      )
+      expect(reviewed.panel).toBe('none')
+      expect(reviewed.board.selected).toBe('server')
+      expect(reviewed.board.selection).toEqual([])
+      expect(reviewed.board.tradeoff).toMatchObject({
+        nodeId: 'server',
+        option: { kind: 'runtime', id: runtime },
+        pinned: true,
+        refusal: null,
+      })
+      expect(reviewed.board.game).toBe(mailed.board.game)
+      expect(reviewed.board.inbox.mail.at(-1)?.answer).toBeNull()
+      expect(send(reviewed, Message.TradeoffClosed()).board.game).toBe(mailed.board.game)
+      const confirmed = send(reviewed, Message.OptionConfirmed())
+      expect(confirmed.board.game.services[0]?.migration?.runtime).toBe(runtime)
+      expect(confirmed.board.game.nodes.find((node) => node.id === 'server')?.runtime).toBe(
+        'php_fpm',
+      )
+    },
+  )
+
+  test.each([
+    ['Elixir', 'lang-elixir'],
+    ['Zig', 'lang-zig'],
+    ['Haskell', 'lang-haskell'],
+  ])(
+    'locked %s mail opens its research without answering or starting the migration',
+    (language, research) => {
+      const mailed = send(
+        ready(),
+        Message.InboxChanged({ message: InboxMessage.SampleChosen({ id: `rewrite:${language}` }) }),
+        Message.InboxChanged({ message: InboxMessage.Generated({ count: 1 }) }),
+      )
+      const mail = mailed.board.inbox.mail.at(-1)!
+      const reviewed = send(
+        mailed,
+        Message.InboxChanged({
+          message: InboxMessage.Acted({ id: mail.id, action: mail.actions[0]!.id }),
+        }),
+      )
+      expect(reviewed.panel).toBe('research')
+      expect(reviewed.board.research.focus).toBe(research)
+      expect(reviewed.board.game).toBe(mailed.board.game)
+      expect(reviewed.board.inbox.mail.at(-1)?.answer).toBeNull()
+    },
+  )
 })
 
 describe('Exit and offline return', () => {

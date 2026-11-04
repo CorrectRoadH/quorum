@@ -158,6 +158,8 @@ const DEFAULT_RUNTIME: Record<LanguageId, RuntimeId> = {
   csharp: 'kestrel',
   elixir: 'beam',
   rust: 'tokio',
+  zig: 'zig',
+  haskell: 'warp',
 }
 
 const frameworkOption =

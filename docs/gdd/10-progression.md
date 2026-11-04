@@ -439,6 +439,8 @@ language ([Runtimes](./06-runtimes.md#variants-by-language)).
 | `asgi`               | ASGI with Uvicorn      | Seed     | 500    | `lang-python` |
 | `lang-elixir`        | Elixir                 | Series A | 2,500  | —             |
 | `lang-rust`          | Rust                   | Series A | 4,000  | —             |
+| `lang-zig`           | Zig                    | Series A | 3,500  | —             |
+| `lang-haskell`       | Haskell                | Series A | 3,000  | —             |
 | `php-worker-mode`    | PHP worker mode        | Series A | 2,500  | `php-fpm`     |
 | `swoole`             | Swoole                 | Series A | 3,000  | `php-fpm`     |
 | `bun`                | Bun                    | Series A | 2,000  | `lang-node`   |

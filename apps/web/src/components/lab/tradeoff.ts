@@ -9,6 +9,7 @@ import {
   type Axis,
 } from '@quorum/simulation/catalog'
 import { has } from '@quorum/simulation/lookups'
+import { migrationCost, targetOf } from '@quorum/simulation/migration'
 import type { GameNode } from '@quorum/simulation/state'
 import { describeDelta } from '@/game/feedback.ts'
 import { money } from '@/game/format.ts'
@@ -244,8 +245,8 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
   const current = currentOf(node, card.option)
   const title = `${KIND_TITLE[card.option.kind]}: ${nameOf(current)} → ${nameOf(card.option)}`
 
-  // A confirmed option set collapses to one line.
-  if (model.prefs.seenTradeoffs.includes(card.option.kind))
+  // Explicit reviews stay expanded even after this option set has been seen.
+  if (!card.pinned && model.prefs.seenTradeoffs.includes(card.option.kind))
     return h.div(
       [
         h.Key('tradeoff-line'),
@@ -259,6 +260,17 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
 
   const stack = stackOf(card.option)
   const now = stackOf(current)
+  const migration =
+    !model.board.game.sandbox &&
+    node.type === 'server' &&
+    (card.option.kind === 'runtime' || card.option.kind === 'framework')
+      ? targetOf(
+          node,
+          card.option.kind === 'runtime'
+            ? { runtime: card.option.id }
+            : { framework: card.option.id },
+        )
+      : null
   return h.div(
     [
       h.Key('tradeoff'),
@@ -270,7 +282,7 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
         [h.Class('flex items-center gap-2')],
         [
           icon(h, Sparkles, 'size-4 shrink-0 text-group-compute'),
-          h.span([h.Class('flex-1 truncate text-[13.5px] font-semibold')], [title]),
+          h.span([h.Class('min-w-0 flex-1 text-[13.5px] font-semibold')], [title]),
           card.pinned
             ? button(
                 {
@@ -288,6 +300,14 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       stack && now ? radar(now.axes, stack.axes, h) : h.empty,
       effect(model, card, h),
+      migration && !card.refusal
+        ? h.p(
+            [h.Class('text-[12px] leading-snug text-muted-foreground')],
+            [
+              `Migration: ${migrationCost(model.board.game, migration)} DH across all App Servers. Feature work slows and rollout can expose bugs. Manage work and shift traffic in Team after starting.`,
+            ],
+          )
+        : h.empty,
       stack && stack.glossary.length > 0
         ? h.div(
             [h.Class('flex flex-wrap gap-1.5')],
@@ -313,11 +333,11 @@ export const tradeoffCard = (model: Model, h: HtmlBuilder<Message>): Html => {
               button(
                 {
                   onClick: Message.OptionConfirmed(),
-                  isDisabled: card.preview === null,
+                  isDisabled: card.preview === null || card.refusal !== null,
                   size: 'lg',
                   className: 'flex-1',
                 },
-                [icon(h, Check, 'size-4'), 'Confirm'],
+                [icon(h, Check, 'size-4'), migration ? 'Start migration' : 'Confirm'],
                 h,
               ),
               button(

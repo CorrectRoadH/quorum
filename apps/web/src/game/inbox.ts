@@ -198,6 +198,7 @@ const ACTING = new Set([
   'decline',
   'hire',
   'team',
+  'rewrite',
   'first',
   'rush',
   'show',

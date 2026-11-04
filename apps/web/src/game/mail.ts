@@ -243,7 +243,7 @@ const rewriteFact = (game: Game, mate: string, salt: number): Fact => {
   // An engineer falls for one language and stays with it.
   const rewrite = pick(REWRITES, mate, 'rewrite')
   return fact(key, mate, write(rewrite.letters, {}, mate, game, key, salt), [
-    { id: 'team', label: 'Open Team' },
+    { id: `rewrite:${rewrite.language}`, label: `Review ${rewrite.language} migration` },
     { id: 'decline', label: 'Decline' },
   ])
 }
@@ -543,7 +543,7 @@ export const SAMPLES: ReadonlyArray<Sample> = [
       const mate = mateOf(game, n)
       const key = `team:rewrite:${mate}#${n}`
       return fact(key, mate, write(rewrite.letters, {}, mate, game, key, n), [
-        { id: 'team', label: 'Open Team' },
+        { id: `rewrite:${rewrite.language}`, label: `Review ${rewrite.language} migration` },
         { id: 'decline', label: 'Decline' },
       ])
     },

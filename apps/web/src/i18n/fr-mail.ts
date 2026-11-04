@@ -2226,16 +2226,16 @@ export const frMail: Readonly<Record<string, string>> = {
     "J'ai passé le week-end avec Rust et je pense que je suis amoureux. Le compilateur a discuté avec moi pendant six heures et c'était vrai à chaque fois. Imaginez nos serveurs applicatifs avec ce genre d'honnêteté.",
   'I could rewrite them in a couple of weeks. Maybe less. The borrow checker does half the work.':
     "Je pourrais les réécrire dans quelques semaines. Peut-être moins. Le vérificateur d'emprunt fait la moitié du travail.",
-  "Open Team if you want to talk it through, or Decline and I'll go back to pretending I'm fine.":
-    "Ouvrez l'équipe si vous voulez en parler, ou refusez et je recommencerai à faire semblant que je vais bien.",
+  "Review the migration if you want to talk it through, or Decline and I'll go back to pretending I'm fine.":
+    'Examinez la migration si vous voulez en parler, ou refusez et je recommencerai à faire semblant que je vais bien.',
   'Memory safety is a feeling, and I have it':
     "La sécurité de la mémoire est un sentiment, et je l'ai",
   "Every null pointer we've ever chased would simply not compile in Rust. I want that for us. I want that for the app servers.":
     'Chaque pointeur nul que nous avons recherché ne serait tout simplement pas compilé dans Rust. Je veux ça pour nous. Je veux ça pour les serveurs applicatifs.',
   "My estimate is one sprint. I've been wrong about estimates before, but never about Rust.":
     'Mon estimation est un sprint. Je me suis déjà trompé sur les estimations, mais jamais sur Rust.',
-  "If you'd like to plan it, Open Team. If not, Decline, and I'll respect that, and I'll mention Rust in standup anyway.":
-    'Si vous souhaitez le planifier, Ouvrir l’équipe. Sinon, refusez, et je respecterai cela, et je mentionnerai quand même Rust en stand-up.',
+  "If you'd like to plan it, review the migration. If not, Decline, and I'll respect that, and I'll mention Rust in standup anyway.":
+    'Si vous souhaitez le planifier, examinez la migration. Sinon, refusez, et je respecterai cela, et je mentionnerai quand même Rust en stand-up.',
   'RFC: rewrite the app servers in Rust': 'RFC : réécrire les serveurs applicatifs dans Rust',
   'RFC: Rewrite the app servers in Rust\nAuthor: {0}\nStatus: Extremely proposed':
     'RFC : réécrire les serveurs applicatifs dans Rust\nAuteur : {0}\nStatut : Extrêmement proposé',
@@ -2245,14 +2245,15 @@ export const frMail: Readonly<Record<string, string>> = {
   'Estimate: small. Smaller than you think. Possibly smaller than I think.':
     'Estimation : petite. Plus petit que vous ne le pensez. Peut-être plus petit que je ne le pense.',
   "Risks: none I'm willing to discuss.": 'Risques : aucun dont je suis prêt à discuter.',
-  'To discuss anyway, Open Team. To end this, Decline.':
-    'Pour discuter quand même, Ouvrir l’équipe. Pour mettre fin à cela, refusez.',
+  'To discuss anyway, review the migration. To end this, Decline.':
+    'Pour discuter quand même, examinez la migration. Pour mettre fin à cela, refusez.',
   'Go is just... simple?': 'Go est juste... simple ?',
   'I rewrote a toy service in Go on the train home. Then I rewrote it again because it was so pleasant. "if err != nil" is a lifestyle now and I\'ve adopted it.':
     "J'ai réécrit un service de jouets en Go dans le train du retour. Puis je l'ai réécrit parce que c'était tellement agréable. \"if err != nil\" est désormais un style de vie et je l'ai adopté.",
   "Our app servers would be one small binary each. I think it's a week's work. Two if we argue about naming.":
     "Nos serveurs applicatifs seraient chacun un petit binaire. Je pense que c'est une semaine de travail. Deux si nous discutons de la dénomination.",
-  'Open Team to plan it, or Decline.': "Ouvrez l'équipe pour le planifier, ou refusez.",
+  'Review the migration to plan it, or Decline.':
+    'Examinez la migration pour la planifier, ou refusez.',
   'Goroutines for the app servers': 'Goroutines pour les serveurs applicatifs',
   'Short version: rewrite the app servers in Go.':
     'Version courte : réécrivez les serveurs applicatifs dans Go.',
@@ -2260,14 +2261,14 @@ export const frMail: Readonly<Record<string, string>> = {
     'Version longue : goroutines. Canaux. Une bibliothèque standard qui ne contient que des éléments. Il se compile avant que vous ayez fini de cligner des yeux.',
   "Estimate: a few days. It's a boring language, so it's a boring rewrite, so it'll be fast. That's just logic.":
     "Estimation : quelques jours. C'est un langage ennuyeux, donc c'est une réécriture ennuyeuse, donc ce sera rapide. C'est juste de la logique.",
-  'Open Team or Decline.': "Ouvrir l'équipe ou refuser.",
+  'Review the migration or Decline.': 'Examinez la migration ou refusez.',
   'A modest proposal (in Go)': 'Une proposition modeste (en Go)',
   "I know rewrites have a reputation. This one is different: Go was designed so that people like me can't overcomplicate things. I've tested that theory by trying very hard, and so far the language is winning.":
     "Je sais que les réécritures ont une réputation. Celui-ci est différent : le Go a été conçu pour que les gens comme moi ne puissent pas trop compliquer les choses. J'ai testé cette théorie en faisant de gros efforts, et jusqu'à présent, le langage gagne.",
   "I'd like to move the app servers to Go. Honestly, the hard part is already done. I've decided.":
     "Je souhaite déplacer les serveurs applicatifs vers Go. Honnêtement, le plus dur est déjà fait. J'ai décidé.",
-  "If you want the details, Open Team. If you'd rather not, Decline, and I'll keep my gopher sticker to myself.":
-    'Si vous voulez les détails, ouvrez équipe. Si vous préférez ne pas le faire, refusez, et je garderai mon autocollant Gopher pour moi.',
+  "If you want the details, review the migration. If you'd rather not, Decline, and I'll keep my gopher sticker to myself.":
+    'Si vous voulez les détails, examinez la migration. Si vous préférez ne pas le faire, refusez, et je garderai mon autocollant Gopher pour moi.',
   'Let it crash (in a good way)': "Laisse-le s'écraser (dans le bon sens)",
   "I've found Elixir and I've found peace. Processes crash, supervisors restart them, and nobody gets paged. Can you imagine our app servers just... healing?":
     "J'ai trouvé Elixir et j'ai trouvé la paix. Les processus plantent, les superviseurs les redémarrent et personne n'est bipé. Pouvez-vous imaginer que nos serveurs applicatifs soient juste... en train de guérir ?",
@@ -2280,8 +2281,8 @@ export const frMail: Readonly<Record<string, string>> = {
     "Le temps d'exécution sous Elixir a été conçu pour les commutateurs téléphoniques qui n'étaient pas autorisés à tomber en panne. Nos serveurs applicatifs tombent en panne lorsque quelqu'un éternue à proximité.",
   "I'd like to rewrite them in Elixir. A sprint, maybe a sprint and a bit. It's mostly pipes and joy.":
     "J'aimerais les réécrire dans Elixir. Un sprint, peut-être un sprint et un peu. C'est surtout des pipes et de la joie.",
-  "Open Team if you're curious. Decline if you've heard enough. I'll still be humming, quietly, in a fault-tolerant way.":
-    'Ouvrez équipe si vous êtes curieux. Refusez si vous en avez suffisamment entendu. Je continuerai de fredonner, doucement, de manière tolérante aux pannes.',
+  "Review the migration if you're curious. Decline if you've heard enough. I'll still be humming, quietly, in a fault-tolerant way.":
+    'Examinez la migration si vous êtes curieux. Refusez si vous en avez suffisamment entendu. Je continuerai de fredonner, doucement, de manière tolérante aux pannes.',
   'quick elixir thought': "pensée d'élixir rapide",
   'random thought at 1 a.m.:': 'pensée aléatoire à 1 heure du matin :',
   'what if the app servers were Elixir.': 'et si les serveurs applicatifs étaient Elixir.',
@@ -2289,12 +2290,13 @@ export const frMail: Readonly<Record<string, string>> = {
   "hot code reloading. deploys without restarts. i read the whole book tonight, so i'm basically an expert.":
     "rechargement de code à chaud. se déploie sans redémarrage. j'ai lu le livre en entier ce soir, donc je suis fondamentalement un expert.",
   'probably a week? the book was short.': 'probablement une semaine ? le livre était court.',
-  'Open Team if you want to hear the rest of the thought. Decline if you want me to go to sleep.':
-    "Ouvrez l'équipe si vous voulez entendre le reste de la pensée. Refusez si vous voulez que je m'endorme.",
+  'Review the migration if you want to hear the rest of the thought. Decline if you want me to go to sleep.':
+    'Examinez la migration si vous voulez entendre le reste de la pensée. Refusez si vous voulez que je m’endorme.',
   Zig: 'Zig',
   "I've started writing Zig and I can see every allocation with my own eyes. It's like taking off foggy glasses I didn't know I was wearing.":
     "J'ai commencé à écrire Zig et je peux voir chaque allocation de mes propres yeux. C'est comme enlever des lunettes embuées que je ne savais pas que je portais.",
-  'Open Team to talk it over, or Decline.': "Ouvrir l'équipe pour en discuter, ou refuser.",
+  'Review the migration to talk it over, or Decline.':
+    'Examinez la migration pour en discuter, ou refusez.',
   'Explicitly yours,\n{0}': 'Explicitement vôtre,\n{0}',
   "That's the pitch. That's the whole word.": "C'est le pitch. C'est tout le mot.",
   "Fine, more: Zig, for the app servers. Manual memory, but friendly about it. I'll have it done before the next version of Zig comes out, which is soon, so I'd better start.":
@@ -2304,8 +2306,8 @@ export const frMail: Readonly<Record<string, string>> = {
     "J'ai lu la bibliothèque standard Zig pour m'amuser. Oui, pour le plaisir. C'est très lisible, ce qui en dit long sur la langue et aussi sur mes soirées.",
   "I'd like to propose a rewrite of the app servers in Zig. By my estimate it's mostly typing, and things that are mostly typing are quick.":
     "J'aimerais proposer une réécriture des serveurs applicatifs dans Zig. D'après mon estimation, il s'agit principalement de frappe, et les choses qui consistent principalement à taper sont rapides.",
-  "If you'd like to see my plan (one page, with a diagram), Open Team. Otherwise, Decline.":
-    'Si vous souhaitez voir mon plan (une page, avec un schéma), Ouvrir l’équipe. Sinon, refusez.',
+  "If you'd like to see my plan (one page, with a diagram), review the migration. Otherwise, Decline.":
+    'Si vous souhaitez voir mon plan (une page, avec un schéma), examinez la migration. Sinon, refusez.',
   'Thanks for reading,\n{0}': "Merci d'avoir lu,\n{0}",
   Haskell: 'Haskell',
   'What if the app servers were pure?': 'Et si les serveurs applicatifs étaient purs ?',
@@ -2313,13 +2315,14 @@ export const frMail: Readonly<Record<string, string>> = {
     "J'ai appris Haskell et je ne peux pas revenir en arrière. Nos serveurs applicatifs ont des effets secondaires partout. À Haskell, ils vivraient dans une monade, là où ils appartiennent, sous surveillance.",
   'The rewrite is quick once the types line up. The types always line up eventually. If it compiles, it works.':
     'La réécriture est rapide une fois les types alignés. Les types finissent toujours par s’aligner. Si ça compile, ça marche.',
-  'Open Team to discuss, or Decline.': "Ouvrir l'équipe pour discuter ou refuser.",
+  'Review the migration to discuss, or Decline.':
+    'Examinez la migration pour en discuter ou refusez.',
   'A monad is just a monoid in the category of...':
     "Une monade n'est qu'un monoïde dans la catégorie des...",
   "I want to rewrite the app servers in Haskell. I'll explain monads in the planning meeting. It'll take ten minutes. The explanation, I mean. The rewrite will take, like, a sprint.":
     "Je souhaite réécrire les serveurs applicatifs dans Haskell. J'expliquerai les monades lors de la réunion de planification. Cela prendra dix minutes. L'explication, je veux dire. La réécriture prendra genre un sprint.",
-  "Open Team and I'll bring a whiteboard. Decline and I'll bring it anyway, just to stand next to.":
-    "Équipe ouverte et j'apporterai un tableau blanc. Refusez et je l'apporterai quand même, juste pour me tenir à côté.",
+  "Review the migration and I'll bring a whiteboard. Decline and I'll bring it anyway, just to stand next to.":
+    'Examinez la migration et j’apporterai un tableau blanc. Refusez et je l’apporterai quand même, juste pour me tenir à côté.',
   'Lazily yours,\n{0}': 'Paresseusement vôtre,\n{0}',
   'Type-safe app servers: a proposal': "Serveurs d'applications de type sécurisé : une proposition",
   "I'm proposing we rewrite the app servers in Haskell.":
@@ -2328,8 +2331,8 @@ export const frMail: Readonly<Record<string, string>> = {
     'Ce que nous obtenons : un système de type qui détecte les bogues avant les utilisateurs et un code qui se lit comme des mathématiques.',
   "What it costs: less than you'd think. Most of the work is choosing the types, and I've already chosen most of them, in my head, on the bus.":
     "Ce que ça coûte : moins que vous ne le pensez. La majeure partie du travail consiste à choisir les types, et j'en ai déjà choisi la plupart, dans ma tête, dans le bus.",
-  'Open Team to go through it together, or Decline.':
-    "Ouvrir l'équipe pour le parcourir ensemble, ou refuser.",
+  'Review the migration to go through it together, or Decline.':
+    'Examinez la migration pour la parcourir ensemble, ou refusez.',
   '[Ticket #4096] "Is it supposed to be this slow?"':
     '[Ticket #4096] "Est-ce que c\'est censé être aussi lent ?"',
   'A customer opened a ticket via {0}:': 'Un client a ouvert un ticket via {0} :',

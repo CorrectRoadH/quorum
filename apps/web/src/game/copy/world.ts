@@ -94,15 +94,15 @@ export const REWRITES: ReadonlyArray<Rewrite> = [
     letters: [
       ({ from }) => ({
         subject: `hear me out: Rust`,
-        body: `ok so hear me out.\n\nI spent the weekend with Rust and I think I'm in love. The compiler argued with me for six hours and it was right every single time. Imagine our app servers with that kind of honesty.\n\nI could rewrite them in a couple of weeks. Maybe less. The borrow checker does half the work.\n\nOpen Team if you want to talk it through, or Decline and I'll go back to pretending I'm fine.\n\n${from.split(' ')[0]}`,
+        body: `ok so hear me out.\n\nI spent the weekend with Rust and I think I'm in love. The compiler argued with me for six hours and it was right every single time. Imagine our app servers with that kind of honesty.\n\nI could rewrite them in a couple of weeks. Maybe less. The borrow checker does half the work.\n\nReview the migration if you want to talk it through, or Decline and I'll go back to pretending I'm fine.\n\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `Memory safety is a feeling, and I have it`,
-        body: `Hi,\n\nEvery null pointer we've ever chased would simply not compile in Rust. I want that for us. I want that for the app servers.\n\nMy estimate is one sprint. I've been wrong about estimates before, but never about Rust.\n\nIf you'd like to plan it, Open Team. If not, Decline, and I'll respect that, and I'll mention Rust in standup anyway.\n\nThanks,\n${from.split(' ')[0]}`,
+        body: `Hi,\n\nEvery null pointer we've ever chased would simply not compile in Rust. I want that for us. I want that for the app servers.\n\nMy estimate is one sprint. I've been wrong about estimates before, but never about Rust.\n\nIf you'd like to plan it, review the migration. If not, Decline, and I'll respect that, and I'll mention Rust in standup anyway.\n\nThanks,\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `RFC: rewrite the app servers in Rust`,
-        body: `RFC: Rewrite the app servers in Rust\nAuthor: ${from}\nStatus: Extremely proposed\n\nMotivation: fearless concurrency. Also, I'm afraid of our current concurrency.\n\nPlan:\n1. Rewrite.\n2. Celebrate.\n\nEstimate: small. Smaller than you think. Possibly smaller than I think.\n\nRisks: none I'm willing to discuss.\n\nTo discuss anyway, Open Team. To end this, Decline.\n\n${from.split(' ')[0]}`,
+        body: `RFC: Rewrite the app servers in Rust\nAuthor: ${from}\nStatus: Extremely proposed\n\nMotivation: fearless concurrency. Also, I'm afraid of our current concurrency.\n\nPlan:\n1. Rewrite.\n2. Celebrate.\n\nEstimate: small. Smaller than you think. Possibly smaller than I think.\n\nRisks: none I'm willing to discuss.\n\nTo discuss anyway, review the migration. To end this, Decline.\n\n${from.split(' ')[0]}`,
       }),
     ],
   },
@@ -111,15 +111,15 @@ export const REWRITES: ReadonlyArray<Rewrite> = [
     letters: [
       ({ from }) => ({
         subject: `Go is just... simple?`,
-        body: `Hey,\n\nI rewrote a toy service in Go on the train home. Then I rewrote it again because it was so pleasant. "if err != nil" is a lifestyle now and I've adopted it.\n\nOur app servers would be one small binary each. I think it's a week's work. Two if we argue about naming.\n\nOpen Team to plan it, or Decline.\n\n${from.split(' ')[0]}`,
+        body: `Hey,\n\nI rewrote a toy service in Go on the train home. Then I rewrote it again because it was so pleasant. "if err != nil" is a lifestyle now and I've adopted it.\n\nOur app servers would be one small binary each. I think it's a week's work. Two if we argue about naming.\n\nReview the migration to plan it, or Decline.\n\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `Goroutines for the app servers`,
-        body: `Short version: rewrite the app servers in Go.\n\nLong version: goroutines. Channels. A standard library that just has things in it. It compiles before you finish blinking.\n\nEstimate: a few days. It's a boring language, so it's a boring rewrite, so it'll be fast. That's just logic.\n\nOpen Team or Decline.\n\n${from.split(' ')[0]}`,
+        body: `Short version: rewrite the app servers in Go.\n\nLong version: goroutines. Channels. A standard library that just has things in it. It compiles before you finish blinking.\n\nEstimate: a few days. It's a boring language, so it's a boring rewrite, so it'll be fast. That's just logic.\n\nReview the migration or Decline.\n\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `A modest proposal (in Go)`,
-        body: `Hi,\n\nI know rewrites have a reputation. This one is different: Go was designed so that people like me can't overcomplicate things. I've tested that theory by trying very hard, and so far the language is winning.\n\nI'd like to move the app servers to Go. Honestly, the hard part is already done. I've decided.\n\nIf you want the details, Open Team. If you'd rather not, Decline, and I'll keep my gopher sticker to myself.\n\nCheers,\n${from.split(' ')[0]}`,
+        body: `Hi,\n\nI know rewrites have a reputation. This one is different: Go was designed so that people like me can't overcomplicate things. I've tested that theory by trying very hard, and so far the language is winning.\n\nI'd like to move the app servers to Go. Honestly, the hard part is already done. I've decided.\n\nIf you want the details, review the migration. If you'd rather not, Decline, and I'll keep my gopher sticker to myself.\n\nCheers,\n${from.split(' ')[0]}`,
       }),
     ],
   },
@@ -128,15 +128,15 @@ export const REWRITES: ReadonlyArray<Rewrite> = [
     letters: [
       ({ from }) => ({
         subject: `Let it crash (in a good way)`,
-        body: `Hi!\n\nI've found Elixir and I've found peace. Processes crash, supervisors restart them, and nobody gets paged. Can you imagine our app servers just... healing?\n\nI think the rewrite is a couple of weeks. The pattern matching basically writes itself, and the parts that don't, a supervisor will restart.\n\nOpen Team to plan it, or Decline.\n\nWith newfound serenity,\n${from.split(' ')[0]}`,
+        body: `Hi!\n\nI've found Elixir and I've found peace. Processes crash, supervisors restart them, and nobody gets paged. Can you imagine our app servers just... healing?\n\nI think the rewrite is a couple of weeks. The pattern matching basically writes itself, and the parts that don't, a supervisor will restart.\n\nReview the migration to plan it, or Decline.\n\nWith newfound serenity,\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `It ran phone switches. It can run us.`,
-        body: `Hey,\n\nThe runtime under Elixir was built for telephone switches that were not allowed to go down. Our app servers go down when someone sneezes near them.\n\nI'd like to rewrite them in Elixir. A sprint, maybe a sprint and a bit. It's mostly pipes and joy.\n\nOpen Team if you're curious. Decline if you've heard enough. I'll still be humming, quietly, in a fault-tolerant way.\n\n${from.split(' ')[0]}`,
+        body: `Hey,\n\nThe runtime under Elixir was built for telephone switches that were not allowed to go down. Our app servers go down when someone sneezes near them.\n\nI'd like to rewrite them in Elixir. A sprint, maybe a sprint and a bit. It's mostly pipes and joy.\n\nReview the migration if you're curious. Decline if you've heard enough. I'll still be humming, quietly, in a fault-tolerant way.\n\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `quick elixir thought`,
-        body: `random thought at 1 a.m.:\n\nwhat if the app servers were Elixir.\n\nlike, what if.\n\nhot code reloading. deploys without restarts. i read the whole book tonight, so i'm basically an expert.\n\nprobably a week? the book was short.\n\nOpen Team if you want to hear the rest of the thought. Decline if you want me to go to sleep.\n\n${from.split(' ')[0]}`,
+        body: `random thought at 1 a.m.:\n\nwhat if the app servers were Elixir.\n\nlike, what if.\n\nhot code reloading. deploys without restarts. i read the whole book tonight, so i'm basically an expert.\n\nprobably a week? the book was short.\n\nReview the migration if you want to hear the rest of the thought. Decline if you want me to go to sleep.\n\n${from.split(' ')[0]}`,
       }),
     ],
   },
@@ -145,15 +145,15 @@ export const REWRITES: ReadonlyArray<Rewrite> = [
     letters: [
       ({ from }) => ({
         subject: `Zig: no hidden control flow, no hidden anything`,
-        body: `Hi,\n\nI've started writing Zig and I can see every allocation with my own eyes. It's like taking off foggy glasses I didn't know I was wearing.\n\nI want to rewrite the app servers in Zig. It's young, but so are we. I figure a couple of weeks, since there's no hidden control flow to slow me down.\n\nOpen Team to talk it over, or Decline.\n\nExplicitly yours,\n${from.split(' ')[0]}`,
+        body: `Hi,\n\nI've started writing Zig and I can see every allocation with my own eyes. It's like taking off foggy glasses I didn't know I was wearing.\n\nI want to rewrite the app servers in Zig. It's young, but so are we. I figure a couple of weeks, since there's no hidden control flow to slow me down.\n\nReview the migration to talk it over, or Decline.\n\nExplicitly yours,\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `comptime`,
-        body: `comptime.\n\nThat's the pitch. That's the whole word.\n\nFine, more: Zig, for the app servers. Manual memory, but friendly about it. I'll have it done before the next version of Zig comes out, which is soon, so I'd better start.\n\nOpen Team or Decline.\n\n${from.split(' ')[0]}`,
+        body: `comptime.\n\nThat's the pitch. That's the whole word.\n\nFine, more: Zig, for the app servers. Manual memory, but friendly about it. I'll have it done before the next version of Zig comes out, which is soon, so I'd better start.\n\nReview the migration or Decline.\n\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `Proposal: the app servers, but in Zig`,
-        body: `Hello,\n\nI've been reading the Zig standard library for fun. Yes, for fun. It's very readable, which says something about the language and also about my evenings.\n\nI'd like to propose a rewrite of the app servers in Zig. By my estimate it's mostly typing, and things that are mostly typing are quick.\n\nIf you'd like to see my plan (one page, with a diagram), Open Team. Otherwise, Decline.\n\nThanks for reading,\n${from.split(' ')[0]}`,
+        body: `Hello,\n\nI've been reading the Zig standard library for fun. Yes, for fun. It's very readable, which says something about the language and also about my evenings.\n\nI'd like to propose a rewrite of the app servers in Zig. By my estimate it's mostly typing, and things that are mostly typing are quick.\n\nIf you'd like to see my plan (one page, with a diagram), review the migration. Otherwise, Decline.\n\nThanks for reading,\n${from.split(' ')[0]}`,
       }),
     ],
   },
@@ -162,15 +162,15 @@ export const REWRITES: ReadonlyArray<Rewrite> = [
     letters: [
       ({ from }) => ({
         subject: `What if the app servers were pure?`,
-        body: `Hi,\n\nI've been learning Haskell, and I can't go back. Our app servers have side effects everywhere. In Haskell they'd live in a monad, where they belong, being watched.\n\nThe rewrite is quick once the types line up. The types always line up eventually. If it compiles, it works.\n\nOpen Team to discuss, or Decline.\n\n${from.split(' ')[0]}`,
+        body: `Hi,\n\nI've been learning Haskell, and I can't go back. Our app servers have side effects everywhere. In Haskell they'd live in a monad, where they belong, being watched.\n\nThe rewrite is quick once the types line up. The types always line up eventually. If it compiles, it works.\n\nReview the migration to discuss, or Decline.\n\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `A monad is just a monoid in the category of...`,
-        body: `...wait, let me start over.\n\nI want to rewrite the app servers in Haskell. I'll explain monads in the planning meeting. It'll take ten minutes. The explanation, I mean. The rewrite will take, like, a sprint.\n\nOpen Team and I'll bring a whiteboard. Decline and I'll bring it anyway, just to stand next to.\n\nLazily yours,\n${from.split(' ')[0]}`,
+        body: `...wait, let me start over.\n\nI want to rewrite the app servers in Haskell. I'll explain monads in the planning meeting. It'll take ten minutes. The explanation, I mean. The rewrite will take, like, a sprint.\n\nReview the migration and I'll bring a whiteboard. Decline and I'll bring it anyway, just to stand next to.\n\nLazily yours,\n${from.split(' ')[0]}`,
       }),
       ({ from }) => ({
         subject: `Type-safe app servers: a proposal`,
-        body: `Hello,\n\nI'm proposing we rewrite the app servers in Haskell.\n\nWhat we get: a type system that catches bugs before users do, and code that reads like mathematics.\n\nWhat it costs: less than you'd think. Most of the work is choosing the types, and I've already chosen most of them, in my head, on the bus.\n\nOpen Team to go through it together, or Decline.\n\nBest,\n${from.split(' ')[0]}`,
+        body: `Hello,\n\nI'm proposing we rewrite the app servers in Haskell.\n\nWhat we get: a type system that catches bugs before users do, and code that reads like mathematics.\n\nWhat it costs: less than you'd think. Most of the work is choosing the types, and I've already chosen most of them, in my head, on the bus.\n\nReview the migration to go through it together, or Decline.\n\nBest,\n${from.split(' ')[0]}`,
       }),
     ],
   },

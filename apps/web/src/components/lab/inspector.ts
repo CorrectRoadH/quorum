@@ -35,6 +35,7 @@ import {
   TASKS,
   ZONES,
   type RequestKind,
+  type RuntimeId,
   BACKUPS,
   REGION_INFO,
 } from '@quorum/simulation/catalog'
@@ -129,9 +130,14 @@ const gauge = (
 }
 
 /** A folded section: the title alone until opened. */
-const section = (title: string, children: ReadonlyArray<Html>, h: HtmlBuilder<Message>) =>
+const section = (
+  title: string,
+  children: ReadonlyArray<Html>,
+  h: HtmlBuilder<Message>,
+  open = false,
+) =>
   h.details(
-    [h.Key(title), h.Class('fold group px-4')],
+    [h.Key(title), h.Open(open), h.Class('fold group px-4')],
     [
       h.summary(
         [
@@ -682,7 +688,12 @@ const instance = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html => 
   )
 }
 
-const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+const stack = (
+  game: Game,
+  node: GameNode,
+  h: HtmlBuilder<Message>,
+  reviewingRuntime: RuntimeId | null,
+): ReadonlyArray<Html> => {
   const runtime = RUNTIMES[node.runtime]
   const frameworks = FRAMEWORK_IDS.filter(
     (id) => id === 'none' || FRAMEWORKS[id].language === runtime.language,
@@ -709,6 +720,9 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
               [
                 stackLogo(RUNTIMES[id].language, 'size-4', h),
                 h.span([h.Class('truncate')], [RUNTIMES[id].name]),
+                ...(reviewingRuntime === id
+                  ? [h.span([h.Class('text-[10px] text-group-compute')], ['Proposed'])]
+                  : []),
               ],
               runtimeReady(game, id)
                 ? RUNTIMES[id].blurb
@@ -722,6 +736,7 @@ const stack = (game: Game, node: GameNode, h: HtmlBuilder<Message>): ReadonlyArr
         h.p([h.Class('text-[12px] leading-snug text-muted-foreground')], [runtime.blurb]),
       ],
       h,
+      reviewingRuntime !== null,
     ),
     ...(runtime.pool
       ? [
@@ -1673,7 +1688,18 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...resources(node, ledger, h),
           ...(node.type === 'users' ? traffic(game, ledger, h) : []),
           ...(def.sized ? [instance(game, node, h)] : []),
-          ...(node.type === 'server' || node.type === 'worker' ? stack(game, node, h) : []),
+          ...(node.type === 'server' || node.type === 'worker'
+            ? stack(
+                game,
+                node,
+                h,
+                model.board.tradeoff?.nodeId === node.id &&
+                  model.board.tradeoff.option.kind === 'runtime' &&
+                  model.board.tradeoff.pinned
+                  ? model.board.tradeoff.option.id
+                  : null,
+              )
+            : []),
           ...(node.type === 'server' ? collector(game, node, h) : []),
           ...(node.type === 'server' ? routing(game, node, h) : []),
           ...(node.type === 'gpu' ? [gpu(node, h)] : []),

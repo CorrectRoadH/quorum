@@ -51,6 +51,8 @@ export const BY_RESEARCH: Partial<Record<ResearchId, ReadonlyArray<string>>> = {
   'lang-node': ['async-io', 'blast-radius', 'event-loop'],
   'lang-csharp': ['async-io', 'jit-warmup'],
   'lang-rust': ['async-io'],
+  'lang-zig': ['thread-pool', 'blast-radius'],
+  'lang-haskell': ['green-threads', 'gc-pause'],
   'idempotency-keys': ['at-least-once-delivery', 'idempotency'],
   autoscaling: ['autoscaling', 'cold-start', 'diurnal-traffic', 'vertical-and-horizontal-scaling'],
   'multi-az': ['availability-zone', 'blast-radius', 'egress'],

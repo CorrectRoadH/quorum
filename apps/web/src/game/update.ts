@@ -22,6 +22,7 @@ import {
   INCIDENTS,
   BACKUPS,
   COLLECTORS,
+  LANGUAGES,
   REGION_INFO,
   IAC_TOOL_INFO,
   MIGRATION_STEPS,
@@ -30,6 +31,7 @@ import {
   LB_POLICIES,
   PM_MODES,
   RESEARCH,
+  RUNTIME_IDS,
   RUNTIMES,
   SIZES,
   STEP_SECONDS,
@@ -614,18 +616,27 @@ const tradeoffOf = (
   option: TradeoffOption,
   pinned: boolean,
 ): readonly [Tradeoff, ReadonlyArray<AnyCommand>] =>
-  Result.match(optionAction(model.board.game, nodeId, option), {
-    onSuccess: () =>
-      [
-        { nodeId, option, pinned, preview: null, refusal: null },
-        [ComputePreview({ game: model.board.game, nodeId, option })],
-      ] as const,
-    onFailure: (refusal) =>
-      [
-        { nodeId, option, pinned, preview: null, refusal: Actions.describeRefusal(refusal) },
-        [],
-      ] as const,
-  })
+  Result.match(
+    migrates(model.board.game, nodeId) && option.kind !== 'family'
+      ? Work.changeStack(
+          model.board.game,
+          nodeId,
+          option.kind === 'runtime' ? { runtime: option.id } : { framework: option.id },
+        )
+      : optionAction(model.board.game, nodeId, option),
+    {
+      onSuccess: () =>
+        [
+          { nodeId, option, pinned, preview: null, refusal: null },
+          [ComputePreview({ game: model.board.game, nodeId, option })],
+        ] as const,
+      onFailure: (refusal) =>
+        [
+          { nodeId, option, pinned, preview: null, refusal: Actions.describeRefusal(refusal) },
+          [],
+        ] as const,
+    },
+  )
 
 /** Applies an option and logs what its card predicted, so playtests can compare it with the outcome. */
 const applyOption = (model: Model, card: Tradeoff): Result => {
@@ -704,6 +715,56 @@ const mailAction = (model: Model, kind: string, target: string | null): Result =
       return teamAction(model, TeamOutMessage.Hire())
     case 'team':
       return route(model, Message.PanelOpened({ panel: 'team' }))
+    case 'rewrite': {
+      const runtime = RUNTIME_IDS.find((id) => LANGUAGES[RUNTIMES[id].language].name === target)
+      if (!runtime)
+        return withToast(
+          model,
+          `${target} has no playable runtime. You can decline this proposal.`,
+          'warn',
+        )
+      const game = model.board.game
+      const servers = game.nodes.filter((node) => node.type === 'server')
+      const node =
+        servers.find((entry) => entry.id === model.board.selected && entry.runtime !== runtime) ??
+        servers.find((entry) => entry.runtime !== runtime)
+      if (!node)
+        return withToast(
+          model,
+          servers.length === 0
+            ? 'Add an App Server before reviewing a migration.'
+            : `Your App Servers already run ${target}. No rewrite is needed.`,
+          'warn',
+        )
+      const research = RUNTIMES[runtime].research
+      if (research && !game.researched.includes(research)) {
+        const opened = route(model, Message.PanelOpened({ panel: 'research' }))
+        return withToast(
+          {
+            ...opened.model,
+            board: { ...opened.model.board, research: { focus: research } },
+          },
+          `Research ${RESEARCH[research].name}, then review the proposal again in Inbox.`,
+          'warn',
+        )
+      }
+      const [card, commands] = tradeoffOf(model, node.id, { kind: 'runtime', id: runtime }, true)
+      return {
+        model: {
+          ...model,
+          panel: 'none',
+          board: {
+            ...model.board,
+            region: node.region,
+            selected: node.id,
+            selection: [],
+            tool: null,
+            tradeoff: card,
+          },
+        },
+        commands,
+      }
+    }
     case 'churn':
       return route(model, Message.PanelOpened({ panel: 'churn' }))
     case 'first':
