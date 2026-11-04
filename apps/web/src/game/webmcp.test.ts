@@ -1,3 +1,4 @@
+import { PrefsMessage } from './prefs.ts'
 import { describe, expect, test } from 'vitest'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import { Message } from './message.ts'
@@ -45,7 +46,7 @@ describe('what an agent may read', () => {
 describe('Agent access', () => {
   test('is off until the player turns it on, and is saved and applied when they do', () => {
     expect(company.prefs.agentAccess).toBe(false)
-    const on = update(company, Message.AgentAccessToggled())
+    const on = update(company, Message.PrefsChanged({ message: PrefsMessage.AgentAccessToggled() }))
     expect(on.model.prefs.agentAccess).toBe(true)
     expect(on.commands).toEqual(
       expect.arrayContaining([

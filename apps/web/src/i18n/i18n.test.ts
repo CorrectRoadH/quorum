@@ -1,3 +1,4 @@
+import { PrefsMessage } from '../game/prefs.ts'
 import { describe, expect, test } from 'vitest'
 import { Option, Schema } from 'effect'
 import { Scene } from 'foldkit/test'
@@ -27,7 +28,10 @@ describe('interface languages', () => {
           clock: { ...initialModel().board.clock, paused: true },
         },
       }
-      const result = update(model, Message.LocaleChosen({ locale }))
+      const result = update(
+        model,
+        Message.PrefsChanged({ message: PrefsMessage.LocaleChosen({ locale }) }),
+      )
       expect(result.model.prefs.locale).toBe(locale)
       expect(result.model.board.game).toBe(model.board.game)
       expect(result.model.board.clock.paused).toBe(true)
@@ -54,9 +58,12 @@ describe('interface languages', () => {
         }),
       )
       expect(restored.model.prefs).toMatchObject({ locale, muted: true, motion: 'reduce' })
-      expect(update(result.model, Message.LocaleChosen({ locale: 'en' })).model.board.game).toBe(
-        model.board.game,
-      )
+      expect(
+        update(
+          result.model,
+          Message.PrefsChanged({ message: PrefsMessage.LocaleChosen({ locale: 'en' }) }),
+        ).model.board.game,
+      ).toBe(model.board.game)
     },
   )
 

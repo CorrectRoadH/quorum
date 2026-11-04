@@ -1,3 +1,4 @@
+import { DashboardMessage } from '@/game/dashboard.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ChevronDown, Clock3, LayoutGrid, RefreshCw, Star, X } from 'lucide'
 import { clockOf } from '@quorum/simulation/calendar'
@@ -449,7 +450,8 @@ const timeSeries = (
               className: PLOT,
               accessibilityLayer: true,
               activeIndex: model.board.dashboard.hover,
-              onActiveIndexChange: (index) => Message.DashboardHovered({ index }),
+              onActiveIndexChange: (index) =>
+                Message.DashboardChanged({ message: DashboardMessage.Hovered({ index }) }),
               defs: spec.series
                 .filter((series) => series.fill)
                 .map((series) => gradient(id(series), series.color, h)),
@@ -1199,7 +1201,11 @@ const topBar = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.Key(`range-${minutes}`),
                   h.Type('button'),
                   h.AriaPressed(minutes === model.board.dashboard.range ? 'true' : 'false'),
-                  h.OnClick(Message.DashboardRangeChosen({ minutes })),
+                  h.OnClick(
+                    Message.DashboardChanged({
+                      message: DashboardMessage.RangeChosen({ minutes }),
+                    }),
+                  ),
                   h.Class(
                     cn(
                       'h-6 rounded-md px-2.5 text-[12px]',

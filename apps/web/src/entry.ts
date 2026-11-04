@@ -22,7 +22,7 @@ const application = Runtime.makeApplication({
   resources: ApiRpc.layer,
   container: document.getElementById('root'),
   // The clock and its board sync fire 8 times a second and would push every gesture out of history.
-  devTools: { Message, excludeFromHistory: ['Ticked', 'Synced', 'DashboardHovered'] },
+  devTools: { Message, excludeFromHistory: ['Ticked', 'Synced', 'DashboardChanged'] },
 })
 
 // Surfaces opened from the keyboard skip their entrance (see styles.css): shortcuts must feel instant.

@@ -1,3 +1,4 @@
+import { PrefsMessage } from '@/game/prefs.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Copy, DoorOpen, Download, House, Play, Settings, Trash2, X } from 'lucide'
 import { offer } from '@quorum/simulation/actions'
@@ -267,7 +268,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               id: 'setting-muted',
               label: 'Mute sound (M)',
               isChecked: model.prefs.muted,
-              onToggle: () => Message.MuteToggled(),
+              onToggle: () => Message.PrefsChanged({ message: PrefsMessage.MuteToggled() }),
             },
             h,
           ),
@@ -276,7 +277,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               id: 'setting-auto-pause',
               label: 'Pause on SEV1 and SEV2',
               isChecked: model.prefs.autoPause,
-              onToggle: () => Message.AutoPauseToggled(),
+              onToggle: () => Message.PrefsChanged({ message: PrefsMessage.AutoPauseToggled() }),
             },
             h,
           ),
@@ -285,7 +286,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               id: 'setting-blur-pause',
               label: 'Pause when the window loses focus',
               isChecked: model.prefs.blurPause,
-              onToggle: () => Message.BlurPauseToggled(),
+              onToggle: () => Message.PrefsChanged({ message: PrefsMessage.BlurPauseToggled() }),
             },
             h,
           ),
@@ -294,7 +295,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               id: 'setting-motion',
               label: 'Reduce motion',
               isChecked: model.prefs.motion === 'reduce',
-              onToggle: () => Message.MotionToggled(),
+              onToggle: () => Message.PrefsChanged({ message: PrefsMessage.MotionToggled() }),
             },
             h,
           ),
@@ -303,7 +304,7 @@ export const settingsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
               id: 'setting-agent-access',
               label: 'Agent access',
               isChecked: model.prefs.agentAccess,
-              onToggle: () => Message.AgentAccessToggled(),
+              onToggle: () => Message.PrefsChanged({ message: PrefsMessage.AgentAccessToggled() }),
             },
             h,
           ),

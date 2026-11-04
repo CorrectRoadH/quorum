@@ -1,3 +1,4 @@
+import { GlossaryMessage } from '@/game/glossary.ts'
 import { translate, type Locale } from '@/i18n/index.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowUpRight, Check, Search } from 'lucide'
@@ -70,7 +71,7 @@ const filter = (
       h.Key(key),
       h.Type('button'),
       h.AriaPressed(chosen ? 'true' : 'false'),
-      h.OnClick(Message.GlossaryFiltered({ category })),
+      h.OnClick(Message.GlossaryChanged({ message: GlossaryMessage.Filtered({ category }) })),
       h.Class(
         cn(
           'h-7 shrink-0 rounded-lg px-2.5 text-[12px] font-medium transition-colors',
@@ -257,7 +258,9 @@ export const glossaryPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
             h.Type('search'),
             h.AriaLabel('Search the glossary'),
             h.Value(model.glossary.query),
-            h.OnInput((query) => Message.GlossarySearched({ query })),
+            h.OnInput((query) =>
+              Message.GlossaryChanged({ message: GlossaryMessage.Searched({ query }) }),
+            ),
             h.Class('w-full min-w-0 bg-transparent text-[13px] outline-none'),
           ]),
         ],

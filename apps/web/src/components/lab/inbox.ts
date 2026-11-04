@@ -1,3 +1,4 @@
+import { InboxMessage } from '@/game/inbox.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Activity,
@@ -131,7 +132,7 @@ export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
           ),
           button(
             {
-              onClick: Message.MailPeekDismissed(),
+              onClick: Message.InboxChanged({ message: InboxMessage.PeekDismissed() }),
               variant: 'ghost',
               size: 'icon-sm',
               className: '-mt-1 -mr-1.5 text-muted-foreground',
@@ -160,7 +161,9 @@ export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
           act
             ? button(
                 {
-                  onClick: Message.MailActed({ id: mail.id, action: act.id }),
+                  onClick: Message.InboxChanged({
+                    message: InboxMessage.Acted({ id: mail.id, action: act.id }),
+                  }),
                   size: 'sm',
                   attributes: [h.Key(act.id)],
                 },
@@ -170,7 +173,7 @@ export const peek = (model: Model, h: HtmlBuilder<Message>): Html => {
             : h.empty,
           button(
             {
-              onClick: Message.MailPeekOpened({ id: mail.id }),
+              onClick: Message.InboxChanged({ message: InboxMessage.PeekOpened({ id: mail.id }) }),
               variant: act ? 'outline' : 'default',
               size: 'sm',
               attributes: [h.Key('open')],
@@ -238,7 +241,7 @@ const row = (mail: Mail, open: boolean, h: HtmlBuilder<Message>): Html => {
         [
           h.Type('button'),
           h.AriaCurrent(open ? 'true' : 'false'),
-          h.OnClick(Message.MailOpened({ id: mail.id })),
+          h.OnClick(Message.InboxChanged({ message: InboxMessage.Opened({ id: mail.id }) })),
           h.Class(
             cn(
               'relative flex w-full items-start gap-2.5 px-3.5 py-2 text-left',
@@ -315,7 +318,7 @@ const folderTab = (
       h.Key(folder),
       h.Type('button'),
       h.AriaCurrent(active ? 'true' : 'false'),
-      h.OnClick(Message.FolderChosen({ folder })),
+      h.OnClick(Message.InboxChanged({ message: InboxMessage.FolderChosen({ folder }) })),
       h.Class(
         cn(
           'press flex h-6 items-center gap-1.5 rounded-lg px-2.5 text-[12px]',
@@ -351,7 +354,9 @@ const letter = (mail: Mail, h: HtmlBuilder<Message>): Html => {
         ? mail.actions.slice(0, 3).map((action, index) =>
             button(
               {
-                onClick: Message.MailActed({ id: mail.id, action: action.id }),
+                onClick: Message.InboxChanged({
+                  message: InboxMessage.Acted({ id: mail.id, action: action.id }),
+                }),
                 variant: action.id.startsWith('show') ? 'outline' : 'default',
                 size: 'sm',
                 attributes: [h.Key(action.id)],
@@ -435,17 +440,27 @@ const letter = (mail: Mail, h: HtmlBuilder<Message>): Html => {
           ...buttons,
           h.span([h.Class('flex-1')], []),
           mail.trashed
-            ? tool('Move to Inbox (E)', ArchiveRestore, Message.MailRestored({ id: mail.id }), h)
+            ? tool(
+                'Move to Inbox (E)',
+                ArchiveRestore,
+                Message.InboxChanged({ message: InboxMessage.Restored({ id: mail.id }) }),
+                h,
+              )
             : h.span(
                 [h.Class('flex items-center')],
                 [
                   tool(
                     mail.spam ? 'Not spam (S)' : 'Report spam (S)',
                     mail.spam ? MailIcon : Ban,
-                    Message.MailMarkedSpam({ id: mail.id }),
+                    Message.InboxChanged({ message: InboxMessage.MarkedSpam({ id: mail.id }) }),
                     h,
                   ),
-                  tool('Delete (E)', Trash2, Message.MailTrashed({ id: mail.id }), h),
+                  tool(
+                    'Delete (E)',
+                    Trash2,
+                    Message.InboxChanged({ message: InboxMessage.Trashed({ id: mail.id }) }),
+                    h,
+                  ),
                 ],
               ),
         ],
@@ -477,7 +492,7 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
           labelClass: 'sr-only',
           size: 'sm',
           value: model.board.inbox.sample,
-          onChange: (id) => Message.MailSampleChosen({ id }),
+          onChange: (id) => Message.InboxChanged({ message: InboxMessage.SampleChosen({ id }) }),
           wrapperClass: 'w-64',
           options: [...new Set(SAMPLES.map((sample) => sample.group))].map((group) =>
             nativeSelectOptGroup(
@@ -494,7 +509,7 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
       ...[1, 10, 50].map((count) =>
         button(
           {
-            onClick: Message.MailGenerated({ count }),
+            onClick: Message.InboxChanged({ message: InboxMessage.Generated({ count }) }),
             variant: count === 1 ? 'default' : 'outline',
             size: 'sm',
             attributes: [
@@ -510,11 +525,23 @@ const generator = (model: Model, h: HtmlBuilder<Message>): Html =>
       ),
       h.span([h.Class('flex-1')], []),
       button(
-        { onClick: Message.MailResolved(), variant: 'ghost', size: 'sm' },
+        {
+          onClick: Message.InboxChanged({ message: InboxMessage.Resolved() }),
+          variant: 'ghost',
+          size: 'sm',
+        },
         'Resolve threads',
         h,
       ),
-      button({ onClick: Message.MailCleared(), variant: 'ghost', size: 'sm' }, 'Clear', h),
+      button(
+        {
+          onClick: Message.InboxChanged({ message: InboxMessage.Cleared() }),
+          variant: 'ghost',
+          size: 'sm',
+        },
+        'Clear',
+        h,
+      ),
     ],
   )
 

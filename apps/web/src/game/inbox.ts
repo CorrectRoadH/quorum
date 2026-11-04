@@ -1,9 +1,14 @@
-import { needsAction, senderOf, type Fact } from './mail.ts'
-import type { Folder, Inbox, Mail } from './model.ts'
+import { Schema } from 'effect'
+import type { Update } from 'foldkit'
+import { defineMessageUnion } from 'foldkit/message'
+import type { Game } from '@quorum/simulation/state'
+import { SAMPLES, needsAction, randomSample, senderOf, type Fact } from './mail.ts'
+import { Folder, type Inbox, type Mail } from './model.ts'
 
 /* ==========================================================================
    The Inbox submodel (GDD 18): how Mail joins its Thread, resolves, and is
-   read. Every function takes the Inbox and returns the next one.
+   read. Every function takes the Inbox and returns the next one; `update`
+   handles the panel's gestures, and the parent folds it with foldChild.
    ========================================================================== */
 
 const MAIL_KEPT = 40
@@ -124,3 +129,116 @@ export const withMail = (inbox: Inbox, id: number, change: Partial<Mail>): Inbox
   ...inbox,
   mail: inbox.mail.map((mail) => (mail.id === id ? { ...mail, ...change } : mail)),
 })
+
+/* ---------- the panel's gestures ---------- */
+
+export const InboxMessage = defineMessageUnion({
+  /** Shows one Mail; null shows the newest in the folder. */
+  Opened: { id: Schema.NullOr(Schema.Finite) },
+  /** The preview card above the Inbox button opens its Mail in the panel. */
+  PeekOpened: { id: Schema.Finite },
+  PeekDismissed: {},
+  Trashed: { id: Schema.Finite },
+  Restored: { id: Schema.Finite },
+  MarkedSpam: { id: Schema.Finite },
+  FolderChosen: { folder: Folder },
+  /** A button on a Mail. */
+  Acted: { id: Schema.Finite, action: Schema.String },
+  /** The Sandbox's mail generator. */
+  SampleChosen: { id: Schema.String },
+  Generated: { count: Schema.Finite },
+  Resolved: {},
+  Cleared: {},
+})
+export type InboxMessage = typeof InboxMessage.Type
+
+/** What the parent does after a gesture: open the panel, or act on a Mail's button. */
+export const InboxOutMessage = defineMessageUnion({
+  PanelWanted: {},
+  /** A button whose effect is outside the Inbox; its answer is already written. */
+  ActionTaken: { kind: Schema.String, target: Schema.NullOr(Schema.String) },
+})
+export type InboxOutMessage = typeof InboxOutMessage.Type
+
+/** What the Inbox reads from the board around it. */
+export type InboxContext = Readonly<{ game: Game; open: boolean }>
+
+/** The answer a button writes into its Mail; null for one that only acts. */
+const answerOf = (kind: string | undefined, mail: Mail): string | null => {
+  switch (kind) {
+    case 'raise':
+      return 'You raised the round.'
+    case 'decline':
+      return mail.sender.startsWith('mate:')
+        ? 'You declined. They will bring it up again.'
+        : 'You declined the round.'
+    case 'hire':
+      return 'You approved the hire.'
+    case 'team':
+      return 'You opened Team.'
+    case 'later':
+      return 'Later. They will ask again.'
+    case 'first':
+      return 'You moved the patch to the top.'
+    case 'rush':
+      return 'You rushed the patch.'
+    case 'trap':
+      return 'You clicked it. It was a trap: the address was not the real sender.'
+    default:
+      return null
+  }
+}
+
+/** Buttons that only answer: a teammate's declined request, and Later. */
+const answersOnly = (kind: string | undefined, mail: Mail): boolean =>
+  kind === 'later' || (kind === 'decline' && mail.sender.startsWith('mate:'))
+
+const ACTING = new Set(['raise', 'decline', 'hire', 'team', 'first', 'rush', 'show', 'trap'])
+
+export const updateInbox = (
+  inbox: Inbox,
+  message: InboxMessage,
+  context: InboxContext,
+): Update.ReturnWithOutMessage<Inbox, InboxMessage, InboxOutMessage> =>
+  InboxMessage.match<Update.ReturnWithOutMessage<Inbox, InboxMessage, InboxOutMessage>>(message, {
+    Opened: ({ id }) => ({ model: reading(inbox, id) }),
+    PeekOpened: ({ id }) => {
+      const mail = inbox.mail.find((entry) => entry.id === id)
+      const folder = mail?.spam ? 'spam' : mail && needsAction(mail) ? 'action' : 'fyi'
+      return { model: reading({ ...inbox, folder }, id), outMessage: InboxOutMessage.PanelWanted() }
+    },
+    PeekDismissed: () => ({ model: { ...inbox, peek: null } }),
+    Trashed: ({ id }) => ({ model: reading(withMail(inbox, id, { trashed: true })) }),
+    Restored: ({ id }) => ({ model: reading(withMail(inbox, id, { trashed: false })) }),
+    MarkedSpam: ({ id }) => {
+      const mail = inbox.mail.find((entry) => entry.id === id)
+      return { model: reading(withMail(inbox, id, { spam: !mail?.spam })) }
+    },
+    FolderChosen: ({ folder }) => ({ model: reading({ ...inbox, folder }) }),
+    Acted: ({ id, action }) => {
+      const mail = inbox.mail.find((entry) => entry.id === id)
+      if (!mail) return { model: inbox }
+      const [kind, target] = action.split(':')
+      const unpeeked = { ...inbox, peek: inbox.peek === id ? null : inbox.peek }
+      const answer = answerOf(kind, mail)
+      const next = answer === null ? unpeeked : withMail(unpeeked, id, { answer })
+      return kind && ACTING.has(kind) && !answersOnly(kind, mail)
+        ? { model: next, outMessage: InboxOutMessage.ActionTaken({ kind, target: target ?? null }) }
+        : { model: next }
+    },
+    SampleChosen: ({ id }) => ({ model: { ...inbox, sample: id } }),
+    Generated: ({ count }) => {
+      // Send uses the chosen sample; a burst of 10 or 50 draws a random sample for each Mail.
+      const chosen = SAMPLES.find((entry) => entry.id === inbox.sample) ?? SAMPLES[0]
+      if (!chosen) return { model: inbox }
+      let next = inbox
+      for (let sent = 0; sent < count; sent += 1) {
+        const n = Math.max(0, ...next.mail.map((mail) => mail.id)) + 1
+        const sample = count === 1 ? chosen : randomSample(context.game, n)
+        next = mailed(next, sample.make(context.game, n), context.game.time, context.open)
+      }
+      return { model: reading(next, null) }
+    },
+    Resolved: () => ({ model: resolvedExcept(inbox, '', context.game.time) }),
+    Cleared: () => ({ model: { ...inbox, mail: [], focus: null, peek: null } }),
+  })

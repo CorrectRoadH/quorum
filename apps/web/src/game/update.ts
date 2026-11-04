@@ -100,27 +100,22 @@ import {
 import { forceIncident } from '@quorum/simulation/director'
 import { StepEvent } from '@quorum/simulation/events'
 import { nextAdvice } from '@quorum/simulation/goals'
-import {
-  EVENT_EVERY,
-  SAMPLES,
-  disclosureFact,
-  needsAction,
-  eventFact,
-  randomSample,
-  eventMail,
-  factOf,
-  type Fact,
-} from './mail.ts'
+import { EVENT_EVERY, disclosureFact, eventFact, eventMail, factOf, type Fact } from './mail.ts'
 import type { EventMail } from './copy/index.ts'
+import { updateDashboard } from './dashboard.ts'
+import { updateGlossary } from './glossary.ts'
 import {
   EMPTY_INBOX,
+  InboxMessage,
+  InboxOutMessage,
   closed,
   folderList,
   mailed,
   reading,
   resolvedExcept,
-  withMail,
+  updateInbox,
 } from './inbox.ts'
+import { PrefsMessage, updatePrefs } from './prefs.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, isFinalEra, nextEra, zoned } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
@@ -194,6 +189,7 @@ import {
   Model,
   Prefs,
   type Board,
+  type Inbox,
   SandboxStore,
   type SandboxRun,
   type Tone,
@@ -388,47 +384,30 @@ const mailKey = (model: Model, key: string): Result | null => {
   const at = list.findIndex((mail) => mail.id === model.board.inbox.focus)
   const current = list[at]
   const neighbour = (list[at + 1] ?? list[at - 1])?.id ?? null
-  const apply = (message: Message): Result => {
-    const result = handle(model, message)
-    return {
-      ...result,
-      model: {
-        ...result.model,
-        board: { ...result.model.board, inbox: reading(result.model.board.inbox, neighbour) },
-      },
-    }
-  }
+  // Deleting or reporting a Mail moves on to its neighbour.
+  const apply = (message: InboxMessage): Result =>
+    Update.combine(model, [
+      (next: Model) => foldInbox(next, message),
+      (next: Model) => foldInbox(next, InboxMessage.Opened({ id: neighbour })),
+    ])
   switch (key) {
     case 'j':
-      return {
-        model: {
-          ...model,
-          board: {
-            ...model.board,
-            inbox: reading(model.board.inbox, list[Math.min(at + 1, list.length - 1)]?.id ?? null),
-          },
-        },
-      }
+      return foldInbox(
+        model,
+        InboxMessage.Opened({ id: list[Math.min(at + 1, list.length - 1)]?.id ?? null }),
+      )
     case 'k':
-      return {
-        model: {
-          ...model,
-          board: {
-            ...model.board,
-            inbox: reading(model.board.inbox, list[Math.max(at - 1, 0)]?.id ?? null),
-          },
-        },
-      }
+      return foldInbox(model, InboxMessage.Opened({ id: list[Math.max(at - 1, 0)]?.id ?? null }))
     case 'e':
       return current
         ? apply(
             current.trashed
-              ? Message.MailRestored({ id: current.id })
-              : Message.MailTrashed({ id: current.id }),
+              ? InboxMessage.Restored({ id: current.id })
+              : InboxMessage.Trashed({ id: current.id }),
           )
         : null
     case 's':
-      return current && !current.trashed ? apply(Message.MailMarkedSpam({ id: current.id })) : null
+      return current && !current.trashed ? apply(InboxMessage.MarkedSpam({ id: current.id })) : null
     case '1':
     case '2':
     case '3': {
@@ -437,7 +416,7 @@ const mailKey = (model: Model, key: string): Result | null => {
           ? current.actions[Number(key) - 1]
           : undefined
       return current && action
-        ? route(model, Message.MailActed({ id: current.id, action: action.id }))
+        ? foldInbox(model, InboxMessage.Acted({ id: current.id, action: action.id }))
         : { model } // the Inbox owns 1 to 3 while open, so they never reach the build shortcuts
     }
     default:
@@ -646,22 +625,86 @@ const applyOption = (model: Model, card: Tradeoff): Result => {
   }
 }
 
-/** Changes settings, then saves and applies them. */
-const settled = (model: Model, change: Partial<Prefs>): Result => {
-  const next: Model = { ...model, prefs: { ...model.prefs, ...change } }
-  return {
-    model: next,
-    commands: [
-      WritePrefs({ prefs: next.prefs }),
-      ApplySettings({
-        muted: next.prefs.muted,
-        motion: next.prefs.motion,
-        locale: next.prefs.locale,
-        agentAccess: next.prefs.agentAccess,
-      }),
-    ],
+/** Saves and applies the Model's settings. */
+const savePrefs = (model: Model): Result => ({
+  model,
+  commands: [
+    WritePrefs({ prefs: model.prefs }),
+    ApplySettings({
+      muted: model.prefs.muted,
+      motion: model.prefs.motion,
+      locale: model.prefs.locale,
+      agentAccess: model.prefs.agentAccess,
+    }),
+  ],
+})
+
+/** A Settings gesture: the Prefs Submodel changes, then the new settings are saved and applied. */
+const foldPrefs = (model: Model, message: PrefsMessage): Result =>
+  Update.combine(model, [
+    Update.foldChild({
+      update: updatePrefs,
+      read: (parent: Model) => Option.some(parent.prefs),
+      write: (parent, prefs) => ({ ...parent, prefs }),
+      toParentMessage: (child) => Message.PrefsChanged({ message: child }),
+    })(message),
+    savePrefs,
+  ])
+
+const foldGlossary = Update.foldChild({
+  update: updateGlossary,
+  read: (model: Model) => Option.some(model.glossary),
+  write: (model, glossary) => ({ ...model, glossary }),
+  toParentMessage: (message) => Message.GlossaryChanged({ message }),
+})
+
+const foldDashboard = Update.foldChild({
+  update: updateDashboard,
+  read: (model: Model) => Option.some(model.board.dashboard),
+  write: (model, dashboard) => ({ ...model, board: { ...model.board, dashboard } }),
+  toParentMessage: (message) => Message.DashboardChanged({ message }),
+})
+
+/** A Mail button whose effect is outside the Inbox: the Message it stands for. */
+const mailAction = (model: Model, kind: string, target: string | null): Result => {
+  switch (kind) {
+    case 'raise':
+      return route(model, Message.RoundRaised())
+    case 'decline':
+      return route(model, Message.RoundDeclined())
+    case 'hire':
+      return route(model, Message.HireChosen())
+    case 'team':
+      return route(model, Message.PanelOpened({ panel: 'team' }))
+    case 'first':
+      return route(model, Message.WorkPrioritized({ id: Number(target) }))
+    case 'rush':
+      return route(model, Message.WorkRushed({ id: Number(target) }))
+    case 'show':
+      return { model: { ...model, board: { ...model.board, selected: target } } }
+    case 'trap':
+      return withToast(model, 'That was phishing. Check the sender address first.', 'danger')
+    default:
+      return { model }
   }
 }
+
+/** An Inbox gesture. The Inbox reads the board's Game and whether its panel is open. */
+const foldInbox = (model: Model, message: InboxMessage): Result =>
+  Update.foldChild({
+    update: (inbox: Inbox, child: InboxMessage) =>
+      updateInbox(inbox, child, { game: model.board.game, open: model.panel === 'inbox' }),
+    read: (parent: Model) => Option.some(parent.board.inbox),
+    write: (parent, inbox) => ({ ...parent, board: { ...parent.board, inbox } }),
+    toParentMessage: (child) => Message.InboxChanged({ message: child }),
+    foldOutMessage: (out: InboxOutMessage) => (parent: Model) =>
+      InboxOutMessage.match<Result>(out, {
+        PanelWanted: () => ({
+          model: { ...parent, panel: 'inbox', board: { ...parent.board, tool: null } },
+        }),
+        ActionTaken: ({ kind, target }) => mailAction(parent, kind, target),
+      }),
+  })(model, message)
 
 /** Puts the badge in the reader, once: it beeps, and the title follows. */
 const clockIn = (model: Model): Result =>
@@ -1309,7 +1352,10 @@ const foldLanguagePicker = Update.foldChild({
   foldOutMessage:
     ({ value }) =>
     (model) =>
-      handle(model, Message.LocaleChosen({ locale: value })),
+      handle(
+        model,
+        Message.PrefsChanged({ message: PrefsMessage.LocaleChosen({ locale: value }) }),
+      ),
 })
 
 /** What each item in the phone toolbar's More menu does: the same as its desktop button. */
@@ -2019,7 +2065,7 @@ const handle = (model: Model, message: Message): Result =>
             Message.PanelOpened({ panel: model.panel === 'inbox' ? 'none' : 'inbox' }),
           )
         case 'm':
-          return route(model, Message.MuteToggled())
+          return route(model, Message.PrefsChanged({ message: PrefsMessage.MuteToggled() }))
         case 'g':
           if (!shown(model, 'glossary')) return { model }
           return model.panel === 'glossary'
@@ -3081,21 +3127,18 @@ const handle = (model: Model, message: Message): Result =>
 
     LanguagePickerChanged: ({ message }) => foldLanguagePicker(model, message),
     MoreMenuChanged: ({ message }) => foldMoreMenu(model, message),
-    LocaleChosen: ({ locale }) => settled(model, { locale }),
-    MuteToggled: () => settled(model, { muted: !model.prefs.muted }),
-    AutoPauseToggled: () => settled(model, { autoPause: !model.prefs.autoPause }),
-    BlurPauseToggled: () => settled(model, { blurPause: !model.prefs.blurPause }),
+    PrefsChanged: ({ message }) => foldPrefs(model, message),
     WindowBlurred: () => {
       if (!model.prefs.blurPause || halted(model) || !onBoard(model.route)) return { model }
-      const next: Model = { ...model, board: { ...model.board, paused: true } }
+      const next: Model = {
+        ...model,
+        board: { ...model.board, clock: { ...model.board.clock, paused: true } },
+      }
       return withToast(next, 'Paused while you were away. Space resumes.', 'plain')
     },
-    AgentAccessToggled: () => settled(model, { agentAccess: !model.prefs.agentAccess }),
     InsightHelpToggled: () => ({
       model: { ...model, board: { ...model.board, insightHelp: !model.board.insightHelp } },
     }),
-    MotionToggled: () =>
-      settled(model, { motion: model.prefs.motion === 'reduce' ? 'system' : 'reduce' }),
     GlossaryOpened: ({ id }) => {
       const founder = id ? discoverTerm(model.founder, id) : model.founder
       // Browsing inside the panel keeps the search and filter; opening it from outside resets them.
@@ -3118,172 +3161,9 @@ const handle = (model: Model, message: Message): Result =>
         commands: founder === model.founder ? [] : [WriteFounder({ founder })],
       }
     },
-    MailOpened: ({ id }) => ({
-      model: { ...model, board: { ...model.board, inbox: reading(model.board.inbox, id) } },
-    }),
-    MailPeekOpened: ({ id }) => {
-      const mail = model.board.inbox.mail.find((entry) => entry.id === id)
-      const folder = mail?.spam ? 'spam' : mail && needsAction(mail) ? 'action' : 'fyi'
-      return {
-        model: {
-          ...model,
-          panel: 'inbox',
-          board: {
-            ...model.board,
-            tool: null,
-            inbox: reading({ ...model.board.inbox, folder }, id),
-          },
-        },
-      }
-    },
-    MailPeekDismissed: () => ({
-      model: { ...model, board: { ...model.board, inbox: { ...model.board.inbox, peek: null } } },
-    }),
-    MailTrashed: ({ id }) => ({
-      model: {
-        ...model,
-        board: {
-          ...model.board,
-          inbox: reading(withMail(model.board.inbox, id, { trashed: true })),
-        },
-      },
-    }),
-    MailRestored: ({ id }) => ({
-      model: {
-        ...model,
-        board: {
-          ...model.board,
-          inbox: reading(withMail(model.board.inbox, id, { trashed: false })),
-        },
-      },
-    }),
-    MailMarkedSpam: ({ id }) => {
-      const mail = model.board.inbox.mail.find((entry) => entry.id === id)
-      return {
-        model: {
-          ...model,
-          board: {
-            ...model.board,
-            inbox: reading(withMail(model.board.inbox, id, { spam: !mail?.spam })),
-          },
-        },
-      }
-    },
-    MailSampleChosen: ({ id }) => ({
-      model: { ...model, board: { ...model.board, inbox: { ...model.board.inbox, sample: id } } },
-    }),
-    MailGenerated: ({ count }) => {
-      // Send uses the chosen sample; a burst of 10 or 50 draws a random sample for each Mail.
-      const chosen = SAMPLES.find((entry) => entry.id === model.board.inbox.sample) ?? SAMPLES[0]
-      if (!chosen) return { model }
-      let next = model
-      for (let sent = 0; sent < count; sent += 1) {
-        const n = Math.max(0, ...next.board.inbox.mail.map((mail) => mail.id)) + 1
-        const sample = count === 1 ? chosen : randomSample(next.board.game, n)
-        next = mailedTo(next, sample.make(next.board.game, n), next.board.game.time)
-      }
-      return {
-        model: { ...next, board: { ...next.board, inbox: reading(next.board.inbox, null) } },
-      }
-    },
-    MailResolved: () => ({
-      model: {
-        ...model,
-        board: {
-          ...model.board,
-          inbox: resolvedExcept(model.board.inbox, '', model.board.game.time),
-        },
-      },
-    }),
-    MailCleared: () => ({
-      model: {
-        ...model,
-        board: {
-          ...model.board,
-          inbox: { ...model.board.inbox, mail: [], focus: null, peek: null },
-        },
-      },
-    }),
-    FolderChosen: ({ folder }) => ({
-      model: {
-        ...model,
-        board: { ...model.board, inbox: reading({ ...model.board.inbox, folder }) },
-      },
-    }),
-    MailActed: ({ id, action }) => {
-      const mail = model.board.inbox.mail.find((entry) => entry.id === id)
-      if (!mail) return { model }
-      model = {
-        ...model,
-        board: {
-          ...model.board,
-          inbox: {
-            ...model.board.inbox,
-            peek: model.board.inbox.peek === id ? null : model.board.inbox.peek,
-          },
-        },
-      }
-      const [kind, target] = action.split(':')
-      const answered = (answer: string): Model => ({
-        ...model,
-        board: { ...model.board, inbox: withMail(model.board.inbox, id, { answer }) },
-      })
-      switch (kind) {
-        case 'raise':
-          return route(answered('You raised the round.'), Message.RoundRaised())
-        case 'decline':
-          return mail.sender.startsWith('mate:')
-            ? { model: answered('You declined. They will bring it up again.') }
-            : route(answered('You declined the round.'), Message.RoundDeclined())
-        case 'hire':
-          return route(answered('You approved the hire.'), Message.HireChosen())
-        case 'team':
-          return route(answered('You opened Team.'), Message.PanelOpened({ panel: 'team' }))
-        case 'later':
-          return { model: answered('Later. They will ask again.') }
-        case 'first':
-          return route(
-            answered('You moved the patch to the top.'),
-            Message.WorkPrioritized({ id: Number(target) }),
-          )
-        case 'rush':
-          return route(
-            answered('You rushed the patch.'),
-            Message.WorkRushed({ id: Number(target) }),
-          )
-        case 'show':
-          return { model: { ...model, board: { ...model.board, selected: target ?? null } } }
-        case 'trap':
-          return withToast(
-            answered('You clicked it. It was a trap: the address was not the real sender.'),
-            'That was phishing. Check the sender address first.',
-            'danger',
-          )
-        default:
-          return { model }
-      }
-    },
-    GlossarySearched: ({ query }) => ({
-      model: { ...model, glossary: { ...model.glossary, query } },
-    }),
-    DashboardRangeChosen: ({ minutes }) => ({
-      model: {
-        ...model,
-        board: {
-          ...model.board,
-          dashboard: { ...model.board.dashboard, range: minutes, hover: null },
-        },
-      },
-    }),
-    DashboardHovered: ({ index }) => ({
-      model: {
-        ...model,
-        board: { ...model.board, dashboard: { ...model.board.dashboard, hover: index } },
-      },
-    }),
-    GlossaryFiltered: ({ category }) => ({
-      model: { ...model, glossary: { ...model.glossary, category } },
-    }),
+    InboxChanged: ({ message }) => foldInbox(model, message),
+    GlossaryChanged: ({ message }) => foldGlossary(model, message),
+    DashboardChanged: ({ message }) => foldDashboard(model, message),
 
     CheatCash: () => {
       const next: Model = {
@@ -3400,8 +3280,7 @@ const QUIET = new Set([
   'ToastCleared',
   'Saved',
   'SaveLoaded',
-  // Sent on pointer moves or by the compute worker several times a second.
-  'DashboardHovered',
+  // Sent by the compute worker several times a second.
   'BottleneckFound',
   'PreviewComputed',
 ])
@@ -3409,6 +3288,8 @@ const QUIET = new Set([
 /** A team drag sends a Message per pointer move; only the drop that moves someone is a gesture. */
 const quiet = (model: Model, message: Message, after: Model): boolean =>
   QUIET.has(message._tag) ||
+  // The Dashboard crosshair sends a Message on every pointer move.
+  (message._tag === 'DashboardChanged' && message.message._tag === 'Hovered') ||
   (message._tag === 'TeamDragChanged' && after.board.game === model.board.game)
 
 const fieldsOf = (message: Message): Record<string, unknown> =>

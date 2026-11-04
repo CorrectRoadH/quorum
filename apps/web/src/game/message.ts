@@ -1,5 +1,4 @@
 import { DragAndDrop, Listbox, Menu as UiMenu } from '@foldkit/ui'
-import { Locale } from '../i18n/index.ts'
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
@@ -32,9 +31,12 @@ import {
 } from '@quorum/simulation/state'
 import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
+import { DashboardMessage } from './dashboard.ts'
+import { GlossaryMessage } from './glossary.ts'
+import { InboxMessage } from './inbox.ts'
+import { PrefsMessage } from './prefs.ts'
 import {
   BuildGroupKey,
-  Folder,
   Menu,
   Panel,
   PreviewFigures,
@@ -273,36 +275,17 @@ export const Message = defineMessageUnion({
   PanelOpened: { panel: Panel },
   PanelClosed: {},
 
-  /** Settings and the Glossary (15). */
-  MuteToggled: {},
-  AutoPauseToggled: {},
-  BlurPauseToggled: {},
+  /** Settings and the Glossary (15). Each panel is a Submodel with its own Messages. */
+  PrefsChanged: { message: PrefsMessage },
   /** The window lost focus. */
   WindowBlurred: {},
-  AgentAccessToggled: {},
-  MotionToggled: {},
-  LocaleChosen: { locale: Locale },
   LanguagePickerChanged: { message: Listbox.Message },
   MoreMenuChanged: { message: UiMenu.Message },
   InsightHelpToggled: {},
   GlossaryOpened: { id: Schema.NullOr(Schema.String) },
-  GlossarySearched: { query: Schema.String },
-  DashboardRangeChosen: { minutes: Schema.Finite },
-  DashboardHovered: { index: Schema.NullOr(Schema.Finite) },
-  GlossaryFiltered: { category: Schema.NullOr(Schema.String) },
-  MailOpened: { id: Schema.Finite },
-  MailPeekOpened: { id: Schema.Finite },
-  MailPeekDismissed: {},
-  MailTrashed: { id: Schema.Finite },
-  MailRestored: { id: Schema.Finite },
-  FolderChosen: { folder: Folder },
-  MailActed: { id: Schema.Finite, action: Schema.String },
-  MailMarkedSpam: { id: Schema.Finite },
-  /** The Sandbox's mail generator. */
-  MailSampleChosen: { id: Schema.String },
-  MailGenerated: { count: Schema.Finite },
-  MailResolved: {},
-  MailCleared: {},
+  GlossaryChanged: { message: GlossaryMessage },
+  DashboardChanged: { message: DashboardMessage },
+  InboxChanged: { message: InboxMessage },
 
   /** Playtest panel. */
   CheatCash: {},

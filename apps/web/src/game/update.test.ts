@@ -1,3 +1,7 @@
+import { DashboardMessage } from './dashboard.ts'
+import { GlossaryMessage } from './glossary.ts'
+import { InboxMessage } from './inbox.ts'
+import { PrefsMessage } from './prefs.ts'
 import { describe, expect, test } from 'vitest'
 import { Option } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
@@ -585,13 +589,16 @@ describe('M9: sound, achievements, glossary, keys', () => {
 
   test('mute and reduced motion are saved as prefs, not in the Game', () => {
     const start = inLab()
-    const muted = update(start, Message.MuteToggled())
+    const muted = update(start, Message.PrefsChanged({ message: PrefsMessage.MuteToggled() }))
     expect(muted.model.prefs.muted).toBe(true)
     expect(muted.model.board.game).toBe(start.board.game)
     const write = names(muted.commands).find((command) => command.name === 'WritePrefs')
     expect(write?.args['prefs']).toMatchObject({ muted: true, motion: 'system' })
     expect(update(start, Message.KeyPressed({ key: 'm' })).model.prefs.muted).toBe(true)
-    expect(update(start, Message.MotionToggled()).model.prefs.motion).toBe('reduce')
+    expect(
+      update(start, Message.PrefsChanged({ message: PrefsMessage.MotionToggled() })).model.prefs
+        .motion,
+    ).toBe('reduce')
   })
 
   test('a Tradeoff term opens the Glossary on it and marks it met', () => {
@@ -740,9 +747,12 @@ test('tidying the board groups nodes into a band per zone, in flow order', () =>
 
 test('losing focus pauses the clock, unless the setting is off', () => {
   const blurred = update(inLab(), Message.WindowBlurred()).model
-  expect(blurred.board.paused).toBe(true)
-  const off = update(inLab(), Message.BlurPauseToggled()).model
-  expect(update(off, Message.WindowBlurred()).model.board.paused).toBe(false)
+  expect(blurred.board.clock.paused).toBe(true)
+  const off = update(
+    inLab(),
+    Message.PrefsChanged({ message: PrefsMessage.BlurPauseToggled() }),
+  ).model
+  expect(update(off, Message.WindowBlurred()).model.board.clock.paused).toBe(false)
 })
 
 test('a queued Study can run now, keeping the running one’s progress, and be cancelled', () => {
@@ -777,7 +787,10 @@ test('a queued Study can run now, keeping the running one’s progress, and be c
 test('pointer-rate Messages stay out of the playtest log, and gestures go in', () => {
   const names = (result: ReturnType<typeof update>) =>
     (result.commands ?? []).map((command) => command.name)
-  const hovered = update(inLab(), Message.DashboardHovered({ index: 3 }))
+  const hovered = update(
+    inLab(),
+    Message.DashboardChanged({ message: DashboardMessage.Hovered({ index: 3 }) }),
+  )
   expect(names(hovered)).not.toContain('AppendLog')
   const found = update(inLab(), Message.BottleneckFound({ bottleneck: null, at: 0 }))
   expect(names(found)).not.toContain('AppendLog')
@@ -821,7 +834,14 @@ test('the board redraws after any Message that changes what it shows, and fits a
   expect(syncs(glossary)).toEqual([
     expect.objectContaining({ args: expect.objectContaining({ placing: null, fit: false }) }),
   ])
-  expect(syncs(update(glossary.model, Message.GlossarySearched({ query: 'cache' })))).toEqual([])
+  expect(
+    syncs(
+      update(
+        glossary.model,
+        Message.GlossaryChanged({ message: GlossaryMessage.Searched({ query: 'cache' }) }),
+      ),
+    ),
+  ).toEqual([])
 
   const entered = update(initialModel(), Message.FreeSandboxStarted())
   const names = (entered.commands ?? []).map((command) => command.name)
@@ -844,7 +864,10 @@ test("a toast from the last board cannot clear the next board's toast", () => {
 })
 
 test('a Company comes back from a Sandbox as it was: its Inbox, history and undo too', () => {
-  let company = update(inLab(), Message.MailGenerated({ count: 3 })).model
+  let company = update(
+    inLab(),
+    Message.InboxChanged({ message: InboxMessage.Generated({ count: 3 }) }),
+  ).model
   for (let index = 0; index < 40; index += 1) company = update(company, Message.Ticked()).model
   const sandbox = update(company, Message.FreeSandboxStarted()).model
   expect(sandbox.board.inbox.mail).toEqual([])
