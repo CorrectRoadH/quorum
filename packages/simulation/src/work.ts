@@ -38,7 +38,7 @@ import {
   targetOf,
 } from './migration.ts'
 import { nextRandom } from './random.ts'
-import type { Game, WorkItem } from './state.ts'
+import type { Game, TeamKind, WorkItem } from './state.ts'
 import {
   badDeployChance,
   deployEvery,
@@ -46,6 +46,7 @@ import {
   hireSeconds,
   languageOfService,
   moraleSeconds,
+  platformStaffed,
   policyNow,
   serviceOf,
   signingOf,
@@ -70,6 +71,8 @@ const notAllowed = (reason: string): Action => no(Refusal.NotAllowed({ reason })
 const SANDBOX = 'A Sandbox has no Team.'
 /** Teams the player can run in the slice. */
 export const MAX_TEAMS = 4
+/** A Platform team opens at Series A (08 "Teams"). */
+export const PLATFORM_STAGE = 3
 /** The autopilot refactors once debt reaches this. */
 const AUTO_REFACTOR = 0.3
 
@@ -294,6 +297,7 @@ export const createTeam = (game: Game): Action => {
       {
         id,
         name: `Team ${game.teams.length + 1}`,
+        kind: 'product',
         policy: 'balanced',
         previous: 'balanced',
         since: game.time,
@@ -327,6 +331,28 @@ export const assign = (game: Game, engineerId: string, teamId: string): Action =
     engineers: game.engineers.map((engineer) =>
       engineer.id === engineerId ? { ...engineer, team: teamId } : engineer,
     ),
+  })
+}
+
+/**
+ * Makes a team a product team or a Platform team (08 "Teams"). A Platform team
+ * builds no backlog: it runs the Clusters and halves deploy time. From Series A;
+ * the founder's team stays a product team.
+ */
+export const setTeamKind = (game: Game, teamId: string, kind: TeamKind): Action => {
+  const team = game.teams.find((entry) => entry.id === teamId)
+  if (!team) return no(Refusal.Missing())
+  if (team.kind === kind) return ok(game)
+  if (kind === 'platform') {
+    if (game.stage < PLATFORM_STAGE)
+      return no(
+        Refusal.TooEarly({ what: 'A Platform team', era: ERAS[PLATFORM_STAGE]?.name ?? '' }),
+      )
+    if (game.teams[0]?.id === teamId) return notAllowed('The founder’s team builds the product.')
+  }
+  return ok({
+    ...game,
+    teams: game.teams.map((entry) => (entry.id === teamId ? { ...entry, kind } : entry)),
   })
 }
 
@@ -585,6 +611,8 @@ export const advanceTeam = (
   let pool = next.devHours
   let paydown = 0
   for (const output of teamOutputs(next, ledger, tuning)) {
+    // A Platform team runs the Clusters and the pipeline: its Dev Hours build no backlog.
+    if (output.team.kind === 'platform') continue
     const made = output.rate * seconds
     const kept = made * policyNow(next, output.team, tuning).paydown
     paydown += kept
@@ -613,6 +641,17 @@ export const advanceTeam = (
     next = complete(next, item)
     events.push(StepEvent.WorkFinished({ item }))
   }
+
+  // A Platform team keeps every Cluster on a supported version.
+  if (platformStaffed(next) && next.nodes.some((node) => node.type === 'cluster'))
+    next = {
+      ...next,
+      nodes: next.nodes.map((node) =>
+        node.type === 'cluster' && node.upgradedAt !== next.time
+          ? { ...node, upgradedAt: next.time }
+          : node,
+      ),
+    }
 
   next = deploy(next, ledger, tuning, events, offline)
   return { game: next, events }

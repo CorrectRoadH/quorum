@@ -30,12 +30,14 @@ import {
 import {
   addIndex,
   advanceTeam,
+  assign,
   createTeam,
   moveItem,
   queueFeature,
   queueTask,
   rollback,
   rushItem,
+  setTeamKind,
   setTeamPolicy,
 } from './work.ts'
 
@@ -332,7 +334,7 @@ describe('Connection Pooler modes', () => {
   })
 })
 
-describe('Kubernetes Clusters (08 "Teams")', () => {
+describe('Kubernetes Clusters and the Platform team (08 "Teams")', () => {
   /** Series A with three engineers on the founder's team and one Kubernetes Cluster. */
   const clustered = (): Game => {
     const base: Game = {
@@ -349,12 +351,45 @@ describe('Kubernetes Clusters (08 "Teams")', () => {
     return ok(place(base, 'cluster', 900, 80))
   }
 
-  test('each Cluster takes half an engineer of Dev Hours from the teams', () => {
+  test('each Cluster takes half an engineer of Dev Hours from the product teams', () => {
     const game = clustered()
     const without: Game = { ...game, nodes: game.nodes.filter((node) => node.type !== 'cluster') }
     const effective = teamOutputs(without, at(without))[0]?.effective ?? 0
     const rate = (current: Game) => teamOutputs(current, at(current))[0]?.rate ?? 0
     expect(rate(game)).toBeCloseTo(rate(without) * (1 - 0.5 / effective), 9)
+  })
+
+  test('a staffed Platform team takes the Clusters off the product teams, builds no backlog, and halves deploy time', () => {
+    const game = clustered()
+    // The founder's team builds the product, and no team turns Platform before Series A.
+    expect(Result.isFailure(setTeamKind(game, 'core', 'platform'))).toBe(true)
+    const second = ok(createTeam(game))
+    const id = second.teams[1]?.id ?? ''
+    expect(Result.isFailure(setTeamKind({ ...second, stage: 2 }, id, 'platform'))).toBe(true)
+    const empty = ok(setTeamKind(second, id, 'platform'))
+    const staffed = ok(assign(empty, 'e3', id))
+    const noCluster = (current: Game): Game => ({
+      ...current,
+      nodes: current.nodes.filter((node) => node.type !== 'cluster'),
+    })
+    const product = (current: Game) => teamOutputs(current, at(current))[0]?.rate ?? 0
+    // An empty Platform team lifts nothing; one engineer on it lifts the whole cost.
+    expect(product(empty)).toBeLessThan(product(noCluster(empty)))
+    expect(product(staffed)).toBeCloseTo(product(noCluster(staffed)), 9)
+    // Two items: the founder's team builds the first; a product team would build the second.
+    const two = (current: Game) =>
+      work(ok(queueFeature(ok(queueFeature(current, 'landing-page')), 'pagination')), 1)
+    expect(two(staffed).backlog[1]?.spent).toBe(0)
+    expect(two(ok(setTeamKind(staffed, id, 'product'))).backlog[1]?.spent ?? 0).toBeGreaterThan(0)
+    // At Move fast, manual deploys of 30 minutes cap the day; a Platform team's take 15.
+    const fast = (current: Game): Game => ({
+      ...current,
+      teams: current.teams.map((team, index) =>
+        index === 0 ? { ...team, policy: 'move-fast', previous: 'move-fast' } : team,
+      ),
+    })
+    expect(deploysPerDay(fast(empty))).toBeCloseTo(480 / (0.5 + 30 + 15), 6)
+    expect(deploysPerDay(fast(staffed))).toBeCloseTo(480 / (0.5 + 15 + 15), 6)
   })
 
   test('Upgrade clusters puts every Cluster on a supported version and ends a forced upgrade', () => {

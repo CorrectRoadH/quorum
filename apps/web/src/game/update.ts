@@ -721,6 +721,12 @@ const teamAction = (model: Model, out: TeamOutMessage): Result => {
       act(model, 'Moved an engineer', Work.assign(game, engineerId, teamId)),
     SetPolicy: ({ teamId, policy }) =>
       act(model, `${POLICIES[policy].label} policy`, Work.setTeamPolicy(game, teamId, policy)),
+    SetKind: ({ teamId, kind }) =>
+      act(
+        model,
+        kind === 'platform' ? 'Platform team' : 'Product team',
+        Work.setTeamKind(game, teamId, kind),
+      ),
     QueueFeature: ({ id }) =>
       act(model, `Queued ${FEATURES[id].name}`, Work.queueFeature(game, id)),
   })

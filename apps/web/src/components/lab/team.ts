@@ -10,6 +10,8 @@ import {
   Bot,
   Bug,
   Check,
+  Code,
+  Container,
   Crown,
   Gem,
   Hourglass,
@@ -43,7 +45,7 @@ import {
   PATCH_GRACE,
 } from '@quorum/simulation/catalog'
 import { has } from '@quorum/simulation/lookups'
-import type { Engineer, Game, Team, WorkItem, WorkKind } from '@quorum/simulation/state'
+import type { Engineer, Game, Team, TeamKind, WorkItem, WorkKind } from '@quorum/simulation/state'
 import {
   badDeployChance,
   deployEvery,
@@ -59,6 +61,7 @@ import {
   teamOutputs,
 } from '@quorum/simulation/team'
 import { overdueBy } from '@quorum/simulation/cve'
+import { PLATFORM_STAGE } from '@quorum/simulation/work'
 import { featureRefusal, itemName, MAX_TEAMS, taskRefusal } from '@quorum/simulation/work'
 import { describeRefusal } from '@quorum/simulation/actions'
 import { money } from '@/game/format.ts'
@@ -452,6 +455,39 @@ const policySwitch = (team: Team, h: HtmlBuilder<Message>): Html =>
     }),
   )
 
+const KINDS: ReadonlyArray<readonly [TeamKind, string, typeof Code]> = [
+  ['product', 'Product', Code],
+  ['platform', 'Platform', Container],
+]
+
+/** Product teams build the backlog; a Platform team runs the Clusters and the pipeline (08 "Teams"). */
+const kindSwitch = (team: Team, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class(cn('grid grid-cols-2 gap-[3px] p-[3px]', WELL, 'rounded-[11px]'))],
+    KINDS.map(([kind, label, mark]) => {
+      const selected = team.kind === kind
+      return h.button(
+        [
+          h.Key(`${team.id}-${kind}`),
+          h.Type('button'),
+          h.AriaPressed(selected ? 'true' : 'false'),
+          h.OnClick(
+            Message.TeamChanged({ message: TeamMessage.KindChosen({ teamId: team.id, kind }) }),
+          ),
+          h.Class(
+            cn(
+              'press flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-medium',
+              selected
+                ? 'bg-raised text-foreground shadow-raised'
+                : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
+            ),
+          ),
+        ],
+        [icon(h, mark, 'size-3.5'), h.span([h.Class('truncate')], [label])],
+      )
+    }),
+  )
+
 const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): Html => {
   const game = model.board.game
   const output = teamOutputs(game, ledgerOf(model)).find((entry) => entry.team.id === team.id)
@@ -514,8 +550,9 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
             : h.empty,
         ],
       ),
-      policySwitch(team, h),
-      now.id !== team.policy
+      index > 0 && !sandbox && game.stage >= PLATFORM_STAGE ? kindSwitch(team, h) : h.empty,
+      team.kind === 'platform' ? h.empty : policySwitch(team, h),
+      team.kind !== 'platform' && now.id !== team.policy
         ? h.span(
             [h.Class('-mt-1.5 px-1 text-[11px] text-muted-foreground')],
             [`${now.label} until tomorrow`],
@@ -565,12 +602,30 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
           index === 0 && !sandbox && game.stage >= 1 ? hireSeat(game, h) : h.empty,
         ],
       ),
-      sandbox ? h.empty : working(game.backlog[index], h),
+      sandbox
+        ? h.empty
+        : team.kind === 'platform'
+          ? platformWork(h)
+          : working(
+              game.backlog[
+                game.teams.slice(0, index).filter((entry) => entry.kind === 'product').length
+              ],
+              h,
+            ),
     ],
   )
 }
 
 /** What the pod has on its desk: the backlog item its team builds. */
+const platformWork = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class(cn('flex items-center gap-2 px-2.5 py-2', WELL, 'rounded-[10px]'))],
+    [
+      icon(h, Container, 'size-3.5 text-muted-foreground'),
+      h.span([h.Class('text-[12.5px] text-muted-foreground')], ['Runs Clusters and deploys']),
+    ],
+  )
+
 const working = (item: WorkItem | undefined, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class(cn('flex items-center gap-2 px-2.5 py-2', WELL, 'rounded-[10px]'))],

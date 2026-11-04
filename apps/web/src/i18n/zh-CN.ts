@@ -531,6 +531,10 @@ export const zhCN: Readonly<Record<string, string>> = {
     '它的 Kubernetes 版本已不受支持。云服务商可能强制升级。',
   'Clusters take {0} engineers of Dev Hours. A Platform team takes that work.':
     '集群占用 {0} 名工程师的开发工时。平台团队可接手这项工作。',
+  Platform: '平台',
+  'Platform team': '平台团队',
+  'Product team': '产品团队',
+  'Runs Clusters and deploys': '负责集群和部署',
   'No standby': '无备用节点',
   Standby: '备用节点',
   One: '单个',

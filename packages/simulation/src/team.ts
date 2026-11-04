@@ -127,6 +127,13 @@ export const moraleSeconds = (tuning: Tuning = LIVE_TUNING): number => days(MORA
 
 /* ---------- the platform (08 "Teams") ---------- */
 
+/** A Platform team with at least one engineer runs the Clusters and the deploy pipeline. */
+export const platformStaffed = (game: Game): boolean =>
+  game.teams.some(
+    (team) =>
+      team.kind === 'platform' && game.engineers.some((engineer) => engineer.team === team.id),
+  )
+
 const liveClusters = (game: Game): number =>
   game.nodes.filter((node) => node.type === 'cluster' && node.down === 0).length
 
@@ -142,9 +149,11 @@ export const quartersBehind = (
   Math.max(0, (game.time - cluster.upgradedAt) / quarterSeconds(tuning) - SUPPORTED_QUARTERS)
 
 /**
- * Engineers of Dev Hours the Clusters take from the teams: 0.5 per Cluster.
+ * Engineers of Dev Hours the Clusters take from the product teams: 0.5 per
+ * Cluster, and none with a Platform team, which does that work instead.
  */
-export const platformTax = (game: Game): number => PLATFORM_TAX * liveClusters(game)
+export const platformTax = (game: Game): number =>
+  platformStaffed(game) ? 0 : PLATFORM_TAX * liveClusters(game)
 
 /* ---------- output ---------- */
 
@@ -194,12 +203,15 @@ export const teamOutputs = (
     const rate = (effective * velocity * DEV_HOURS_PER_DAY * tuning.calendarPace) / CALENDAR_DAY
     return { team, headcount, effective, velocity, rate }
   })
-  // Each Cluster takes engineers' worth of Dev Hours from the teams, in proportion.
+  // Each Cluster takes engineers' worth of Dev Hours from the product teams, in proportion.
   const tax = platformTax(game)
   if (tax <= 0) return outputs
-  const engineers = outputs.reduce((sum, entry) => sum + entry.effective, 0)
+  const product = outputs.filter((entry) => entry.team.kind === 'product')
+  const engineers = product.reduce((sum, entry) => sum + entry.effective, 0)
   const kept = engineers > 0 ? Math.max(0, 1 - tax / engineers) : 0
-  return outputs.map((entry) => ({ ...entry, rate: entry.rate * kept }))
+  return outputs.map((entry) =>
+    entry.team.kind === 'product' ? { ...entry, rate: entry.rate * kept } : entry,
+  )
 }
 
 export const devHoursRate = (game: Game, ledger: Ledger, tuning: Tuning = LIVE_TUNING): number =>
@@ -226,7 +238,10 @@ export const signingOf = (game: Game, language: LanguageId): number =>
 export const deploysPerDay = (game: Game, tuning: Tuning = LIVE_TUNING): number => {
   const team = game.teams[0]
   const policy = team ? policyNow(game, team, tuning) : POLICIES.balanced
-  const deploy = has(game, 'ci') ? CI_DEPLOY_MINUTES : MANUAL_DEPLOY_MINUTES
+  // A Platform team halves deploy time (08 "Teams").
+  const deploy =
+    (has(game, 'ci') ? CI_DEPLOY_MINUTES : MANUAL_DEPLOY_MINUTES) *
+    (platformStaffed(game) ? 0.5 : 1)
   const build = LANGUAGES[languageOfService(game)].buildMinutes
   return Math.min(policy.deploysPerDay, WORK_MINUTES / (build + deploy + VERIFY_MINUTES))
 }

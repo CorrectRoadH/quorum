@@ -47,7 +47,14 @@ test('dropping an engineer on another team moves them', () => {
         ...game,
         teams: [
           ...game.teams,
-          { id: 't2', name: 'Team 2', policy: 'balanced', previous: 'balanced', since: 0 },
+          {
+            id: 't2',
+            name: 'Team 2',
+            kind: 'product',
+            policy: 'balanced',
+            previous: 'balanced',
+            since: 0,
+          },
         ],
         engineers: [{ id: 'e1', team: 'core', language: 'php', hiredAt: 0 }],
       },

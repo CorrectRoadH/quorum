@@ -357,7 +357,12 @@ const warnings = (
       )
     if (platformTax(game) > 0)
       list.push(
-        callout(`Clusters take ${platformTax(game)} engineers of Dev Hours.`, 'warn', null, h),
+        callout(
+          `Clusters take ${platformTax(game)} engineers of Dev Hours. A Platform team takes that work.`,
+          'warn',
+          null,
+          h,
+        ),
       )
   }
   if (node.type === 'queue' && game.incident?.kind === 'poison' && game.incident.nodeId === node.id)

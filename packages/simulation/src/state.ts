@@ -324,9 +324,14 @@ export const Hire = Schema.Struct({
 })
 export type Hire = typeof Hire.Type
 
+/** A product team builds the backlog; a platform team runs the Kubernetes Clusters and the deploy pipeline. */
+export const TeamKind = Schema.Literals(['product', 'platform'])
+export type TeamKind = typeof TeamKind.Type
+
 export const Team = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
+  kind: TeamKind.pipe(Schema.withDecodingDefaultKey(Effect.succeed('product' as const))),
   policy: PolicyId,
   /** The policy in force until a calendar day after `since`. */
   previous: PolicyId,
@@ -393,6 +398,7 @@ export type WorkItem = typeof WorkItem.Type
 export const CORE_TEAM: Team = {
   id: 'core',
   name: 'Core',
+  kind: 'product',
   policy: 'balanced',
   previous: 'balanced',
   since: 0,

@@ -40,7 +40,7 @@ import { nextRandom, pickWeighted } from './random.ts'
 import type { Game, GameLink, GameNode, Incident, Postmortem, Region, Zone } from './state.ts'
 import { isGlobal, survivesRegion } from './regions.ts'
 import { collectorOf } from './capacity.ts'
-import { fixed, quartersBehind, serviceOf } from './team.ts'
+import { fixed, platformStaffed, quartersBehind, serviceOf } from './team.ts'
 
 /* ==========================================================================
    The incident director. It attacks the Design, not the player: each
@@ -142,15 +142,17 @@ const cacheTargets = (game: Game, ledger: Ledger): ReadonlyArray<GameNode> =>
 
 /** Clusters with pods that run past their version's support, weighted by how far. */
 const clusterTargets = (game: Game): ReadonlyArray<readonly [GameNode, number]> =>
-  game.nodes
-    .filter(
-      (node) =>
-        node.type === 'cluster' &&
-        !isDown(node) &&
-        podsOf(game, node).length > 0 &&
-        quartersBehind(game, node) > 0,
-    )
-    .map((node) => [node, Math.min(3, 1 + quartersBehind(game, node))] as const)
+  platformStaffed(game)
+    ? []
+    : game.nodes
+        .filter(
+          (node) =>
+            node.type === 'cluster' &&
+            !isDown(node) &&
+            podsOf(game, node).length > 0 &&
+            quartersBehind(game, node) > 0,
+        )
+        .map((node) => [node, Math.min(3, 1 + quartersBehind(game, node))] as const)
 
 const poisonTargets = (game: Game): ReadonlyArray<GameNode> =>
   game.nodes.filter((node) => node.type === 'queue' && !node.dlq)

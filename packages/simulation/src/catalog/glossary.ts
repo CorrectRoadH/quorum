@@ -621,7 +621,7 @@ export const GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     definition:
       'Software that places containers on a shared pool of machines, restarts them when they fail, and scales them up and down. Kubernetes is the common example. Packing many workloads onto shared nodes uses machines better, but neighbours can slow each other down.',
     inGame:
-      'The Container orchestration Research unlocks the Kubernetes Cluster. App Servers and Workers that you link into it run as pods: they cost 15% less Burn, and an Autoscaler adds their copies in 30 s instead of 180 s. Noisy neighbours add 10 ms to 1% of their requests, which shows in the tail latency.',
+      'The Container orchestration Research unlocks the Kubernetes Cluster. App Servers and Workers that you link into it run as pods: they cost 15% less Burn, an Autoscaler adds their copies in 30 s instead of 180 s, a bad deploy stops after its first quarter of pods, and a pod whose host dies is back in 30 s. Each Cluster takes half an engineer of Dev Hours unless a Platform team runs it, and a version left out of support for a quarter risks a forced upgrade that crashes 30% of pod requests. Noisy neighbours add 10 ms to 0.5% to 2% of requests as the pods get busier.',
     related: ['autoscaling', 'cold-start', 'tail-at-scale', 'vertical-and-horizontal-scaling'],
     links: [
       { label: 'Kubernetes: Overview', url: 'https://kubernetes.io/docs/concepts/overview/' },

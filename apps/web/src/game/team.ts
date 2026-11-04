@@ -2,7 +2,7 @@ import { DragAndDrop } from '@foldkit/ui'
 import { Schema } from 'effect'
 import { Command, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { FeatureId, PolicyId } from '@quorum/simulation/state'
+import { FeatureId, PolicyId, TeamKind } from '@quorum/simulation/state'
 import type { Team } from './model.ts'
 
 /* The Team panel: it owns the engineer drag gesture and turns each button and
@@ -16,6 +16,7 @@ export const TeamMessage = defineMessageUnion({
   Removed: { teamId: Schema.String },
   EngineerAssigned: { engineerId: Schema.String, teamId: Schema.String },
   PolicyChosen: { teamId: Schema.String, policy: PolicyId },
+  KindChosen: { teamId: Schema.String, kind: TeamKind },
   FeatureQueued: { id: FeatureId },
 })
 export type TeamMessage = typeof TeamMessage.Type
@@ -27,6 +28,7 @@ export const TeamOutMessage = defineMessageUnion({
   RemoveTeam: { teamId: Schema.String },
   Assign: { engineerId: Schema.String, teamId: Schema.String },
   SetPolicy: { teamId: Schema.String, policy: PolicyId },
+  SetKind: { teamId: Schema.String, kind: TeamKind },
   QueueFeature: { id: FeatureId },
 })
 export type TeamOutMessage = typeof TeamOutMessage.Type
@@ -67,5 +69,6 @@ export const updateTeam = (team: Team, message: TeamMessage): TeamReturn =>
     EngineerAssigned: ({ engineerId, teamId }) =>
       out(team, TeamOutMessage.Assign({ engineerId, teamId })),
     PolicyChosen: ({ teamId, policy }) => out(team, TeamOutMessage.SetPolicy({ teamId, policy })),
+    KindChosen: ({ teamId, kind }) => out(team, TeamOutMessage.SetKind({ teamId, kind })),
     FeatureQueued: ({ id }) => out(team, TeamOutMessage.QueueFeature({ id })),
   })
