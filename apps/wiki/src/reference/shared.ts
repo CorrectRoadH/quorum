@@ -67,7 +67,7 @@ export const factsBox = (
   h: H,
 ): Html =>
   h.aside(
-    [h.AriaLabel(`${title} facts`), h.Class(cn(PANEL, 'overflow-hidden lg:sticky lg:top-[96px]'))],
+    [h.AriaLabel(`${title} facts`), h.Class(cn(PANEL, 'overflow-hidden'))],
     [
       h.div(
         [

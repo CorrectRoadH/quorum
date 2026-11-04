@@ -17,6 +17,7 @@ import { BY_COMPONENT } from '@quorum/simulation/discovery'
 import { groupBadge } from '@quorum/ui/game/bits'
 import { money, ms } from '@quorum/ui/game/format'
 import { COMPONENT_ICONS } from '@quorum/ui/game/icons'
+import { nodeCard } from '../node-card.ts'
 import type { Page } from '../page.ts'
 import {
   authored,
@@ -143,7 +144,21 @@ const entity = (def: ComponentDef): Page => {
     ],
     text: `${def.product} ${def.blurb} ${text.text}`,
     aside: (_model, h) =>
-      factsBox(def.name, componentBadge(def.id, 'size-8', h), def.group, facts(def, h), h),
+      h.div(
+        [h.Class('flex flex-col gap-4')],
+        [
+          // The card as it stands on the board, on the board's dotted canvas.
+          h.div(
+            [
+              h.Class(
+                'grid place-items-center rounded-2xl bg-canvas px-4 py-6 shadow-well [background-image:radial-gradient(circle_at_1px_1px,var(--canvas-grid)_1px,transparent_0)] [background-size:16px_16px]',
+              ),
+            ],
+            [nodeCard(def.id, h)],
+          ),
+          factsBox(def.name, componentBadge(def.id, 'size-8', h), def.group, facts(def, h), h),
+        ],
+      ),
     body: (model, h) =>
       h.div(
         [h.Class('prose')],
