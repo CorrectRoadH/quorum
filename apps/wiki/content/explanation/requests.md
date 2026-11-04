@@ -38,7 +38,7 @@ inferences. For example, a page view sends two read queries to the database.
 Backend kinds earn nothing by themselves. They carry load to the data tier and to managed services.
 A request keeps its original kind on every hop, though. The read queries that a page view sends still
 count as page-view traffic when Analytics samples the Database. That is why Insight has a request
-kind.
+kind ([Insight and observability](/explanation/observability)).
 
 ## Demand follows the clock
 

@@ -35,13 +35,13 @@ below.
 5. In the Inspector, read the **Resources** section of the bottleneck Node.
 6. Find the gauge that is nearest to full. Use the table to choose the fix.
 
-| Full gauge                 | What it means                                                            | Fix                                                                                                |
-| -------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| CPU                        | The Node does too much work per request.                                 | Select **Larger**, or place a second copy behind a [Load Balancer](/components/lb).                |
-| Workers busy, with CPU low | Each request holds a worker while it waits for a slower Node downstream. | Fix the Node that the requests wait for. Or select **More workers** if **RAM fits** a larger pool. |
-| RAM                        | The process is near its memory limit.                                    | Select **Fewer workers**, select **Larger**, or pick the **Memory** family.                        |
-| CPU credits                | A Burstable box spent its credits and runs at a fraction of its CPU.     | Pick the **General** or **Compute** family.                                                        |
-| Connections                | The Database is at its connection limit.                                 | Place a [Connection Pooler](/components/pooler).                                                   |
+| Full gauge                 | What it means                                                            | Fix                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| CPU                        | The Node does too much work per request.                                 | Select **Larger**, or place a second copy behind a [Load Balancer](/components/lb).                    |
+| Workers busy, with CPU low | Each request holds a worker while it waits for a slower Node downstream. | Fix the Node that the requests wait for. Or select **More workers** if **RAM fits** a larger pool.     |
+| RAM                        | The process is near its memory limit.                                    | Select **Fewer workers**, select **Larger**, or pick the **Memory** family.                            |
+| CPU credits                | A Burstable box spent its credits and runs at a fraction of its CPU.     | Pick the **General** or **Compute** family.                                                            |
+| Connections                | The Database is at its connection limit.                                 | Place a [Connection Pooler](/components/pooler). See [Scale the database](/guides/scale-the-database). |
 
 A full "Workers busy" gauge with low CPU is the most common trap. The App Server looks full, but
 the slow part is the Database behind it. This is [Little's law](/glossary/littles-law): a request
@@ -76,7 +76,7 @@ The Design can lose users with no bottleneck. Check these places:
 
 ## Other ways to find it
 
-- Press **D** to open the Dashboard, once you own
+- Press **D** to open the [Dashboard](/explanation/observability), once you own
   [Metrics](/research/metrics). The **Saturation** row shows each Node's load over time. The stat
   **Hottest Node** names the busiest Node.
 - With [Percentiles](/research/percentiles), the Latency row of each card shows the p99. A Node with a
@@ -92,6 +92,7 @@ resource fills first, and fix it within the Burn limit.
 
 ## Related
 
+- [Your first bottleneck](/tutorials/first-bottleneck) teaches this loop step by step.
 - [Capacity, utilization, and queues](/explanation/queues) explains why waiting time rises so fast
   near full load.
 - [Utilization](/glossary/utilization) in the glossary.

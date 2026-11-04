@@ -12,7 +12,7 @@ It also brings:
 The costs:
 
 - **Noisy neighbours**: pods share CPU, and busy neighbours add delay to a share of requests.
-- **Platform work**: without a Platform team, each Cluster takes Dev Hours from your product teams.
+- **Platform work**: without a Platform team, each Cluster takes Dev Hours from your product teams. See [Team and velocity](/explanation/team-and-velocity).
 - **Upgrades**: each Kubernetes version is supported for a limited time.
 
 ## When to place it

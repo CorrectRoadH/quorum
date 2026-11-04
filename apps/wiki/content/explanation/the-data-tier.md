@@ -120,3 +120,6 @@ replica buy speed with freshness. A strong quorum and consensus buy freshness wi
 other zones and regions buy survival with Burn. The Data track shows the research behind each tool:
 
 ::Track{track="data"}
+
+For practical steps, see [Scale the database](/guides/scale-the-database) and
+[Fix slow queries](/guides/fix-slow-queries).

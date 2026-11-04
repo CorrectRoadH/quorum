@@ -61,8 +61,7 @@ loyal.
 
 ## Things that speed growth
 
-- **Funding.** An Era that began with a raised round grows at the full rate. One that began with a
-  declined round grows slower.
+- **Funding.** An Era that began with a raised round grows at the full rate. One that began with a declined round grows slower. See [Cash, Burn, and funding](/explanation/money).
 - **Features.** Some raise growth or the market, and some lower churn. See the
   [Team](/team#features) reference.
 - **Research.** [Funnel analytics](/research/funnels) raises growth.
@@ -93,7 +92,7 @@ per region. Three rules make this work like the real thing:
 
 So a far region can fall below target while every Node on the home board is green. The fix is to
 serve those users nearby: open the region, and use [GeoDNS](/research/geo-dns) to send each region's
-users to their own region.
+users to their own region. See [Go global](/guides/go-global).
 
 ::Sandbox{id="far-away"}
 

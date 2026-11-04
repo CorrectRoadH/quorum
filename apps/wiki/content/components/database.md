@@ -10,7 +10,7 @@ Postgres runs one process per connection, and the Database refuses connections p
 
 ## When to place it
 
-Split Postgres off the Garage box when the shared box runs out of memory or CPU. Resize it when its CPU stays high and query latency rises. When errors show refused connections, add a [Connection Pooler](/components/pooler), not a bigger box.
+Split Postgres off the Garage box when the shared box runs out of memory or CPU. Resize it when its CPU stays high and query latency rises. When errors show refused connections, add a [Connection Pooler](/components/pooler), not a bigger box. See [Scale the database](/guides/scale-the-database).
 
 ## How it fails
 

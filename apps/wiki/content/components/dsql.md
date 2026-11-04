@@ -8,7 +8,7 @@ Every write waits for a majority of its replicas. In one region that costs a few
 
 ## When to place it
 
-Place it when your Company runs in several regions and checkouts must stay correct everywhere. It is the right store for checkouts, and an expensive one for feeds. It unlocks with [Consensus databases](/research/consensus).
+Place it when your Company runs in several regions and checkouts must stay correct everywhere. It is the right store for checkouts, and an expensive one for feeds. It unlocks with [Consensus databases](/research/consensus). See [Go global](/guides/go-global).
 
 ## How it fails
 

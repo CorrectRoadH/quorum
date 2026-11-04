@@ -86,6 +86,8 @@ and others measured them across real outages at OSDI 2022. Cloud providers advis
 with jitter for every client, and many services also cap retries with a budget.
 :::
 
+For a step-by-step fix during play, see [Stop a retry storm](/guides/stop-a-retry-storm).
+
 ## Connections: why more servers can break the Database
 
 The Database runs one process per connection, so it accepts only a limited number of them. Every App

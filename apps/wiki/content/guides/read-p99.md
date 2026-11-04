@@ -87,3 +87,4 @@ For garbage collection, try the [GC Pauses](/sandboxes/gc-pauses) Sandbox.
 
 - [Percentile (p50, p95, p99)](/glossary/percentile-p50-p95-p99) in the glossary.
 - [Apdex and revenue](/explanation/apdex-and-revenue) explains how slow requests lose money.
+- [Insight and observability](/explanation/observability) explains what each Research lets you see.

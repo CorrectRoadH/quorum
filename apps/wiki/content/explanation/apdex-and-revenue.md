@@ -86,7 +86,7 @@ Bigger sizes hold more. Revenue that arrives while the drawer is full is lost.
 
 The drawer keeps the first minutes of the Garage active, and then it gets out of the way. The
 [Stripe Billing](/research/stripe) research collects automatically. While you are away, the game pays
-revenue straight into Cash.
+revenue straight into Cash. Where Cash goes after that is in [Cash, Burn, and funding](/explanation/money).
 
 ## How to raise income
 
