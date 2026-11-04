@@ -1,5 +1,6 @@
 import { cosTurns } from './calendar.ts'
 import {
+  ABROAD_SEED,
   CALENDAR_START,
   DIURNAL_AMPLITUDE,
   HOME_REGION,
@@ -14,7 +15,7 @@ import {
   type RegionId,
 } from './catalog.ts'
 import { has, zoneMs } from './lookups.ts'
-import type { Game, GameNode } from './state.ts'
+import type { Game, GameNode, PerRegion } from './state.ts'
 
 /* ==========================================================================
    Regions (05 "Zones and regions", docs/adr/0005-regions-are-tabs-over-one-design.md).
@@ -60,21 +61,68 @@ export const regionDiurnal = (time: number, region: RegionId): number => {
   return 1 + DIURNAL_AMPLITUDE * cosTurns((minute - 20 * 60) / 1440)
 }
 
+/** One figure for each region. */
+export const perRegion = (figure: (region: RegionId) => number): PerRegion =>
+  Object.fromEntries(REGIONS.map((region) => [region, figure(region)])) as PerRegion
+
+/** The catalog's split of users: each region's share of the market. */
+export const MARKET_SHARES: PerRegion = perRegion((region) => REGION_INFO[region].share)
+
+const AT_HOME: PerRegion = perRegion((region) => (region === HOME_REGION ? 1 : 0))
+
+/**
+ * Each region's share of the Users (04 "Users and growth"). Before Series C
+ * everyone is at home; a Game from before per-region Users keeps the market split.
+ */
+export const userSharesOf = (game: Game): PerRegion =>
+  game.userShares ?? (regional(game) ? MARKET_SHARES : AT_HOME)
+
+/** Each region's Users. They add up to `game.users`. */
+export const regionUsers = (game: Game): PerRegion => {
+  const shares = userSharesOf(game)
+  return perRegion((region) => game.users * shares[region])
+}
+
+/** A Game with these Users per region: the total and each region's share. */
+export const withRegionUsers = (game: Game, users: PerRegion): Game => {
+  const total = REGIONS.reduce((sum, region) => sum + users[region], 0)
+  if (total <= 0) return { ...game, users: 0 }
+  return { ...game, users: total, userShares: perRegion((region) => users[region] / total) }
+}
+
+/**
+ * Regions arrive (04 "Going global"): every user stays at home, where they found
+ * the Company, and each far region starts from a seed.
+ */
+export const goGlobal = (game: Game): Game => {
+  const seed = (region: RegionId): number =>
+    (ABROAD_SEED * game.users * REGION_INFO[region].share) / REGION_INFO[HOME_REGION].share
+  return withRegionUsers(
+    game,
+    perRegion((region) => (region === HOME_REGION ? game.users : seed(region))),
+  )
+}
+
+/** Apdex of one region's users over the last calendar hour. */
+export const regionApdexOf = (game: Game, region: RegionId): number =>
+  game.regionApdex?.[region] ?? game.apdex
+
 /** Demand relative to the mean across regions: the sum of each region's share times its cycle. */
-export const regionalCycle = (time: number): number => {
+export const regionalCycle = (time: number, shares: PerRegion = MARKET_SHARES): number => {
   let sum = 0
-  for (const region of REGIONS) sum += REGION_INFO[region].share * regionDiurnal(time, region)
+  for (const region of REGIONS) sum += shares[region] * regionDiurnal(time, region)
   return sum
 }
 
 /** Each region's share of the demand right now. Sums to 1. */
 export const regionShares = (game: Game): ReadonlyArray<readonly [RegionId, number]> => {
   if (!regional(game)) return [[HOME_REGION, 1]]
+  const shares = userSharesOf(game)
   const weights = REGIONS.map(
     (region) =>
       [
         region,
-        REGION_INFO[region].share *
+        shares[region] *
           (game.sandbox && !game.scenario?.daily ? 1 : regionDiurnal(game.time, region)),
       ] as const,
   )

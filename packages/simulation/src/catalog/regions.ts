@@ -60,3 +60,15 @@ export const EGRESS_CROSS_REGION = 0.02
 export const OPEN_REGION_PRICE = 20_000
 /** The Era regions arrive in (10 "Era 5"). */
 export const REGIONS_FROM_STAGE = 5
+/**
+ * When regions arrive, each far region starts with this share of the users at home,
+ * times its share over North America's (04 "Going global"). Proposed.
+ */
+export const ABROAD_SEED = 0.05
+/**
+ * How much users in other regions count toward word of mouth in a region, against
+ * 1 for its own users (04 "Going global"). Putsis et al. (1997) measured adoption in
+ * one country speeding it in others; Takada and Jain (1991) found later countries
+ * adopt faster. Proposed.
+ */
+export const BORDER_MIXING = 0.1

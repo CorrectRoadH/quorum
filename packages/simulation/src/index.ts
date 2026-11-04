@@ -8,6 +8,7 @@
 export * from './actions.ts'
 export * from './capacity.ts'
 export * from './challenges.ts'
+export * from './churn.ts'
 export * from './catalog.ts'
 export * from './company.ts'
 export * from './director.ts'

@@ -69,6 +69,15 @@ export type Collector = typeof Collector.Type
 export const Region = Schema.Literals(REGIONS)
 export type Region = typeof Region.Type
 
+/** One figure for each region. */
+export const PerRegion = Schema.Struct({
+  na: Schema.Finite,
+  eu: Schema.Finite,
+  apac: Schema.Finite,
+  sa: Schema.Finite,
+})
+export type PerRegion = typeof PerRegion.Type
+
 export const Backup = Schema.Literals(['none', 'nightly', 'pitr'])
 export type Backup = typeof Backup.Type
 
@@ -533,6 +542,15 @@ export const Game = Schema.Struct({
   seed: Schema.Finite,
   /** Apdex averaged over the last calendar hour. */
   apdex: Schema.Finite,
+  /**
+   * Each region's share of `users` (04 "Users and growth"). Null keeps the split
+   * from before per-region Users: everyone at home, and the catalog's shares from Series C.
+   */
+  userShares: Schema.NullOr(PerRegion).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** Each region's share of its users who are steady; null reads `1 − FICKLE_SHARE`. */
+  steady: Schema.NullOr(PerRegion).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** Apdex of each region's users over the last calendar hour; null reads `apdex` for every region. */
+  regionApdex: Schema.NullOr(PerRegion).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   incident: Schema.NullOr(Incident),
   /** The last incident type, so the director does not repeat itself. */
   lastIncident: Schema.NullOr(IncidentId),

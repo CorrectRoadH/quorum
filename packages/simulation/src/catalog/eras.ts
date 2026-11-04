@@ -249,8 +249,16 @@ export const WEEKEND_FACTOR = 1
 export const STEP_SECONDS = 0.1
 /** The calendar starts at 14:00 on day 1, so the Garage ends near the evening peak. One sim second is one calendar minute. */
 export const CALENDAR_START = 14 * 60
-/** Users leave at this rate per second at the worst Apdex. */
+/** Fickle users leave at this rate per second at the worst Apdex. */
 export const CHURN = 0.004
+/**
+ * Share of new users who are fickle; the rest are steady (04 "Users and growth").
+ * Fader and Hardie (2007): retention rises with tenure because the least loyal
+ * users leave first. Two segments are the simplest form of that sorting. Proposed.
+ */
+export const FICKLE_SHARE = 0.5
+/** Steady users leave at this share of the fickle users' rate. Proposed. */
+export const STEADY_CHURN = 0.2
 /** Growth multiplier from Funnel analytics. */
 export const FUNNEL_GROWTH = 1.1
 /** Growth multiplier in an Era that began with a declined round. */

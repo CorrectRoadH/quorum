@@ -42,6 +42,7 @@ import {
   OPEN_REGION_PRICE,
   QUORUM_N,
   REGION_INFO,
+  REGIONS_FROM_STAGE,
 } from './catalog.ts'
 import {
   frameworkReady,
@@ -62,7 +63,7 @@ import {
   vcpuOf,
 } from './lookups.ts'
 import { link } from './company.ts'
-import { isGlobal, openRegions } from './regions.ts'
+import { goGlobal, isGlobal, openRegions } from './regions.ts'
 import {
   alumniOf,
   dilutionOf,
@@ -1050,7 +1051,8 @@ const advanceEra = (game: Game, raised: boolean, firstIncidentAfter: number): Ac
   // Alumni network: former colleagues join when hiring opens.
   const alumni = stage === 1 ? alumniOf(game, perkLevel(game, 'alumni-network')) : []
   return ok({
-    ...game,
+    // Users abroad arrive with the regions (04 "Going global").
+    ...(stage === REGIONS_FROM_STAGE ? goGlobal(game) : game),
     stage,
     cash: game.cash + (raised ? grantOf(game, era.grant) : 0),
     equity: raised ? game.equity * (1 - dilution) : game.equity,

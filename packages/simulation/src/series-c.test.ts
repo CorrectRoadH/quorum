@@ -5,12 +5,14 @@ import type { Action } from './actions.ts'
 import { ERAS, REGIONS, RESEARCH_IDS, rttOf, type ResearchId } from './catalog.ts'
 import { company, link, node } from './company.ts'
 import { forceIncident } from './director.ts'
+import { churnOf } from './churn.ts'
 import { checklistOf, rpoOf } from './ipo.ts'
 import { QUARTER_SECONDS, advanceQuarter, firstQuarter } from './quarters.ts'
 import { majorityMs } from './rules.ts'
-import { regionDiurnal, regionalCycle } from './regions.ts'
+import { regionDiurnal, regionUsers, regionalCycle } from './regions.ts'
 import { diurnal, solve } from './solve.ts'
 import type { Game, GameNode } from './state.ts'
+import { step } from './step.ts'
 import { valuationOf } from './valuation.ts'
 
 /* M6 (10 "Era 5" to "Era 7"): regions, quorums, consensus, fan-out, the IPO and quarters. */
@@ -75,6 +77,58 @@ describe('the M6 Eras', () => {
 })
 
 describe('regions', () => {
+  test('the raise into Series C keeps every user at home and seeds each far region', () => {
+    const game = ok(
+      Actions.raise({ ...company(12), nodes: [], links: [], stage: 4, users: 1_000_000 }),
+    )
+    const users = regionUsers(game)
+    expect(users.na).toBeCloseTo(1_000_000, 6)
+    expect(users.eu).toBeCloseTo(37_500, 6)
+    expect(users.apac).toBeCloseTo(25_000, 6)
+    expect(users.sa).toBeCloseTo(12_500, 6)
+    expect(game.users).toBeCloseTo(1_075_000, 6)
+  })
+
+  test("the Churn breakdown splits each region's lost Apdex into the round trip, slowness, and failures", () => {
+    const game: Game = { ...seriesC(20_000), sandbox: false }
+    const ledger = solve(game)
+    const apac = churnOf(game, ledger).find((entry) => entry.region === 'apac')
+    expect(apac).toBeDefined()
+    if (!apac) return
+    const points = apac.rows.reduce((sum, row) => sum + row.points, 0)
+    // Rows under 0.002 are left out, so the sum may fall short by a little.
+    expect(points).toBeLessThanOrEqual(1 - apac.now + 1e-9)
+    expect(points).toBeGreaterThan(1 - apac.now - 0.02)
+    // An NA-only Design: most of what Asia-Pacific loses is the ocean, and the fix is a region.
+    expect(apac.rows[0]?.cause).toBe('far')
+    expect(apac.rows[0]?.fix).toEqual({ _tag: 'region', region: 'apac' })
+    expect(apac.rows[0]?.needed).toBe(true)
+    // North America is served at home: no round trip to win back.
+    const na = churnOf(game, ledger).find((entry) => entry.region === 'na')
+    expect(na?.rows.some((row) => row.cause === 'far')).toBe(false)
+  })
+
+  test('users abroad leave on their own Apdex, and the users at home keep growing', () => {
+    const game: Game = {
+      ...seriesC(20_000),
+      sandbox: false,
+      userShares: { na: 0.5, eu: 0.3, apac: 0.2, sa: 0 },
+      // Blended, the Company sits under the Series C target of 0.92; only Asia-Pacific is slow.
+      apdex: 0.9,
+      regionApdex: { na: 0.99, eu: 0.99, apac: 0.5, sa: 0.99 },
+    }
+    const before = regionUsers(game)
+    const after = regionUsers(step(game, 1).game)
+    expect(after.na).toBeGreaterThan(before.na)
+    expect(after.eu).toBeGreaterThan(before.eu)
+    expect(after.apac).toBeLessThan(before.apac)
+    // South America has no users yet; word of mouth from the other regions brings its first.
+    expect(after.sa).toBeGreaterThan(0)
+    // An NA-only Design: the users who cross the Pacific get the worst Apdex.
+    const regions = solve(game).regions
+    expect(regions.apac).toBeLessThan(regions.na ?? 0)
+  })
+
   test('round trips are symmetric, and the home peak is the old daily cycle', () => {
     for (const a of REGIONS) for (const b of REGIONS) expect(rttOf(a, b)).toBe(rttOf(b, a))
     expect(rttOf('na', 'eu')).toBe(75)

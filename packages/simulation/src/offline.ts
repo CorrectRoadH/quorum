@@ -1,6 +1,7 @@
 import {
   COMPONENTS,
   FIRST_INCIDENT_AFTER,
+  HOME_REGION,
   LIVE_TUNING,
   OFFLINE_CAP,
   type ResearchId,
@@ -8,6 +9,7 @@ import {
 } from './catalog.ts'
 import { clockOf } from './calendar.ts'
 import { perkLevel } from './founding.ts'
+import { perRegion, regional, regionUsers, withRegionUsers } from './regions.ts'
 import type { Game } from './state.ts'
 import { step } from './step.ts'
 import { devHoursRate } from './team.ts'
@@ -15,7 +17,7 @@ import { devHoursRate } from './team.ts'
 /* ==========================================================================
    Offline progress (04 "Offline progress"): the time the player was away, in
    10-second Steps, with the day and week cycles, no incidents, revenue
-   straight to Cash, and churn capped at 5% of users.
+   straight to Cash, and churn capped at 5% of each region's users.
    ========================================================================== */
 
 export const OFFLINE_STEP = 10
@@ -54,7 +56,17 @@ export const simulateAway = (
   tuning: Tuning = LIVE_TUNING,
 ): Readonly<{ game: Game; report: AwayReport }> => {
   const seconds = Math.max(0, Math.min(away, offlineCap(game)))
-  const floor = game.users * (1 - OFFLINE_CHURN)
+  // Each region keeps at least 95% of its users (04 "Offline progress").
+  const before = regionUsers(game)
+  const floor = perRegion((region) => before[region] * (1 - OFFLINE_CHURN))
+  const floored = (next: Game): Game => {
+    if (!regional(next)) return { ...next, users: Math.max(floor[HOME_REGION], next.users) }
+    const users = regionUsers(next)
+    return withRegionUsers(
+      next,
+      perRegion((region) => Math.max(floor[region], users[region])),
+    )
+  }
   let current = game
   let devHours = 0
   let peak = 0
@@ -64,7 +76,7 @@ export const simulateAway = (
   let left = seconds
   while (left > 0) {
     const size = Math.min(OFFLINE_STEP, left)
-    const before = current.users
+    const usersBefore = current.users
     const result = step(current, size, tuning, true)
     devHours += devHoursRate(current, result.ledger, tuning) * size
     for (const node of current.nodes) {
@@ -76,8 +88,8 @@ export const simulateAway = (
         peakNode = COMPONENTS[node.type].name
       }
     }
-    current = { ...result.game, users: Math.max(floor, result.game.users) }
-    if (current.users < before) lost = true
+    current = floored(result.game)
+    if (current.users < usersBefore) lost = true
     left -= size
   }
   // Nothing waits to strike the moment the player is back.

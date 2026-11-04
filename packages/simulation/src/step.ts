@@ -4,22 +4,28 @@ import {
   BREAKER_OPEN,
   BREAKER_THRESHOLD,
   APDEX_WINDOW,
+  BORDER_MIXING,
   CHURN,
   CREDIT_CAP,
   DECLINED_GROWTH,
+  FICKLE_SHARE,
   FIRST_KIND_INSIGHT,
   FUNNEL_GROWTH,
   LIVE_TUNING,
   OOM_RATIO,
   PROFILES,
+  REGION_INFO,
+  REGIONS,
   REQUEST_KINDS,
   POD_REACTION,
   RUNTIMES,
   SCALE_COOLDOWN,
   SCALE_IN,
+  STEADY_CHURN,
   UPLOAD_MB,
   VM_REACTION,
   WARMUP_SECONDS,
+  type RegionId,
   type Tuning,
 } from './catalog.ts'
 import { advanceCves } from './cve.ts'
@@ -44,7 +50,8 @@ import { calendarMinute, solveFlow } from './solve.ts'
 import { advanceDrill } from './ipo.ts'
 import { advanceQuarter } from './quarters.ts'
 import { accrue, advanceStudies } from './studies.ts'
-import type { Alarms, FalseAlarms, Game, GameLink, GameNode, Sample } from './state.ts'
+import { perRegion, regional, regionApdexOf, regionUsers, withRegionUsers } from './regions.ts'
+import type { Alarms, FalseAlarms, Game, GameLink, GameNode, PerRegion, Sample } from './state.ts'
 import { advanceTeam } from './work.ts'
 
 /* ==========================================================================
@@ -61,16 +68,25 @@ export type StepResult = Readonly<{
 
 const HISTORY = 600
 
+/** Users per second one region gains, before the split into fickle and steady. */
+type Flow = Readonly<{ fickle: number; steady: number }>
+
+/** Each region's share of its users who are steady. */
+const steadyOf = (game: Game, region: RegionId): number => game.steady?.[region] ?? 1 - FICKLE_SHARE
+
 /**
  * Users grow along an S-curve while Apdex beats the Era's target, and leave fast
- * when it does not. `pace` multiplies `g`: the live game plays faster than the design.
- * Shipped Features raise growth and the market, and lower churn.
+ * when it does not (04 "Users and growth"). `pace` multiplies `g`: the live game
+ * plays faster than the design. Shipped Features raise growth and the market, and
+ * lower churn. From Series C each region grows toward its share of the market on
+ * its own users' Apdex, and word of mouth crosses borders at `BORDER_MIXING`. New
+ * users are fickle at `FICKLE_SHARE`; steady users leave at `STEADY_CHURN` of the rate.
  */
-export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): number => {
+const flowsOf = (game: Game, ledger: Ledger, pace: number): Readonly<Record<RegionId, Flow>> => {
   const era = eraOf(game)
-  const target = era.apdexTarget
-  const health = Math.max(-1, Math.min(1, (game.apdex - target) / (1 - target)))
-  if (health < 0) return CHURN * churnFactor(game) * game.users * health
+  const users = regionUsers(game)
+  const split = regional(game)
+  const total = REGIONS.reduce((sum, region) => sum + users[region], 0)
   const rate =
     era.growth *
     pace *
@@ -78,7 +94,106 @@ export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): n
     growthPerk(game) *
     (game.declined ? DECLINED_GROWTH : 1) *
     (has(game, 'funnels') ? FUNNEL_GROWTH : 1)
-  return rate * game.users * Math.max(0, 1 - game.users / ledger.market) * health
+  const flows = {} as Record<RegionId, Flow>
+  for (const region of REGIONS) {
+    const own = users[region]
+    const apdex = regionApdexOf(game, region)
+    const health = Math.max(-1, Math.min(1, (apdex - era.apdexTarget) / (1 - era.apdexTarget)))
+    const steady = own * steadyOf(game, region)
+    if (health < 0) {
+      const churn = CHURN * churnFactor(game) * health
+      flows[region] = { fickle: churn * (own - steady), steady: churn * STEADY_CHURN * steady }
+      continue
+    }
+    const market = split ? ledger.market * REGION_INFO[region].share : ledger.market
+    const talk = split ? own + BORDER_MIXING * (total - own) : own
+    const growth = rate * talk * Math.max(0, 1 - own / market) * health
+    flows[region] = { fickle: growth * FICKLE_SHARE, steady: growth * (1 - FICKLE_SHARE) }
+  }
+  return flows
+}
+
+/** Users per second each region gains, or loses below 0. */
+export const regionGrowth = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): PerRegion => {
+  const flows = flowsOf(game, ledger, pace)
+  return perRegion((region) => flows[region].fickle + flows[region].steady)
+}
+
+/** Users per second the Company gains, or loses below 0, over every region. */
+export const growthOf = (game: Game, ledger: Ledger, pace = LIVE_TUNING.pace): number => {
+  const growth = regionGrowth(game, ledger, pace)
+  return REGIONS.reduce((total, region) => total + growth[region], 0)
+}
+
+/**
+ * Users after `seconds`, never under 20. Offline, users grow only while the
+ * errors stay inside the SLO; they still leave.
+ */
+const grow = (
+  game: Game,
+  ledger: Ledger,
+  seconds: number,
+  pace: number,
+  offline: boolean,
+): Pick<Game, 'users' | 'userShares' | 'steady'> => {
+  if (game.sandbox) return game
+  const flows = flowsOf(game, ledger, pace)
+  const holds = !offline || ledger.errorShare <= 1 - eraOf(game).slo
+  const moved = (flow: number): number => (flow <= 0 || holds ? flow * seconds : 0)
+  const users = regionUsers(game)
+  const steady = perRegion((region) =>
+    Math.max(0, users[region] * steadyOf(game, region) + moved(flows[region].steady)),
+  )
+  const fickle = perRegion((region) =>
+    Math.max(0, users[region] * (1 - steadyOf(game, region)) + moved(flows[region].fickle)),
+  )
+  const grown = perRegion((region) => steady[region] + fickle[region])
+  const shares = perRegion((region) =>
+    grown[region] > 0 ? steady[region] / grown[region] : steadyOf(game, region),
+  )
+  if (!regional(game)) {
+    const total = REGIONS.reduce((sum, region) => sum + grown[region], 0)
+    return { users: Math.max(20, total), userShares: game.userShares, steady: shares }
+  }
+  const next = withRegionUsers(game, grown)
+  return { users: Math.max(20, next.users), userShares: next.userShares, steady: shares }
+}
+
+/**
+ * Each region's Users after `seconds` if every region's Apdex stays where it is:
+ * the forecast the Churn breakdown shows (12 "The Churn breakdown"). Runs the
+ * same growth rule as the Step, in 10-second steps.
+ */
+export const forecastUsers = (
+  game: Game,
+  ledger: Ledger,
+  seconds: number,
+  pace = LIVE_TUNING.pace,
+): PerRegion => {
+  let current = game
+  for (let left = seconds; left > 0; left -= FORECAST_STEP) {
+    const grown = grow(
+      { ...current, sandbox: false },
+      ledger,
+      Math.min(FORECAST_STEP, left),
+      pace,
+      false,
+    )
+    current = { ...current, ...grown }
+  }
+  return regionUsers(current)
+}
+
+const FORECAST_STEP = 10
+
+/** Each region's hourly Apdex moves toward what its users get now; null before Series C. */
+const regionApdexAfter = (game: Game, ledger: Ledger, seconds: number): PerRegion | null => {
+  if (!regional(game)) return null
+  const weight = Math.min(1, seconds / APDEX_WINDOW)
+  return perRegion((region) => {
+    const before = regionApdexOf(game, region)
+    return before + ((ledger.regions[region] ?? before) - before) * weight
+  })
 }
 
 /**
@@ -364,9 +479,7 @@ export const step = (
       node.type === 'storage' ? total + (ledger.nodes[node.id]?.inbound ?? 0) : total,
     0,
   )
-  const growth = growthOf(game, ledger, tuning.pace)
-  const held = !offline || growth <= 0 || ledger.errorShare <= 1 - eraOf(game).slo
-  const users = game.sandbox ? game.users : Math.max(20, game.users + (held ? growth : 0) * seconds)
+  const { users, userShares, steady } = grow(game, ledger, seconds, tuning.pace, offline)
   const apdex = game.apdex + (ledger.apdex - game.apdex) * Math.min(1, seconds / APDEX_WINDOW)
   // Sim time stays on a microsecond grid, so ten 0.1 s Steps make exactly one second.
   const time = Math.round((game.time + seconds) * 1e6) / 1e6
@@ -401,8 +514,11 @@ export const step = (
     pending,
     spilled,
     users,
+    userShares,
+    steady,
     peak: Math.max(game.peak, users),
     apdex,
+    regionApdex: regionApdexAfter(game, ledger, seconds),
     alarms,
     falseAlarms,
     insight: 0,

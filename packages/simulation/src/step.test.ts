@@ -89,6 +89,18 @@ describe('a Garage minute', () => {
   })
 })
 
+describe('users who leave', () => {
+  test('the fickle half leaves first, so a long bad spell leaves a steadier base', () => {
+    // No Design at all: every request is stranded, so Apdex stays at 0.
+    let game: Game = { ...newGame(), nodes: [], links: [], users: 100_000, apdex: 0 }
+    for (let second = 0; second < 1_000; second += 1) game = step(game, 1).game
+    // Half the users leave at 0.4% a second and half at a fifth of that:
+    // 50,000 × 0.996^1000 + 50,000 × 0.9992^1000.
+    expect(game.users).toBeCloseTo(50_000 * 0.996 ** 1_000 + 50_000 * 0.9992 ** 1_000, -1)
+    expect(game.steady?.na).toBeGreaterThan(0.9)
+  })
+})
+
 describe('user growth at the design pace', () => {
   // 16 "User growth": Apdex 1, no capacity limit, the Era's market. The live game runs at
   // PLAYTEST_PACE; the design's times hold at pace 1.

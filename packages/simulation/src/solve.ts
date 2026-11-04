@@ -40,6 +40,7 @@ import {
   type BackendKind,
   type InsightPool,
   type Kind,
+  type RegionId,
   type RequestKind,
 } from './catalog.ts'
 import { insightPerk, ventureOf } from './founding.ts'
@@ -68,7 +69,14 @@ import {
   type Outcome,
 } from './distribution.ts'
 import { marketOf, mixOf, subscriptionsOf, valueFactor } from './features.ts'
-import type { KindLedger, Ledger, LinkLedger, NodeLedger, NodeStatus } from './ledger.ts'
+import type {
+  KindLedger,
+  Ledger,
+  LinkLedger,
+  NodeLedger,
+  NodeStatus,
+  RegionKindLedger,
+} from './ledger.ts'
 import {
   burnOf,
   eraOf,
@@ -98,6 +106,7 @@ import {
   regional,
   regionalCycle,
   userRoutes,
+  userSharesOf,
   type UserRoute,
 } from './regions.ts'
 import { NO_INSIGHT, type Game, type GameLink, type GameNode } from './state.ts'
@@ -155,10 +164,10 @@ export const demandOf = (game: Game): Partial<Record<RequestKind, number>> => {
   const spike = game.incident?.kind === 'spike' ? game.incident.magnitude : 1
   const cycle = game.sandbox
     ? game.scenario?.daily && regional(game)
-      ? regionalCycle(game.time)
+      ? regionalCycle(game.time, userSharesOf(game))
       : 1
     : regional(game)
-      ? regionalCycle(game.time) * ventureWeekly(game)
+      ? regionalCycle(game.time, userSharesOf(game)) * ventureWeekly(game)
       : ventureDiurnal(game) * ventureWeekly(game)
   const total = game.users * RPS_PER_USER * cycle * spike
   const demand: Partial<Record<RequestKind, number>> = {}
@@ -1146,6 +1155,9 @@ const completionsOf = (game: Game, pass: Pass, outcomes: ReturnType<typeof outco
   return { enqueued, scored, waits }
 }
 
+/** One region's answer to a request kind, with and without its users' hop. */
+type RouteAnswer = Readonly<{ entry: UserRoute; answer: Outcome; raw: Outcome }>
+
 const ledgerOf = (
   game: Game,
   graph: Graph,
@@ -1154,22 +1166,30 @@ const ledgerOf = (
   outcomes: ReturnType<typeof outcomesOf>,
   routes: ReadonlyArray<UserRoute>,
 ): Ledger => {
+  /** What one request of `kind` gets back for each region's users, and what it would with no user hop. */
+  const answersOf = (kind: RequestKind): ReadonlyArray<RouteAnswer> =>
+    routes.map((entry) => {
+      const raw = entry.source ? outcomes.outcome(entry.source, kind) : failed('stranded')
+      return {
+        entry,
+        raw,
+        answer: entry.extraMs > 0 ? through(hop({ fixed: entry.extraMs }), [[raw, 1]]) : raw,
+      }
+    })
   /** What one request of `kind` gets back, over every region's users. */
-  const answerOf = (kind: RequestKind): Outcome => {
-    const only = routes.length === 1 ? routes[0] : undefined
-    if (only && only.extraMs === 0)
-      return only.source ? outcomes.outcome(only.source, kind) : failed('stranded')
-    const mixed = blend(
-      routes.map((entry) => {
-        const answer = entry.source ? outcomes.outcome(entry.source, kind) : failed('stranded')
-        return [
-          entry.extraMs > 0 ? through(hop({ fixed: entry.extraMs }), [[answer, 1]]) : answer,
-          entry.share,
-        ] as const
-      }),
+  const answerOf = (answers: ReadonlyArray<RouteAnswer>): Outcome => {
+    const only = answers.length === 1 ? answers[0] : undefined
+    if (only && only.entry.extraMs === 0) return only.answer
+    return (
+      blend(answers.map(({ entry, answer }) => [answer, entry.share] as const)) ??
+      failed('stranded')
     )
-    return mixed ?? failed('stranded')
   }
+  // Each region's users get their own Apdex (04 "Users and growth"), and their own rows for the
+  // Churn breakdown (12 "The Churn breakdown").
+  const regionRate: Partial<Record<RegionId, number>> = {}
+  const regionSatisfied: Partial<Record<RegionId, number>> = {}
+  const regionKinds: Partial<Record<RegionId, Partial<Record<RequestKind, RegionKindLedger>>>> = {}
 
   const completion = completionsOf(game, pass, outcomes)
 
@@ -1186,13 +1206,15 @@ const ledgerOf = (
   for (const kind of REQUEST_KINDS) {
     const rate = demand[kind] ?? 0
     if (rate <= 0) continue
-    const result = answerOf(kind)
+    const answers = answersOf(kind)
+    const result = answerOf(answers)
     // The part that went through a Queue is also scored on when its result is ready.
     const enqueued = completion.enqueued[kind] ?? 0
     const done = enqueued > 0 ? (completion.scored[kind] ?? 0) / enqueued : null
     const async =
       done === null || result.success <= 0 ? 0 : Math.min(1, enqueued / (rate * result.success))
-    const apdex = apdexOf(result, PROFILES[kind].apdex) * (1 - async + async * (done ?? 1))
+    const finish = 1 - async + async * (done ?? 1)
+    const apdex = apdexOf(result, PROFILES[kind].apdex) * finish
     kinds[kind] = {
       rate,
       success: result.success,
@@ -1205,6 +1227,26 @@ const ledgerOf = (
     }
     // Bots earn nothing and do not count toward Apdex or errors: blocking one is a success.
     if (!PROFILES[kind].scored) continue
+    for (const { entry, answer, raw } of answers) {
+      const sent = rate * entry.share
+      const region = entry.region
+      // Each region's users wait for queued work as long as everyone else.
+      const own = answer === result ? apdex : apdexOf(answer, PROFILES[kind].apdex) * finish
+      regionRate[region] = (regionRate[region] ?? 0) + sent
+      regionSatisfied[region] = (regionSatisfied[region] ?? 0) + sent * answer.success * own
+      regionKinds[region] = {
+        ...regionKinds[region],
+        [kind]: {
+          rate: sent,
+          success: answer.success,
+          apdex: own,
+          near: raw === answer ? own : apdexOf(raw, PROFILES[kind].apdex) * finish,
+          fail: answer.fail,
+          hopMs: entry.extraMs,
+          p99: percentile(answer, 0.99),
+        },
+      }
+    }
     rateTotal += rate
     served += rate * result.success
     satisfied += rate * result.success * apdex
@@ -1458,6 +1500,13 @@ const ledgerOf = (
     p95: overall ? percentile(overall, 0.95) : 0,
     p99: overall ? percentile(overall, 0.99) : 0,
     apdex,
+    regions: Object.fromEntries(
+      Object.entries(regionRate).map(([region, sent]) => [
+        region,
+        sent > 0 ? (regionSatisfied[region as RegionId] ?? 0) / sent : 1,
+      ]),
+    ),
+    regionKinds,
     revenue: revenue + subscriptions,
     subscriptions,
     insight,

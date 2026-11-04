@@ -1,6 +1,6 @@
 import type { Limit, Resources } from './capacity.ts'
-import type { InsightPool, Kind, RequestKind } from './catalog.ts'
-import type { ErrorCause } from './distribution.ts'
+import type { InsightPool, Kind, RegionId, RequestKind } from './catalog.ts'
+import type { ErrorCause, Failures } from './distribution.ts'
 
 /* ==========================================================================
    The Ledger: every figure the Simulation derives at a Step. It is the single
@@ -71,6 +71,23 @@ export type KindLedger = Readonly<{
   p99: number
 }>
 
+/** What one region's users get for one request kind. */
+export type RegionKindLedger = Readonly<{
+  /** Requests per second this region's users send. */
+  rate: number
+  /** Share answered. */
+  success: number
+  /** Apdex of the answered requests, with the users' hop. */
+  apdex: number
+  /** Apdex the same answers would have with no hop to reach the Design. */
+  near: number
+  /** Share that fails, by cause. */
+  fail: Failures
+  /** Milliseconds the users' hop adds to reach the Design. */
+  hopMs: number
+  p99: number
+}>
+
 export type Ledger = Readonly<{
   nodes: Readonly<Record<string, NodeLedger>>
   links: ReadonlyArray<LinkLedger>
@@ -90,6 +107,12 @@ export type Ledger = Readonly<{
   p99: number
   /** Apdex of all requests; failures count as frustrated. */
   apdex: number
+  /** Apdex of each region's users, wherever the Design serves them. */
+  regions: Readonly<Partial<Record<RegionId, number>>>
+  /** What each region's users get for each scored request kind (12 "The Churn breakdown"). */
+  regionKinds: Readonly<
+    Partial<Record<RegionId, Readonly<Partial<Record<RequestKind, RegionKindLedger>>>>>
+  >
   /** Dollars per second: requests, plus subscriptions. */
   revenue: number
   /** Dollars per second from paid plans, included in `revenue`. */
