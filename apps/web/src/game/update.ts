@@ -258,7 +258,14 @@ export const freshBoard = (game: Game): Board => ({
   team: initTeam(),
   research: EMPTY_RESEARCH,
   insightHelp: false,
-  clock: { speed: 1, paused: false, carry: 0, savedAt: game.time, sampledAt: game.time },
+  clock: {
+    speed: 1,
+    paused: false,
+    away: false,
+    carry: 0,
+    savedAt: game.time,
+    sampledAt: game.time,
+  },
   change: null,
   delta: null,
   stableTicks: 0,
@@ -2044,7 +2051,7 @@ const handle = (model: Model, message: Message): Result =>
         ...model,
         board: {
           ...model.board,
-          clock: { ...model.board.clock, paused: !model.board.clock.paused },
+          clock: { ...model.board.clock, paused: !model.board.clock.paused, away: false },
         },
       }
       return { model: next }
@@ -3151,9 +3158,17 @@ const handle = (model: Model, message: Message): Result =>
       if (!model.prefs.blurPause || halted(model) || !onBoard(model.route)) return { model }
       const next: Model = {
         ...model,
-        board: { ...model.board, clock: { ...model.board.clock, paused: true } },
+        board: { ...model.board, clock: { ...model.board.clock, paused: true, away: true } },
       }
-      return withToast(next, 'Paused while you were away. Space resumes.', 'plain')
+      return { model: next }
+    },
+    WindowFocused: () => {
+      if (!model.board.clock.away) return { model }
+      const next: Model = {
+        ...model,
+        board: { ...model.board, clock: { ...model.board.clock, paused: false, away: false } },
+      }
+      return { model: next }
     },
     InsightHelpToggled: () => ({
       model: { ...model, board: { ...model.board, insightHelp: !model.board.insightHelp } },

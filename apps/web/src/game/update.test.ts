@@ -747,9 +747,12 @@ test('tidying the board groups nodes into a band per zone, in flow order', () =>
   expect(r!.y).toBeGreaterThan(q!.y)
 })
 
-test('losing focus pauses the clock, unless the setting is off', () => {
+test('losing focus pauses the clock and focus resumes it, unless the setting is off', () => {
   const blurred = update(inLab(), Message.WindowBlurred()).model
   expect(blurred.board.clock.paused).toBe(true)
+  expect(update(blurred, Message.WindowFocused()).model.board.clock.paused).toBe(false)
+  const manual = update(inLab(), Message.PauseToggled()).model
+  expect(update(manual, Message.WindowFocused()).model.board.clock.paused).toBe(true)
   const off = update(
     inLab(),
     Message.PrefsChanged({ message: PrefsMessage.BlurPauseToggled() }),

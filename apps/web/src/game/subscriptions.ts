@@ -13,7 +13,7 @@ import { TICK_MS } from './update.ts'
 /* ==========================================================================
    Time and keys. The company runs while the lab is open and not paused, even
    with a panel up: Quorum is an idle game. Unless the player turns it off, it
-   pauses when the window loses focus; time with the tab closed is offline
+   pauses when the window loses focus and resumes when it gets focus back; time with the tab closed is offline
    progress. Keys only matter in the lab.
    ========================================================================== */
 
@@ -75,19 +75,23 @@ const keys = Stream.callback<KeyMessage>((queue) =>
   }),
 )
 
-/** The window loses focus, or the tab is hidden. */
+/** The window loses or gets back focus, or the tab is hidden or shown. */
 const blurs = Stream.callback<Message>((queue) =>
   Effect.gen(function* () {
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const blurred = () => Queue.offerUnsafe(queue, Message.WindowBlurred())
+        const focused = () => Queue.offerUnsafe(queue, Message.WindowFocused())
         const changed = () => {
           if (document.visibilityState === 'hidden') blurred()
+          else if (document.hasFocus()) focused()
         }
         window.addEventListener('blur', blurred)
+        window.addEventListener('focus', focused)
         document.addEventListener('visibilitychange', changed)
         return () => {
           window.removeEventListener('blur', blurred)
+          window.removeEventListener('focus', focused)
           document.removeEventListener('visibilitychange', changed)
         }
       }),
@@ -203,7 +207,10 @@ export const subscriptions = {
       { watching: Schema.Boolean },
       {
         modelToDependencies: (model: Model) => ({
-          watching: model.prefs.blurPause && onBoard(model.route) && !halted(model),
+          watching:
+            model.prefs.blurPause &&
+            onBoard(model.route) &&
+            (!halted(model) || model.board.clock.away),
         }),
         dependenciesToStream: ({ watching }: { watching: boolean }) =>
           watching ? blurs : Stream.empty,

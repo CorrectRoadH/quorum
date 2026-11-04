@@ -361,7 +361,6 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Resume (Space)': '继续（空格）',
   'Pause (Space)': '暂停（空格）',
   'Pause when the window loses focus': '窗口失去焦点时暂停',
-  'Paused while you were away. Space resumes.': '离开期间已暂停。按空格继续。',
   'Study queue': '研究队列',
   'Study now': '立即研究',
   'Studying now: {0}.': '正在研究：{0}。',

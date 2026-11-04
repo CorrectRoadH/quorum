@@ -267,6 +267,8 @@ export const Message = defineMessageUnion({
   PrefsChanged: { message: PrefsMessage },
   /** The window lost focus. */
   WindowBlurred: {},
+  /** The window got focus back. */
+  WindowFocused: {},
   LanguagePickerChanged: { message: Listbox.Message },
   MoreMenuChanged: { message: UiMenu.Message },
   InsightHelpToggled: {},

@@ -354,6 +354,8 @@ export type Disclosure = typeof Disclosure.Type
 export const Clock = Schema.Struct({
   speed: Schema.Finite,
   paused: Schema.Boolean,
+  /** The pause came from the window losing focus, so focus resumes it. */
+  away: Schema.Boolean,
   /** Steps owed but not run yet: a tick at 1× is 2.5 Steps. */
   carry: Schema.Finite,
   /** Game time of the last save, so the clock saves every few seconds. */

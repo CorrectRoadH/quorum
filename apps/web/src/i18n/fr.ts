@@ -1159,8 +1159,6 @@ export const fr: Readonly<Record<string, string>> = {
   'Move up': 'Monter',
   'Move down': 'Descendre',
   'Pause when the window loses focus': 'Mettre en pause quand la fenêtre perd le focus',
-  'Paused while you were away. Space resumes.':
-    'En pause pendant votre absence. Espace pour reprendre.',
   'Offer accepted. They start soon.': 'Offre acceptée. Ils commencent bientôt.',
   'Laid off': 'Licencié',
   'Laid off. The team is shaken for a week.': "Licencié. L'équipe est secouée depuis une semaine.",
