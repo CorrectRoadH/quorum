@@ -1,10 +1,11 @@
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import { UrlRequest } from 'foldkit/navigation'
-import { PRIVACY_URL } from '@/platform/analytics.ts'
+import { PRIVACY_URL, WIKI_URL } from '@/platform/analytics.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   ArrowUpRight,
+  BookOpen,
   Check,
   Download,
   Trash2,
@@ -975,6 +976,16 @@ const taskbar = (model: Model, page: Page, h: HtmlBuilder<Message>): Html => {
         : []),
       tool('achievements', 'Achievements', Trophy),
       tool('settings', 'Settings', Settings),
+      h.a(
+        [
+          h.Href(WIKI_URL),
+          h.Target('_blank'),
+          h.Rel('noreferrer noopener'),
+          h.Title('Wiki'),
+          h.AriaLabel('Wiki'),
+        ],
+        [icon(h, BookOpen, 'booth-icon')],
+      ),
       h.span([h.Class('booth-clock'), h.OnMount(ReaderClock())], ['--:--']),
     ],
   )

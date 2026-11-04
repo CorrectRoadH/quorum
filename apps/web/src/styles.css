@@ -633,7 +633,8 @@
   font-size: max(10px, calc(var(--s) * 1.35));
   color: var(--muted-foreground);
 }
-.booth-taskbar button {
+.booth-taskbar button,
+.booth-taskbar a {
   display: flex;
   align-items: center;
   gap: calc(var(--s) * 0.7);
@@ -644,6 +645,8 @@
   border-radius: calc(var(--s) * 0.6);
 }
 .booth-taskbar button:hover,
+.booth-taskbar a:hover,
+.booth-taskbar a:focus-visible,
 .booth-taskbar button[aria-pressed='true'],
 .booth-taskbar button:focus-visible {
   background: oklch(1 0 0 / 0.08);

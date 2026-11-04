@@ -24,7 +24,8 @@ const FORCED =
     ? null
     : new URLSearchParams(window.location.search).get('analytics')
 
-export const PRIVACY_URL = 'https://wiki.playquorum.dev/about/privacy'
+export const WIKI_URL = 'https://wiki.playquorum.dev'
+export const PRIVACY_URL = `${WIKI_URL}/about/privacy`
 
 let client: Client | null = null
 let starting = false
