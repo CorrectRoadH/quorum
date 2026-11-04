@@ -3,10 +3,10 @@ import { cn } from 'cn'
 import { SCROLL } from '@quorum/ui/game/bits'
 import type { Message, Model } from '../main.ts'
 import type { Page } from '../page.ts'
-import { PAGES, SECTION_ORDER, childrenOf, navOf, pageAt } from '../pages.ts'
-import { QUADRANTS, quadrantBadge } from './quadrant.ts'
+import { childrenOf, navOf, pageAt } from '../pages.ts'
+import { QUADRANTS } from './quadrant.ts'
 
-/* The navigation rail: each kind of page with its hubs, and the open hub's pages beneath it. */
+/* The navigation rail: the current section's pages, and the open hub's pages beneath it. */
 
 type H = HtmlBuilder<Message>
 
@@ -35,56 +35,35 @@ const navLink = (page: Page, current: string, h: H, nested = false): Html =>
 export const sidebar = (model: Model, h: H): Html => {
   const page = pageAt(model.path)
   const open = page?.parent ?? page?.path ?? null
+  // Home has no section of its own; it lists the tutorials, where a new player starts.
+  const section = model.path === '/' ? 'tutorials' : (page?.section ?? 'tutorials')
   return h.nav(
     [
-      h.AriaLabel('Wiki'),
+      h.AriaLabel(QUADRANTS[section].label),
       h.Class(
         cn(
           SCROLL,
-          'sticky top-14 h-[calc(100dvh-56px)] self-start border-border py-8 pr-5 lg:block lg:border-r',
+          'sticky top-[100px] h-[calc(100dvh-100px)] self-start border-border py-8 pr-5 lg:block lg:border-r',
           model.menu ? 'block' : 'hidden',
         ),
       ),
     ],
     [
-      navLink(
-        { ...PAGES.find((candidate) => candidate.path === '/')!, title: 'Home' },
-        model.path,
-        h,
+      h.div(
+        [h.Class('mb-2 text-[12.5px] font-semibold text-foreground')],
+        [QUADRANTS[section].label],
       ),
-      ...SECTION_ORDER.flatMap((section) => {
-        const pages = navOf(section)
-        if (pages.length === 0) return []
-        return [
-          h.div(
-            [h.Key(section), h.Class('mt-6')],
-            [
+      ...navOf(section).flatMap((hub) => [
+        navLink(hub, model.path, h),
+        ...(hub.path === open
+          ? [
               h.div(
-                [
-                  h.Class(
-                    'mb-1.5 flex items-center gap-2 text-[12.5px] font-semibold text-foreground',
-                  ),
-                ],
-                [quadrantBadge(section, 'size-4', h), QUADRANTS[section].label],
+                [h.Key(`${hub.path}-children`), h.Class('my-1 ml-1 border-l border-border')],
+                childrenOf(hub.path).map((child) => navLink(child, model.path, h, true)),
               ),
-              ...pages.flatMap((hub) => [
-                navLink(hub, model.path, h),
-                ...(hub.path === open
-                  ? [
-                      h.div(
-                        [
-                          h.Key(`${hub.path}-children`),
-                          h.Class('my-1 ml-1 border-l border-border'),
-                        ],
-                        childrenOf(hub.path).map((child) => navLink(child, model.path, h, true)),
-                      ),
-                    ]
-                  : []),
-              ]),
-            ],
-          ),
-        ]
-      }),
+            ]
+          : []),
+      ]),
     ],
   )
 }

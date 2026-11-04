@@ -95,7 +95,7 @@ const grid = (columns: string, items: ReadonlyArray<Html>, h: H): Html =>
 
 export const homeView = (page: Page, model: Model, h: H): Html =>
   h.div(
-    [h.Class('min-w-0 py-10 lg:px-10 xl:col-span-2')],
+    [h.Class('min-w-0 py-10 lg:col-span-2 xl:col-span-3')],
     [
       h.header(
         [h.Class('max-w-[62ch]')],

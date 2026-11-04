@@ -9,7 +9,10 @@ export const toc = (page: Page, h: HtmlBuilder<Message>): Html =>
   page.headings.length < 2
     ? h.empty
     : h.nav(
-        [h.AriaLabel('On this page'), h.Class('sticky top-14 hidden self-start py-8 xl:block')],
+        [
+          h.AriaLabel('On this page'),
+          h.Class('sticky top-[100px] hidden self-start py-8 xl:block'),
+        ],
         [
           h.div([h.Class('mb-2 text-[12.5px] font-semibold')], ['On this page']),
           h.ul(

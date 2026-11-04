@@ -38,7 +38,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
             ),
           ],
           [
-            sidebar(model, h),
+            // Home is a landing page: it spans the frame, and the section bar leads on.
+            !isHome || model.menu ? sidebar(model, h) : h.empty,
             page
               ? isHome
                 ? homeView(page, model, h)

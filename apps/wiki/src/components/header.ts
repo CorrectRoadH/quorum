@@ -4,7 +4,8 @@ import { ArrowUpRight, Menu, X } from 'lucide'
 import { FIGURE } from '@quorum/ui/game/bits'
 import { icon } from '@quorum/ui/primitives/icon'
 import { Message, type Model } from '../main.ts'
-import { PAGES } from '../pages.ts'
+import { PAGES, SECTION_ORDER, navOf, pageAt } from '../pages.ts'
+import { QUADRANTS } from './quadrant.ts'
 import { indexOf } from '../search.ts'
 import { GAME_ORIGIN, VERSION } from '../site.ts'
 import * as Search from '../submodels/search.ts'
@@ -103,5 +104,45 @@ export const header = (model: Model, h: H): Html =>
           ),
         ],
       ),
+      sections(model, h),
     ],
   )
+
+/** The section bar: each kind of page links to its first page. The sidebar lists only the current one. */
+const sections = (model: Model, h: H): Html => {
+  const current = model.path === '/' ? null : (pageAt(model.path)?.section ?? null)
+  return h.nav(
+    [h.AriaLabel('Sections')],
+    [
+      h.div(
+        [
+          h.Class(
+            'mx-auto flex h-11 max-w-[1400px] items-stretch gap-6 overflow-x-auto px-4 sm:px-6 [scrollbar-width:none]',
+          ),
+        ],
+        SECTION_ORDER.flatMap((section) => {
+          const first = navOf(section)[0]
+          if (!first) return []
+          return [
+            h.a(
+              [
+                h.Key(section),
+                h.Href(first.path),
+                ...(section === current ? [h.AriaCurrent('true')] : []),
+                h.Class(
+                  cn(
+                    'flex shrink-0 items-center gap-2 border-b-2 text-[13.5px] transition-colors',
+                    section === current
+                      ? 'border-foreground font-medium text-foreground'
+                      : 'border-transparent text-muted-foreground hover:text-foreground',
+                  ),
+                ),
+              ],
+              [icon(h, QUADRANTS[section].icon, 'size-4'), QUADRANTS[section].label],
+            ),
+          ]
+        }),
+      ),
+    ],
+  )
+}
