@@ -8,7 +8,7 @@ export const RELAY_HOST = '127.0.0.1'
 export const RELAY_PORT = 7437
 
 /** The page's address. Pages on localhost may also connect, for development. */
-export const QUORUM_ORIGIN = 'https://quorum.elianiva.com'
+export const QUORUM_ORIGIN = 'https://playquorum.dev'
 
 /** Page to relay. */
 export type PageMessage =

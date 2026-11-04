@@ -31,7 +31,7 @@ export type RelayOptions = Readonly<{
 }>
 
 const NO_PAGE =
-  'No Quorum tab is connected. Ask the player to open https://quorum.elianiva.com, start a Company, and turn on "Agent access" in Settings.'
+  'No Quorum tab is connected. Ask the player to open https://playquorum.dev, start a Company, and turn on "Agent access" in Settings.'
 
 type Page = {
   readonly socket: WebSocket

@@ -4,7 +4,7 @@
 
 <p align="center">
   <b>An incremental systems game for software engineers.</b><br />
-  Play it at <a href="https://quorum.elianiva.com">quorum.elianiva.com</a>.
+  Play it at <a href="https://playquorum.dev">playquorum.dev</a>.
 </p>
 
 ---

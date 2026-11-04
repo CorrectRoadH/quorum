@@ -52,7 +52,7 @@ Pre-commit runs `pnpm check`. Pre-push runs the typecheck and the tests.
 
 ## Deploy
 
-CI deploys every push to `main` to the `prod` stage at <https://quorum.elianiva.com>, after the
+CI deploys every push to `main` to the `prod` stage at <https://playquorum.dev>, after the
 checks pass. The job reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the
 repository's Actions secrets. Alchemy keeps the stack state in a Cloudflare state-store Worker in
 the same account, so CI needs no other credentials.

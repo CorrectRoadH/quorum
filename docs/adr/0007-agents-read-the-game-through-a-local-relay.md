@@ -27,7 +27,7 @@ Considered options:
 
 ## Consequences
 
-- Only a page on `https://quorum.elianiva.com`, or on `localhost` for development, may connect, and
+- Only a page on `https://playquorum.dev`, or on `localhost` for development, may connect, and
   only under a loopback `Host`, so a website cannot reach the relay through a rebound DNS name.
   The relay has no tool that writes, and the page answers only the six named tools.
 - A Challenge is scored by replay and the server's check, so an agent that reads one is a hint.

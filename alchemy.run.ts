@@ -6,8 +6,11 @@ import { API_PREFIX } from '@quorum/rpc'
 
 const compatibility = { date: '2026-10-08' }
 
-/** The public hostname of the `prod` stage. Its zone must exist in the Cloudflare account. */
-const PRODUCTION_DOMAIN = 'quorum.elianiva.com'
+/**
+ * The public hostnames of the `prod` stage. The old hostname 301s to the new one, path and query
+ * kept. Both zones must exist in the Cloudflare account.
+ */
+const PRODUCTION_DOMAIN = { name: 'playquorum.dev', redirects: ['quorum.elianiva.com'] }
 
 /**
  * Cloudflare Workers Observability, configured on the host resources only.

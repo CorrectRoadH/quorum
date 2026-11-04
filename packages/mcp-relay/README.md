@@ -1,6 +1,6 @@
 # quorum-mcp-relay
 
-A read-only MCP server that lets a coding agent read your [Quorum](https://quorum.elianiva.com)
+A read-only MCP server that lets a coding agent read your [Quorum](https://playquorum.dev)
 game: the Board, the Inbox, and the incidents. The agent can read and advise. It cannot play.
 
 Nothing leaves your machine. The relay listens on `ws://127.0.0.1:7437` and the Quorum page, running
@@ -30,7 +30,7 @@ in your browser, connects to it.
    { "mcpServers": { "quorum": { "command": "npx", "args": ["-y", "quorum-mcp-relay"] } } }
    ```
 
-2. Open [quorum.elianiva.com](https://quorum.elianiva.com), start a Company, and turn on
+2. Open [playquorum.dev](https://playquorum.dev), start a Company, and turn on
    **Agent access** in Settings.
 3. Ask your agent: "Read my Quorum game and tell me what to fix first."
 
