@@ -667,7 +667,8 @@ Research `gitops` applies each source change to every Mirror on its own. The Mir
 for long, and hand changes revert at the next sync, because a GitOps controller reconciles against
 live state with every tool, so overrides are the only way to tune a region.
 All at once syncs at the next poll, `sync_poll` calendar minutes after the drift starts, as Argo CD
-polls its repository every three minutes by default. A sync pays for its plan like an Apply; without
+checks its repository at most every three minutes by default, and reverting hand changes
+matches Argo CD with self-heal on. A sync pays for its plan like an Apply; without
 the Cash, the Mirror stays behind. A new data Node still waits for the player to pick its pattern, and
 GitOps never removes a data Node. The cost
 moves from drift to blast radius: a bad change now reaches every region. The player picks the sync

@@ -82,7 +82,7 @@ export const BORDER_MIXING = 0.1
 export const MIRROR_TIME = 30
 /** Calendar minutes GitOps Staged holds a change on the source before the Mirrors get it (16 `stage_wait`). Proposed. */
 export const STAGE_WAIT = 60
-/** Calendar minutes between GitOps syncs: Argo CD polls its repository every 3 minutes by default. */
+/** Calendar minutes until a GitOps sync: Argo CD polls every 120 s plus up to 60 s of jitter by default. */
 export const SYNC_POLL = 3
 /** Calendar minutes Mirrors do not sync while the Company moves to another IaC tool. Proposed: one calendar day. */
 export const IAC_SWITCH = 1_440
