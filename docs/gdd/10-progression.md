@@ -116,11 +116,13 @@ plays its [Sandbox track](./14-challenges.md#sandbox-tracks).
 ### Era 5: Series C
 
 - **New kinds.** `feed` fans out. `hook` calls slow customer servers. `push` fans out on write.
-- **New problems.** Users are global. A single region gives users far away 200 ms of extra round trip.
-  Celebrity accounts create hot keys. Region outages begin.
-- **New systems.** Regions as separate boards, GeoDNS, regional demand peaks (follow the sun).
-- **Unlocks available.** Multi-region, GeoDNS, Anycast, Wide-column Store, Distributed SQL, Edge
-  Functions, HTTP/3, hedged requests.
+- **New problems.** Users are global. A single region gives users far away 200 ms of extra round trip,
+  and each region's users leave on their own Apdex. Celebrity accounts create hot keys. Region
+  outages begin.
+- **New systems.** Regions as separate boards, Users per region
+  ([Simulation](./04-simulation.md#going-global)), GeoDNS, regional demand peaks (follow the sun).
+- **Unlocks available.** Multi-region, GeoDNS, Infrastructure as code (Mirror a region), Anycast,
+  Wide-column Store, Distributed SQL, Edge Functions, HTTP/3, hedged requests.
 
 ### Era 6: Pre-IPO
 
@@ -292,38 +294,40 @@ puts its Study first in the queue ([Incidents](./11-incidents.md#postmortems)).
 
 ### Track: Infrastructure
 
-| ID                    | Name                      | Era      | ◇       | Requires          | Effect                                                      |
-| --------------------- | ------------------------- | -------- | ------- | ----------------- | ----------------------------------------------------------- |
-| `dns-rr`              | DNS round robin           | Garage   | 15      | —                 | DNS Component                                               |
-| `load-balancing`      | Load balancing            | Garage   | 25      | —                 | Load Balancer (L7, round robin and weighted)                |
-| `health-checks`       | Health checks             | Pre-seed | 90      | `load-balancing`  | Health-checked DNS, deep checks, check intervals            |
-| `lb-algorithms`       | Load balancing algorithms | Pre-seed | 120     | `load-balancing`  | Least connections, power of two choices, consistent hashing |
-| `background-jobs`     | Background jobs           | Seed     | 300     | —                 | Worker                                                      |
-| `queues`              | Message queues            | Seed     | 600     | `background-jobs` | Queue (RabbitMQ, SQS)                                       |
-| `cdn`                 | Content delivery          | Seed     | 350     | —                 | CDN                                                         |
-| `waf`                 | Web application firewall  | Seed     | 500     | —                 | WAF                                                         |
-| `l4-lb`               | L4 load balancing         | Seed     | 400     | `lb-algorithms`   | L4 variant                                                  |
-| `multi-az`            | Multiple zones            | Series A | 3,000   | `health-checks`   | Zone placement                                              |
-| `autoscaling`         | Autoscaling               | Series A | 4,000   | `load-balancing`  | Autoscaler                                                  |
-| `containers`          | Container orchestration   | Series A | 5,000   | `autoscaling`     | Kubernetes Cluster                                          |
-| `serverless`          | Serverless                | Series A | 3,500   | —                 | Serverless Function                                         |
-| `websockets`          | WebSockets                | Series A | 2,500   | —                 | Realtime Hub                                                |
-| `api-gateway`         | API gateway               | Series A | 2,000   | `load-balancing`  | API Gateway                                                 |
-| `rate-limiting`       | Rate limiting             | Series A | 1,800   | `api-gateway`     | Token bucket limits on the gateway                          |
-| `tiered-caching`      | Tiered caching            | Series A | 2,000   | `cdn`             | CDN `media` hit ratio 92%                                   |
-| `esi`                 | Edge-side includes        | Series A | 3,000   | `cdn`             | +20% `page` hit ratio for logged-in users                   |
-| `bot-management`      | Bot management            | Series A | 2,500   | `waf`             | Challenges suspicious clients; lowers false positives       |
-| `scheduled-scaling`   | Scheduled scaling         | Series B | 9,000   | `autoscaling`     | Scale ahead of the daily peak                               |
-| `service-mesh`        | Service mesh              | Series B | 20,000  | `containers`      | Service Mesh                                                |
-| `arm-instances`       | ARM instances             | Series B | 12,000  | —                 | ARM family, 0.8× price                                      |
-| `hosted-models`       | Hosted models             | Series B | 8,000   | —                 | LLM API                                                     |
-| `model-serving`       | Model serving             | Series B | 15,000  | —                 | GPU Node                                                    |
-| `quantization`        | Quantization              | Series B | 18,000  | `model-serving`   | INT8 and INT4 options                                       |
-| `continuous-batching` | Continuous batching       | Series B | 25,000  | `model-serving`   | Batch throughput without the latency cost                   |
-| `multi-region`        | Multiple regions          | Series C | 60,000  | `multi-az`        | Regions as boards                                           |
-| `geo-dns`             | GeoDNS                    | Series C | 50,000  | `multi-region`    | Route users to the nearest region                           |
-| `anycast`             | Anycast                   | Series C | 120,000 | `geo-dns`         | −20 ms on the user hop everywhere                           |
-| `edge-compute`        | Edge compute              | Series C | 80,000  | `cdn`             | Edge Function                                               |
+| ID                    | Name                      | Era      | ◇       | Requires          | Effect                                                                                     |
+| --------------------- | ------------------------- | -------- | ------- | ----------------- | ------------------------------------------------------------------------------------------ |
+| `dns-rr`              | DNS round robin           | Garage   | 15      | —                 | DNS Component                                                                              |
+| `load-balancing`      | Load balancing            | Garage   | 25      | —                 | Load Balancer (L7, round robin and weighted)                                               |
+| `health-checks`       | Health checks             | Pre-seed | 90      | `load-balancing`  | Health-checked DNS, deep checks, check intervals                                           |
+| `lb-algorithms`       | Load balancing algorithms | Pre-seed | 120     | `load-balancing`  | Least connections, power of two choices, consistent hashing                                |
+| `background-jobs`     | Background jobs           | Seed     | 300     | —                 | Worker                                                                                     |
+| `queues`              | Message queues            | Seed     | 600     | `background-jobs` | Queue (RabbitMQ, SQS)                                                                      |
+| `cdn`                 | Content delivery          | Seed     | 350     | —                 | CDN                                                                                        |
+| `waf`                 | Web application firewall  | Seed     | 500     | —                 | WAF                                                                                        |
+| `l4-lb`               | L4 load balancing         | Seed     | 400     | `lb-algorithms`   | L4 variant                                                                                 |
+| `multi-az`            | Multiple zones            | Series A | 3,000   | `health-checks`   | Zone placement                                                                             |
+| `autoscaling`         | Autoscaling               | Series A | 4,000   | `load-balancing`  | Autoscaler                                                                                 |
+| `containers`          | Container orchestration   | Series A | 5,000   | `autoscaling`     | Kubernetes Cluster                                                                         |
+| `serverless`          | Serverless                | Series A | 3,500   | —                 | Serverless Function                                                                        |
+| `websockets`          | WebSockets                | Series A | 2,500   | —                 | Realtime Hub                                                                               |
+| `api-gateway`         | API gateway               | Series A | 2,000   | `load-balancing`  | API Gateway                                                                                |
+| `rate-limiting`       | Rate limiting             | Series A | 1,800   | `api-gateway`     | Token bucket limits on the gateway                                                         |
+| `tiered-caching`      | Tiered caching            | Series A | 2,000   | `cdn`             | CDN `media` hit ratio 92%                                                                  |
+| `esi`                 | Edge-side includes        | Series A | 3,000   | `cdn`             | +20% `page` hit ratio for logged-in users                                                  |
+| `bot-management`      | Bot management            | Series A | 2,500   | `waf`             | Challenges suspicious clients; lowers false positives                                      |
+| `scheduled-scaling`   | Scheduled scaling         | Series B | 9,000   | `autoscaling`     | Scale ahead of the daily peak                                                              |
+| `service-mesh`        | Service mesh              | Series B | 20,000  | `containers`      | Service Mesh                                                                               |
+| `arm-instances`       | ARM instances             | Series B | 12,000  | —                 | ARM family, 0.8× price                                                                     |
+| `hosted-models`       | Hosted models             | Series B | 8,000   | —                 | LLM API                                                                                    |
+| `model-serving`       | Model serving             | Series B | 15,000  | —                 | GPU Node                                                                                   |
+| `quantization`        | Quantization              | Series B | 18,000  | `model-serving`   | INT8 and INT4 options                                                                      |
+| `continuous-batching` | Continuous batching       | Series B | 25,000  | `model-serving`   | Batch throughput without the latency cost                                                  |
+| `multi-region`        | Multiple regions          | Series C | 60,000  | `multi-az`        | Regions as boards                                                                          |
+| `geo-dns`             | GeoDNS                    | Series C | 50,000  | `multi-region`    | Route users to the nearest region                                                          |
+| `infra-as-code`       | Infrastructure as code    | Series C | 40,000  | `multi-region`    | Pick an IaC tool; Mirror a region ([Components](./05-components.md#mirror-a-region))       |
+| `gitops`              | GitOps                    | Series C | 90,000  | `infra-as-code`   | Mirrors sync on their own, all at once or staged ([Components](./05-components.md#gitops)) |
+| `anycast`             | Anycast                   | Series C | 120,000 | `geo-dns`         | −20 ms on the user hop everywhere                                                          |
+| `edge-compute`        | Edge compute              | Series C | 80,000  | `cdn`             | Edge Function                                                                              |
 
 ### Track: Data
 

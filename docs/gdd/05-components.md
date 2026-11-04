@@ -118,7 +118,8 @@ The source of all traffic. Fixed, and the player cannot place or sell it.
 - Users take **one** outbound link in the Garage Era, because a domain name resolves to one host. A
   **DNS** Node lifts this limit.
 - In the Series C Era, Users split into regional sources (North America, Europe, Asia-Pacific, South
-  America), each with its own share of demand and peak hour ([Zones and regions](#zones-and-regions)).
+  America), each with its own user count, market share, and peak hour
+  ([Zones and regions](#zones-and-regions)).
 
 ### DNS
 
@@ -552,3 +553,120 @@ ms, US East to Sydney 200 ms.
 
 Each region is a separate board tab, like a planet in Factorio Space Age. Inter-region links connect
 them.
+
+| Region        | Share of users | Local 20:00 on the home clock |
+| ------------- | -------------- | ----------------------------- |
+| North America | 40%            | 20:00                         |
+| Europe        | 30%            | 14:00                         |
+| Asia-Pacific  | 20%            | 06:00                         |
+| South America | 10%            | 18:00                         |
+
+The shares set each region's market (`Market_r`). Each region counts its own Users from the Series C
+Era ([Simulation](./04-simulation.md#going-global)).
+
+### Mirror a region
+
+With research `infra-as-code`, the player can **Mirror** one region into another. Real teams
+describe a region as code, such as Terraform modules or CloudFormation StackSets, and apply the same
+code to a new region. Copying the servers is the easy part. The hard part is the data: where each
+write goes.
+
+1. On a region tab, the player picks **Mirror from** and a source region. The target region opens if
+   it is not open yet, at the usual opening price.
+2. The game shows a plan, like `terraform plan`: the Nodes to create, the Cash to place them, the Burn
+   they add, and one choice for each data Node.
+3. **Apply** places the Nodes as pending. They appear after `mirror_time` calendar minutes, cold,
+   and warm up as usual.
+
+| In the source region                                                | In the Mirror                                                                                                                                                                                           |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Edge, compute, and platform Nodes, Caches, and Queues               | A copy with the same Instance type, Stack, copies, and options. Caches start cold and Queues start empty.                                                                                               |
+| Relational Database, with its replicas and pooler                   | The player picks one: a **read replica** of the source primary (the default: reads stay local, writes cross to the source), an **own primary** partitioned by region, or **call the source** (no copy). |
+| Object Storage                                                      | The player picks one: **replicate** (pays cross-region Egress for each write) or **call the source**.                                                                                                   |
+| Wide-column Store, Distributed SQL                                  | Not copied. The plan offers to Spread the source Node to the target region.                                                                                                                             |
+| Global and Managed Components                                       | Not copied. The Mirror's Links go to the same Node.                                                                                                                                                     |
+| The source region's Users Node                                      | Its Links start from the target region's Users Node. With GeoDNS, the plan routes the region's users there.                                                                                             |
+| Links between source Nodes, and from source Nodes to a third region | Copied with their timeout, retry, and circuit breaker settings.                                                                                                                                         |
+
+The three database choices are the patterns in [Multi-region data](./07-data-tier.md#multi-region-data),
+and each one has the RPO and outage behavior that table gives.
+
+A Mirror costs no Dev Hours, because the research is the work of writing the code. It is not a
+Playbook: a Playbook is a part of a Design that survives Exits and uses a slot, and a Mirror copies
+a whole region inside one Company, stays linked to it, and asks the data question.
+
+### Keeping a Mirror in sync
+
+A Mirror stays linked to its source region. The source is the code; the Mirror is what the code
+built. **Drift** is every difference between them, of two kinds:
+
+- **Behind.** A change in the source that the Mirror does not have yet: a Node placed, sold, or
+  resized, a Stack or option changed, a Link added or removed.
+- **Hand change.** A change made directly on the Mirror's tab.
+
+The Mirror's tab shows its drift, for example `Mirror of NA · 3 behind · 1 hand change`, with a
+**Plan** button. The plan lists each change. Apply brings the Mirror back to the source: placed Nodes
+arrive after `mirror_time`, and resizes and option changes are immediate. **Apply reverts every hand
+change**, and the plan marks those changes in red.
+
+Some differences between regions are correct, because each region has its own demand. The player
+can keep a hand change as an **override**, like a per-region variable file in Terraform. Only the
+Instance size, the copy count, and the Autoscaler's minimum and maximum can be overrides. An override
+is not drift, and apply keeps it.
+
+Data Nodes are never applied without the player:
+
+- A new data Node in the source stops the plan until the player picks its pattern.
+- A data Node sold in the source stays in the Mirror until the player confirms. Real tools have the
+  same guard, such as Terraform's `prevent_destroy`.
+
+**What drift costs.** The Simulation adds no special penalty. The Mirror runs an older Design, and
+that has its own cost:
+
+- A new Request kind that the source routes to a new Node is Stranded in a Mirror that does not have
+  that Node.
+- A resize that the source needed for a Feature's load is missing, so the Mirror saturates at its
+  own peak.
+- In a Region outage, GeoDNS sends the failed region's users to the nearest live region. If that
+  region is a Mirror that is behind, it takes the extra load with the older Design.
+
+The [Churn breakdown](./12-observability.md#the-churn-breakdown) shows the result as a slow or
+failed row in the Mirror's region.
+
+### IaC tools
+
+Research `infra-as-code` asks the player to pick an **IaC tool** on a Tradeoff card. The tool sets
+how Mirrors apply, what can be an override, and what the tool can build. Like a Stack, no tool is
+best: each one is a real tradeoff.
+
+| Tool      | Language                          | Apply time         | Overrides                                                                                               | Coverage                                                                                                   | Cost                                                                                                |
+| --------- | --------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Terraform | HCL, declarative, a state file    | 1× `mirror_time`   | Size, copies, and Autoscaler bounds                                                                     | Every Component                                                                                            | None. The plan is the most exact: it lists every change                                             |
+| Pulumi    | TypeScript, Python, or Go         | 1× `mirror_time`   | Any option, and computed overrides: a Mirror's sizes and copies can follow its region's share of demand | Every Component                                                                                            | Upkeep: the IaC code is a Service the Platform Team owns ([Team](./08-team-and-velocity.md#upkeep)) |
+| Alchemy   | TypeScript, run as a plain script | 0.5× `mirror_time` | Any option                                                                                              | Edge, serverless, managed, and Cloudflare-style Components. A Component it does not cover is **unmanaged** | Unmanaged Nodes are placed by hand and drift silently                                               |
+
+- An unmanaged Node is not in the code, so the plan never shows it as behind. The player must
+  remember to change it in every region. Silent drift is the cost of a fast, light tool.
+- A computed override in Pulumi removes most hand changes, but a mistake in it reaches every Mirror,
+  like any other code.
+- Changing the tool later is a [migration](./08-team-and-velocity.md#migrations): Dev Hours and
+  calendar time, during which Mirrors do not sync.
+
+Reality check: the coverage of each tool is stylized. Real Terraform, Pulumi, and Alchemy each
+support many providers; the game gives each tool one clear strength and one clear gap.
+
+### GitOps
+
+Research `gitops` applies each source change to every Mirror on its own. The Mirror is never behind,
+and hand changes revert at the next sync, so overrides are the only way to tune a region. The cost
+moves from drift to blast radius: a bad change now reaches every region. The player picks the sync
+mode on a Tradeoff card:
+
+| Sync mode   | Drift                                         | A bad change                                                                  |
+| ----------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| All at once | None                                          | Reaches every region together.                                                |
+| Staged      | The other Mirrors are behind for `stage_wait` | Reaches one region. The player rolls it back before the other Mirrors get it. |
+
+The Bad config push incident uses this rule ([Incidents](./11-incidents.md#catalog)): with GitOps
+all at once, it reaches every mirrored region; with Staged, it reaches one region. GitOps works with
+every IaC tool. It does not sync unmanaged Nodes.

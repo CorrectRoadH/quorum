@@ -89,12 +89,13 @@ carry load to the data tier.
 ## Demand
 
 ```text
-demand_rps(kind) = Users × R_user × diurnal(t) × weekly(t) × mix(kind) × feature_mult(kind)
+demand_rps(kind) = Σ_r Users_r × R_user × diurnal_r(t) × weekly(t) × mix(kind) × feature_mult(kind)
 ```
 
 | Term           | Meaning                                                                                                           |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Users`        | The current user count.                                                                                           |
+| `Users_r`      | The user count of region `r` ([Users and growth](#users-and-growth)). Before Series C, only North America.        |
+| `diurnal_r(t)` | `diurnal(t)` at region `r`'s local hour, so each region peaks at its own 20:00.                                   |
 | `R_user`       | Requests per user per second, 0.02 by default.                                                                    |
 | `diurnal(t)`   | `1 + A × cos(2π × (hour − 20) / 24)`. Peak at 20:00, trough at 08:00. `A` is 0.45 for the default Venture.        |
 | `weekly(t)`    | 1.0 on weekdays. Each Venture defines its weekend factor (B2B 0.5, consumer 1.15).                                |
@@ -287,23 +288,59 @@ seconds.
 
 ## Users and growth
 
-Users grow along an S-curve toward the market size, and only while the design keeps users happy:
+Users grow along an S-curve toward the market size, and only while the design keeps users happy.
+From the Series C Era, each region counts its own Users and applies the formula on its own figures:
 
 ```text
-h(A)     = clamp((A − A_target) / (1 − A_target), −1, 1)       A = Apdex over the last calendar hour
-growth   = g × funding_mult × Users × (1 − Users / Market) × h(A)   when h(A) ≥ 0
-churn    = c × Users × h(A)                                     when h(A) < 0
+h(A_r)   = clamp((A_r − A_target) / (1 − A_target), −1, 1)    A_r = Apdex of region r's users over the last calendar hour
+talk_r   = Users_r + m × (Users − Users_r)                     word of mouth, own users plus users elsewhere
+growth_r = g × funding_mult × talk_r × (1 − Users_r / Market_r) × h(A_r)    when h(A_r) ≥ 0
+churn_r  = c × (Fickle_r + s × Steady_r) × h(A_r)                           when h(A_r) < 0
+Users    = Σ_r Users_r
 ```
 
-- `A_target` is 0.85 in the Garage Era and rises to 0.94 in the Public Era.
+- Before the Series C Era there is one region, North America, and the formula is the same as one
+  global count.
+- **Fickle and steady users.** A share `f` of new users is fickle, and the rest are steady. Fickle
+  users leave at the full rate `c`, and steady users at `s × c`. Under a bad Apdex the fickle users
+  leave first, so the users who stay are steadier, and the next bad spell costs less. This is the
+  sorting that Fader and Hardie (2007) found in real retention data: the retention rate rises with
+  tenure because the least loyal customers leave first.
+- **Word of mouth crosses borders.** A region grows from its own users and, at weight `m`, from the
+  users in every other region. A region with few users still grows from the Company's users
+  elsewhere, so a region that lost its users can recover once the player serves it well
+  (Putsis et al. 1997; Takada and Jain 1991).
+- Before the Series C Era there is one region, North America, and the formula is the same as one
+  global count.
+- `A_r` counts the requests that region r's users send, wherever the Design serves them. A Europe
+  user whose read crosses the ocean to a North America App Server counts in Europe's Apdex.
+- `A_target` is 0.85 in the Garage Era and rises to 0.94 in the Public Era. It is the same for every
+  region.
 - `Market` is the Era's market size, multiplied by features, regions, and Venture rules
   ([Progression](./10-progression.md#eras)). It never exceeds the online population (about 6 billion).
+  `Market_r` is `Market × share_r`, with the region shares in
+  [Zones and regions](./05-components.md#zones-and-regions).
 - `funding_mult` is 1.0 in the Garage Era and in an Era that began with a raised round, and 0.7 in an
   Era that began with a declined round ([Economy](./09-economy.md#funding)). Money buys growth, so a declined round is
   slower and keeps Equity.
 - Churn has no logistic term. Unhappy users leave fast, which is the main pressure in the game.
+- The Milestone, the HUD, Valuation, and the Rule of 40 read the total `Users`.
 
-Constants `g` and `c` are in [Balancing](./16-balancing.md#user-growth).
+### Going global
+
+When the Series C Era starts, every existing user stays in North America: they are the users who
+found the Company at home. Each other region starts with a seed of
+`seed_share × Users × share_r / share_na` users and grows from there. Demand from a far region
+starts small and rises as that region's users grow. The player sees the far regions' Apdex before
+those regions carry much of the user count.
+
+A far region whose Apdex is under target loses only its own users. A Region outage makes the users
+of the failed region leave, and users in other regions stay while their requests still succeed.
+
+Constants `g`, `c`, `f`, `s`, `m`, and `seed_share` are in
+[Balancing](./16-balancing.md#user-growth). The player
+reads the cause of each region's churn in the
+[Churn breakdown](./12-observability.md#the-churn-breakdown).
 
 ## The bottleneck
 
@@ -355,7 +392,8 @@ When the player returns, the game simulates the time they were away:
 - Studies keep running and take Insight as it is earned ([Progression](./10-progression.md#studies)).
 - Offline revenue goes straight to Cash. The Payments drawer limit applies only to live play
   ([Economy](./09-economy.md#the-payments-drawer)).
-- Offline churn is capped at 5% of users, so the player never returns to a ruined company.
+- Offline churn is capped at 5% of each region's users, so the player never returns to a ruined
+  company.
 - The cap is 8 hours. Legacy raises it to 24 hours.
 - A return screen shows what happened: users, Cash, the Studies that completed, Dev Hours, peak
   utilization, and the worst calendar hour.

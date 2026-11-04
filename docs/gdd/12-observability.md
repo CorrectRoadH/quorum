@@ -143,6 +143,48 @@ requests. They just cannot see the p99.
 
 The bottleneck marker is always visible. It is the safety net that keeps the game playable at step 0.
 
+## The Churn breakdown
+
+The bottleneck marker tells the player what limits revenue. The **Churn breakdown** tells the player
+why users leave. Users leave when Apdex falls slightly under target, with no outage and no red Node
+([Simulation](./04-simulation.md#users-and-growth)), so the player needs a direct answer. Like the
+bottleneck marker, the Churn breakdown is always available. Research adds detail to it, but does not
+unlock it.
+
+It opens from the Users figure on the HUD and from the Users Node. It has one section per region,
+with the region that loses the most users per hour first:
+
+```text
+Europe   Apdex 0.91 · target 0.92 · −1.8% users per hour · 1 day at this rate: 410k → 277k
+  read     slow     ██████████   0.05   p99 310 ms, T 200 ms
+  feed     slow     ████         0.02
+  write    failed   ██           0.01   refused
+  page     slow     ██           0.01
+```
+
+In the Series C Era, one point of Apdex under target costs a region about a third of its users in a
+calendar day, when half of them are steady. The Churn breakdown
+exists because nothing else on the screen says so.
+
+- Each row is one Request kind and one cause. Its bar is the Apdex points that the row takes from
+  the region: the share of the region's requests in that row, times 1 for a failure and ½ for a
+  tolerating request.
+- The rows add up to `1 − A_r`. The header marks the target, so the player sees how many points they
+  must win back and which rows hold them.
+- The header shows the rate and a forecast for one calendar day at the current Apdex. The figures
+  use the same formula as the Simulation, with no estimate.
+- The cause is `far` for the round trip to a Design in another region, `slow` for time inside the
+  Design, or `failed`. Each needed row names one fix, such as Open Asia-Pacific, Research GeoDNS, or
+  Show the bottleneck Node, and shows it once per region.
+- Without research, a failure reads `failed`. With `logs`, `failed` shows the error class
+  ([Errors](./04-simulation.md#errors)). With `percentiles`, a `slow` row shows p99 against the kind's
+  T. With `tracing`, a `slow` row names the hop that takes the most time, such as
+  `internet hop to NA` or `db-01`. With `rum`, the internet hop shows per device.
+- Clicking a row selects the Node that its hop names, or the region's Users Node.
+
+When a region's users fall for one calendar hour, the Customers sender writes a Mail with the top two
+rows ([Mail](./18-mail.md#senders)).
+
 ## The Dashboard
 
 The Board shows the system **now**. The **Dashboard** shows it **over time**. It is a full-screen
@@ -197,18 +239,18 @@ The Dashboard copies the methods that real teams use, so that what the player le
 
 Each visibility step adds a row. A row appears only when its research is owned.
 
-| Research            | Row             | Charts                                                                                                                                                                                                                         |
-| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `metrics`           | Overview        | Stats for Users, Apdex, and Cash per second, each with a sparkline. Time series: demand against served (traffic), mean latency, errors, and utilization per Node with lines at 70% and 90% (saturation). Revenue against Burn. |
-| `logs`              | Errors          | Errors per second as a stacked area by cause: `timeout`, `refused`, `oom`, and the rest.                                                                                                                                       |
-| `percentiles`       | Latency         | p50, p95, and p99 with the mean. Latency per Node as a bar gauge for the selected moment.                                                                                                                                      |
-| `alerting`          | Alerts          | A state timeline per alert rule: OK, pending, firing, and ignored. Threshold lines on the Charts that each rule watches.                                                                                                       |
-| `tracing`           | Services (RED)  | One row per Service: rate, errors, and p99 per Request kind. Exemplar dots on the latency Charts.                                                                                                                              |
-| `slo-dashboards`    | SLO             | Availability this calendar week as a stat, error budget left as a gauge, and burn rate over the last day. The HUD keeps availability and the budget left.                                                                      |
-| `profiling`         | Resources (USE) | A state timeline per Node that colours its limiting resource: CPU, workers, memory, connections, network, GC, or event-loop blocking. Pool waits and queue depths.                                                             |
-| `tail-sampling`     | —               | Exemplars prefer slow and failed requests, so the dots sit in the tail.                                                                                                                                                        |
-| `rum`               | Users           | Latency per region and device from the user's side, including the internet hop.                                                                                                                                                |
-| `anomaly-detection` | —               | A forecast band on the traffic and latency Charts, and a line at tomorrow's predicted peak.                                                                                                                                    |
+| Research            | Row             | Charts                                                                                                                                                                                                                                                                    |
+| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metrics`           | Overview        | Stats for Users, Apdex, and Cash per second, each with a sparkline. Time series: demand against served (traffic), mean latency, errors, and utilization per Node with lines at 70% and 90% (saturation). Revenue against Burn. From Series C, Users and Apdex per region. |
+| `logs`              | Errors          | Errors per second as a stacked area by cause: `timeout`, `refused`, `oom`, and the rest.                                                                                                                                                                                  |
+| `percentiles`       | Latency         | p50, p95, and p99 with the mean. Latency per Node as a bar gauge for the selected moment.                                                                                                                                                                                 |
+| `alerting`          | Alerts          | A state timeline per alert rule: OK, pending, firing, and ignored. Threshold lines on the Charts that each rule watches.                                                                                                                                                  |
+| `tracing`           | Services (RED)  | One row per Service: rate, errors, and p99 per Request kind. Exemplar dots on the latency Charts.                                                                                                                                                                         |
+| `slo-dashboards`    | SLO             | Availability this calendar week as a stat, error budget left as a gauge, and burn rate over the last day. The HUD keeps availability and the budget left.                                                                                                                 |
+| `profiling`         | Resources (USE) | A state timeline per Node that colours its limiting resource: CPU, workers, memory, connections, network, GC, or event-loop blocking. Pool waits and queue depths.                                                                                                        |
+| `tail-sampling`     | —               | Exemplars prefer slow and failed requests, so the dots sit in the tail.                                                                                                                                                                                                   |
+| `rum`               | Users           | Latency per region and device from the user's side, including the internet hop.                                                                                                                                                                                           |
+| `anomaly-detection` | —               | A forecast band on the traffic and latency Charts, and a line at tomorrow's predicted peak.                                                                                                                                                                               |
 
 ### Component rows
 

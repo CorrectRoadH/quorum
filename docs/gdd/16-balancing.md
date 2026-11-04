@@ -29,34 +29,40 @@ Formatting: SI suffixes only (k, M, B, T). No letter suffixes such as "aa".
 
 ## Constants
 
-| Constant              | Symbol   | Value                                           | Where used                                                       |
-| --------------------- | -------- | ----------------------------------------------- | ---------------------------------------------------------------- |
-| Step length           | —        | 100 ms                                          | [Simulation](./04-simulation.md#time)                            |
-| Calendar rate         | —        | 1 sim s = 1 calendar min                        | [Simulation](./04-simulation.md#time)                            |
-| Requests per user     | `R_user` | 0.02 rps                                        | [Demand](./04-simulation.md#demand)                              |
-| Diurnal amplitude     | `A`      | 0.45                                            | [Demand](./04-simulation.md#demand)                              |
-| Copy price growth     | —        | 1.25×                                           | [Prices](#prices)                                                |
-| Resize price growth   | —        | 2× per size step                                | [Vertical and horizontal](#vertical-and-horizontal)              |
-| Sell refund           | —        | 50%                                             | [Components](./05-components.md#rules-for-all-components)        |
-| Insight yield         | —        | 1 × √(sampled rps), per Component type and kind | [Observability](./12-observability.md#earning-insight)           |
-| Default sample rate   | —        | 10%                                             | [Observability](./12-observability.md#earning-insight)           |
-| Default retention     | —        | 15 min; pool cap at least 100                   | [Observability](./12-observability.md#retention)                 |
-| Study duration        | —        | 20 s (Garage) to 60 min (Public)                | [Progression](./10-progression.md#studies)                       |
-| Spike speed           | —        | 2×                                              | [Team](./08-team-and-velocity.md#spikes)                         |
-| Growth rate           | `g`      | See [User growth](#user-growth)                 |                                                                  |
-| Churn rate            | `c`      | 0.004/s                                         | [User growth](#user-growth)                                      |
-| Declined-round growth | —        | 0.7 × `g`                                       | [Funding](./09-economy.md#funding)                               |
-| Valuation scale       | —        | 1.5 × 10⁻⁴                                      | [Valuation scale](#valuation-scale)                              |
-| Coordination penalty  | `k`      | 0.08                                            | [Team](./08-team-and-velocity.md#coordination)                   |
-| Dev Hours per day     | —        | 8 per engineer, 6.4 founder                     | [Team](./08-team-and-velocity.md#dev-hours)                      |
-| Adoption time         | `τ`      | 7 calendar days                                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
-| Lift spread           | `σ`      | 1.0                                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
-| Upkeep ceiling        | —        | 0.4 × S / (S + 2,000), max 0.6                  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
-| Market gain cap       | —        | +100% of the Era market                         | [Sizes](./08-team-and-velocity.md#sizes)                         |
-| Link timeout          | —        | 30 s                                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
-| Drawer size           | —        | 60 s of revenue                                 | [Economy](./09-economy.md#the-payments-drawer)                   |
-| Offline cap           | —        | 8 h                                             | [Simulation](./04-simulation.md#offline-progress)                |
-| Offline churn cap     | —        | 5%                                              | [Simulation](./04-simulation.md#offline-progress)                |
+| Constant              | Symbol        | Value                                           | Where used                                                       |
+| --------------------- | ------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| Step length           | —             | 100 ms                                          | [Simulation](./04-simulation.md#time)                            |
+| Calendar rate         | —             | 1 sim s = 1 calendar min                        | [Simulation](./04-simulation.md#time)                            |
+| Requests per user     | `R_user`      | 0.02 rps                                        | [Demand](./04-simulation.md#demand)                              |
+| Diurnal amplitude     | `A`           | 0.45                                            | [Demand](./04-simulation.md#demand)                              |
+| Copy price growth     | —             | 1.25×                                           | [Prices](#prices)                                                |
+| Resize price growth   | —             | 2× per size step                                | [Vertical and horizontal](#vertical-and-horizontal)              |
+| Sell refund           | —             | 50%                                             | [Components](./05-components.md#rules-for-all-components)        |
+| Insight yield         | —             | 1 × √(sampled rps), per Component type and kind | [Observability](./12-observability.md#earning-insight)           |
+| Default sample rate   | —             | 10%                                             | [Observability](./12-observability.md#earning-insight)           |
+| Default retention     | —             | 15 min; pool cap at least 100                   | [Observability](./12-observability.md#retention)                 |
+| Study duration        | —             | 20 s (Garage) to 60 min (Public)                | [Progression](./10-progression.md#studies)                       |
+| Spike speed           | —             | 2×                                              | [Team](./08-team-and-velocity.md#spikes)                         |
+| Growth rate           | `g`           | See [User growth](#user-growth)                 |                                                                  |
+| Churn rate            | `c`           | 0.004/s                                         | [User growth](#user-growth)                                      |
+| Declined-round growth | —             | 0.7 × `g`                                       | [Funding](./09-economy.md#funding)                               |
+| Abroad seed share     | `seed_share`  | 0.05 (proposed)                                 | [Going global](./04-simulation.md#going-global)                  |
+| Fickle share          | `f`           | 0.5 (proposed)                                  | [Users and growth](./04-simulation.md#users-and-growth)          |
+| Steady churn          | `s`           | 0.2 × `c` (proposed)                            | [Users and growth](./04-simulation.md#users-and-growth)          |
+| Border mixing         | `m`           | 0.1 (proposed)                                  | [Users and growth](./04-simulation.md#users-and-growth)          |
+| Mirror time           | `mirror_time` | 30 calendar minutes (proposed)                  | [Mirror a region](./05-components.md#mirror-a-region)            |
+| Staged sync wait      | `stage_wait`  | 60 calendar minutes (proposed)                  | [GitOps](./05-components.md#gitops)                              |
+| Valuation scale       | —             | 1.5 × 10⁻⁴                                      | [Valuation scale](#valuation-scale)                              |
+| Coordination penalty  | `k`           | 0.08                                            | [Team](./08-team-and-velocity.md#coordination)                   |
+| Dev Hours per day     | —             | 8 per engineer, 6.4 founder                     | [Team](./08-team-and-velocity.md#dev-hours)                      |
+| Adoption time         | `τ`           | 7 calendar days                                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
+| Lift spread           | `σ`           | 1.0                                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
+| Upkeep ceiling        | —             | 0.4 × S / (S + 2,000), max 0.6                  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
+| Market gain cap       | —             | +100% of the Era market                         | [Sizes](./08-team-and-velocity.md#sizes)                         |
+| Link timeout          | —             | 30 s                                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
+| Drawer size           | —             | 60 s of revenue                                 | [Economy](./09-economy.md#the-payments-drawer)                   |
+| Offline cap           | —             | 8 h                                             | [Simulation](./04-simulation.md#offline-progress)                |
+| Offline churn cap     | —             | 5%                                              | [Simulation](./04-simulation.md#offline-progress)                |
 
 ## Prices
 
@@ -141,6 +147,28 @@ growth = g(Era) × Users × (1 − Users / Market) × h(A)
 The times solve the logistic equation from the Era's start to its milestone with the market sizes in
 [Progression](./10-progression.md#eras): `t = ln(((M − U₀) / U₀) × (U₁ / (M − U₁))) / g`. The sum is
 about 7 hours.
+
+From Series C the formula runs per region ([Simulation](./04-simulation.md#users-and-growth)). With
+`seed_share` at 0.05, a Company that reaches Series C with 1,000,000 users starts Europe at 37,500,
+Asia-Pacific at 25,000, and South America at 12,500. Far demand is then about 7% of the total, not
+60%, so a single-region Design meets the round trip as a warning, not as a collapse. North America's
+market alone is 5.6 million, so the 10 million Milestone needs users abroad. The Series C row in the
+table above assumes one region and must be measured again with the pacing bots.
+
+Churn is steep on purpose, and much steeper than in real life. Brutlag (2009) found that 400 ms of
+extra latency cost Google 0.59% of searches over six weeks; the game compresses weeks into minutes.
+Fickle users carry the steepness: at the Series C target of 0.92, an Apdex of 0.91 loses them at
+about 3% per calendar hour. Steady users leave at a fifth of that. Three calendar days at 0.909
+take a region of 1,000,000 users, half of them steady, to about 360,000, not 93,000 as with one rate.
+The [Churn breakdown](./12-observability.md#the-churn-breakdown) shows the rate.
+
+Word of mouth crosses borders at `m` = 0.1. With 1,000,000 users at home, a region abroad grows as
+if it had 100,000 users of its own on top of its seed, so it fills fast once its users are served
+well, and it recovers after it lost its users.
+
+Brutlag also found that searches stayed low for a while after the delay was removed. The game does
+not model that lag: users respond to the last calendar hour only, so a fix shows its effect within
+the hour. A lag would hide the feedback the Churn breakdown exists to give.
 
 These are lower bounds. Real players are slower because capacity, Cash, and research limit them.
 The pacing targets in [Progression](./10-progression.md#pacing-targets-for-the-first-company) are

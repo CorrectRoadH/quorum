@@ -36,8 +36,12 @@ The offer of a Grant for Equity at a Milestone. The player can raise or decline.
 _Avoid_: investment, raise (as a noun), stage
 
 **Users**:
-The people the Company serves. They send demand, and they grow or leave with Apdex.
+The people the Company serves. They send demand, and they grow or leave with Apdex. From Series C, each region counts its own Users, which grow or leave with that region's Apdex. Half of new Users are fickle and half steady; steady Users leave at a fifth of the rate.
 _Avoid_: customers, players, audience, DAU
+
+**Churn breakdown**:
+The list of what takes Apdex from each region's Users, by Request kind and cause, with the rate at which they leave.
+_Avoid_: churn report, why panel, attribution
 
 ### The design
 
@@ -80,6 +84,18 @@ _Avoid_: availability zone, AZ (in UI copy), datacenter, rack
 **Region**:
 A continent the Company runs in: North America, Europe, Asia-Pacific, or South America. Each open region has its own Users and its own tab on the Board; a call between regions pays the round trip.
 _Avoid_: datacenter, cloud region (in UI copy), geo
+
+**Mirror**:
+A region built from another region's Nodes and Links, after the player picks where each data Node's writes go. It stays linked to its source, and applying a plan brings it back in sync. Research `infra-as-code` unlocks it.
+_Avoid_: clone, duplicate, copy (that is a Node's machine)
+
+**Drift**:
+Every difference between a Mirror and its source that is not an override: source changes the Mirror is behind on, and hand changes on the Mirror. Unmanaged Nodes drift without showing it.
+_Avoid_: desync, divergence, config skew
+
+**IaC tool**:
+The infrastructure-as-code tool the Company writes Mirrors in: Terraform, Pulumi, or Alchemy. It sets apply time, what can be an override, and which Components it can build.
+_Avoid_: provisioner, deployer, IaC (alone in UI copy)
 
 **Region tab**:
 The Board's view of one region: its Nodes, the global ones, and the Nodes elsewhere they link to. Every tab shows one Design.

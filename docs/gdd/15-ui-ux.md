@@ -216,6 +216,7 @@ Rule: no action needs more than five repeated clicks without a bulk alternative.
 | Incidents | —            | The active incident, history, postmortems, runbooks                        |
 | Glossary  | `G`          | The engineering glossary, with discovered entries highlighted              |
 | Company   | `E`          | Era, milestone, funding, Equity, valuation, the IPO checklist              |
+| Churn     | Users on HUD | The [Churn breakdown](./12-observability.md#the-churn-breakdown) by region |
 
 ## Research screen
 
