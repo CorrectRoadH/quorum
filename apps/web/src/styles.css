@@ -669,366 +669,611 @@ details.fold[open]::details-content {
 }
 
 /* ==========================================================================
-   Title screen (src/game/title.ts). A rare screen, so it gets the delight
-   budget: the wordmark draws itself, the cable runs out to the bench, and the
-   bench boots plate by plate (in its own SVG). Pointing at a menu item lifts
-   the machines it touches and lights the cable.
+   Title screen (src/game/title.ts): the on-call booth. Flat, moulded parts in
+   the reader's material: a monitor whose screen is the menu, a keyboard and a
+   mouse that answer it, and the server hall's edges at the sides. Stage parts
+   size in cqw of the 16:10 stage; screen parts in --s, 1% of the screen.
    ========================================================================== */
-.title-grid {
-  --iso-line: oklch(1 0 0 / 0.045);
-  background:
-    radial-gradient(ellipse 45% 55% at 66% 48%, oklch(0.8 0.12 225 / 0.07), transparent 70%),
-    repeating-linear-gradient(30deg, var(--iso-line) 0 1px, transparent 1px 36px),
-    repeating-linear-gradient(150deg, var(--iso-line) 0 1px, transparent 1px 36px);
-  mask-image: radial-gradient(ellipse 65% 70% at 62% 50%, black 10%, transparent 80%);
-}
-.title-frame {
-  border: 1px solid oklch(1 0 0 / 0.05);
-}
-.title-corner {
-  border-color: oklch(1 0 0 / 0.28);
-  margin: -1px;
-}
-/* Edge rulers: a minor tick every 12px and a major one every 96px. */
-.title-ruler {
-  position: absolute;
-  --tick: oklch(1 0 0 / 0.1);
-}
-.title-ruler-x {
-  top: 0;
-  left: 96px;
-  right: 96px;
-  height: 9px;
-  background:
-    repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 96px) top / 100% 9px
-      no-repeat,
-    repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 12px) top / 100% 4px
-      no-repeat;
-}
-.title-ruler-y {
-  left: 0;
-  top: 96px;
-  bottom: 96px;
-  width: 9px;
-  background:
-    repeating-linear-gradient(to bottom, var(--tick) 0 1px, transparent 1px 96px) left / 9px 100%
-      no-repeat,
-    repeating-linear-gradient(to bottom, var(--tick) 0 1px, transparent 1px 12px) left / 4px 100%
-      no-repeat;
-}
-/* The selection marker: a signal bar at the left of the row being pointed at. */
-.title-marker {
-  position: absolute;
-  left: 0;
-  top: 30%;
-  bottom: 30%;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--signal);
-  opacity: 0;
-  transform: scaleY(0.4);
-  transition:
-    opacity 150ms ease,
-    transform 200ms var(--ease-out);
-}
-:focus-visible > .title-marker {
-  opacity: 1;
-  transform: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  :hover > .title-marker {
-    opacity: 1;
-    transform: none;
-  }
-}
-.title-stage {
-  width: min(100vw, 160vh);
-  aspect-ratio: 16 / 10;
-  container-type: inline-size;
-  --title-lift: -6px;
-  /* The menu's unit: 1% of the stage, so it scales with the bench. */
-  --u: 1cqw;
-}
-.title-art,
-.title-ui {
+.booth {
   position: absolute;
   inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* The room's materials, from the theme, so a light theme can restyle the booth. */
+  --booth-plastic: color-mix(in oklch, var(--muted) 70%, var(--page));
+  --booth-plastic-hi: color-mix(in oklch, var(--muted) 85%, var(--foreground) 6%);
+  --booth-glint: color-mix(in oklch, var(--signal) 22%, transparent);
+  background:
+    radial-gradient(
+      ellipse 55% 50% at 50% 42%,
+      color-mix(in oklch, var(--signal) 9%, transparent),
+      transparent 72%
+    ),
+    var(--page);
 }
-/* The bench floats by a share of its own width. */
-.title-art {
+.booth-stage {
+  position: relative;
+  width: min(130vw, max(100vw, 160vh));
+  aspect-ratio: 16 / 10;
   container-type: inline-size;
 }
-.title-bench svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
 
-/* Once assembled, the bench floats: it rises and falls over its floor shadow,
-   which tightens and darkens as the bench comes down. The menu cable's end
-   follows it (its raised path is set inline from title.ts). The 2.6s delay
-   waits out the assembly in the bench SVG. */
-.title-bench {
-  animation: title-float 6s ease-in-out 2.6s infinite;
-}
-.title-floor {
-  fill: oklch(0 0 0 / 0.7);
-  filter: blur(22px);
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: title-floor 6s ease-in-out 2.6s infinite;
-}
-.title-cable-edge,
-.title-cable {
-  animation:
-    title-draw 600ms var(--ease-out) 450ms forwards,
-    title-cable-float 6s ease-in-out 2.6s infinite;
-}
-@keyframes title-float {
+@keyframes booth-blink {
   50% {
-    translate: 0 -0.625cqw;
-  }
-}
-@keyframes title-floor {
-  50% {
-    opacity: 0.7;
-    scale: 0.97;
-  }
-}
-@keyframes title-cable-float {
-  50% {
-    d: var(--cable-raised);
+    opacity: 0.15;
   }
 }
 
-.title-wordmark path {
+/* The desk, straight on: its top edge at 86% of the stage, lit only by the screen. */
+.booth-desk {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.booth-desk::before {
+  content: '';
+  position: absolute;
+  inset: 86% -30% -40%;
+  background:
+    radial-gradient(
+      ellipse 30% 55% at 50% 0%,
+      color-mix(in oklch, var(--signal) 14%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(var(--booth-plastic), var(--page) 18%);
+  box-shadow: inset 0 1px 0 var(--booth-glint);
+}
+.booth-keyboard {
+  position: absolute;
+  left: 30%;
+  top: calc(90% - 1.4cqw);
+  z-index: 1;
+  width: 40%;
+  height: 1.4cqw;
+  border-radius: 0.4cqw 0.4cqw 0.15cqw 0.15cqw;
+  background: linear-gradient(var(--booth-plastic-hi), var(--booth-plastic));
+  box-shadow:
+    inset 0 1px 0 var(--booth-glint),
+    0 0.6cqw 1.4cqw oklch(0 0 0 / 0.6);
+}
+.booth-keyrow {
+  position: absolute;
+  inset: -0.35cqw 3% auto;
+  height: 0.5cqw;
+  display: flex;
+  gap: 0.3cqw;
+}
+.booth-key {
+  flex: 1;
+  border-radius: 0.15cqw 0.15cqw 0 0;
+  background: var(--booth-plastic-hi);
+  box-shadow: inset 0 1px 0 var(--booth-glint);
+}
+.booth-key.is-wide {
+  flex: 1.8;
+}
+.booth-key.is-space {
+  flex: 6;
+}
+.booth-key.is-lit {
+  animation: booth-key 240ms ease-out;
+}
+@keyframes booth-key {
+  from {
+    background: var(--signal);
+    box-shadow: 0 0 0.8cqw color-mix(in oklch, var(--signal) 60%, transparent);
+    translate: 0 0.12cqw;
+  }
+}
+.booth-mouse {
+  position: absolute;
+  left: 76%;
+  top: calc(90% - 1.1cqw);
+  z-index: 1;
+  width: 3cqw;
+  height: 1.1cqw;
+  border-radius: 50% 50% 0.2cqw 0.2cqw / 100% 100% 0.2cqw 0.2cqw;
+  background: linear-gradient(var(--booth-plastic-hi), var(--booth-plastic));
+  box-shadow:
+    inset 0 1px 0 var(--booth-glint),
+    0 0.4cqw 0.8cqw oklch(0 0 0 / 0.6);
+  transition: translate 120ms linear;
+}
+.booth-mouse.is-down {
+  filter: brightness(0.85);
+}
+
+/* The monitor, in the badge reader's moulded plastic. */
+.booth-neck {
+  position: absolute;
+  left: 46%;
+  top: 76%;
+  width: 8%;
+  height: calc(10% - 0.6cqw);
+  background: linear-gradient(
+    90deg,
+    oklch(0.16 0.004 260),
+    oklch(0.26 0.006 260) 45%,
+    oklch(0.18 0.004 260)
+  );
+}
+.booth-neck::after {
+  content: '';
+  position: absolute;
+  left: -60%;
+  right: -60%;
+  bottom: -0.6cqw;
+  height: 0.6cqw;
+  border-radius: 0.3cqw 0.3cqw 0 0;
+  background: linear-gradient(var(--booth-plastic-hi), var(--booth-plastic));
+  box-shadow: inset 0 1px 0 var(--booth-glint);
+}
+.booth-monitor {
+  position: absolute;
+  left: 13%;
+  top: 6%;
+  width: 74%;
+  padding: 1.1cqw 1.1cqw 2.8cqw;
+  border-radius: 1.6cqw;
+  background: linear-gradient(170deg, oklch(0.3 0.006 260), oklch(0.19 0.004 260) 60%);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.14),
+    inset 0 -0.3cqw 0 oklch(0 0 0 / 0.45),
+    0 0 0 1px oklch(0 0 0 / 0.6),
+    0 4cqw 7cqw -2cqw oklch(0 0 0 / 0.9),
+    0 0 14cqw oklch(0.8 0.12 225 / 0.1);
+}
+.booth-chin {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2.8cqw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.booth-chin svg {
+  width: 0.9cqw;
+  overflow: visible;
+}
+.booth-chin path {
+  fill: none;
+  stroke: oklch(0.4 0.004 260);
+  stroke-width: 22;
+}
+.booth-chin circle {
+  fill: oklch(0.4 0.004 260);
+}
+.booth-power {
+  position: absolute;
+  right: 2.4cqw;
+  top: 50%;
+  width: 0.45cqw;
+  height: 0.45cqw;
+  margin-top: -0.22cqw;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, oklch(0.9 0.12 160), oklch(0.65 0.16 160));
+  box-shadow: 0 0 0.7cqw oklch(0.8 0.15 160 / 0.7);
+}
+.booth-power.is-busy {
+  animation: booth-blink 160ms steps(1) infinite;
+}
+
+/* The screen. */
+.booth-screen {
+  --s: 1cqw;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  grid-template-columns: 1fr 30%;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  container-type: inline-size;
+  border-radius: 0.7cqw;
+  background: radial-gradient(
+    ellipse 90% 80% at 30% 20%,
+    oklch(0.23 0.035 225),
+    oklch(0.12 0.018 235)
+  );
+  box-shadow:
+    inset 0 0.3cqw 1cqw oklch(0 0 0 / 0.8),
+    0 1px 0 oklch(1 0 0 / 0.1);
+  user-select: none;
+}
+.booth-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(oklch(1 0 0 / 0.015) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 62%, oklch(0 0 0 / 0.38));
+}
+.booth-screen.is-new {
+  grid-template-columns: minmax(0, 1fr);
+}
+.booth-home,
+.booth-status,
+.booth-taskbar {
+  animation: booth-on 500ms var(--ease-out) 150ms both;
+}
+@keyframes booth-on {
+  from {
+    opacity: 0;
+  }
+}
+.booth-home {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: calc(var(--s) * 4.4) calc(var(--s) * 4) 0 calc(var(--s) * 5);
+}
+.booth-wordmark {
+  flex: none;
+  width: calc(var(--s) * 16);
+  margin-bottom: calc(var(--s) * 2.4);
+  overflow: visible;
+}
+.booth-wordmark path {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-width: 22;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: title-draw 900ms var(--ease-out) forwards;
 }
-.title-node {
+.booth-wordmark circle {
   fill: var(--signal);
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: title-node 400ms var(--ease-out) 650ms forwards;
-}
-.title-menu {
-  opacity: 0;
-  transform: translateY(8px);
-  animation: stagger-in 400ms var(--ease-out) 250ms forwards;
-}
-
-/* A menu longer than its box fades at the edge with more items beyond it. */
-@property --fade-top {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-@property --fade-bottom {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-@keyframes menu-edges {
-  0% {
-    --fade-top: 0px;
-    --fade-bottom: 48px;
-  }
-  10% {
-    --fade-top: 48px;
-  }
-  90% {
-    --fade-bottom: 48px;
-  }
-  100% {
-    --fade-top: 48px;
-    --fade-bottom: 0px;
-  }
-}
-@supports (animation-timeline: scroll()) {
-  .title-menu {
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      #000 var(--fade-top),
-      #000 calc(100% - var(--fade-bottom)),
-      transparent
-    );
-    animation:
-      stagger-in 400ms var(--ease-out) 250ms forwards,
-      menu-edges linear both;
-    animation-timeline: auto, scroll(self);
-  }
-}
-/* Without scroll timelines, a shadow marks the edge that has more. */
-@supports not (animation-timeline: scroll()) {
-  .title-menu {
-    background:
-      linear-gradient(var(--card), transparent) top / 100% 32px no-repeat local,
-      linear-gradient(transparent, var(--card)) bottom / 100% 32px no-repeat local,
-      radial-gradient(farthest-side at 50% 0, oklch(0 0 0 / 0.14), transparent) top / 100% 12px
-        no-repeat scroll,
-      radial-gradient(farthest-side at 50% 100%, oklch(0 0 0 / 0.14), transparent) bottom / 100%
-        12px no-repeat scroll,
-      var(--card);
-  }
 }
 @keyframes title-draw {
   to {
     stroke-dashoffset: 0;
   }
 }
-@keyframes title-node {
-  from {
-    transform: scale(0.6);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.booth-crumb {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--s) * 0.5);
+  width: 100%;
+  max-width: calc(var(--s) * 62);
+  min-height: calc(var(--s) * 2.6);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--s) * 1.3));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
 }
-
-/* The menu cable, styled as the bench's tubes: an edge line around a dark core. */
-.title-cable-edge,
-.title-cable {
+.booth-crumb b {
+  font-weight: 500;
+  color: var(--signal);
+}
+.booth-crumb .booth-figure {
+  margin-left: auto;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.booth-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: calc(100% + var(--s) * 2.8);
+  max-width: calc(var(--s) * 64.8);
+  margin: 0 calc(var(--s) * -1.4);
+  padding-bottom: calc(var(--s) * 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 0.3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 0.15) transparent;
+}
+.booth-list > * {
+  flex: none;
+}
+.booth-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 1);
+  width: 100%;
+  min-height: calc(var(--s) * 3.6);
+  padding: calc(var(--s) * 0.4) calc(var(--s) * 1.4);
+  border-radius: calc(var(--s) * 0.8);
+  color: var(--muted-foreground);
+  font-size: max(12px, calc(var(--s) * 1.6));
+  font-weight: 500;
+  text-align: left;
+  outline: none;
+}
+.booth-row.is-big {
+  min-height: calc(var(--s) * 4.8);
+  color: var(--foreground);
+  font-size: max(14px, calc(var(--s) * 2.1));
+  font-weight: 600;
+}
+.booth-row:focus {
+  color: var(--foreground);
+  background: oklch(1 0 0 / 0.08);
+  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.06);
+}
+.booth-row:disabled {
+  opacity: 0.4;
+}
+.booth-row[aria-pressed='true']:not(:focus) {
+  color: var(--foreground);
+}
+.booth-mark {
+  flex: none;
+  color: var(--muted-foreground);
+}
+.booth-label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.booth-detail {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--s) * 1.3));
+  font-weight: 400;
+  opacity: 0.65;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.booth-side {
+  display: flex;
+  flex: none;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--s) * 1.3));
+  font-weight: 400;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+.booth-icon {
+  width: max(14px, calc(var(--s) * 1.9));
+  height: max(14px, calc(var(--s) * 1.9));
+}
+.booth-group {
+  padding: calc(var(--s) * 1.2) calc(var(--s) * 2) calc(var(--s) * 0.3);
+  font-family: var(--font-mono);
+  font-size: max(9px, calc(var(--s) * 1.15));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.booth-hint {
+  flex: none;
+  display: flex;
+  gap: calc(var(--s) * 2.6);
+  margin-top: auto;
+  padding: calc(var(--s) * 1.4) 0 calc(var(--s) * 2);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--s) * 1.25));
+  color: var(--muted-foreground);
+}
+.booth-hint kbd {
+  margin-right: calc(var(--s) * 0.6);
+  padding: 0 calc(var(--s) * 0.6);
+  border-radius: calc(var(--s) * 0.3);
+  font: inherit;
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.18);
+}
+.booth-status {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--s) * 0.8);
+  padding: calc(var(--s) * 4.6) calc(var(--s) * 4) 0 0;
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--s) * 1.35));
+  color: var(--muted-foreground);
+}
+.booth-status-users {
+  font-size: calc(var(--s) * 4.6);
+  line-height: 1;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+.booth-status-unit {
+  margin-top: calc(var(--s) * -0.6);
+}
+.booth-status svg {
+  width: 100%;
+  height: calc(var(--s) * 5);
+  margin: calc(var(--s) * 1) 0;
+  overflow: visible;
+}
+.booth-status svg path {
   fill: none;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
+  stroke: var(--signal);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
 }
-.title-cable-edge {
-  stroke: #7a818c;
-  stroke-width: 6.6;
+.booth-status-hot {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 0.5);
+  color: var(--foreground);
 }
-.title-cable {
-  stroke: #2b2e33;
-  stroke-width: 4.6;
-  transition: stroke 200ms ease;
+.booth-status-hot i {
+  width: calc(var(--s) * 0.8);
+  height: calc(var(--s) * 0.8);
+  margin-right: calc(var(--s) * 0.3);
+  border-radius: 50%;
+  background: var(--ok);
 }
-.title-port {
-  fill: var(--card);
-  stroke: #7a818c;
-  stroke-width: 1.2;
+.booth-status-hot.is-warn i {
+  background: oklch(0.8 0.15 75);
 }
-.title-port-core {
-  fill: var(--signal);
-  transition: opacity 200ms ease;
-  opacity: 0.55;
+.booth-status-hot.is-bad i {
+  background: oklch(0.68 0.19 25);
+  animation: booth-blink 1s steps(1) infinite;
+}
+.booth-taskbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 0.4);
+  height: calc(var(--s) * 5.2);
+  padding: 0 calc(var(--s) * 1.6);
+  background: oklch(0 0 0 / 0.35);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--s) * 1.35));
+  color: var(--muted-foreground);
+}
+.booth-taskbar button {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--s) * 0.7);
+  height: calc(var(--s) * 3.9);
+  min-width: calc(var(--s) * 3.9);
+  justify-content: center;
+  padding: 0 calc(var(--s) * 1);
+  border-radius: calc(var(--s) * 0.6);
+}
+.booth-taskbar button:hover,
+.booth-taskbar button[aria-pressed='true'],
+.booth-taskbar button:focus-visible {
+  background: oklch(1 0 0 / 0.08);
+  color: var(--foreground);
+  outline: none;
+}
+.booth-taskbar .booth-figure {
+  color: var(--signal);
+}
+.booth-clock {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.booth-term {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  padding: calc(var(--s) * 4.6) calc(var(--s) * 5);
+  background: oklch(0.1 0.01 215);
+  font-family: var(--font-mono);
+  font-size: max(12px, calc(var(--s) * 1.7));
+  line-height: 1.8;
+  color: var(--muted-foreground);
+}
+.booth-term b {
+  font-weight: 500;
+  color: var(--foreground);
+}
+.booth-term p {
+  animation: booth-line 1ms steps(1) both;
+}
+.booth-term p:nth-child(2) {
+  animation-delay: 350ms;
+}
+.booth-term p:nth-child(3) {
+  animation-delay: 800ms;
+}
+@keyframes booth-line {
+  from {
+    visibility: hidden;
+  }
+}
+.booth-caret {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  background: var(--foreground);
+  animation: booth-blink 1s steps(1) infinite;
+}
+/* The playtest strip along the top edge. */
+.booth-strip {
+  position: absolute;
+  top: 18px;
+  right: 32px;
+  left: 32px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.booth-strip > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+.booth-strip > :hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.booth-strip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(0.8 0.15 75);
 }
 
-.title-bench [data-machine] {
-  transition:
-    translate 300ms var(--ease-out),
-    filter 300ms ease;
-}
-.title-screen:has([data-aim]:focus-visible) .title-cable {
-  stroke: color-mix(in oklch, var(--signal) 55%, #2b2e33);
-}
-.title-screen:has([data-aim]:focus-visible) .title-port-core {
-  opacity: 1;
-}
-.title-screen:has([data-aim~='users']:focus-visible) [data-machine='users'],
-.title-screen:has([data-aim~='lb']:focus-visible) [data-machine='lb'],
-.title-screen:has([data-aim~='server']:focus-visible) [data-machine='server'],
-.title-screen:has([data-aim~='cache']:focus-visible) [data-machine='cache'],
-.title-screen:has([data-aim~='database']:focus-visible) [data-machine='database'] {
-  translate: 0 var(--title-lift);
-  --callout: var(--signal);
-  filter: drop-shadow(0 7px 6px oklch(0 0 0 / 0.55))
-    drop-shadow(0 0 10px color-mix(in oklch, var(--signal) 35%, transparent));
-}
-@media (hover: hover) and (pointer: fine) {
-  .title-screen:has([data-aim]:hover) .title-cable {
-    stroke: color-mix(in oklch, var(--signal) 55%, #2b2e33);
-  }
-  .title-screen:has([data-aim]:hover) .title-port-core {
-    opacity: 1;
-  }
-  .title-screen:has([data-aim~='users']:hover) [data-machine='users'],
-  .title-screen:has([data-aim~='lb']:hover) [data-machine='lb'],
-  .title-screen:has([data-aim~='server']:hover) [data-machine='server'],
-  .title-screen:has([data-aim~='cache']:hover) [data-machine='cache'],
-  .title-screen:has([data-aim~='database']:hover) [data-machine='database'] {
-    translate: 0 var(--title-lift);
-    --callout: var(--signal);
-    filter: drop-shadow(0 7px 6px oklch(0 0 0 / 0.55))
-      drop-shadow(0 0 10px color-mix(in oklch, var(--signal) 35%, transparent));
-  }
-}
-
-/* On a phone the 16:10 stage does not fit. The bench fills the top, cropped
-   by the edge, and the wordmark and menu stack at the foot at a fixed unit.
-   The wordmark and menu carry inline stage coordinates, hence !important. */
-@media (max-width: 639px), (max-height: 499px) {
-  .title-stage {
+/* Phones, short screens and portrait: the monitor is the whole screen, without the room. */
+@media (max-width: 639px), (max-height: 539px), (max-aspect-ratio: 1 / 1) {
+  .booth-stage {
     position: absolute;
     inset: 0;
     width: auto;
     aspect-ratio: auto;
     container-type: normal;
-    --u: 14px;
   }
-  .title-ui {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    gap: 18px;
-    padding: 0 28px 76px;
-    pointer-events: none;
-  }
-  .title-ui > * {
-    pointer-events: auto;
-  }
-  .title-ui .title-wordmark {
-    position: static !important;
-    width: 168px !important;
-    flex: none;
-  }
-  .title-ui .title-menu {
-    position: static !important;
-    width: 100% !important;
-    max-height: 100%;
-    padding: 6px !important;
-    overflow-y: auto;
-  }
-  .title-ui .title-overlay,
-  .title-ui .title-overlay * {
+  .booth-desk,
+  .booth-neck,
+  .booth-chin,
+  .booth-hint,
+  .booth-status {
     display: none;
   }
-  .title-art {
-    inset: auto;
-    top: 12dvh;
-    width: 130vw;
-    left: calc(50vw - 91vw);
-    aspect-ratio: 16 / 10;
+  .booth-monitor {
+    inset: 48px 10px 10px;
+    width: auto;
+    padding: 6px;
+    border-radius: 18px;
   }
-  .title-bench {
-    animation-name: title-float-compact;
+  .booth-screen {
+    --s: 7px;
+    height: 100%;
+    aspect-ratio: auto;
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: 12px;
   }
-}
-@media (max-height: 499px) and (min-width: 640px) {
-  .title-ui {
-    width: 330px;
-    padding: 24px 0 56px 40px;
-    gap: 12px;
-    justify-content: flex-start;
+  .booth-home {
+    padding: calc(var(--s) * 4) calc(var(--s) * 3) 0;
   }
-  .title-ui .title-wordmark {
-    width: 128px !important;
+  .booth-list,
+  .booth-crumb {
+    width: auto;
   }
-  .title-ui .title-menu {
-    min-height: 0;
+  .booth-list {
+    margin-left: calc(var(--s) * -1);
+    margin-right: calc(var(--s) * -1);
   }
-  .title-art {
-    top: 50%;
-    width: 125vh;
-    left: 30vw;
-    translate: 0 -45%;
+  .booth-strip {
+    top: 16px;
+    right: 18px;
+    left: 18px;
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
   }
-}
-@keyframes title-float-compact {
-  50% {
-    translate: 0 -4px;
+  .booth-strip > * {
+    white-space: nowrap;
+  }
+  .booth-strip-label {
+    display: none;
   }
 }
 
@@ -1265,42 +1510,23 @@ details.fold[open]::details-content {
 }
 
 /* The Reduce motion setting, whatever the system says: animations and transitions end at once. */
-:root[data-motion='reduce'] :not(.title-menu),
+:root[data-motion='reduce'] *,
 :root[data-motion='reduce'] ::before,
 :root[data-motion='reduce'] ::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
 }
-:root[data-motion='reduce'] .title-packets {
-  display: none;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .enter-backdrop {
     transition-duration: 0.01ms;
   }
-  .title-wordmark path,
-  .title-cable-edge,
-  .title-cable {
+  .booth-wordmark path {
     stroke-dasharray: none;
-    animation: none;
   }
-  .title-node {
-    animation-name: stagger-in;
-  }
-  .title-menu {
-    transform: none;
-  }
-  .title-packets {
-    display: none;
-  }
-  .title-bench,
-  .title-floor {
-    animation: none;
-  }
-  .title-stage {
-    --title-lift: 0px;
+  .booth * {
+    animation: none !important;
   }
   .press:active:not([aria-haspopup], :disabled) {
     transform: none;

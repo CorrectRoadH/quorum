@@ -62,6 +62,8 @@ export const Message = defineMessageUnion({
     today: Schema.String,
   },
   Saved: {},
+  /** The title screen's connect sequence ended: the board it was opening shows. */
+  Connected: {},
   Continued: {},
   NewCompanyStarted: {},
   PreseedStarted: {},

@@ -317,6 +317,13 @@ export const RevealTitle = Command.define('RevealTitle', {
   execute: () => Effect.sleep('1100 millis').pipe(Effect.as(Message.TitleRevealed())),
 })
 
+/** The title monitor's connect sequence plays, then the board shows. */
+export const ConnectBoard = Command.define('ConnectBoard', {
+  args: {},
+  messages: [Message.Connected],
+  execute: () => Effect.sleep('1200 millis').pipe(Effect.as(Message.Connected())),
+})
+
 export const AppendLog = Command.define('AppendLog', {
   args: { entries: Schema.Array(LogEntry) },
   messages: [Message.Synced],

@@ -670,7 +670,15 @@ describe('URL routing', () => {
 describe('progressive disclosure', () => {
   const send = (model: Model, ...messages: ReadonlyArray<Message>): Model =>
     messages.reduce((current, message) => update(current, message).model, model)
-  const founded = (): Model => send(initialModel(), Message.CompanyFounded())
+  /** Founding from the title plays the monitor's connect sequence; the board takes keys once it ends. */
+  const founded = (): Model => {
+    const connecting = send(initialModel(), Message.CompanyFounded())
+    expect(connecting.connecting).toBe(true)
+    expect(send(connecting, Message.KeyPressed({ key: 'r' })).panel).toBe('none')
+    const open = send(connecting, Message.Connected())
+    expect(open.connecting).toBe(false)
+    return open
+  }
 
   test('a first Company opens on the board, with Research shut until Insight can buy an item', () => {
     const start = founded()

@@ -439,6 +439,8 @@ export const Model = Schema.Struct({
   company: Schema.NullOr(Board),
   /** A saved company exists, so the title screen offers Continue. */
   saved: Schema.Boolean,
+  /** The board route is set, but the title screen's monitor plays its connect sequence first. */
+  connecting: Schema.Boolean,
   /** The player across Companies, kept apart from the Company save. */
   founder: Founder,
   /** Guided Sandboxes the player has passed. */
@@ -480,7 +482,8 @@ export const inMenu = (model: Model): boolean =>
   model.panel === 'menu' || model.panel === 'settings'
 
 /** The clock holds still: the player paused it, or the game menu is open. */
-export const halted = (model: Model): boolean => model.board.clock.paused || inMenu(model)
+export const halted = (model: Model): boolean =>
+  model.board.clock.paused || inMenu(model) || model.connecting
 
 /** The Playbook that follows the pointer, if any. */
 export const stampedPlaybook = (model: Model): Playbook | null =>

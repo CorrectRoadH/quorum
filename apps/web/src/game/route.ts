@@ -25,6 +25,7 @@ export const MENU_PAGES = [
   'history',
   'challenges',
   'achievements',
+  'settings',
 ] as const
 export const MenuPage = Schema.Literals(MENU_PAGES)
 

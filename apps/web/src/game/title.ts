@@ -1,11 +1,12 @@
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Download, Lock } from 'lucide'
+import { ArrowUpRight, Check, Download, Lock, ScrollText, Settings, Store, Trophy } from 'lucide'
 import { icon } from '@/lib/icons'
 import {
   ACHIEVEMENTS,
   ACHIEVEMENT_IDS,
+  COMPONENTS,
   ERAS,
   MUTATORS,
   MUTATOR_IDS,
@@ -18,116 +19,146 @@ import {
 import { foundingOf, levelOf, perkPrice } from '@quorum/simulation/founder'
 import { legacyMultiplier, startEra } from '@quorum/simulation/founding'
 import { eraOf } from '@quorum/simulation/lookups'
-import { CHALLENGES, challengeOpen, dailyDrill } from '@quorum/simulation/challenges'
-import { GUIDED, TRACKS, sandboxOpen, type SandboxId } from '@quorum/simulation/sandbox'
+import { solveFlow } from '@quorum/simulation/solve'
+import type { Game } from '@quorum/simulation/state'
+import { CHALLENGES, challengeById, challengeOpen, dailyDrill } from '@quorum/simulation/challenges'
+import { GUIDED, TRACKS, sandboxOpen } from '@quorum/simulation/sandbox'
 import { clock, compact } from './format.ts'
 import { Message } from './message.ts'
+import { PrefsMessage } from './prefs.ts'
 import type { Model } from './model.ts'
-import { menuOf } from './route.ts'
+import { menuOf, type MenuPage } from './route.ts'
+import { supportedLocales } from '../i18n/index.ts'
 import { play } from './sound.ts'
 
 /* ==========================================================================
-   The title screen: the night shift. One 16:10 stage, 1600 x 1000 units,
-   scales as a whole so the menu's port, the overlay cable and the bench's
-   lead cable always meet. The bench is the game idling (Factorio's menu
-   world); the menu is a node wired into it (Upload Labs). Pointing at an
-   item lifts the machines it touches.
+   The title screen: the on-call booth at night. You sit at the desk, and the
+   menu runs on your own monitor like a game's menu: one list, one selection
+   bar that follows the pointer and the arrow keys, pages that replace the list
+   in place. The keyboard and mouse on the desk answer what you do. The screen
+   is the room's only light.
    ========================================================================== */
 
-/** Stage units to percentages of the stage box. */
-const x = (u: number) => `${u / 16}%`
-const y = (u: number) => `${u / 10}%`
-
-/** The bench SVG is 640 x 360 and sits here, at this scale, bleeding off the right. */
-const BENCH = { left: 560, top: 190, width: 1120 }
-const S = BENCH.width / 640
-const fromBench = (bx: number, by: number) => [BENCH.left + bx * S, BENCH.top + by * S] as const
-
-/** The lead cable's points in the bench SVG, from apps/web/art/figures/hero.mjs:
- *  where it meets the users plate, where it crosses the front edge, and where it ends below. */
-const LEAD_PLATE = fromBench(74.07, 102.86)
-const LEAD_EDGE = fromBench(48.44, 115.68)
-const LEAD_END = fromBench(48.44, 140.69)
-
-const MENU = { left: 96, top: 470, width: 400, pad: 8, row: 64 }
-/** Where the menu must end, in stage units. */
-const MENU_BOTTOM = 900
-const PORT = [MENU.left + MENU.width, MENU.top + MENU.pad + MENU.row / 2] as const
-
-/** Once assembled, the bench floats this many units up and back; the cable's end follows it. */
-const FLOAT = 10
-const cable = (lift: number) =>
-  `M${PORT[0]} ${PORT[1]} C${PORT[0] + 70} ${PORT[1]} ${LEAD_END[0]} ${PORT[1] + 26 - lift} ${LEAD_END[0]} ${LEAD_END[1] - lift}`
-const CABLE = cable(0)
-const CABLE_STYLE = { '--cable-raised': `path("${cable(FLOAT)}")` }
-
-/** The bench's footprint on the floor below it, where its shadow falls. */
-const FLOOR = '858,283 1649,678 1382,811 592,416'
-
-const ROUTE = `${CABLE} L${LEAD_EDGE[0]} ${LEAD_EDGE[1]} L${LEAD_PLATE[0]} ${LEAD_PLATE[1]}`
+type Page = typeof MenuPage.Type | 'main'
 
 /* --------------------------------------------------------------------------
-   The bench, inlined so page CSS reaches its machines. Both SVG clocks are
-   reset together, so a packet on the menu cable reaches the users plate as
-   the bench sends its next request on.
+   The driver: everything the screen does below the Model. The selection bar is
+   focus, so Enter and Space work as they do on any button; the arrows move it,
+   Escape and Backspace press Back, the pointer moves it and the desk mouse,
+   and each key lights its key on the desk.
    -------------------------------------------------------------------------- */
 
-const BenchMounted = Mount.define('BenchMounted', {
-  messages: [Message.Synced],
-  execute: ({ element }) =>
-    Effect.tryPromise(() => fetch('/art/hero.svg').then((response) => response.text())).pipe(
-      Effect.orElseSucceed(() => ''),
-      Effect.map((svg) => {
-        element.innerHTML = svg
-        for (const clockRoot of element.closest('.title-stage')?.querySelectorAll('svg') ?? [])
-          if (clockRoot instanceof SVGSVGElement) clockRoot.setCurrentTime(0)
-        return Message.Synced()
-      }),
-    ),
-})
+/** The page the screen showed before main, so Back lands on the row that opened it. */
+let lastPage: Page = 'main'
 
-/* --------------------------------------------------------------------------
-   Sounds. Each bench pop sounds as its animation starts: the plates stamp down
-   on a rising pentatonic scale, left to right. Menu items blip under the
-   pointer and beep when chosen.
-   -------------------------------------------------------------------------- */
+const rowsOf = (root: ParentNode) =>
+  [...root.querySelectorAll<HTMLElement>('.booth-list [data-row]')].filter(
+    (row) => !(row instanceof HTMLButtonElement && row.disabled),
+  )
 
-const SCALE = [0, 2, 4, 7, 9, 12, 14]
-
-const TitleSounds = Mount.define('TitleSounds', {
+const BoothDriver = Mount.define('BoothDriver', {
   messages: [Message.Synced],
   execute: ({ element }) =>
     Effect.acquireRelease(
       Effect.sync(() => {
-        let bursts = 0
-        const onAnimationStart = (event: Event) => {
-          if (!(event instanceof AnimationEvent) || event.animationName !== 'iso-pop') return
-          if (!(event.target instanceof Element)) return
-          if (event.target.classList.contains('slam'))
-            play('burst', 2 ** (SCALE[bursts++ % SCALE.length]! / 12))
-          else play('pop')
+        const screen = element.querySelector<HTMLElement>('.booth-screen')
+        const mouse = element.querySelector<HTMLElement>('.booth-mouse')
+        const keys = [...element.querySelectorAll<HTMLElement>('.booth-key')]
+        const light = (name: string) => {
+          const key =
+            keys.find((key) => key.dataset.k === name) ??
+            keys[Math.floor(Math.random() * keys.length)]
+          if (!key) return
+          key.classList.remove('is-lit')
+          void key.offsetWidth
+          key.classList.add('is-lit')
         }
-        const aimOf = (target: EventTarget | null) =>
-          target instanceof Element ? target.closest('[data-aim]') : null
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (event.altKey || event.metaKey || event.ctrlKey) return
+          const target = event.target
+          if (target instanceof Element && target !== document.body && !element.contains(target))
+            return
+          if (element.querySelector('.booth-term')) return
+          light(event.key === ' ' ? 'Space' : event.key)
+          play('tick')
+          const rows = rowsOf(element)
+          const at = rows.indexOf(document.activeElement as HTMLElement)
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            const step = event.key === 'ArrowDown' ? 1 : -1
+            const next = rows[at < 0 ? 0 : (at + step + rows.length) % rows.length]
+            if (next && next !== rows[at]) {
+              next.focus()
+              play('hover')
+            }
+          } else if (['Escape', 'Backspace', 'ArrowLeft'].includes(event.key)) {
+            const back = element.querySelector<HTMLElement>('[data-back]')
+            if (back) {
+              event.preventDefault()
+              back.click()
+            }
+          } else if (
+            event.key === 'ArrowRight' ||
+            ((event.key === 'Enter' || event.key === ' ') && at < 0)
+          ) {
+            event.preventDefault()
+            if (at < 0) rows[0]?.focus()
+            else rows[at]?.click()
+          }
+        }
         const onPointerOver = (event: Event) => {
-          if (!(event instanceof PointerEvent) || event.pointerType === 'touch') return
-          const aim = aimOf(event.target)
-          if (aim && aim !== aimOf(event.relatedTarget)) play('hover')
+          if (!(event instanceof PointerEvent)) return
+          const row = event.target instanceof Element ? event.target.closest('[data-row]') : null
+          if (!(row instanceof HTMLElement) || row === document.activeElement) return
+          if (row instanceof HTMLButtonElement && row.disabled) return
+          row.focus({ preventScroll: true })
+          if (event.pointerType !== 'touch') play('hover')
         }
+        const onPointerMove = (event: Event) => {
+          if (!(event instanceof PointerEvent)) return
+          if (!screen || event.pointerType === 'touch') return
+          const box = screen.getBoundingClientRect()
+          const x = event.clientX - box.left
+          if (mouse) mouse.style.translate = `${((x / box.width - 0.5) * 60).toFixed(1)}% 0`
+        }
+        const onPointerDown = () => mouse?.classList.add('is-down')
+        const onPointerUp = () => mouse?.classList.remove('is-down')
         const onClick = (event: Event) => {
-          if (aimOf(event.target)) play('choose')
+          if (event.target instanceof Element && event.target.closest('button')) play('choose')
         }
-        element.addEventListener('animationstart', onAnimationStart)
+        window.addEventListener('keydown', onKeyDown)
         element.addEventListener('pointerover', onPointerOver)
+        element.addEventListener('pointermove', onPointerMove)
+        element.addEventListener('pointerdown', onPointerDown)
+        window.addEventListener('pointerup', onPointerUp)
         element.addEventListener('click', onClick)
         return () => {
-          element.removeEventListener('animationstart', onAnimationStart)
+          window.removeEventListener('keydown', onKeyDown)
           element.removeEventListener('pointerover', onPointerOver)
+          element.removeEventListener('pointermove', onPointerMove)
+          element.removeEventListener('pointerdown', onPointerDown)
+          window.removeEventListener('pointerup', onPointerUp)
           element.removeEventListener('click', onClick)
         }
       }),
       (cleanup) => Effect.sync(cleanup),
     ).pipe(Effect.as(Message.Synced())),
+})
+
+/** Each page puts the selection on its first row after Back, or main on the row that opened the last page. */
+const PageMounted = Mount.define('PageMounted', {
+  messages: [Message.Synced],
+  execute: ({ element }) =>
+    Effect.sync(() => {
+      const page = (element.getAttribute('data-page') ?? 'main') as Page
+      const rows = rowsOf(element.parentElement ?? element)
+      const from = page === 'main' ? rows.find((row) => row.dataset.to === lastPage) : undefined
+      lastPage = page
+      ;(from ?? rows.find((row) => !('back' in row.dataset)) ?? rows[0])?.focus({
+        preventScroll: true,
+      })
+      return Message.Synced()
+    }),
 })
 
 /* --------------------------------------------------------------------------
@@ -147,335 +178,261 @@ const GLYPHS: ReadonlyArray<{ at: number; paths: ReadonlyArray<string> }> = [
   },
 ]
 
+const glyphPaths = (
+  paths: ReadonlyArray<string>,
+  at: number,
+  delay: number,
+  h: HtmlBuilder<Message>,
+) =>
+  paths.map((d) =>
+    h.path([
+      h.D(d),
+      h.Transform(`translate(${at} 0)`),
+      h.PathLength('1'),
+      h.Style({ 'animation-delay': `${delay}ms` }),
+    ]),
+  )
+
 const wordmark = (h: HtmlBuilder<Message>): Html =>
   h.svg(
+    [h.ViewBox('0 0 720 194'), h.Class('booth-wordmark'), h.Role('img'), h.AriaLabel('Quorum')],
     [
-      h.ViewBox('0 0 720 194'),
-      h.Class('title-wordmark absolute overflow-visible text-foreground'),
-      h.Style({ left: x(MENU.left), top: y(282), width: x(420) }),
-      h.Role('img'),
-      h.AriaLabel('Quorum'),
-    ],
-    [
-      ...GLYPHS.flatMap(({ at, paths }, letter) =>
-        paths.map((d) =>
-          h.path([
-            h.D(d),
-            h.Transform(`translate(${at} 0)`),
-            h.PathLength('1'),
-            h.Fill('none'),
-            h.Stroke('currentColor'),
-            h.StrokeWidth('22'),
-            h.Style({ 'animation-delay': `${letter * 70}ms` }),
-          ]),
-        ),
-      ),
-      h.circle([h.Class('title-node'), h.Cx('89'), h.Cy('180'), h.R('14')]),
+      ...GLYPHS.flatMap(({ at, paths }, letter) => glyphPaths(paths, at, 300 + letter * 70, h)),
+      h.circle([h.Cx('89'), h.Cy('180'), h.R('14')]),
     ],
   )
 
 /* --------------------------------------------------------------------------
-   The menu: a node with one output port. `aim` names the machines an item
-   touches, which the stylesheet lifts while the item is pointed at.
+   Rows. Every page is one list of rows: actions are buttons, records (history,
+   achievements) are rows the selection can still rest on.
    -------------------------------------------------------------------------- */
 
-const item = (
-  label: string,
-  detail: string,
-  aim: string,
-  message: Message,
-  primary: boolean,
-  h: HtmlBuilder<Message>,
-): Html =>
-  h.button(
-    [
-      h.Key(label),
-      h.Type('button'),
-      h.OnClick(message),
-      h.DataAttribute('aim', aim),
-      h.Class(
-        `press group relative flex w-full items-center justify-between gap-4 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-left ${
-          primary
-            ? 'h-[calc(var(--u)*4)] bg-primary-fill text-on-primary-fill shadow-primary hover:brightness-105'
-            : 'h-[calc(var(--u)*3)] text-muted-foreground hover:bg-muted hover:text-foreground'
-        }`,
-      ),
-    ],
-    [
-      primary ? h.empty : h.span([h.Class('title-marker')], []),
-      h.span(
-        [h.Class('flex flex-col')],
-        [
-          h.span([h.Class('text-[max(13px,calc(var(--u)*1.05))] font-medium')], [label]),
-          detail
-            ? h.span(
-                [h.Class('font-mono text-[max(11px,calc(var(--u)*0.78))] tabular-nums opacity-60')],
-                [detail],
-              )
-            : h.empty,
-        ],
-      ),
-      h.span(
-        [
-          h.Class(
-            `transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 ${primary ? 'opacity-60' : 'opacity-0 group-hover:opacity-60'}`,
-          ),
-        ],
-        [icon(h, ArrowRight, 'size-4')],
-      ),
-    ],
-  )
+type Row = Readonly<{
+  key: string
+  label: string
+  detail?: string
+  side?: Html | string | undefined
+  message: Message | null
+  big?: boolean
+  back?: boolean
+  to?: Page
+  pressed?: boolean
+  record?: boolean
+}>
 
-/** A guided Sandbox in the Sandbox menu: passed ones show a check, closed ones a lock. */
-const guidedItem = (model: Model, id: SandboxId, h: HtmlBuilder<Message>): Html => {
-  const open = sandboxOpen(id, model.passed)
-  const passed = model.passed.includes(id)
+const row = (r: Row, h: HtmlBuilder<Message>): Html => {
+  const body = [
+    r.back ? h.span([h.Class('booth-mark'), h.AriaHidden(true)], ['‹']) : h.empty,
+    h.span(
+      [h.Class('booth-label')],
+      [h.span([], [r.label]), r.detail ? h.span([h.Class('booth-detail')], [r.detail]) : h.empty],
+    ),
+    r.side === undefined
+      ? h.empty
+      : typeof r.side === 'string'
+        ? h.span([h.Class('booth-side')], [r.side])
+        : h.span([h.Class('booth-side')], [r.side]),
+  ]
+  const className = `booth-row ${r.big ? 'is-big' : ''} ${r.back ? 'is-back' : ''}`
+  if (r.record)
+    return h.div(
+      [h.Key(r.key), h.Tabindex(-1), h.DataAttribute('row', ''), h.Class(`${className} is-record`)],
+      body,
+    )
   return h.button(
     [
-      h.Key(id),
+      h.Key(r.key),
       h.Type('button'),
-      h.Disabled(!open),
-      h.OnClick(Message.GuidedStarted({ id })),
-      h.DataAttribute('aim', open ? 'server' : ''),
-      h.Class(
-        `press group relative flex h-[calc(var(--u)*2.3)] w-full items-center justify-between gap-4 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-left text-[max(13px,calc(var(--u)*1.05))] font-medium ${
-          open
-            ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            : 'cursor-not-allowed text-muted-foreground/45'
-        }`,
-      ),
+      h.Disabled(r.message === null),
+      ...(r.message ? [h.OnClick(r.message)] : []),
+      h.DataAttribute('row', ''),
+      ...(r.back ? [h.DataAttribute('back', '')] : []),
+      ...(r.to ? [h.DataAttribute('to', r.to)] : []),
+      ...(r.pressed === undefined ? [] : [h.AriaPressed(r.pressed ? 'true' : 'false')]),
+      h.Class(className),
     ],
-    [
-      open ? h.span([h.Class('title-marker')], []) : h.empty,
-      h.span([], [GUIDED[id].name]),
-      passed
-        ? icon(h, Check, 'size-4 text-ok')
-        : open
-          ? h.span(
-              [h.Class('opacity-0 transition-opacity duration-150 group-hover:opacity-60')],
-              [icon(h, ArrowRight, 'size-4')],
-            )
-          : icon(h, Lock, 'size-3.5'),
-    ],
+    body,
   )
 }
 
-const trackLabel = (text: string, h: HtmlBuilder<Message>): Html =>
-  h.span(
-    [
-      h.Key(`track-${text}`),
-      h.Class(
-        'px-[calc(var(--u)*1.5)] pt-[calc(var(--u)*0.6)] pb-[calc(var(--u)*0.1)] font-mono text-[max(10px,calc(var(--u)*0.72))] tracking-[0.1em] text-muted-foreground uppercase',
-      ),
-    ],
-    [text],
-  )
+const done = (h: HtmlBuilder<Message>) => icon(h, Check, 'booth-icon text-ok')
+const locked = (h: HtmlBuilder<Message>) => icon(h, Lock, 'booth-icon')
 
-const sandboxMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
-  h.button(
-    [
-      h.Key('back'),
-      h.Type('button'),
-      h.OnClick(Message.MenuChosen({ menu: 'main' })),
-      h.Class(
-        'press flex h-[calc(var(--u)*2.6)] shrink-0 items-center gap-2 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-[max(13px,calc(var(--u)*1.05))] font-semibold hover:bg-muted',
-      ),
-    ],
-    [icon(h, ArrowLeft, 'size-4 text-muted-foreground'), 'Sandbox'],
-  ),
-  ...TRACKS.flatMap((track) => [
-    trackLabel(ERAS[track.stage]?.name ?? '', h),
-    ...track.sandboxes.map((id) => guidedItem(model, id, h)),
-  ]),
-  h.div(
-    [
-      h.Key('rule'),
-      h.Class('mx-[calc(var(--u)*1.5)] my-[calc(var(--u)*0.4)] h-px shrink-0 bg-hairline'),
-    ],
-    [],
-  ),
-  item(
-    'Free Sandbox',
-    '',
-    'users lb server cache database',
-    Message.FreeSandboxStarted(),
-    false,
-    h,
-  ),
-]
+const backRow = (h: HtmlBuilder<Message>): Html =>
+  row({ key: 'back', label: 'Back', message: Message.MenuChosen({ menu: 'main' }), back: true }, h)
 
-const back = (label: string, h: HtmlBuilder<Message>, right: Html = h.empty): Html =>
-  h.div(
-    [
-      h.Key('back'),
-      h.Class('flex shrink-0 items-center justify-between gap-2 pr-[calc(var(--u)*1)]'),
-    ],
-    [
-      h.button(
-        [
-          h.Type('button'),
-          h.OnClick(Message.MenuChosen({ menu: 'main' })),
-          h.Class(
-            'press flex h-[calc(var(--u)*2.6)] items-center gap-2 rounded-[calc(var(--u)*1)] px-[calc(var(--u)*1.5)] text-[max(13px,calc(var(--u)*1.05))] font-semibold hover:bg-muted',
-          ),
-        ],
-        [icon(h, ArrowLeft, 'size-4 text-muted-foreground'), label],
-      ),
-      right,
-    ],
-  )
+const group = (text: string, h: HtmlBuilder<Message>): Html =>
+  h.span([h.Key(`group-${text}`), h.Class('booth-group')], [text])
 
-const legacyBadge = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.span(
-    [h.Class('font-mono text-[max(11px,calc(var(--u)*0.8))] tabular-nums text-muted-foreground')],
-    [`${model.founder.legacy} Legacy`],
-  )
-
-/** A row of a list page: a name, a short figure, and a state on the right. */
-const listRow = (
-  key: string,
-  label: string,
-  detail: string,
-  right: Html | string,
-  message: Message | null,
-  selected: boolean,
-  h: HtmlBuilder<Message>,
-): Html =>
-  h.button(
-    [
-      h.Key(key),
-      h.Type('button'),
-      h.Disabled(message === null),
-      ...(message ? [h.OnClick(message)] : []),
-      h.AriaPressed(selected ? 'true' : 'false'),
-      h.Class(
-        `press flex min-h-[calc(var(--u)*2.4)] w-full items-center justify-between gap-3 rounded-[calc(var(--u)*0.8)] px-[calc(var(--u)*1.5)] py-[calc(var(--u)*0.35)] text-left ${
-          selected
-            ? 'bg-muted text-foreground'
-            : message
-              ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              : 'cursor-not-allowed text-muted-foreground/45'
-        }`,
-      ),
-    ],
-    [
-      h.span(
-        [h.Class('flex min-w-0 flex-col')],
-        [
-          h.span([h.Class('text-[max(13px,calc(var(--u)*1))] font-medium')], [label]),
-          detail
-            ? h.span(
-                [h.Class('truncate text-[max(11px,calc(var(--u)*0.72))] opacity-70')],
-                [detail],
-              )
-            : h.empty,
-        ],
-      ),
-      typeof right === 'string'
-        ? h.span(
-            [h.Class('shrink-0 font-mono text-[max(11px,calc(var(--u)*0.78))] tabular-nums')],
-            [right],
-          )
-        : right,
-    ],
-  )
-
-const foundMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
-  const founder = model.founder
-  const founding = foundingOf(founder)
+const mainRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const game = model.board.game
+  const veteran = model.founder.history.length > 0
   return [
-    back('New company', h, legacyBadge(model, h)),
-    trackLabel('Venture', h),
-    ...VENTURE_IDS.map((id) => {
-      const def = VENTURES[id]
-      const owned = founder.ventures.includes(id)
-      return listRow(
-        id,
-        def.name,
-        def.summary,
-        owned
-          ? id === founding.venture
-            ? icon(h, Check, 'size-4 text-ok')
-            : `×${def.legacy.toFixed(1)}`
-          : def.bootstrapped
-            ? icon(h, Lock, 'size-3.5')
-            : `${def.cost} Legacy`,
-        owned || (!def.bootstrapped && founder.legacy >= def.cost)
-          ? Message.VentureChosen({ id })
-          : null,
-        id === founding.venture,
-        h,
-      )
-    }),
-    trackLabel('Mutators', h),
-    ...MUTATOR_IDS.map((id) =>
-      listRow(
-        id,
-        MUTATORS[id].name,
-        MUTATORS[id].rule,
-        founder.mutators.includes(id)
-          ? founding.mutators.includes(id)
-            ? icon(h, Check, 'size-4 text-ok')
-            : `+${Math.round(MUTATORS[id].legacy * 100)}%`
-          : icon(h, Lock, 'size-3.5'),
-        founder.mutators.includes(id) ? Message.MutatorToggled({ id }) : null,
-        founding.mutators.includes(id),
-        h,
-      ),
+    ...(model.saved
+      ? [
+          row(
+            {
+              key: 'continue',
+              label: 'Continue',
+              detail: `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+              message: Message.Continued(),
+              big: true,
+            },
+            h,
+          ),
+        ]
+      : []),
+    row(
+      {
+        key: 'new',
+        label: model.saved ? 'New company' : 'Start a company',
+        message: veteran ? Message.MenuChosen({ menu: 'found' }) : Message.NewCompanyStarted(),
+        big: !model.saved,
+        to: 'found',
+      },
+      h,
     ),
-    h.div(
-      [
-        h.Key('rule'),
-        h.Class('mx-[calc(var(--u)*1.5)] my-[calc(var(--u)*0.4)] h-px shrink-0 bg-hairline'),
-      ],
-      [],
+    row({ key: 'preseed', label: 'Start in Pre-seed', message: Message.PreseedStarted() }, h),
+    row(
+      {
+        key: 'sandbox',
+        label: 'Sandbox',
+        message: Message.MenuChosen({ menu: 'sandbox' }),
+        to: 'sandbox',
+      },
+      h,
     ),
-    item(
-      'Found',
-      `${startEra(founding)} · Legacy ×${legacyMultiplier(founding).toFixed(2)}`,
-      'users lb server',
-      Message.CompanyFounded(),
-      true,
+    row(
+      {
+        key: 'challenges',
+        label: 'Challenges',
+        message: Message.MenuChosen({ menu: 'challenges' }),
+        to: 'challenges',
+      },
       h,
     ),
   ]
 }
 
-const challengesMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+const sandboxRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  backRow(h),
+  ...TRACKS.flatMap((track) => [
+    group(ERAS[track.stage]?.name ?? '', h),
+    ...track.sandboxes.map((id) => {
+      const open = sandboxOpen(id, model.passed)
+      return row(
+        {
+          key: id,
+          label: GUIDED[id].name,
+          side: model.passed.includes(id) ? done(h) : open ? undefined : locked(h),
+          message: open ? Message.GuidedStarted({ id }) : null,
+        },
+        h,
+      )
+    }),
+  ]),
+  group('', h),
+  row({ key: 'free', label: 'Free Sandbox', message: Message.FreeSandboxStarted() }, h),
+]
+
+const foundRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const founder = model.founder
+  const founding = foundingOf(founder)
+  return [
+    backRow(h),
+    group('Venture', h),
+    ...VENTURE_IDS.map((id) => {
+      const def = VENTURES[id]
+      const owned = founder.ventures.includes(id)
+      return row(
+        {
+          key: id,
+          label: def.name,
+          detail: def.summary,
+          side: owned
+            ? id === founding.venture
+              ? done(h)
+              : `×${def.legacy.toFixed(1)}`
+            : def.bootstrapped
+              ? locked(h)
+              : `${def.cost} Legacy`,
+          message:
+            owned || (!def.bootstrapped && founder.legacy >= def.cost)
+              ? Message.VentureChosen({ id })
+              : null,
+          pressed: id === founding.venture,
+        },
+        h,
+      )
+    }),
+    group('Mutators', h),
+    ...MUTATOR_IDS.map((id) =>
+      row(
+        {
+          key: id,
+          label: MUTATORS[id].name,
+          detail: MUTATORS[id].rule,
+          side: founder.mutators.includes(id)
+            ? founding.mutators.includes(id)
+              ? done(h)
+              : `+${Math.round(MUTATORS[id].legacy * 100)}%`
+            : locked(h),
+          message: founder.mutators.includes(id) ? Message.MutatorToggled({ id }) : null,
+          pressed: founding.mutators.includes(id),
+        },
+        h,
+      ),
+    ),
+    group('', h),
+    row(
+      {
+        key: 'found',
+        label: 'Found',
+        detail: `${startEra(founding)} · Legacy ×${legacyMultiplier(founding).toFixed(2)}`,
+        message: Message.CompanyFounded(),
+        big: true,
+      },
+      h,
+    ),
+  ]
+}
+
+const challengeRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   const founder = model.founder
   const drill = model.today ? dailyDrill(model.today) : null
-  const row = (id: string, name: string, detail: string, legacy: number, open: boolean) =>
-    listRow(
-      id,
-      name,
-      detail,
-      founder.completed.includes(id)
-        ? icon(h, Check, 'size-4 text-ok')
-        : open
-          ? legacy > 0
-            ? `${legacy} Legacy`
-            : ''
-          : icon(h, Lock, 'size-3.5'),
-      open ? Message.ChallengeStarted({ id }) : null,
-      false,
+  const challenge = (id: string, name: string, detail: string, legacy: number, open: boolean) =>
+    row(
+      {
+        key: id,
+        label: name,
+        detail,
+        side: founder.completed.includes(id)
+          ? done(h)
+          : open
+            ? legacy > 0
+              ? `${legacy} Legacy`
+              : undefined
+            : locked(h),
+        message: open ? Message.ChallengeStarted({ id }) : null,
+      },
       h,
     )
   return [
-    back('Challenges', h, legacyBadge(model, h)),
-    ...(drill ? [row(drill.id, 'Daily drill', drill.brief, 0, true)] : []),
+    backRow(h),
+    ...(drill ? [challenge(drill.id, 'Daily drill', drill.brief, 0, true)] : []),
     ...ERAS.flatMap((era, stage) => {
-      const list = CHALLENGES.filter((challenge) => challenge.era === stage)
+      const list = CHALLENGES.filter((entry) => entry.era === stage)
       return list.length === 0
         ? []
         : [
-            trackLabel(era.name, h),
-            ...list.map((challenge) =>
-              row(
-                challenge.id,
-                challenge.name,
-                challenge.brief,
-                challenge.legacy,
-                challengeOpen(challenge, founder.completed),
+            group(era.name, h),
+            ...list.map((entry) =>
+              challenge(
+                entry.id,
+                entry.name,
+                entry.brief,
+                entry.legacy,
+                challengeOpen(entry, founder.completed),
               ),
             ),
           ]
@@ -483,204 +440,234 @@ const challengesMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Ht
   ]
 }
 
-const legacyMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
-  const founder = model.founder
-  return [
-    back('Legacy shop', h, legacyBadge(model, h)),
-    ...PERK_IDS.map((id) => {
-      const def = PERKS[id]
-      const level = levelOf(founder, id)
-      const price = perkPrice(founder, id)
-      return listRow(
-        id,
-        `${def.name} ${level}/${def.costs.length}`,
-        def.effect,
-        price === null ? icon(h, Check, 'size-4 text-ok') : `${price} Legacy`,
-        price !== null && founder.legacy >= price ? Message.PerkBought({ id }) : null,
-        false,
-        h,
-      )
-    }),
-  ]
-}
+const legacyRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  backRow(h),
+  ...PERK_IDS.map((id) => {
+    const def = PERKS[id]
+    const price = perkPrice(model.founder, id)
+    return row(
+      {
+        key: id,
+        label: `${def.name} ${levelOf(model.founder, id)}/${def.costs.length}`,
+        detail: def.effect,
+        side: price === null ? done(h) : `${price} Legacy`,
+        message:
+          price !== null && model.founder.legacy >= price ? Message.PerkBought({ id }) : null,
+      },
+      h,
+    )
+  }),
+]
 
-const historyMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
-  back('History', h),
+const historyRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  backRow(h),
   ...(model.founder.history.length === 0
-    ? [trackLabel('No Exits yet', h)]
+    ? [group('No Exits yet', h)]
     : model.founder.history
-        .map((row, index) =>
-          listRow(
-            `h${index}`,
-            `${EXITS[row.exit].name} · ${VENTURES[row.founding.venture].name}`,
-            `${ERAS[row.stage]?.name ?? ''} · ${compact(row.peak)} users · ${clock(row.time)}`,
-            `+${row.legacy}`,
-            null,
-            false,
+        .map((entry, index) =>
+          row(
+            {
+              key: `h${index}`,
+              label: `${EXITS[entry.exit].name} · ${VENTURES[entry.founding.venture].name}`,
+              detail: `${ERAS[entry.stage]?.name ?? ''} · ${compact(entry.peak)} users · ${clock(entry.time)}`,
+              side: `+${entry.legacy}`,
+              message: null,
+              record: true,
+            },
             h,
           ),
         )
         .toReversed()),
 ]
 
-const achievementsMenu = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
-  back(
-    'Achievements',
-    h,
-    h.span(
-      [h.Class('font-mono text-[max(11px,calc(var(--u)*0.8))] tabular-nums text-muted-foreground')],
-      [`${model.founder.achievements.length}/${ACHIEVEMENT_IDS.length}`],
-    ),
-  ),
-  h.ul(
-    [h.Key('achievements'), h.Class('flex flex-col')],
-    ACHIEVEMENT_IDS.map((id) => {
-      const def = ACHIEVEMENTS[id]
-      const earned = model.founder.achievements.includes(id)
-      return h.li(
-        [
-          h.Key(id),
-          h.Class(
-            `flex min-h-[calc(var(--u)*2.4)] items-center justify-between gap-3 px-[calc(var(--u)*1.5)] py-[calc(var(--u)*0.35)] ${earned ? 'text-foreground' : 'text-muted-foreground'}`,
-          ),
-        ],
-        [
-          h.span(
-            [h.Class('flex min-w-0 flex-col')],
-            [
-              h.span([h.Class('text-[max(13px,calc(var(--u)*1))] font-medium')], [def.name]),
-              h.span([h.Class('text-[max(11px,calc(var(--u)*0.72))]')], [def.condition]),
-            ],
-          ),
-          earned
-            ? h.span(
-                [h.Class('flex shrink-0 items-center text-ok')],
-                [icon(h, Check, 'size-4'), h.span([h.Class('sr-only')], ['Earned'])],
-              )
-            : h.span(
-                [h.Class('flex shrink-0 items-center')],
-                [icon(h, Lock, 'size-3.5'), h.span([h.Class('sr-only')], ['Not yet'])],
-              ),
-        ],
-      )
-    }),
-  ),
+const achievementRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  backRow(h),
+  ...ACHIEVEMENT_IDS.map((id) => {
+    const earned = model.founder.achievements.includes(id)
+    return row(
+      {
+        key: id,
+        label: ACHIEVEMENTS[id].name,
+        detail: ACHIEVEMENTS[id].condition,
+        side: h.span(
+          [h.Class('flex items-center')],
+          [
+            earned ? done(h) : locked(h),
+            h.span([h.Class('sr-only')], [earned ? 'Earned' : 'Not yet']),
+          ],
+        ),
+        message: null,
+        record: true,
+      },
+      h,
+    )
+  }),
 ]
 
-const menu = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const game = model.board.game
-  const page = menuOf(model.route)
-  return h.nav(
+/** Settings as rows: each switch shows On or Off, and Language steps to the next one. */
+const settingsRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const at = supportedLocales.findIndex(({ value }) => value === model.prefs.locale)
+  const next = supportedLocales[(at + 1) % supportedLocales.length]!
+  const toggle = (key: string, label: string, on: boolean, message: Message) =>
+    row({ key, label, side: on ? 'On' : 'Off', message, pressed: on }, h)
+  return [
+    backRow(h),
+    toggle(
+      'muted',
+      'Mute sound (M)',
+      model.prefs.muted,
+      Message.PrefsChanged({ message: PrefsMessage.MuteToggled() }),
+    ),
+    toggle(
+      'auto-pause',
+      'Pause on SEV1 and SEV2',
+      model.prefs.autoPause,
+      Message.PrefsChanged({ message: PrefsMessage.AutoPauseToggled() }),
+    ),
+    toggle(
+      'blur-pause',
+      'Pause when the window loses focus',
+      model.prefs.blurPause,
+      Message.PrefsChanged({ message: PrefsMessage.BlurPauseToggled() }),
+    ),
+    toggle(
+      'motion',
+      'Reduce motion',
+      model.prefs.motion === 'reduce',
+      Message.PrefsChanged({ message: PrefsMessage.MotionToggled() }),
+    ),
+    toggle(
+      'agent',
+      'Agent access',
+      model.prefs.agentAccess,
+      Message.PrefsChanged({ message: PrefsMessage.AgentAccessToggled() }),
+    ),
+    row(
+      {
+        key: 'language',
+        label: 'Language',
+        side: supportedLocales[at]?.label ?? '',
+        message: Message.PrefsChanged({
+          message: PrefsMessage.LocaleChosen({ locale: next.value }),
+        }),
+      },
+      h,
+    ),
+    row({ key: 'copy', label: 'Copy state as JSON', message: Message.StateCopied() }, h),
+  ]
+}
+
+const PAGES: Record<
+  Page,
+  Readonly<{ title: string; rows: (model: Model, h: HtmlBuilder<Message>) => ReadonlyArray<Html> }>
+> = {
+  main: { title: '', rows: mainRows },
+  found: { title: 'New company', rows: foundRows },
+  sandbox: { title: 'Sandbox', rows: sandboxRows },
+  challenges: { title: 'Challenges', rows: challengeRows },
+  legacy: { title: 'Legacy shop', rows: legacyRows },
+  history: { title: 'History', rows: historyRows },
+  achievements: { title: 'Achievements', rows: achievementRows },
+  settings: { title: 'Settings', rows: settingsRows },
+}
+
+/** A page's heading: where it is, and the figure it spends or counts. */
+const crumb = (model: Model, page: Page, h: HtmlBuilder<Message>): Html => {
+  const figure =
+    page === 'found' || page === 'challenges' || page === 'legacy'
+      ? `${model.founder.legacy} Legacy`
+      : page === 'achievements'
+        ? `${model.founder.achievements.length}/${ACHIEVEMENT_IDS.length}`
+        : ''
+  return h.div(
+    [h.Class('booth-crumb')],
+    page === 'main'
+      ? []
+      : [
+          h.span([], ['Main menu']),
+          h.span([h.AriaHidden(true)], [' › ']),
+          h.b([], [PAGES[page].title]),
+          figure ? h.span([h.Class('booth-figure')], [figure]) : h.empty,
+        ],
+  )
+}
+
+const hint = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('booth-hint'), h.AriaHidden(true)],
     [
-      h.AriaLabel('Main menu'),
-      h.Class(
-        'title-menu absolute flex flex-col gap-[calc(var(--u)*0.25)] overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-[calc(var(--u)*1.5)] bg-surface shadow-card',
+      ['↑↓', 'Select'],
+      ['Enter', 'Open'],
+      ['Esc', 'Back'],
+    ].map(([key, label]) => h.span([], [h.kbd([], [key ?? '']), h.span([], [label ?? ''])])),
+  )
+
+/* --------------------------------------------------------------------------
+   The status column: the saved Company at a glance, from the save itself.
+   -------------------------------------------------------------------------- */
+
+/** The busiest Node of the saved Design, by utilization. */
+const busiest = (game: Game): { name: string; load: number } | null => {
+  const flow = solveFlow(game)
+  let best: { name: string; load: number } | null = null
+  for (const node of game.nodes) {
+    if (COMPONENTS[node.type].fixed) continue
+    const load = flow.nodes[node.id]?.utilization ?? 0
+    if (!best || load > best.load) best = { name: COMPONENTS[node.type].name, load }
+  }
+  return best
+}
+
+/** The users line over the last Samples, in a 100 x 30 box. */
+const sparkOf = (game: Game): string => {
+  const users = game.history.slice(-60).map((sample) => sample.users)
+  if (users.length < 2) return ''
+  const low = Math.min(...users)
+  const span = Math.max(...users) - low || 1
+  return `M${users
+    .map(
+      (value, i) =>
+        `${((i / (users.length - 1)) * 100).toFixed(1)} ${(28 - ((value - low) / span) * 26).toFixed(1)}`,
+    )
+    .join(' L')}`
+}
+
+const status = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const game = model.board.game
+  const hot = busiest(game)
+  const spark = sparkOf(game)
+  const tone = !hot ? '' : hot.load >= 0.9 ? 'is-bad' : hot.load >= 0.7 ? 'is-warn' : 'is-ok'
+  return h.aside(
+    [h.Class('booth-status')],
+    [
+      h.span(
+        [h.Class('booth-status-era')],
+        [h.span([], [eraOf(game).name]), ` · ${clock(game.time)}`],
       ),
-      h.Style({
-        left: x(MENU.left),
-        top: y(MENU.top),
-        width: x(MENU.width),
-        padding: x(MENU.pad),
-        // Above the corner rule and the playtest log button: a longer list scrolls.
-        maxHeight: y(MENU_BOTTOM - MENU.top),
-      }),
+      h.span([h.Class('booth-status-users')], [compact(game.users)]),
+      h.span([h.Class('booth-status-unit')], ['users']),
+      spark
+        ? h.svg(
+            [
+              h.ViewBox('0 0 100 30'),
+              h.Attribute('preserveAspectRatio', 'none'),
+              h.AriaHidden(true),
+            ],
+            [h.path([h.D(spark)])],
+          )
+        : h.empty,
+      hot
+        ? h.span(
+            [h.Class(`booth-status-hot ${tone}`)],
+            [h.i([], []), h.span([], [hot.name]), ` ${Math.round(hot.load * 100)}%`],
+          )
+        : h.empty,
     ],
-    page === 'sandbox'
-      ? sandboxMenu(model, h)
-      : page === 'found'
-        ? foundMenu(model, h)
-        : page === 'legacy'
-          ? legacyMenu(model, h)
-          : page === 'history'
-            ? historyMenu(model, h)
-            : page === 'challenges'
-              ? challengesMenu(model, h)
-              : page === 'achievements'
-                ? achievementsMenu(model, h)
-                : [
-                    ...(model.saved
-                      ? [
-                          item(
-                            'Continue',
-                            `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
-                            'users lb server cache database',
-                            Message.Continued(),
-                            true,
-                            h,
-                          ),
-                        ]
-                      : []),
-                    item(
-                      model.saved ? 'New company' : 'Start a company',
-                      '',
-                      'users',
-                      model.founder.history.length > 0
-                        ? Message.MenuChosen({ menu: 'found' })
-                        : Message.NewCompanyStarted(),
-                      !model.saved,
-                      h,
-                    ),
-                    ...(model.founder.history.length > 0
-                      ? [
-                          item(
-                            'Legacy shop',
-                            `${model.founder.legacy} Legacy`,
-                            'server',
-                            Message.MenuChosen({ menu: 'legacy' }),
-                            false,
-                            h,
-                          ),
-                          item(
-                            'History',
-                            '',
-                            'database',
-                            Message.MenuChosen({ menu: 'history' }),
-                            false,
-                            h,
-                          ),
-                        ]
-                      : []),
-                    item('Start in Pre-seed', '', 'lb server', Message.PreseedStarted(), false, h),
-                    item(
-                      'Sandbox',
-                      '',
-                      'cache database',
-                      Message.MenuChosen({ menu: 'sandbox' }),
-                      false,
-                      h,
-                    ),
-                    item(
-                      'Challenges',
-                      '',
-                      'lb server database',
-                      Message.MenuChosen({ menu: 'challenges' }),
-                      false,
-                      h,
-                    ),
-                    item(
-                      'Achievements',
-                      '',
-                      'server',
-                      Message.MenuChosen({ menu: 'achievements' }),
-                      false,
-                      h,
-                    ),
-                    item(
-                      'Settings',
-                      '',
-                      'lb',
-                      Message.PanelOpened({ panel: 'settings' }),
-                      false,
-                      h,
-                    ),
-                  ],
   )
 }
 
 /* --------------------------------------------------------------------------
-   The clock-in splash. Browsers play sound only after a click or key press,
-   so a fresh load opens on a badge reader: the badge goes in, the reader
-   beeps, and the title boots with its sounds.
+   The taskbar: the Founder's pages, Settings, and the wall clock.
    -------------------------------------------------------------------------- */
 
 const ReaderClock = Mount.define('ReaderClock', {
@@ -700,6 +687,219 @@ const ReaderClock = Mount.define('ReaderClock', {
       (timer) => Effect.sync(() => clearInterval(timer)),
     ).pipe(Effect.as(Message.Synced())),
 })
+
+const taskbar = (model: Model, page: Page, h: HtmlBuilder<Message>): Html => {
+  const tool = (
+    menu: typeof MenuPage.Type,
+    label: string,
+    glyph: Parameters<typeof icon>[1],
+    extra = '',
+  ) =>
+    h.button(
+      [
+        h.Key(menu),
+        h.Type('button'),
+        h.Title(label),
+        h.AriaLabel(label),
+        h.AriaPressed(page === menu ? 'true' : 'false'),
+        h.OnClick(Message.MenuChosen({ menu: page === menu ? 'main' : menu })),
+      ],
+      [icon(h, glyph, 'booth-icon'), extra ? h.span([h.Class('booth-figure')], [extra]) : h.empty],
+    )
+  const veteran = model.founder.history.length > 0
+  return h.nav(
+    [h.Class('booth-taskbar'), h.AriaLabel('Taskbar')],
+    [
+      ...(veteran
+        ? [
+            tool('legacy', 'Legacy shop', Store, `${model.founder.legacy}`),
+            tool('history', 'History', ScrollText),
+          ]
+        : []),
+      tool('achievements', 'Achievements', Trophy),
+      tool('settings', 'Settings', Settings),
+      h.span([h.Class('booth-clock'), h.OnMount(ReaderClock())], ['--:--']),
+    ],
+  )
+}
+
+/** The host the monitor connects to, and what it restores there: the Company, a Sandbox, or a Challenge. */
+const sessionOf = (model: Model): readonly [string, string] => {
+  const game = model.board.game
+  if (model.board.challenge) {
+    const challenge = challengeById(model.board.challenge.id)
+    return [
+      `drill@${model.board.challenge.id.replace(':', '-')}`,
+      challenge ? `${challenge.name} · ${challenge.brief}` : '',
+    ]
+  }
+  if (model.board.sandbox)
+    return [
+      `you@sandbox-${model.board.sandbox.id ?? 'free'}`,
+      model.board.sandbox.id ? GUIDED[model.board.sandbox.id].name : 'Free Sandbox',
+    ]
+  return ['oncall@prod', `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`]
+}
+
+/** Leaving the title: the screen connects to the board before it opens. */
+const terminal = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const [host, line] = sessionOf(model)
+  return h.div(
+    [h.Key('term'), h.Class('booth-term'), h.AriaLive('polite')],
+    [
+      h.p([], [h.b([], [`$ ssh ${host}`])]),
+      h.p([], [line]),
+      h.p([h.Class('text-ok')], ['Connected.']),
+      h.span([h.Class('booth-caret')], []),
+    ],
+  )
+}
+
+const screen = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const page = menuOf(model.route)
+  return h.div(
+    [h.Class(`booth-screen ${model.saved ? '' : 'is-new'}`)],
+    [
+      h.section(
+        [h.Class('booth-home')],
+        [
+          wordmark(h),
+          crumb(model, page, h),
+          h.nav(
+            [
+              h.Key(page),
+              h.Class('booth-list'),
+              h.AriaLabel('Main menu'),
+              h.DataAttribute('page', page),
+              h.OnMount(PageMounted()),
+            ],
+            PAGES[page].rows(model, h),
+          ),
+          hint(h),
+        ],
+      ),
+      model.saved ? status(model, h) : h.empty,
+      taskbar(model, page, h),
+      model.connecting ? terminal(model, h) : h.empty,
+    ],
+  )
+}
+
+/* --------------------------------------------------------------------------
+   The desk, seen straight on at eye level like the monitor: a keyboard slab
+   whose keycap tops catch the screen's light and light up when pressed, and a
+   mouse that follows the pointer.
+   -------------------------------------------------------------------------- */
+
+/** The keycap tops seen over the slab's front edge, with the keys the driver lights by name. */
+const KEYS: ReadonlyArray<readonly [string, string?]> = [
+  ['', 'Escape'],
+  ...Array.from({ length: 5 }, () => [''] as const),
+  ['space', 'Space'],
+  ...Array.from({ length: 4 }, () => [''] as const),
+  ['', 'Backspace'],
+  ['wide', 'Enter'],
+  ['', 'ArrowLeft'],
+  ['', 'ArrowUp'],
+  ['', 'ArrowDown'],
+  ['', 'ArrowRight'],
+]
+
+const desk = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('booth-desk'), h.AriaHidden(true)],
+    [
+      h.div(
+        [h.Class('booth-keyboard')],
+        [
+          h.div(
+            [h.Class('booth-keyrow')],
+            KEYS.map(([size, name]) =>
+              h.span(
+                [
+                  h.Class(`booth-key ${size ? `is-${size}` : ''}`),
+                  ...(name ? [h.DataAttribute('k', name)] : []),
+                ],
+                [],
+              ),
+            ),
+          ),
+        ],
+      ),
+      h.div([h.Class('booth-mouse')], []),
+    ],
+  )
+
+/** The edge of the screen: the playtest tools and the warning that saves can break. */
+const strip = (h: HtmlBuilder<Message>): Html =>
+  h.header(
+    [h.Class('booth-strip')],
+    [
+      h.button(
+        [h.Type('button'), h.OnClick(Message.LogExported())],
+        [
+          icon(h, Download, 'size-3.5'),
+          h.span([h.Class('booth-strip-label')], ['Export playtest log']),
+        ],
+      ),
+      h.a(
+        [
+          h.Href('https://github.com/elianiva/quorum/issues'),
+          h.Target('_blank'),
+          h.Rel('noreferrer noopener'),
+        ],
+        [
+          h.span([h.Class('booth-strip-dot')], []),
+          h.span([], ['Playtest build']),
+          ' · ',
+          h.span([], ['Saves can reset']),
+          ' · ',
+          h.span([], ['Feedback']),
+          icon(h, ArrowUpRight, 'size-3.5'),
+        ],
+      ),
+    ],
+  )
+
+const booth = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Key('booth'), h.Class('booth'), h.OnMount(BoothDriver())],
+    [
+      h.div(
+        [h.Class('booth-stage')],
+        [
+          desk(h),
+          h.div([h.Class('booth-neck')], []),
+          h.div(
+            [h.Class('booth-monitor')],
+            [
+              screen(model, h),
+              h.div(
+                [h.Class('booth-chin'), h.AriaHidden(true)],
+                [
+                  h.svg(
+                    [h.ViewBox('0 0 100 194')],
+                    [
+                      ...GLYPHS[0]!.paths.map((d) => h.path([h.D(d)])),
+                      h.circle([h.Cx('89'), h.Cy('180'), h.R('14')]),
+                    ],
+                  ),
+                  h.span([h.Class(`booth-power ${model.connecting ? 'is-busy' : ''}`)], []),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      strip(h),
+    ],
+  )
+
+/* --------------------------------------------------------------------------
+   The clock-in splash. Browsers play sound only after a click or key press,
+   so a fresh load opens on a badge reader: the badge goes in, the reader
+   beeps, and the booth follows with its sounds.
+   -------------------------------------------------------------------------- */
 
 const reader = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -757,187 +957,12 @@ const reader = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
-/* --------------------------------------------------------------------------
-   The overlay: the cable from the menu's port to the bench's lead, and the
-   requests that ride it, four per bench loop.
-   -------------------------------------------------------------------------- */
-
-const LOOP = 3.6
-const TRAVEL = 1.4
-/** When the bench, once assembled, sends its first request on (START in hero.mjs).
- *  Cable packets leave so they reach the users plate just before each one. */
-const BENCH_START = 2.3
-const FIRST_DEPARTURE = BENCH_START + LOOP / 4 - 0.15 - TRAVEL
-
-const packet = (begin: number, h: HtmlBuilder<Message>): Html =>
-  h.g(
-    [h.Opacity('0')],
-    [
-      h.animate([
-        h.Attribute('attributeName', 'opacity'),
-        h.Attribute('dur', `${LOOP}s`),
-        h.Attribute('begin', `${begin}s`),
-        h.Attribute('repeatCount', 'indefinite'),
-        h.Attribute(
-          'keyTimes',
-          `0;0.03;${(TRAVEL / LOOP - 0.03).toFixed(3)};${(TRAVEL / LOOP).toFixed(3)};1`,
-        ),
-        h.Attribute('values', '0;1;1;0;0'),
-      ]),
-      h.animateMotion([
-        h.Attribute('path', ROUTE),
-        h.Attribute('dur', `${LOOP}s`),
-        h.Attribute('begin', `${begin}s`),
-        h.Attribute('repeatCount', 'indefinite'),
-        h.Attribute('calcMode', 'linear'),
-        h.Attribute('keyPoints', '0;1;1'),
-        h.Attribute('keyTimes', `0;${(TRAVEL / LOOP).toFixed(3)};1`),
-      ]),
-      h.circle([h.R('9'), h.Class('fill-signal opacity-20')]),
-      h.circle([h.R('3.8'), h.Class('fill-signal')]),
-    ],
-  )
-
-const overlay = (h: HtmlBuilder<Message>): Html =>
-  h.svg(
-    [
-      h.ViewBox('0 0 1600 1000'),
-      h.Class('title-overlay pointer-events-none absolute inset-0 size-full overflow-visible'),
-      h.AriaHidden(true),
-    ],
-    [
-      h.path([h.Class('title-cable-edge'), h.D(CABLE), h.PathLength('1'), h.Style(CABLE_STYLE)]),
-      h.path([h.Class('title-cable'), h.D(CABLE), h.PathLength('1'), h.Style(CABLE_STYLE)]),
-      h.g(
-        [h.Class('title-packets')],
-        [0, 1, 2, 3].map((n) => packet(FIRST_DEPARTURE + n * (LOOP / 4), h)),
-      ),
-      h.circle([h.Class('title-port'), h.Cx(`${PORT[0]}`), h.Cy(`${PORT[1]}`), h.R('9')]),
-      h.circle([h.Class('title-port-core'), h.Cx(`${PORT[0]}`), h.Cy(`${PORT[1]}`), h.R('3.5')]),
-    ],
-  )
-
-/* --------------------------------------------------------------------------
-   The drawing frame around the screen: hairline border, corner marks and edge
-   rulers. The build stamp at the foot holds the playtest tools.
-   -------------------------------------------------------------------------- */
-
-const CORNERS = [
-  'top-0 left-0 border-t border-l',
-  'top-0 right-0 border-t border-r',
-  'bottom-0 left-0 border-b border-l',
-  'bottom-0 right-0 border-b border-r',
-]
-
-const frame = (h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [h.Class('title-frame pointer-events-none absolute inset-6')],
-    [
-      h.span([h.Class('title-ruler title-ruler-x')], []),
-      h.span([h.Class('title-ruler title-ruler-y')], []),
-      ...CORNERS.map((corner) => h.span([h.Class(`title-corner absolute size-4 ${corner}`)], [])),
-    ],
-  )
-
-const stamp = (h: HtmlBuilder<Message>): Html =>
-  h.footer(
-    [
-      h.Class(
-        'absolute right-10 bottom-9 left-10 flex items-center justify-between font-mono text-[10.5px] tracking-[0.12em] text-muted-foreground uppercase',
-      ),
-    ],
-    [
-      h.button(
-        [
-          h.Type('button'),
-          h.OnClick(Message.LogExported()),
-          h.DataAttribute('aim', 'database'),
-          h.Class(
-            'press -mx-2 flex items-center gap-2 rounded-md px-2 py-1 uppercase hover:bg-muted hover:text-foreground',
-          ),
-        ],
-        [icon(h, Download, 'size-3.5'), 'Export playtest log'],
-      ),
-      h.span([], ['Playtest build']),
-    ],
-  )
-
-/** Saves can break between builds, so the title says so before anyone plays. */
-const notice = (h: HtmlBuilder<Message>): Html =>
-  h.aside(
-    [
-      h.Class(
-        'title-notice absolute top-10 right-10 left-10 z-10 sm:right-auto flex max-w-sm flex-col gap-1.5 rounded-lg border border-signal/30 bg-page/85 px-4 py-3 text-[12.5px] leading-relaxed text-muted-foreground backdrop-blur-sm',
-      ),
-    ],
-    [
-      h.p([h.Class('font-medium text-foreground')], ['This game is not finished yet']),
-      h.p(
-        [],
-        [
-          'Your saves can break or reset when the game changes. Treat this as a playtest, not a final release.',
-        ],
-      ),
-      h.a(
-        [
-          h.Href('https://github.com/elianiva/quorum/issues'),
-          h.Target('_blank'),
-          h.Rel('noreferrer noopener'),
-          h.Class(
-            'group inline-flex w-fit items-center gap-1 text-foreground underline decoration-foreground/25 underline-offset-[3px] transition-colors hover:decoration-foreground',
-          ),
-        ],
-        [
-          'Send feedback or report a bug on GitHub',
-          icon(
-            h,
-            ArrowUpRight,
-            'size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-px group-hover:-translate-y-px',
-          ),
-        ],
-      ),
-    ],
-  )
-
 export const titleScreen = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.main(
     [
       h.Class(
         'title-screen dark relative grid h-full place-items-center overflow-hidden bg-page text-foreground',
       ),
-      h.OnMount(TitleSounds()),
     ],
-    [
-      h.div([h.Class('title-grid pointer-events-none absolute inset-0')], []),
-      frame(h),
-      model.gate !== 'open'
-        ? reader(model, h)
-        : h.div(
-            [h.Key('stage'), h.Class('title-stage relative')],
-            [
-              h.div(
-                [h.Class('title-art')],
-                [
-                  h.svg(
-                    [
-                      h.ViewBox('0 0 1600 1000'),
-                      h.Class('pointer-events-none absolute inset-0 size-full overflow-visible'),
-                      h.AriaHidden(true),
-                    ],
-                    [h.polygon([h.Class('title-floor'), h.Points(FLOOR)])],
-                  ),
-                  h.div([
-                    h.Key('bench'),
-                    h.Class('title-bench absolute'),
-                    h.Style({ left: x(BENCH.left), top: y(BENCH.top), width: x(BENCH.width) }),
-                    h.OnMount(BenchMounted()),
-                  ]),
-                ],
-              ),
-              h.div([h.Class('title-ui')], [wordmark(h), menu(model, h), overlay(h)]),
-            ],
-          ),
-      model.gate === 'open' ? stamp(h) : h.empty,
-      model.gate === 'open' ? notice(h) : h.empty,
-    ],
+    [model.gate !== 'open' ? reader(model, h) : booth(model, h)],
   )

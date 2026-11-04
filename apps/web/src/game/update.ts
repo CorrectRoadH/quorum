@@ -161,6 +161,7 @@ import {
   AppendLog,
   ClearLog,
   ComputeBottleneck,
+  ConnectBoard,
   ComputePreview,
   ClearToast,
   ExportLog,
@@ -300,6 +301,7 @@ export const initialModel = (): Model =>
     board: freshBoard(newGame()),
     company: null,
     saved: false,
+    connecting: false,
     founder: emptyFounder(),
     passed: [],
     freeBoard: null,
@@ -1882,6 +1884,7 @@ const handle = (model: Model, message: Message): Result =>
     Saved: () => ({ model: model.saved ? model : { ...model, saved: true } }),
 
     Continued: () => continued(model),
+    Connected: () => ({ model: { ...model, connecting: false } }),
 
     NewCompanyStarted: () => found(model),
     CompanyFounded: () => found(model),
@@ -3566,8 +3569,18 @@ const withBoard = (model: Model, result: Result): Result => {
   }
 }
 
+/** Leaving the title for a board plays the monitor's connect sequence first, unless motion is reduced. */
+const connecting = (model: Model, result: Result): Result =>
+  onBoard(model.route) || !onBoard(result.model.route) || model.prefs.motion === 'reduce'
+    ? result
+    : {
+        model: { ...result.model, connecting: true },
+        commands: [...(result.commands ?? []), ConnectBoard({})],
+      }
+
 export const update = (model: Model, message: Message): Result => {
-  const result = withUrl(model, message, route(model, message))
+  if (model.connecting && message._tag === 'KeyPressed') return { model }
+  const result = connecting(model, withUrl(model, message, route(model, message)))
   const moved = ROUNDS.has(message._tag) && result.model.board.game.stage !== model.board.game.stage
   return logged(
     model,
