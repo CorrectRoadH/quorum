@@ -66,10 +66,10 @@ import type {
   LbPolicy,
   PmMode,
 } from '@quorum/simulation/state'
-import { compact, duration, money, ms, priceLabel, rate } from '@/game/format.ts'
+import { compact, duration, money, ms, priceLabel, rate } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
-import { COMPONENT_ICONS } from '@/game/icons.ts'
+import { COMPONENT_ICONS } from '@quorum/ui/game/icons'
 import { icon } from '@quorum/ui/primitives/icon'
 import { badge } from '@quorum/ui/primitives/badge'
 import { button } from '@quorum/ui/primitives/button'
@@ -85,7 +85,7 @@ import {
   meter,
   row,
   stackLogo,
-} from './bits.ts'
+} from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The inspector: one Node up close. Its numbers and resources, its instance

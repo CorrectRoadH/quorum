@@ -16,7 +16,7 @@ import {
   patchWindow,
 } from '@quorum/simulation/catalog'
 import type { ChurnCause, RegionChurn } from '@quorum/simulation/churn'
-import { compact } from './format.ts'
+import { compact } from '@quorum/ui/game/format'
 import type { WorkItem } from '@quorum/simulation/state'
 import { itemName } from '@quorum/simulation/work'
 import {

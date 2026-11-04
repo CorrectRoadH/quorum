@@ -3,8 +3,9 @@ import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { attachBoard } from './board.ts'
+import { attachBoard } from '@quorum/ui/board/board'
 import { Message } from './message.ts'
+import { play } from './sound.ts'
 
 /* ==========================================================================
    Foldkit's side of the Pixi board: an element-scoped Mount that owns the
@@ -52,6 +53,7 @@ const BoardMounted = Mount.defineStream('BoardMounted', {
               onEmptyTap: () => offer(Message.EmptyTapped()),
               onNodeToggle: (nodeId) => offer(Message.NodeToggled({ nodeId })),
               onBox: (ids, mode) => offer(Message.SelectionBoxed({ ids: [...ids], mode })),
+              onSound: play,
             }),
           ),
           (detach) => Effect.sync(detach),

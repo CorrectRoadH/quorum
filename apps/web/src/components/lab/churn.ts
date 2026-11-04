@@ -4,12 +4,12 @@ import { COMPONENTS, KINDS, REGION_INFO, RESEARCH } from '@quorum/simulation/cat
 import { has } from '@quorum/simulation/lookups'
 import { openRegions } from '@quorum/simulation/regions'
 import type { Game } from '@quorum/simulation/state'
-import { compact, ms } from '@/game/format.ts'
+import { compact, ms } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { ledgerOf, type Model } from '@/game/model.ts'
 import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
-import { FIGURE, SCROLL, WELL, toneText } from './bits.ts'
+import { FIGURE, SCROLL, WELL, toneText } from '@quorum/ui/game/bits'
 import { shell } from './panels.ts'
 
 /* ==========================================================================

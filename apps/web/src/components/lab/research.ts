@@ -83,16 +83,30 @@ import type { Ledger } from '@quorum/simulation/ledger'
 import { has, researchReady } from '@quorum/simulation/lookups'
 import type { Game } from '@quorum/simulation/state'
 import { limitingPool, studySeconds, studySpeed } from '@quorum/simulation/studies'
-import { compact } from '@/game/format.ts'
-import { COMPONENT_ICONS, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
+import { compact } from '@quorum/ui/game/format'
+import { COMPONENT_ICONS, STACK_LOGOS, type StackLogoId } from '@quorum/ui/game/icons'
 import { Message } from '@/game/message.ts'
 import { ledgerOf, type Model } from '@/game/model.ts'
-import { POOL_ORDER, recipeOf } from '@/game/pools.ts'
+import { POOL_ORDER, recipeOf } from '@quorum/ui/game/pools'
 import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, groupBadge, insightChip } from './bits.ts'
-import { NODE_SIZE, eraName, researchLayout, type Layout, type Placed } from './research-layouts.ts'
+import {
+  EYEBROW,
+  FIGURE,
+  FLOAT,
+  PANEL,
+  SCROLL,
+  groupBadge,
+  insightChip,
+} from '@quorum/ui/game/bits'
+import {
+  NODE_SIZE,
+  eraName,
+  researchLayout,
+  type Layout,
+  type Placed,
+} from '@quorum/ui/game/research-layouts'
 
 /* ==========================================================================
    Research, fullscreen. The tree (research-layouts.ts) scrolls under a fixed

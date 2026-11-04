@@ -21,7 +21,7 @@ import {
 } from 'lucide'
 import { badge as chip } from '@quorum/ui/primitives/badge'
 import { button } from '@quorum/ui/primitives/button'
-import { clock } from '@/game/format.ts'
+import { clock } from '@quorum/ui/game/format'
 import {
   KIND_LABEL,
   SAMPLES,
@@ -42,7 +42,7 @@ import { Message } from '@/game/message.ts'
 import type { Folder, Mail, Model } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, WELL, groupBadge } from './bits.ts'
+import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, WELL, groupBadge } from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The Inbox (GDD 18): the game's voice, as a mail window docked above its

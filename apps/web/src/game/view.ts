@@ -1,6 +1,6 @@
 import { localizeHtml } from '../i18n/index.ts'
 import type { Document, HtmlBuilder } from 'foldkit/html'
-import { toast } from '@/components/lab/bits.ts'
+import { toast } from '@/components/lab/toast.ts'
 import { settingsPanel } from '@/components/lab/panels.ts'
 import { labScreen } from './screens.ts'
 import { titleScreen } from './title.ts'

@@ -1,3 +1,4 @@
+import { TradeoffOption } from '@quorum/ui/game/tradeoff'
 import { Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { Locale } from '../i18n/index.ts'
 import { Effect, Schema } from 'effect'
@@ -15,17 +16,7 @@ import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
 import { History } from './history.ts'
 import { AppRoute, MENU_PAGES } from './route.ts'
-import {
-  ComponentId,
-  FamilyId,
-  FrameworkId,
-  Game,
-  GameLink,
-  GameNode,
-  ResearchId,
-  RuntimeId,
-  Region,
-} from '@quorum/simulation/state'
+import { ComponentId, Game, GameLink, GameNode, ResearchId, Region } from '@quorum/simulation/state'
 
 /* ==========================================================================
    Quorum — what the UI holds. The Game is the saved company; everything else
@@ -200,13 +191,8 @@ export const Change = Schema.Struct({
 })
 export type Change = typeof Change.Type
 
-/** An option a Tradeoff card previews: a Stack choice or an instance family. */
-export const TradeoffOption = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('runtime'), id: RuntimeId }),
-  Schema.Struct({ kind: Schema.Literal('framework'), id: FrameworkId }),
-  Schema.Struct({ kind: Schema.Literal('family'), id: FamilyId }),
-])
-export type TradeoffOption = typeof TradeoffOption.Type
+/** An option a Tradeoff card previews; the board's compute jobs share it. */
+export { TradeoffOption }
 
 export const TradeoffKind = Schema.Literals(['runtime', 'framework', 'family'])
 export type TradeoffKind = typeof TradeoffKind.Type

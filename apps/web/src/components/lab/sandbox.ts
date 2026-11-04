@@ -22,7 +22,7 @@ import type { Ledger } from '@quorum/simulation/ledger'
 import { has } from '@quorum/simulation/lookups'
 import { IncidentId } from '@quorum/simulation/state'
 import { GUIDED, TRACKS, type SandboxId } from '@quorum/simulation/sandbox'
-import { clock, money, ms, rate } from '@/game/format.ts'
+import { clock, money, ms, rate } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { isPhone } from '@/game/viewport.ts'
 import type { Model, SandboxRun } from '@/game/model.ts'
@@ -30,7 +30,16 @@ import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
 import { nativeSelect, nativeSelectOption } from '@quorum/ui/primitives/native-select'
 import { cn } from '@/lib/utils'
-import { CHIPS, EYEBROW, FIGURE, PANEL, WELL, meter, toneText, type Tone } from './bits.ts'
+import {
+  CHIPS,
+  EYEBROW,
+  FIGURE,
+  PANEL,
+  WELL,
+  meter,
+  toneText,
+  type Tone,
+} from '@quorum/ui/game/bits'
 import { shell } from './panels.ts'
 
 /* ==========================================================================

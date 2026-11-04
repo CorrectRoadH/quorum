@@ -12,13 +12,13 @@ import { newGame, preseedGame } from '@quorum/simulation/company'
 import { COMPONENTS, researchList } from '@quorum/simulation/catalog'
 import { researchReady } from '@quorum/simulation/lookups'
 import { SHARED } from '@quorum/simulation/playbook'
-import { JOBS } from './jobs.ts'
+import { JOBS } from '@quorum/ui/board/jobs'
 import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { init, initialModel, update } from './update.ts'
 import { AppRoute } from './route.ts'
 import { CHALLENGES } from '@quorum/simulation/challenges'
-import { boxOf, crowds } from './geometry.ts'
+import { boxOf, crowds } from '@quorum/ui/board/geometry'
 
 /* The clock: 100 ms Steps under a 250 ms UI tick, and the Bottleneck search once per sim second. */
 

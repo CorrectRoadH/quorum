@@ -62,10 +62,10 @@ import { devHoursRate } from '@quorum/simulation/team'
 import { overdueBy } from '@quorum/simulation/cve'
 import { itemName } from '@quorum/simulation/work'
 import { describeDelta, redoAvailable, settleProgress, undoAvailable } from '@/game/feedback.ts'
-import { clock as mmss, compact, money, ms, rate } from '@/game/format.ts'
+import { clock as mmss, compact, money, ms, rate } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { exitLegacy, offCompany, type Board, type Model } from '@/game/model.ts'
-import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
+import { POOL_ICONS, POOL_ORDER, poolColor } from '@quorum/ui/game/pools'
 import { moreMenu, type MoreItem } from '@/game/more.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
 import { icon } from '@quorum/ui/primitives/icon'
@@ -83,7 +83,7 @@ import {
   ring,
   tool,
   toneText,
-} from './bits.ts'
+} from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The HUD: the company at a glance on the left, the controls on the right,

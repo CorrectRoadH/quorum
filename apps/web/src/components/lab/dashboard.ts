@@ -15,7 +15,7 @@ import { eraOf, has } from '@quorum/simulation/lookups'
 import { budgetOf } from '@quorum/simulation/slo'
 import type { Sample } from '@quorum/simulation/state'
 import { type Field, TIERS, type Tier, startOf } from '@/game/history.ts'
-import { compact, money, ms } from '@/game/format.ts'
+import { compact, money, ms } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { type Model, ledgerOf } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
@@ -33,7 +33,7 @@ import {
   XAxis,
   YAxis,
 } from '@quorum/ui/primitives/composed-chart'
-import { FIGURE, PANEL, SCROLL, WELL } from './bits.ts'
+import { FIGURE, PANEL, SCROLL, WELL } from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The Dashboard (12 "The Dashboard"): the Design over time, as a full page

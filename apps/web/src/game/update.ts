@@ -144,7 +144,7 @@ import {
   START,
 } from '@quorum/simulation/sandbox'
 import { solveFlow } from '@quorum/simulation/solve'
-import { optionAction } from './jobs.ts'
+import { optionAction } from '@quorum/ui/board/jobs'
 import { Game } from '@quorum/simulation/state'
 import { IPO_BURN_SECONDS, PRE_IPO_STAGE } from '@quorum/simulation/ipo'
 import { firstQuarter } from '@quorum/simulation/quarters'
@@ -197,9 +197,17 @@ import {
   type Reversal,
 } from './feedback.ts'
 import { BIG_PURCHASE, cueOf } from './cues.ts'
-import { bigBoard, stressBoard } from './stress.ts'
-import { CARD_W, boxOf, crowds, freeSpot, heightOf, tidy, type Box } from './geometry.ts'
-import { alertText, duration, money } from './format.ts'
+import { bigBoard, stressBoard } from '@quorum/ui/board/stress'
+import {
+  CARD_W,
+  boxOf,
+  crowds,
+  freeSpot,
+  heightOf,
+  tidy,
+  type Box,
+} from '@quorum/ui/board/geometry'
+import { alertText, duration, money } from '@quorum/ui/game/format'
 import { Message } from './message.ts'
 import {
   ledgerOf,
@@ -219,7 +227,7 @@ import {
   type ChallengeRun,
   type Menu,
 } from './model.ts'
-import { poolName, recipeOf } from './pools.ts'
+import { poolName, recipeOf } from '@quorum/ui/game/pools'
 import { AppRoute, menuFor, onBoard, routeOfMenu, urlOf, urlToAppRoute } from './route.ts'
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'

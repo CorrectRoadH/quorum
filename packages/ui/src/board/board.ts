@@ -1,4 +1,3 @@
-import { translate, type Locale } from '../i18n/index.ts'
 import {
   Activity,
   Archive,
@@ -33,7 +32,6 @@ import {
   Users,
   Wallet,
 } from 'lucide'
-import { play } from './sound.ts'
 import {
   Application,
   Container,
@@ -66,7 +64,7 @@ import {
   REGION_INFO,
   rttOf,
 } from '@quorum/simulation/catalog'
-import { POOL_ICONS, POOL_ORDER } from './pools'
+import { POOL_ICONS, POOL_ORDER } from '../game/pools.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import {
   burnOf,
@@ -82,8 +80,7 @@ import {
 import { isGlobal, regional, regionApdexOf, regionUsers } from '@quorum/simulation/regions'
 import { quartersBehind } from '@quorum/simulation/team'
 import type { Game, GameNode, Region } from '@quorum/simulation/state'
-import { compact, money, ms, priceLabel, queueWait, rate } from './format.ts'
-import { isPhone } from './viewport.ts'
+import { compact, money, ms, priceLabel, queueWait, rate } from '../game/format.ts'
 import {
   CARD_W,
   FOOT,
@@ -106,7 +103,7 @@ import {
 } from './geometry.ts'
 import { compute } from './compute.ts'
 import { HOP, type RoutedLink, type RoutedNode, type Wire } from './routing.ts'
-import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './icons.ts'
+import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from '../game/icons.ts'
 
 /* ==========================================================================
    The board: a PixiJS plane the player builds on. Foldkit owns the Model;
@@ -114,6 +111,9 @@ import { COMPONENT_ICONS, GROUP_SHAPES, STACK_LOGOS, type StackLogoId } from './
    Pointer input is read from DOM events and hit-tested by hand against the
    Model's geometry, so what the player clicks is exactly what the Model says.
    ========================================================================== */
+
+/** The sounds a gesture on the board makes. The host decides how to play them. */
+export type BoardSound = 'pull' | 'lift' | 'detent' | 'snap' | 'release'
 
 export type BoardEvents = Readonly<{
   onNodeTap: (nodeId: string) => void
@@ -127,6 +127,7 @@ export type BoardEvents = Readonly<{
   onNodeToggle: (nodeId: string) => void
   /** Shift-drag on empty space: select every Node the box touches. */
   onBox: (ids: ReadonlyArray<string>, mode: 'replace' | 'add' | 'subtract') => void
+  onSound?: (sound: BoardSound, pitch?: number, spatial?: boolean) => void
 }>
 
 /** A Playbook following the pointer: its Nodes relative to the top-left corner. */
@@ -135,7 +136,10 @@ export type Stamp = ReadonlyArray<
 >
 
 export type BoardState = Readonly<{
-  locale: Locale
+  /** Names the language of the card text, so a change redraws it. */
+  locale: string
+  /** Card text in the reader's language. */
+  translate: (text: string) => string
   game: Game
   ledger: Ledger
   selected: string | null
@@ -154,7 +158,14 @@ export type BoardState = Readonly<{
   suspended: boolean
   /** The Node whose footer button glows: a disclosure cue (15 "Progressive disclosure"). */
   cue: string | null
+  /** A board to watch, not to edit: the pointer only pans, and the wheel zooms only with Ctrl or Cmd. */
+  readOnly?: boolean
+  /** Room the host's own controls take at each edge, in pixels, when the view fits the Design. */
+  inset?: Readonly<{ top: number; bottom: number; left: number }>
 }>
+
+/** The phone: narrow in portrait, short in landscape (the `compact` variant in theme.css). */
+const isPhone = (): boolean => matchMedia('(max-width: 639px), (max-height: 499px)').matches
 
 /** Latest state per board, written by update and read on mount. */
 const desired = new Map<string, BoardState>()
@@ -1493,7 +1504,8 @@ class NodeView {
     colors: Palette,
     history: ReadonlyArray<number>,
     region: Region | null,
-    locale: Locale,
+    locale: string,
+    t: (text: string) => string,
   ): void {
     const own = ledger.nodes[node.id]
     if (!own) return
@@ -1631,7 +1643,7 @@ class NodeView {
       const { x, y, w, h } = rect
       const ink =
         footer.tone === 'muted' ? colors.muted : footer.tone === 'accent' ? colors.onFill : 0xffffff
-      this.foot.text = translate(locale, footer.text)
+      this.foot.text = t(footer.text)
       // Center the glyph and text together.
       // A held button's icon sits in a ring that reaches 5px past it on each side.
       const ringed = footer.enabled && (footer.glyph === 'resize' || footer.glyph === 'more')
@@ -1719,12 +1731,12 @@ class NodeView {
         )
       right -= width + 7
     }
-    this.level.text = translate(locale, levelOf(game, node, region))
+    this.level.text = t(levelOf(game, node, region))
     this.level.style.fill = colors.muted
     this.level.position.set(right, HEAD / 2)
     if (this.level.text) right -= this.level.width + 8
     // A long title gives way to the level: it is cut with an ellipsis before the two touch.
-    fitText(this.title, translate(locale, title), right - 4 - this.title.x)
+    fitText(this.title, t(title), right - 4 - this.title.x)
 
     rows.forEach((row, index) => {
       const mark = this.glyphs[index]
@@ -1736,14 +1748,10 @@ class NodeView {
       else if (row.pool) paint(mark, POOL_ICONS[row.pool], POOLS[row.pool].color)
       else paint(mark, ROW_ICONS[row.glyph], colors.muted)
       name.style.fill = row.logo ? colors.ink : colors.muted
-      value.text = translate(locale, row.value)
+      value.text = t(row.value)
       value.style.fill = toneOf(row.tone)
       // A long name gives way to the value: it is cut with an ellipsis before the two touch.
-      fitText(
-        name,
-        translate(locale, row.name),
-        value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x,
-      )
+      fitText(name, t(row.name), value.x - value.width - (row.valueLogo ? 22 : 0) - 10 - name.x)
       valueMark.visible = row.valueLogo !== undefined
       if (row.valueLogo) {
         paintLogo(valueMark, row.valueLogo, colors.ink)
@@ -2071,7 +2079,7 @@ class BoardController {
    */
   private heldLanding: Map<string, Pt> | null = null
   private ghostType: ComponentId | null = null
-  private ghostLocale: Locale = 'en'
+  private ghostLocale = 'en'
   /** The drawn end of a wire being pulled. It eases onto a port it snaps to. */
   private wireEnd: Pt | null = null
   /** The Node a pulled wire is snapped to, and how far its highlight has come in. */
@@ -2217,14 +2225,15 @@ class BoardController {
     const minY = Math.min(...nodes.map((node) => node.y)) - 80
     const maxX = Math.max(...nodes.map((node) => node.x + CARD_W)) + 80
     const maxY = Math.max(...nodes.map((node) => node.y + heightOf(node.type))) + 80
-    // Keep clear of the HUD above and the build dock below.
+    // Keep clear of the HUD above and the build dock below, unless the host says what to keep clear of.
     const phone = isPhone()
     const short = matchMedia('(max-height: 499px)').matches
-    const top = short ? 120 : phone ? 160 : 120
-    const bottom = short ? 70 : phone ? 90 : 210
+    const inset = this.state?.inset
+    const top = inset ? inset.top : short ? 120 : phone ? 160 : 120
+    const bottom = inset ? inset.bottom : short ? 70 : phone ? 90 : 210
     const room = Math.max(1, h - top - bottom)
     // The stats panel sits on the left on desktop: keep cards out from under it.
-    const left = phone || short ? 0 : 380
+    const left = inset ? inset.left : phone || short ? 0 : 380
     const across = Math.max(1, w - left - 24)
     // Below this zoom the card text is too small to read; pan to see the rest.
     const scale = Math.max(
@@ -2540,6 +2549,16 @@ class BoardController {
         }
         if (event.button !== 0) return
         canvas.setPointerCapture(event.pointerId)
+        if (this.state?.readOnly) {
+          this.gesture = {
+            kind: 'pan',
+            x: event.clientX,
+            y: event.clientY,
+            moved: false,
+            cut: null,
+          }
+          return
+        }
         if (this.state?.stamp) {
           this.events.onPlace(Math.round(point.x / 8) * 8, Math.round(point.y / 8) * 8)
           return
@@ -2555,7 +2574,7 @@ class BoardController {
           this.wireEnd = outPort(this.shown().get(port.id) ?? port)
           this.snapTo = null
           this.snapGlow = 0
-          play('pull', 1, true)
+          this.events.onSound?.('pull', 1, true)
           return
         }
         const node = this.nodeAt(point)
@@ -2663,7 +2682,7 @@ class BoardController {
             view.held = false
             view.lifted = true
             this.cards.addChild(view.root)
-            play('lift', 1, true)
+            this.events.onSound?.('lift', 1, true)
           }
           gesture.moved = true
           const last = this.dragged
@@ -2673,7 +2692,8 @@ class BoardController {
             y: Math.round((point.y - gesture.dy) / 8) * 8,
           }
           // Each grid line it crosses is a faint detent.
-          if (last && (last.x !== this.dragged.x || last.y !== this.dragged.y)) play('detent')
+          if (last && (last.x !== this.dragged.x || last.y !== this.dragged.y))
+            this.events.onSound?.('detent')
           this.syncCards()
           canvas.style.cursor = 'grabbing'
           return
@@ -2683,8 +2703,8 @@ class BoardController {
           const target = this.nodeAt(point)
           const next = target && target.id !== gesture.from ? target.id : null
           if (next !== this.snapTo) {
-            if (next) play('snap')
-            else play('detent', 0.7)
+            if (next) this.events.onSound?.('snap')
+            else this.events.onSound?.('detent', 0.7)
             this.snapTo = next
           }
           canvas.style.cursor = 'crosshair'
@@ -2823,6 +2843,8 @@ class BoardController {
     canvas.addEventListener(
       'wheel',
       (event) => {
+        // A board on a page lets the page scroll; Ctrl or Cmd zooms it.
+        if (this.state?.readOnly && !event.ctrlKey && !event.metaKey) return
         event.preventDefault()
         const rect = this.host.getBoundingClientRect()
         const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top }
@@ -2875,7 +2897,7 @@ class BoardController {
     if (!from || !end) return
     const lane = laneUnder(from, end.y)
     this.retract = { path: route(outPort(from), end, lane), t: 0 }
-    play('release', 1, true)
+    this.events.onSound?.('release', 1, true)
   }
 
   /* ---------- drawing ---------- */
@@ -2905,6 +2927,7 @@ class BoardController {
         state.history[node.id] ?? [],
         state.region,
         state.locale,
+        state.translate,
       )
       view.dim = path !== null && !path.has(node.id)
     }
@@ -2986,7 +3009,7 @@ class BoardController {
     silhouette(frame, group, 0, 0, CARD_W, height).stroke({ color: hue, width: 2 })
     medallion(frame, group, hue, colors)
     const name = label(15, SANS, '700')
-    name.text = translate(locale, COMPONENTS[type].name)
+    name.text = (this.state?.translate ?? String)(COMPONENTS[type].name)
     name.style.fill = colors.ink
     name.anchor.set(0, 0.5)
     name.position.set(TITLE_X, HEAD / 2)
@@ -3232,7 +3255,7 @@ class BoardController {
         heightOf(bottleneck.type),
         pad,
       ).stroke({ color: colors.warn, width: 2.5, alpha: pulse })
-      const tag = translate(state.locale, 'BOTTLENECK')
+      const tag = state.translate('BOTTLENECK')
       this.bottleneckTag.text = tag
       this.overlay
         .roundRect(

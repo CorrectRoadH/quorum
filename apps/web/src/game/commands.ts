@@ -1,11 +1,11 @@
-import { Locale } from '../i18n/index.ts'
+import { Locale, translate } from '../i18n/index.ts'
 import * as Effect from 'effect/Effect'
 import { Schema } from 'effect'
 import { Command } from 'foldkit'
 import { load, pushUrl, replaceUrl } from 'foldkit/navigation'
-import { fitBoard, setBoard } from './board.ts'
+import { fitBoard, setBoard } from '@quorum/ui/board/board'
 import { solveFlow } from '@quorum/simulation/solve'
-import { compute } from './compute.ts'
+import { compute } from '@quorum/ui/board/compute'
 import { regionView } from '@quorum/simulation/regions'
 import { ComponentId, Game, Region } from '@quorum/simulation/state'
 import { Message } from './message.ts'
@@ -77,6 +77,7 @@ export const SyncBoard = Command.define('SyncBoard', {
     Effect.sync(() => {
       setBoard('board', {
         locale,
+        translate: (text) => translate(locale, text),
         game: regionView(game, region),
         ledger: { ...solveFlow(game), bottleneck },
         selected,

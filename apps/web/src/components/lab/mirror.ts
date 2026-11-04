@@ -28,12 +28,12 @@ import {
 import { openRegions } from '@quorum/simulation/regions'
 import { solveFlow } from '@quorum/simulation/solve'
 import type { Game, Mirror } from '@quorum/simulation/state'
-import { money } from '@/game/format.ts'
+import { money } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, SCROLL, WELL } from './bits.ts'
+import { EYEBROW, FIGURE, SCROLL, WELL } from '@quorum/ui/game/bits'
 import { shell } from './panels.ts'
 
 /* ==========================================================================

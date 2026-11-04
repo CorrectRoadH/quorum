@@ -3,7 +3,7 @@ import * as Actions from '@quorum/simulation/actions'
 import { previewOf, type Preview } from '@quorum/simulation/preview'
 import { bottleneckOf, solveFlow } from '@quorum/simulation/solve'
 import type { Game } from '@quorum/simulation/state'
-import type { TradeoffOption } from './model.ts'
+import type { TradeoffOption } from '../game/tradeoff.ts'
 import { routeLinks, type RoutedLink, type RoutedNode, type Wire } from './routing.ts'
 
 /*

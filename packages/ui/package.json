@@ -4,20 +4,29 @@
   "type": "module",
   "exports": {
     "./primitives/*": "./src/primitives/*.ts",
+    "./game/*": "./src/game/*.ts",
+    "./board/*": "./src/board/*.ts",
     "./theme.css": "./src/theme.css"
   },
   "scripts": {
-    "typecheck": "tsrs --noEmit -p tsconfig.json && effect-tsrs diagnostics --strict --project tsconfig.json"
+    "typecheck": "tsrs --noEmit -p tsconfig.json && effect-tsrs diagnostics --strict --project tsconfig.json",
+    "test": "vitest run",
+    "stress": "node src/board/stress.perf.ts"
   },
   "dependencies": {
     "@foldkit/ui": "0.168.0",
+    "@quorum/simulation": "workspace:*",
     "cn": "0.5.0",
     "d3-shape": "^3.2.0",
     "effect": "4.0.0",
     "foldkit": "0.167.0",
-    "lucide": "1.58.0"
+    "lucide": "1.58.0",
+    "pixi.js": "8.22.0",
+    "simple-icons": "16.36.0"
   },
   "devDependencies": {
-    "@types/d3-shape": "^3.2.0"
+    "@types/d3-shape": "^3.2.0",
+    "@types/node": "26.6.4",
+    "vitest": "5.0.3"
   }
 }

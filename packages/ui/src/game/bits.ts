@@ -1,17 +1,15 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { IconNode } from 'lucide'
 import type { BuildGroup, InsightPool } from '@quorum/simulation/catalog'
-import { GROUP_SHAPES, type GroupShape, STACK_LOGOS, type StackLogoId } from '@/game/icons.ts'
-import type { Message } from '@/game/message.ts'
-import { POOL_ICONS, poolColor, poolName } from '@/game/pools.ts'
-import type { Toast } from '@/game/model.ts'
-import { icon } from '@quorum/ui/primitives/icon'
-import { cn } from '@/lib/utils'
+import { cn } from 'cn'
+import { icon } from '../primitives/icon.ts'
+import { GROUP_SHAPES, type GroupShape, STACK_LOGOS, type StackLogoId } from './icons.ts'
+import { POOL_ICONS, poolColor, poolName } from './pools.ts'
 
 /* ==========================================================================
-   Small pieces every lab surface shares: the surfaces, group badges, brand marks,
-   labels, figures, and the toast. Depth comes from the four elevations in
-   styles.css: well, raised, card, float.
+   Small pieces every Quorum surface shares, in the game and on the wiki: the
+   surfaces, group badges, brand marks, labels, and figures. Depth comes from
+   the four elevations in theme.css: well, raised, card, float.
    ========================================================================== */
 
 export const EYEBROW =
@@ -75,7 +73,7 @@ const CHIP_PINS = [7.5, 12, 16.5].flatMap((at) => [
   [at - 0.9, 20, 1.8, 3.5],
 ])
 
-const shapeOf = (shape: GroupShape, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+const shapeOf = <M>(shape: GroupShape, h: HtmlBuilder<M>): ReadonlyArray<Html> => {
   // A stroke in the fill colour with round joins softens the polygon corners.
   const soft = [
     h.Fill('currentColor'),
@@ -134,11 +132,11 @@ export type BadgeContent = IconNode | Readonly<{ path: string }>
  * of the system it belongs to: Edge hexagons, Compute chips, Data discs, Ops
  * diamonds. `color` overrides the group's colour; grey when `muted`.
  */
-export const groupBadge = (
+export const groupBadge = <M>(
   group: BuildGroup,
   content: BadgeContent,
   className: string,
-  h: HtmlBuilder<Message>,
+  h: HtmlBuilder<M>,
   muted = false,
   color?: string,
 ): Html => {
@@ -173,7 +171,7 @@ export const groupBadge = (
 }
 
 /** A language or framework brand mark, in its brand colour. */
-export const stackLogo = (id: StackLogoId, className: string, h: HtmlBuilder<Message>): Html => {
+export const stackLogo = <M>(id: StackLogoId, className: string, h: HtmlBuilder<M>): Html => {
   const logo = STACK_LOGOS[id]
   return h.svg(
     [
@@ -187,12 +185,12 @@ export const stackLogo = (id: StackLogoId, className: string, h: HtmlBuilder<Mes
 }
 
 /** A label over a value, for the HUD. */
-export const figure = (
+export const figure = <M>(
   name: string,
   value: string,
   note: string,
   noteTone: Tone,
-  h: HtmlBuilder<Message>,
+  h: HtmlBuilder<M>,
 ): Html =>
   h.div(
     [h.Key(name), h.Class('flex min-w-0 flex-col gap-1 px-3.5 py-2')],
@@ -225,7 +223,7 @@ export const figure = (
   )
 
 /** A label and a value on one line, for nested groups. */
-export const row = (name: string, value: string, tone: Tone, h: HtmlBuilder<Message>): Html =>
+export const row = <M>(name: string, value: string, tone: Tone, h: HtmlBuilder<M>): Html =>
   h.div(
     [h.Key(name), h.Class('flex items-baseline justify-between gap-3 px-3 py-1.5')],
     [
@@ -235,7 +233,7 @@ export const row = (name: string, value: string, tone: Tone, h: HtmlBuilder<Mess
   )
 
 /** A sunken track with a rounded fill. */
-export const meter = (share: number, fill: string, h: HtmlBuilder<Message>): Html =>
+export const meter = <M>(share: number, fill: string, h: HtmlBuilder<M>): Html =>
   h.div(
     [h.Class('h-1.5 overflow-hidden rounded-full bg-well shadow-well')],
     [
@@ -254,52 +252,8 @@ export const meter = (share: number, fill: string, h: HtmlBuilder<Message>): Htm
     ],
   )
 
-const TOAST_MARK: Record<Toast['tone'], string> = {
-  plain: 'bg-muted-foreground',
-  ok: 'bg-ok',
-  warn: 'bg-warn',
-  danger: 'bg-danger',
-  primary: 'bg-primary-strong',
-}
-
-/** One toast surface. A new message replaces the text in place and the surface
- *  morphs to fit it, so a run of messages never blinks; it leaves when the
- *  last one expires. */
-export const toast = (value: Toast | null, overPanel: boolean, h: HtmlBuilder<Message>): Html =>
-  value
-    ? h.div(
-        [
-          h.Key('toast'),
-          h.Role('status'),
-          h.DataAttribute('morph', 'notice'),
-          h.DataAttribute('exit', 'notice'),
-          // A panel can fill a short screen, so the toast moves above it rather than over its actions.
-          h.Class(
-            `pointer-events-none fixed bottom-[176px] left-1/2 z-50 flex max-w-[calc(100%-16px)] -translate-x-1/2 justify-center rounded-xl bg-surface px-3.5 py-2.5 text-[13px] shadow-float enter-toast compact:right-[calc(max(8px,env(safe-area-inset-right))+52px)] compact:bottom-[calc(max(8px,env(safe-area-inset-bottom))+84px)] compact:left-[max(8px,env(safe-area-inset-left))] compact:max-w-none compact:translate-x-0 compact:justify-start ${
-              overPanel
-                ? 'short:top-[max(2px,env(safe-area-inset-top))]! short:right-auto! short:bottom-auto! short:left-1/2! short:max-w-[calc(100%-16px)]! short:translate-x-[-50%]! short:justify-center!'
-                : ''
-            }`,
-          ),
-        ],
-        [
-          h.div(
-            [
-              h.Key(`toast-${value.id}`),
-              h.DataAttribute('exit', 'notice'),
-              h.Class('swap flex w-max max-w-full shrink-0 items-center gap-2.5'),
-            ],
-            [
-              h.span([h.Class(`size-2 shrink-0 rounded-full ${TOAST_MARK[value.tone]}`)], []),
-              value.message,
-            ],
-          ),
-        ],
-      )
-    : h.empty
-
 /** A progress ring, from 0 to 1, drawn clockwise from the top. */
-export const ring = (share: number, className: string, h: HtmlBuilder<Message>): Html => {
+export const ring = <M>(share: number, className: string, h: HtmlBuilder<M>): Html => {
   const radius = 6
   const length = 2 * Math.PI * radius
   return h.svg(
@@ -339,10 +293,10 @@ export const ring = (share: number, className: string, h: HtmlBuilder<Message>):
  * One Insight pool and a figure: the pool's own icon in its colour, then the
  * figure. `grey` draws it uncoloured; `tone` colours the figure.
  */
-export const insightChip = (
+export const insightChip = <M>(
   pool: InsightPool,
   figure: string,
-  h: HtmlBuilder<Message>,
+  h: HtmlBuilder<M>,
   grey = false,
   tone: Tone = 'plain',
 ): Html =>

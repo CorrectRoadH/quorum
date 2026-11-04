@@ -8,15 +8,15 @@ import {
   type ComponentId,
 } from '@quorum/simulation/catalog'
 import { isUnlocked, priceOf } from '@quorum/simulation/lookups'
-import { money } from '@/game/format.ts'
-import { COMPONENT_ICONS, GROUP_ICONS } from '@/game/icons.ts'
+import { money } from '@quorum/ui/game/format'
+import { COMPONENT_ICONS, GROUP_ICONS } from '@quorum/ui/game/icons'
 import { Message } from '@/game/message.ts'
 import { placingOf, type Model } from '@/game/model.ts'
 import { dockGroups, dockItems } from '@/game/reveal.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { Kbd } from '@quorum/ui/primitives/kbd'
 import { cn } from '@/lib/utils'
-import { FIGURE, GROUP_TEXT, PANEL, groupBadge, tool } from './bits.ts'
+import { FIGURE, GROUP_TEXT, PANEL, groupBadge, tool } from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The build dock, disclosed in steps: four group icons. A group opens a list

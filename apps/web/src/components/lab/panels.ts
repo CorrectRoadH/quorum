@@ -6,7 +6,7 @@ import { PRE_IPO_STAGE } from '@quorum/simulation/ipo'
 import { INCIDENTS, INCIDENT_IDS } from '@quorum/simulation/catalog'
 import { eraOf, isFinalEra, nextEra } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from '@/game/cheats.ts'
-import { clock, compact, money } from '@/game/format.ts'
+import { clock, compact, money } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { exitLegacy, type Model } from '@/game/model.ts'
 import { speedsOf } from '@/game/update.ts'
@@ -16,7 +16,7 @@ import { Kbd } from '@quorum/ui/primitives/kbd'
 import { switch_ } from '@quorum/ui/primitives/switch'
 import { cn } from '@/lib/utils'
 import { languagePicker } from '@/i18n/picker.ts'
-import { EYEBROW, FIGURE, FLOAT, NESTED, SCROLL, WELL } from './bits.ts'
+import { EYEBROW, FIGURE, FLOAT, NESTED, SCROLL, WELL } from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The panels over the board: How to play, the funding offer, the

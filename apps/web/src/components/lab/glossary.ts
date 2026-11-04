@@ -12,7 +12,7 @@ import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, SCROLL, WELL } from './bits.ts'
+import { EYEBROW, FIGURE, SCROLL, WELL } from '@quorum/ui/game/bits'
 import { shell } from './panels.ts'
 
 /* ==========================================================================

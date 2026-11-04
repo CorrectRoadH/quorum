@@ -17,15 +17,15 @@ import type { AlertRule } from '@quorum/simulation/events'
 import { has } from '@quorum/simulation/lookups'
 import { ignored } from '@quorum/simulation/step'
 import type { Game, Postmortem } from '@quorum/simulation/state'
-import { alertText, compact, money } from '@/game/format.ts'
+import { alertText, compact, money } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
-import { recipeOf } from '@/game/pools.ts'
+import { recipeOf } from '@quorum/ui/game/pools'
 import { icon } from '@quorum/ui/primitives/icon'
 import { badge } from '@quorum/ui/primitives/badge'
 import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
-import { EYEBROW, FIGURE, PANEL, WELL, insightChip } from './bits.ts'
+import { EYEBROW, FIGURE, PANEL, WELL, insightChip } from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The incident loop on screen: the pager, once Alerting is researched, and

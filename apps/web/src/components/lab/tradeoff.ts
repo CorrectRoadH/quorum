@@ -12,13 +12,13 @@ import { has } from '@quorum/simulation/lookups'
 import { migrationCost, targetOf } from '@quorum/simulation/migration'
 import type { GameNode } from '@quorum/simulation/state'
 import { describeDelta } from '@/game/feedback.ts'
-import { money } from '@/game/format.ts'
+import { money } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import type { Model, PreviewFigures, Tradeoff, TradeoffOption } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
-import { FIGURE, PANEL } from './bits.ts'
+import { FIGURE, PANEL } from '@quorum/ui/game/bits'
 
 /* ==========================================================================
    The Tradeoff card (15 "Tradeoff cards"): what an option is, on the six
