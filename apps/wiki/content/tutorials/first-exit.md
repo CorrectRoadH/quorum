@@ -84,15 +84,17 @@ If you prefer to save your Legacy, skip the purchase. Legacy also unlocks new
 
 ## Found your next Company
 
-1. On the main menu, select **Start a company**. Because you have an Exit, the founding menu opens.
-2. Read the **Venture** list. A Venture sets the kind of company: its request mix, its demand
+1. On the main menu, select **Start a company**. The New company screen opens.
+2. Type a name in **Company name** and select a logo. Each Company keeps its own name and logo.
+3. Read the **Venture** list. A Venture sets the kind of company: its request mix, its demand
    shape, and its rules. Your first Venture is selected.
-3. Read the **Mutators** list. Mutators make a Company harder for more Legacy. You unlock them with
+4. Read the **Mutators** list. Mutators make a Company harder for more Legacy. You unlock them with
    achievements, so they may all show a lock now.
-4. Select **Found**. Its row shows the starting Era and the Legacy multiplier.
+5. Select **Found**. Its row shows the starting Era and the Legacy multiplier.
 
 The new Company starts over: new Cash, new users, no Research, and a new board. Your Legacy, your
-Perks, and your history stay.
+Perks, and your history stay. The Company you exited closes: its file leaves the **Companies** list,
+and you cannot continue it. Its history row and Legacy stay with you.
 
 Your next Company also shows every control from the start, and it adds **Playbooks**. Press **P** to
 open them. A Playbook saves part of a Design, so you can place a known-good Garage setup in one

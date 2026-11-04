@@ -33,6 +33,7 @@ import {
 import { MANAGED } from '@quorum/simulation/mirror'
 import { ChallengeVerdict } from '@quorum/rpc'
 import { histogramQuery } from './challenge-query.ts'
+import { LogoId } from './logos.ts'
 import { DashboardMessage } from './dashboard.ts'
 import { GlossaryMessage } from './glossary.ts'
 import { InboxMessage } from './inbox.ts'
@@ -54,8 +55,33 @@ import {
    ========================================================================== */
 
 export const Message = defineMessageUnion({
-  /** The save in localStorage, read once at boot. Null when there is none. */
-  SaveLoaded: { json: Schema.NullOr(Schema.String), now: Schema.Finite },
+  /** The Company index, and the single save of the build before Company files. Null when neither exists. */
+  SavesLoaded: {
+    index: Schema.NullOr(Schema.String),
+    legacy: Schema.NullOr(Schema.String),
+    now: Schema.Finite,
+  },
+  /** One Company's Game, read to continue it or to open it from the Companies page. */
+  CompanyLoaded: {
+    id: Schema.String,
+    open: Schema.Boolean,
+    json: Schema.NullOr(Schema.String),
+    now: Schema.Finite,
+  },
+  /** The founding screen's name field. */
+  CompanyNameChanged: { name: Schema.String },
+  LogoChosen: { logo: LogoId },
+  /** The Companies page opens one Company's file. */
+  CompanyChosen: { id: Schema.String },
+  CompanyClosed: {},
+  CompanyOpened: { id: Schema.String },
+  CompanyDeleteAsked: {},
+  CompanyDeleteCancelled: {},
+  CompanyDeleteConfirmed: {},
+  CompanyDeleted: { id: Schema.String },
+  /** The hidden recovery action: read the single save of the build before Company files. */
+  OldSaveImportAsked: {},
+  OldSaveLoaded: { json: Schema.NullOr(Schema.String), now: Schema.Finite },
   FounderLoaded: {
     json: Schema.NullOr(Schema.String),
     deviceId: Schema.String,
@@ -65,7 +91,6 @@ export const Message = defineMessageUnion({
   /** The title screen's connect sequence ended: the board it was opening shows. */
   Connected: {},
   Continued: {},
-  NewCompanyStarted: {},
   PreseedStarted: {},
   TitleOpened: {},
   /** The badge goes into the reader on the splash; the title follows. */

@@ -15,7 +15,7 @@ const company: Model = {
 
 const withChallenge = (): Model =>
   update(
-    { ...initialModel(), saved: true, board: { ...initialModel().board, game: newGame() } },
+    { ...initialModel(), board: { ...initialModel().board, game: newGame() } },
     Message.ChallengeStarted({ id: 'hello-world' }),
   ).model
 

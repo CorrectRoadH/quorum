@@ -266,6 +266,9 @@ its worst utilization, and one suggestion if users were lost at peak.
 
 ## Save
 
-- Autosave to local storage every 10 seconds and on every Era change.
+- Autosave to local storage every 10 seconds and on every Era change, per Company.
+- The player names each Company and picks its logo before founding it.
+- Any number of Companies are kept; the Companies page lists them and opens, or deletes, one.
+- The single save from the build before Company files is never deleted. Settings offers a hidden
+  "Recover previous save" action that imports it into the Companies list. This action is temporary.
 - Export and import a save as a text string.
-- Three save slots.

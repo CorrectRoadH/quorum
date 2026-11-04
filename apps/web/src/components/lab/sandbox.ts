@@ -25,7 +25,7 @@ import { GUIDED, TRACKS, type SandboxId } from '@quorum/simulation/sandbox'
 import { clock, money, ms, rate } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
 import { isPhone } from '@/game/viewport.ts'
-import { boardSandbox, type Model, type SandboxRun } from '@/game/model.ts'
+import { boardSandbox, hasCompany, type Model, type SandboxRun } from '@/game/model.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
 import { nativeSelect, nativeSelectOption } from '@quorum/ui/primitives/native-select'
@@ -381,7 +381,7 @@ const controlsBody = (model: Model, h: HtmlBuilder<Message>): Html =>
             [icon(h, RotateCcw, 'size-3.5'), 'Reset'],
             h,
           ),
-          model.company && model.saved
+          model.company && hasCompany(model)
             ? button(
                 {
                   onClick: Message.CompanyCopied(),

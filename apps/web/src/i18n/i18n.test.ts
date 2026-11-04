@@ -75,7 +75,7 @@ describe('interface languages', () => {
         prefs: { ...initialModel().prefs, locale, muted: true, motion: 'reduce' as const },
       }
       for (const message of [
-        Message.NewCompanyStarted(),
+        Message.CompanyFounded(),
         Message.PreseedStarted(),
         Message.FreeSandboxStarted(),
         Message.ChallengeStarted({ id: 'hello-world' }),

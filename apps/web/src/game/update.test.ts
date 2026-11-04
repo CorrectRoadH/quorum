@@ -568,8 +568,14 @@ describe('Exit and offline return', () => {
     const game = { ...preseedGame(), wall: 1_000_000 }
     const loaded = send(
       initialModel(),
-      Message.SaveLoaded({ json: JSON.stringify(game), now: 1_000_000 + 3_600_000 }),
+      Message.SavesLoaded({
+        index: null,
+        legacy: JSON.stringify(game),
+        now: 1_000_000 + 3_600_000,
+      }),
     )
+    expect(loaded.loaded).toBe(true)
+    expect(loaded.saves.current).not.toBeNull()
     expect(loaded.board.game.time).toBeCloseTo(game.time + 3_600)
     expect(loaded.board.away?.seconds).toBe(3_600)
     expect(loaded.board.game.incident).toBeNull()
@@ -741,7 +747,7 @@ describe('M9: sound, achievements, glossary, keys', () => {
     expect(again.filter((command) => command.name !== 'AppendLog')).toEqual([])
     const open = update(clocking.model, Message.TitleRevealed()).model
     expect(open.boot._tag).toBe('Ready')
-    const lab = update(open, Message.NewCompanyStarted()).model
+    const lab = update(open, Message.CompanyFounded()).model
     expect(titleIsOpen(update(lab, Message.TitleOpened()).model.boot)).toBe(true)
   })
 
@@ -925,13 +931,17 @@ describe('progressive disclosure', () => {
 
   test('a save from before disclosure shows everything; a save with it keeps its set', () => {
     const game = preseedGame()
-    const old = send(initialModel(), Message.SaveLoaded({ json: JSON.stringify(game), now: 0 }))
+    const old = send(
+      initialModel(),
+      Message.SavesLoaded({ index: null, legacy: JSON.stringify(game), now: 0 }),
+    )
     expect(old.board.disclosure.revealed).toContain('team')
     expect(old.board.disclosure.revealed).toContain('glossary')
     const kept = send(
       initialModel(),
-      Message.SaveLoaded({
-        json: JSON.stringify({ ...game, disclosure: { revealed: ['undo'], pending: ['team'] } }),
+      Message.SavesLoaded({
+        index: null,
+        legacy: JSON.stringify({ ...game, disclosure: { revealed: ['undo'], pending: ['team'] } }),
         now: 0,
       }),
     )
@@ -1034,8 +1044,9 @@ test('pointer-rate Messages stay out of the playtest log, and gestures go in', (
 test('a save this version cannot read is kept aside instead of dropped', () => {
   const game = newGame()
   const saved = JSON.stringify({ ...game, wall: 0 })
-  const loaded = update(initialModel(), Message.SaveLoaded({ json: saved, now: 0 }))
-  expect(loaded.model.saved).toBe(true)
+  const loaded = update(initialModel(), Message.SavesLoaded({ index: null, legacy: saved, now: 0 }))
+  expect(loaded.model.loaded).toBe(true)
+  expect(loaded.model.saves.current).not.toBeNull()
   expect(loaded.model.board.game.nodes).toEqual(game.nodes)
 
   const renamed = JSON.stringify({
@@ -1044,8 +1055,11 @@ test('a save this version cannot read is kept aside instead of dropped', () => {
     nodes: game.nodes.map((node) => ({ ...node, type: 'retired-component' })),
   })
   for (const json of [renamed, '{not json']) {
-    const broken = update(initialModel(), Message.SaveLoaded({ json, now: 0 }))
-    expect(broken.model.saved).toBe(false)
+    const broken = update(
+      initialModel(),
+      Message.SavesLoaded({ index: null, legacy: json, now: 0 }),
+    )
+    expect(broken.model.loaded).toBe(false)
     expect(broken.model.toast?.tone).toBe('warn')
     expect(broken.commands).toEqual(
       expect.arrayContaining([

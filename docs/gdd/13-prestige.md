@@ -119,6 +119,6 @@ Postgres can serve `q-search` with full-text search, `ai` lookups with pgvector,
 
 ## Company history
 
-Each Exit adds a row to the company history: Venture, Mutators, time played, peak users, Exit type,
+Each Exit adds a row to the company history: the Company's name, Venture, Mutators, time played, peak users, Exit type,
 payout, Legacy earned, final Stack mix, and a snapshot of the board. The history is a record of how
 the player's engineering changed over time.

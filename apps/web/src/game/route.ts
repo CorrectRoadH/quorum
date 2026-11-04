@@ -21,6 +21,7 @@ import { SANDBOX_IDS } from '@quorum/simulation/sandbox'
 export const MENU_PAGES = [
   'sandbox',
   'found',
+  'companies',
   'legacy',
   'history',
   'challenges',

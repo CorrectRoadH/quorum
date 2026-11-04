@@ -1,8 +1,19 @@
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { ArrowUpRight, Check, Download, Lock, ScrollText, Settings, Store, Trophy } from 'lucide'
+import {
+  ArrowUpRight,
+  Check,
+  Download,
+  Trash2,
+  Lock,
+  ScrollText,
+  Settings,
+  Store,
+  Trophy,
+} from 'lucide'
 import { icon } from '@quorum/ui/primitives/icon'
+import { companyMark } from '@/components/company-mark.ts'
 import { connecting, titleIsOpen } from './boot-machine.ts'
 import {
   ACHIEVEMENTS,
@@ -27,7 +38,9 @@ import { GUIDED, TRACKS, sandboxOpen } from '@quorum/simulation/sandbox'
 import { clock, compact } from '@quorum/ui/game/format'
 import { Message } from './message.ts'
 import { PrefsMessage } from './prefs.ts'
-import { boardChallenge, boardSandbox, type Model } from './model.ts'
+import { boardChallenge, boardSandbox, currentFile, hasCompany, type Model } from './model.ts'
+import { LOGOS } from './logos.ts'
+import { MAX_COMPANY_NAME, hasRecovered, nameOr, recent, type CompanyFile } from './saves.ts'
 import { menuOf, type MenuPage } from './route.ts'
 import { supportedLocales } from '../i18n/index.ts'
 import { play } from './sound.ts'
@@ -40,7 +53,7 @@ import { play } from './sound.ts'
    is the room's only light.
    ========================================================================== */
 
-type Page = typeof MenuPage.Type | 'main'
+type Page = typeof MenuPage.Type | 'main' | 'save'
 
 /* --------------------------------------------------------------------------
    The driver: everything the screen does below the Model. The selection bar is
@@ -80,6 +93,23 @@ const BoothDriver = Mount.define('BoothDriver', {
           if (target instanceof Element && target !== document.body && !element.contains(target))
             return
           if (element.querySelector('.booth-term')) return
+          // A name is typed, not navigated: Enter and the vertical arrows step out of the field.
+          if (target instanceof HTMLInputElement) {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              target.blur()
+              return
+            }
+            if (event.key !== 'Enter' && event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+              return
+            event.preventDefault()
+            const rows = rowsOf(element)
+            const at = rows.indexOf(target)
+            const step = event.key === 'ArrowUp' ? -1 : 1
+            const next = rows[at < 0 ? 0 : (at + step + rows.length) % rows.length]
+            next?.focus()
+            return
+          }
           light(event.key === ' ' ? 'Space' : event.key)
           play('tick')
           const rows = rowsOf(element)
@@ -213,17 +243,23 @@ type Row = Readonly<{
   label: string
   detail?: string
   side?: Html | string | undefined
+  /** A Company's logo, before the label. */
+  mark?: Html
   message: Message | null
   big?: boolean
   back?: boolean
   to?: Page
   pressed?: boolean
   record?: boolean
+  danger?: boolean
+  /** Holds at the bottom of a scrolling page: the founding screen's Found action. */
+  sticky?: boolean
 }>
 
 const row = (r: Row, h: HtmlBuilder<Message>): Html => {
   const body = [
     r.back ? h.span([h.Class('booth-mark'), h.AriaHidden(true)], ['‹']) : h.empty,
+    r.mark ?? h.empty,
     h.span(
       [h.Class('booth-label')],
       [h.span([], [r.label]), r.detail ? h.span([h.Class('booth-detail')], [r.detail]) : h.empty],
@@ -234,7 +270,7 @@ const row = (r: Row, h: HtmlBuilder<Message>): Html => {
         ? h.span([h.Class('booth-side')], [r.side])
         : h.span([h.Class('booth-side')], [r.side]),
   ]
-  const className = `booth-row ${r.big ? 'is-big' : ''} ${r.back ? 'is-back' : ''}`
+  const className = `booth-row ${r.big ? 'is-big' : ''} ${r.back ? 'is-back' : ''} ${r.danger ? 'is-danger' : ''} ${r.sticky ? 'is-sticky' : ''}`
   if (r.record)
     return h.div(
       [h.Key(r.key), h.Tabindex(-1), h.DataAttribute('row', ''), h.Class(`${className} is-record`)],
@@ -267,15 +303,18 @@ const group = (text: string, h: HtmlBuilder<Message>): Html =>
 
 const mainRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   const game = model.board.game
-  const veteran = model.founder.history.length > 0
+  const file = currentFile(model)
+  const current = hasCompany(model) ? file : null
+  const count = model.saves.companies.length
   return [
-    ...(model.saved
+    ...(current
       ? [
           row(
             {
               key: 'continue',
+              mark: companyMark(current.logo, 'booth-logo-mini', h),
               label: 'Continue',
-              detail: `${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
+              detail: `${current.name} · ${eraOf(game).name} · ${compact(game.users)} users · ${clock(game.time)}`,
               message: Message.Continued(),
               big: true,
             },
@@ -286,13 +325,27 @@ const mainRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> =>
     row(
       {
         key: 'new',
-        label: model.saved ? 'New company' : 'Start a company',
-        message: veteran ? Message.MenuChosen({ menu: 'found' }) : Message.NewCompanyStarted(),
-        big: !model.saved,
+        label: current ? 'New company' : 'Start a company',
+        message: Message.MenuChosen({ menu: 'found' }),
+        big: !current,
         to: 'found',
       },
       h,
     ),
+    ...(count > 0
+      ? [
+          row(
+            {
+              key: 'companies',
+              label: 'Companies',
+              detail: `${count} saved`,
+              message: Message.MenuChosen({ menu: 'companies' }),
+              to: 'companies',
+            },
+            h,
+          ),
+        ]
+      : []),
     row({ key: 'preseed', label: 'Start in Pre-seed', message: Message.PreseedStarted() }, h),
     row(
       {
@@ -336,11 +389,62 @@ const sandboxRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html>
   row({ key: 'free', label: 'Free Sandbox', message: Message.FreeSandboxStarted() }, h),
 ]
 
+/** The founding screen's identity: the chosen logo, and the name above the fold. */
+const identity = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('booth-identity')],
+    [
+      companyMark(model.draft.logo, 'booth-logo-big', h),
+      h.label(
+        [h.Class('booth-field')],
+        [
+          h.span([h.Class('booth-field-label')], ['Company name']),
+          h.input([
+            h.Class('booth-input'),
+            h.Type('text'),
+            h.Value(model.draft.name),
+            h.Placeholder('Name your company'),
+            h.Maxlength(MAX_COMPANY_NAME),
+            h.Autocomplete('off'),
+            h.Spellcheck(false),
+            h.AriaLabel('Company name'),
+            h.DataAttribute('row', ''),
+            h.OnInput((name) => Message.CompanyNameChanged({ name })),
+          ]),
+        ],
+      ),
+    ],
+  )
+
+/** A logo is one click, and each tile carries its own accessible name. */
+const logoPicker = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('booth-logos')],
+    LOGOS.map((logo) =>
+      h.button(
+        [
+          h.Key(`logo-${logo.id}`),
+          h.Type('button'),
+          h.Class(`booth-logo ${model.draft.logo === logo.id ? 'is-on' : ''}`),
+          h.Title(logo.name),
+          h.AriaLabel(logo.name),
+          h.AriaPressed(model.draft.logo === logo.id ? 'true' : 'false'),
+          h.DataAttribute('row', ''),
+          h.OnClick(Message.LogoChosen({ logo: logo.id })),
+        ],
+        [companyMark(logo.id, 'booth-logo-mark', h)],
+      ),
+    ),
+  )
+
 const foundRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
   const founder = model.founder
   const founding = foundingOf(founder)
   return [
     backRow(h),
+    identity(model, h),
+    group('Logo', h),
+    logoPicker(model, h),
     group('Venture', h),
     ...VENTURE_IDS.map((id) => {
       const def = VENTURES[id]
@@ -388,13 +492,115 @@ const foundRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> =
     row(
       {
         key: 'found',
-        label: 'Found',
+        mark: companyMark(model.draft.logo, 'booth-logo-mini', h),
+        label: `Found ${nameOr(model.draft.name)}`,
         detail: `${startEra(founding)} · Legacy ×${legacyMultiplier(founding).toFixed(2)}`,
         message: Message.CompanyFounded(),
+        big: true,
+        sticky: true,
+      },
+      h,
+    ),
+  ]
+}
+
+/** The Companies page: every file, newest first, with the one Continue opens marked. */
+const companyRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
+  backRow(h),
+  ...recent(model.saves.companies).map((file) =>
+    row(
+      {
+        key: file.id,
+        mark: companyMark(file.logo, 'booth-logo-mini', h),
+        label: file.name,
+        detail: `${VENTURES[file.venture].name} · ${ERAS[file.stage]?.name ?? ''} · ${compact(file.users)} users · ${clock(file.time)}`,
+        side: file.id === model.saves.current ? 'Current' : dateOf(file),
+        message: Message.CompanyChosen({ id: file.id }),
+      },
+      h,
+    ),
+  ),
+  ...(model.saves.companies.length === 0 ? [group('No companies saved yet', h)] : []),
+]
+
+const dateOf = (file: CompanyFile): string =>
+  new Date(file.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+
+/** One Company's file: what it is, then Open, then Delete behind a second press. */
+const saveRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html> => {
+  const file = model.saves.companies.find((entry) => entry.id === model.saveFocus)
+  if (!file) return [backRow(h)]
+  return [
+    row({ key: 'back', label: 'Companies', message: Message.CompanyClosed(), back: true }, h),
+    h.div(
+      [h.Class('booth-file')],
+      [
+        companyMark(file.logo, 'booth-logo-big', h),
+        h.div(
+          [h.Class('booth-file-text')],
+          [
+            h.span([h.Class('booth-file-name')], [file.name]),
+            h.span(
+              [h.Class('booth-detail')],
+              [
+                `${VENTURES[file.venture].name} · ${ERAS[file.stage]?.name ?? ''} · ${compact(file.users)} users · ${clock(file.time)}`,
+              ],
+            ),
+            h.span(
+              [h.Class('booth-detail')],
+              [
+                file.mutators.length > 0
+                  ? `${file.mutators.length} Mutator${file.mutators.length === 1 ? '' : 's'} · `
+                  : '',
+                `Started ${new Date(file.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+    row(
+      {
+        key: 'open',
+        label: file.id === model.saves.current ? 'Continue' : 'Open company',
+        side: file.id === model.saves.current ? 'Current' : undefined,
+        message: Message.CompanyOpened({ id: file.id }),
         big: true,
       },
       h,
     ),
+    ...(model.saveConfirm
+      ? [
+          row(
+            {
+              key: 'delete',
+              label: 'Delete forever',
+              detail: 'The Company and its Design are gone.',
+              message: Message.CompanyDeleteConfirmed(),
+              danger: true,
+            },
+            h,
+          ),
+          row(
+            {
+              key: 'keep',
+              label: 'Keep company',
+              message: Message.CompanyDeleteCancelled(),
+            },
+            h,
+          ),
+        ]
+      : [
+          row(
+            {
+              key: 'delete',
+              label: 'Delete company',
+              side: icon(h, Trash2, 'booth-icon'),
+              message: Message.CompanyDeleteAsked(),
+            },
+            h,
+          ),
+        ]),
   ]
 }
 
@@ -469,8 +675,10 @@ const historyRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html>
           row(
             {
               key: `h${index}`,
-              label: `${EXITS[entry.exit].name} · ${VENTURES[entry.founding.venture].name}`,
-              detail: `${ERAS[entry.stage]?.name ?? ''} · ${compact(entry.peak)} users · ${clock(entry.time)}`,
+              label:
+                entry.name ||
+                `${EXITS[entry.exit].name} · ${VENTURES[entry.founding.venture].name}`,
+              detail: `${entry.name ? `${EXITS[entry.exit].name} · ` : ''}${VENTURES[entry.founding.venture].name} · ${ERAS[entry.stage]?.name ?? ''} · ${compact(entry.peak)} users · ${clock(entry.time)}`,
               side: `+${entry.legacy}`,
               message: null,
               record: true,
@@ -555,6 +763,19 @@ const settingsRows = (model: Model, h: HtmlBuilder<Message>): ReadonlyArray<Html
       h,
     ),
     row({ key: 'copy', label: 'Copy state as JSON', message: Message.StateCopied() }, h),
+    ...(model.oldSave && !hasRecovered(model.saves.companies)
+      ? [
+          row(
+            {
+              key: 'old-save',
+              label: 'Recover previous save',
+              detail: 'Import a playtest Company. Temporary: removed after alpha.',
+              message: Message.OldSaveImportAsked(),
+            },
+            h,
+          ),
+        ]
+      : []),
   ]
 }
 
@@ -564,6 +785,8 @@ const PAGES: Record<
 > = {
   main: { title: '', rows: mainRows },
   found: { title: 'New company', rows: foundRows },
+  companies: { title: 'Companies', rows: companyRows },
+  save: { title: 'Company', rows: saveRows },
   sandbox: { title: 'Sandbox', rows: sandboxRows },
   challenges: { title: 'Challenges', rows: challengeRows },
   legacy: { title: 'Legacy shop', rows: legacyRows },
@@ -572,14 +795,22 @@ const PAGES: Record<
   settings: { title: 'Settings', rows: settingsRows },
 }
 
+/** The page the monitor shows. A Company file replaces the Companies list in place. */
+const pageOf = (model: Model): Page => {
+  const page = menuOf(model.route)
+  return page === 'companies' && model.saveFocus !== null ? 'save' : page
+}
+
 /** A page's heading: where it is, and the figure it spends or counts. */
 const crumb = (model: Model, page: Page, h: HtmlBuilder<Message>): Html => {
   const figure =
     page === 'found' || page === 'challenges' || page === 'legacy'
       ? `${model.founder.legacy} Legacy`
-      : page === 'achievements'
-        ? `${model.founder.achievements.length}/${ACHIEVEMENT_IDS.length}`
-        : ''
+      : page === 'companies'
+        ? `${model.saves.companies.length}`
+        : page === 'achievements'
+          ? `${model.founder.achievements.length}/${ACHIEVEMENT_IDS.length}`
+          : ''
   return h.div(
     [h.Class('booth-crumb')],
     page === 'main'
@@ -635,12 +866,21 @@ const sparkOf = (game: Game): string => {
 
 const status = (model: Model, h: HtmlBuilder<Message>): Html => {
   const game = model.board.game
+  const file = currentFile(model)
   const hot = busiest(game)
   const spark = sparkOf(game)
   const tone = !hot ? '' : hot.load >= 0.9 ? 'is-bad' : hot.load >= 0.7 ? 'is-warn' : 'is-ok'
   return h.aside(
     [h.Class('booth-status')],
     [
+      ...(file
+        ? [
+            h.span(
+              [h.Class('booth-status-brand')],
+              [companyMark(file.logo, 'booth-status-logo', h), h.span([], [file.name])],
+            ),
+          ]
+        : []),
       h.span(
         [h.Class('booth-status-era')],
         [h.span([], [eraOf(game).name]), ` · ${clock(game.time)}`],
@@ -759,9 +999,12 @@ const terminal = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 const screen = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const page = menuOf(model.route)
+  const page = pageOf(model)
+  const open = hasCompany(model)
+  // The status column reads the open Company's Game. On a Company file, the file shows its own figures.
+  const showStatus = open && page !== 'companies' && page !== 'save'
   return h.div(
-    [h.Class(`booth-screen ${model.saved ? '' : 'is-new'}`)],
+    [h.Class(`booth-screen ${showStatus ? '' : 'is-new'}`)],
     [
       h.section(
         [h.Class('booth-home')],
@@ -770,7 +1013,7 @@ const screen = (model: Model, h: HtmlBuilder<Message>): Html => {
           crumb(model, page, h),
           h.nav(
             [
-              h.Key(page),
+              h.Key(page === 'save' ? `save-${model.saveFocus}` : page),
               h.Class('booth-list'),
               h.AriaLabel('Main menu'),
               h.DataAttribute('page', page),
@@ -781,7 +1024,7 @@ const screen = (model: Model, h: HtmlBuilder<Message>): Html => {
           hint(h),
         ],
       ),
-      model.saved ? status(model, h) : h.empty,
+      showStatus ? status(model, h) : h.empty,
       taskbar(model, page, h),
       connecting(model.boot) ? terminal(model, h) : h.empty,
     ],

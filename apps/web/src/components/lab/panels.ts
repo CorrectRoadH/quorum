@@ -3,12 +3,13 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Copy, DoorOpen, Download, House, Play, Settings, Trash2, X } from 'lucide'
 import { offer } from '@quorum/simulation/actions'
 import { PRE_IPO_STAGE } from '@quorum/simulation/ipo'
-import { INCIDENTS, INCIDENT_IDS } from '@quorum/simulation/catalog'
+import { INCIDENTS, INCIDENT_IDS, VENTURES } from '@quorum/simulation/catalog'
 import { eraOf, isFinalEra, nextEra } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from '@/game/cheats.ts'
 import { clock, compact, money } from '@quorum/ui/game/format'
 import { Message } from '@/game/message.ts'
-import { exitLegacy, type Model } from '@/game/model.ts'
+import { currentFile, exitLegacy, type Model } from '@/game/model.ts'
+import { companyMark } from '@/components/company-mark.ts'
 import { speedsOf } from '@/game/update.ts'
 import { icon } from '@quorum/ui/primitives/icon'
 import { button } from '@quorum/ui/primitives/button'
@@ -231,11 +232,32 @@ const menuItem = (
   )
 
 /** The game menu over the board. The clock holds still while it is open. */
-export const menuPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
-  shell(
+export const menuPanel = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const file = currentFile(model)
+  return shell(
     'Menu',
     [],
     [
+      ...(file
+        ? [
+            h.div(
+              [h.Class('flex items-center gap-2.5 px-5 pb-4')],
+              [
+                companyMark(file.logo, 'size-6 shrink-0', h),
+                h.div(
+                  [h.Class('flex min-w-0 flex-col')],
+                  [
+                    h.span([h.Class('truncate text-sm font-medium')], [file.name]),
+                    h.span(
+                      [h.Class('truncate text-xs text-muted-foreground')],
+                      [`${VENTURES[file.venture].name} · ${eraOf(model.board.game).name}`],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ]
+        : []),
       h.div(
         [h.Class('flex flex-col gap-2 px-5 pt-1 pb-5')],
         [
@@ -252,6 +274,7 @@ export const menuPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
     'max-w-[320px]',
     h,
   )
+}
 
 /* ---------- settings ---------- */
 

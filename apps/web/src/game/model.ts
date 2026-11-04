@@ -15,6 +15,8 @@ import { histogramQuery } from './challenge-query.ts'
 import { History } from './history.ts'
 import { NodeSample } from './node-metrics.ts'
 import { AppRoute, MENU_PAGES } from './route.ts'
+import { LogoId } from './logos.ts'
+import { fileOf, SaveIndex } from './saves.ts'
 import { ComponentId, Game, GameLink, GameNode, ResearchId, Region } from '@quorum/simulation/state'
 
 /* ==========================================================================
@@ -398,8 +400,18 @@ export const Model = Schema.Struct({
   board: Board,
   /** The Company's board, kept aside while a Sandbox or Challenge is open. */
   company: Schema.NullOr(Board),
-  /** A saved company exists, so the title screen offers Continue. */
-  saved: Schema.Boolean,
+  /** The Companies saved in the browser, and the one Continue opens. */
+  saves: SaveIndex,
+  /** The single save of the build before Company files exists and can still be recovered. */
+  oldSave: Schema.Boolean,
+  /** The current Company's Game has been read into the board. */
+  loaded: Schema.Boolean,
+  /** The founding screen: the name and logo the next Company starts with. */
+  draft: Schema.Struct({ name: Schema.String, logo: LogoId }),
+  /** The Company file the Companies page shows, or null for the list. */
+  saveFocus: Schema.NullOr(Schema.String),
+  /** The player asked to delete the focused Company; the next press confirms. */
+  saveConfirm: Schema.Boolean,
   /** The player across Companies, kept apart from the Company save. */
   founder: Founder,
   /** Guided Sandboxes the player has passed. */
@@ -424,6 +436,12 @@ export const ledgerOf = (model: Model): Ledger => ({
   ...solveFlow(model.board.game),
   bottleneck: model.board.bottleneck,
 })
+
+/** The Company file Continue opens, or null when the title has no Company. */
+export const currentFile = (model: Model) => fileOf(model.saves, model.saves.current)
+
+/** A Company is open: its file exists and its Game is on the board. */
+export const hasCompany = (model: Model): boolean => model.loaded && currentFile(model) !== null
 
 /** The board is not the Company: a Sandbox or a Challenge is open. */
 export const offCompany = (model: Model): boolean => model.board.session._tag !== 'Company'

@@ -15,7 +15,12 @@ Cash. You need about ten minutes. You do not build anything yet.
 
 1. Open Quorum. A badge reader shows on the screen.
 2. Click the **Founder** badge to clock in. The main menu opens.
-3. Select **Start a company**.
+3. Select **Start a company**. The New company screen opens.
+4. Type a name in **Company name** and select a logo. The logo appears on the title screen and in
+   the game menu.
+5. Leave **B2B SaaS** selected. It is the only Venture at the start. Mutators are locked until you
+   earn them.
+6. Select **Found**, at the bottom of the screen.
 
 The board opens in the **Garage**, the first [Era](/eras/garage). The game shows only a few
 controls now. Other controls appear one at a time, when they become useful.
@@ -104,5 +109,12 @@ Press **H** at any time to open **How to play**. It lists the keys and the six c
 - The HUD shows Cash, Users, Apdex, and Latency.
 - Revenue waits in Payments until you collect it.
 - Users grow while Apdex meets the Era's target.
+- Each Company is saved separately, with its own name and logo.
+
+:::Note{tone="tip"}
+Quorum saves this Company every ten seconds. To start another, go to the title screen and select
+**Start a company**; this one stays in **Companies**. If you played the playtest build, read
+[Import your playtest save](/guides/import-your-playtest-save).
+:::
 
 Next: [Your first bottleneck](/tutorials/first-bottleneck).

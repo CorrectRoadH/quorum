@@ -56,14 +56,17 @@ An Exit ends the Company. Cash, Insight, Dev Hours, users, Research, the board, 
 Equity all reset, and you found a new Company in the Garage, or in Pre-seed with the Head start
 Perk.
 
+The exited Company closes: its file leaves the **Companies** list, and you cannot continue it. The
+Companies list keeps every Company you have not exited, and you can open them in any order.
+
 The Founder keeps:
 
 - Legacy, and the Perks it bought.
 - Playbooks: saved parts of a Design that you can place again in one action.
 - Unlocked Ventures and Mutators.
 - Achievements, Challenge results, and the glossary terms you met.
-- The company history: one row per Exit, with its Venture, payout, Legacy, peak users, Stack, and
-  a snapshot of the board.
+- The company history: one row per Exit, with its name, Venture, payout, Legacy, peak users, Stack,
+  and a snapshot of the board.
 
 ## Perks
 
@@ -112,6 +115,11 @@ Seed), and Postgres for everything. Each forces a different Design. The last one
 among engineers: how far one relational database can go.
 
 See the [Prestige](/prestige#mutators) reference for every Mutator and its share.
+
+:::Note{tone="tip"}
+Played Quorum during the playtest? [Import your playtest save](/guides/import-your-playtest-save)
+moves the old single save into the Companies list. That import is temporary.
+:::
 
 ## When to take an Exit
 

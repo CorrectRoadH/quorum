@@ -1,4 +1,4 @@
-import { Result, Schema } from 'effect'
+import { Effect, Result, Schema } from 'effect'
 import {
   COMPONENTS,
   EXITS,
@@ -33,6 +33,8 @@ export type Snapshot = typeof Snapshot.Type
 
 /** One row of the company history (13 "Company history"). */
 export const HistoryRow = Schema.Struct({
+  /** The Company's name, or empty for a row written before Companies were named. */
+  name: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(''))),
   exit: Schema.Literals(EXIT_IDS),
   founding: Founding,
   /** Sim seconds played. */
@@ -105,11 +107,12 @@ const stackOf = (game: Game): ReadonlyArray<readonly [string, number]> => {
 
 export type ExitResult = Readonly<{ legacy: number; row: HistoryRow; game: Game }>
 
-const resultOf = (game: Game, offer: ExitOffer): ExitResult => ({
+const resultOf = (game: Game, offer: ExitOffer, name: string): ExitResult => ({
   legacy: offer.legacy,
   // The IPO keeps the Company: it remembers what it paid.
   game: { ...game, banked: game.banked + offer.legacy },
   row: {
+    name,
     exit: offer.id,
     founding: game.founding,
     time: game.time,
@@ -127,13 +130,14 @@ export const takeExit = (
   game: Game,
   ledger: Ledger,
   id: ExitId,
+  name = '',
 ): Result.Result<ExitResult, Refusal> => {
   const offer = exitOffers(game, ledger).find((entry) => entry.id === id)
   if (!offer)
     return Result.fail(Refusal.NotAllowed({ reason: `${EXITS[id].name} is not offered.` }))
-  return Result.succeed(resultOf(game, offer))
+  return Result.succeed(resultOf(game, offer, name))
 }
 
 /** The IPO, on the Pre-IPO Game just before it lists: Legacy for the listing. */
-export const ipoExit = (game: Game, ledger: Ledger): ExitResult =>
-  resultOf(game, exitOffer(game, ledger, 'ipo'))
+export const ipoExit = (game: Game, ledger: Ledger, name = ''): ExitResult =>
+  resultOf(game, exitOffer(game, ledger, 'ipo'), name)

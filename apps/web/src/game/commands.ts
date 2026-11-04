@@ -11,6 +11,7 @@ import { ComponentId, Game, Region } from '@quorum/simulation/state'
 import { Message } from './message.ts'
 import { Founder } from '@quorum/simulation/founder'
 import { Motion, Prefs, Reveal, SandboxStore, TradeoffOption } from './model.ts'
+import { refreshed, SaveIndex } from './saves.ts'
 import { History } from './history.ts'
 import { play, setMuted, SOUND_NAMES } from './sound.ts'
 import { setAgentAccess } from './agent-relay.ts'
@@ -23,10 +24,17 @@ import { ApiRpc } from '@/platform/rpc.ts'
    fullscreen API, timers, and the playtest log.
    ========================================================================== */
 
-export const SAVE_KEY = 'quorum.save.v2'
+/** The list of Companies: their names, logos, and the figures the title lists. */
+export const SAVE_INDEX_KEY = 'quorum.saves.v1'
+/** One Company's Game per file, so an autosave writes one Company only. */
+export const SAVE_PREFIX = 'quorum.save.v3.'
+/** The single save of the build before Company files. Read once, then left in place. */
+export const LEGACY_SAVE_KEY = 'quorum.save.v2'
 export const SANDBOX_KEY = 'quorum.sandbox.v1'
 export const PREFS_KEY = 'quorum.prefs.v1'
 export const FOUNDER_KEY = 'quorum.founder.v1'
+
+export const saveKeyOf = (id: string): string => `${SAVE_PREFIX}${id}`
 
 /** A Playbook following the pointer on the board. */
 const StampArg = Schema.NullOr(
@@ -150,44 +158,115 @@ export const FitBoard = Command.define('FitBoard', {
   execute: () => Effect.sync(() => fitBoard('board')).pipe(Effect.as(Message.Synced())),
 })
 
-export const LoadSave = Command.define('LoadSave', {
+/** Reads the Company index, and the single save of the build before Company files. */
+export const LoadSaves = Command.define('LoadSaves', {
   args: {},
-  messages: [Message.SaveLoaded],
+  messages: [Message.SavesLoaded],
   execute: () =>
     Effect.sync(() => {
       try {
-        return Message.SaveLoaded({ json: window.localStorage.getItem(SAVE_KEY), now: Date.now() })
+        return Message.SavesLoaded({
+          index: window.localStorage.getItem(SAVE_INDEX_KEY),
+          legacy: window.localStorage.getItem(LEGACY_SAVE_KEY),
+          now: Date.now(),
+        })
       } catch {
-        return Message.SaveLoaded({ json: null, now: Date.now() })
+        return Message.SavesLoaded({ index: null, legacy: null, now: Date.now() })
       }
     }),
 })
 
-export const WriteSave = Command.define('WriteSave', {
+/** Reads one Company's Game, to continue it or to open it from the Companies page. */
+export const LoadCompany = Command.define('LoadCompany', {
+  args: { id: Schema.String, open: Schema.Boolean },
+  messages: [Message.CompanyLoaded],
+  execute: ({ id, open }) =>
+    Effect.sync(() => {
+      try {
+        return Message.CompanyLoaded({
+          id,
+          open,
+          json: window.localStorage.getItem(saveKeyOf(id)),
+          now: Date.now(),
+        })
+      } catch {
+        return Message.CompanyLoaded({ id, open, json: null, now: Date.now() })
+      }
+    }),
+})
+
+export const WriteCompany = Command.define('WriteCompany', {
   args: {
+    id: Schema.String,
+    index: SaveIndex,
     game: Game,
     revealed: Schema.Array(Reveal),
     pending: Schema.Array(Reveal),
     dashboard: History,
   },
   messages: [Message.Saved],
-  execute: ({ game, revealed, pending, dashboard }) =>
+  execute: ({ id, index, game, revealed, pending, dashboard }) =>
     Effect.sync(() => {
       try {
         // The wall clock goes in at the last moment: it is the only one, for offline progress.
-        window.localStorage.setItem(
-          SAVE_KEY,
-          JSON.stringify({
-            ...game,
-            wall: Date.now(),
-            disclosure: { revealed, pending },
-            dashboard,
-          }),
-        )
+        const now = Date.now()
+        const file = index.companies.find((entry) => entry.id === id)
+        if (file) {
+          const stamped = refreshed(file, game, now)
+          window.localStorage.setItem(
+            saveKeyOf(id),
+            JSON.stringify({
+              ...game,
+              wall: now,
+              disclosure: { revealed, pending },
+              dashboard,
+            }),
+          )
+          window.localStorage.setItem(
+            SAVE_INDEX_KEY,
+            JSON.stringify({
+              ...index,
+              companies: index.companies.map((entry) => (entry.id === id ? stamped : entry)),
+            }),
+          )
+        }
       } catch {
         // A full or blocked storage loses the save, not the game.
       }
       return Message.Saved()
+    }),
+})
+
+/** Removes one Company's file and writes the index without it. */
+export const DeleteCompany = Command.define('DeleteCompany', {
+  args: { id: Schema.String, index: SaveIndex },
+  messages: [Message.CompanyDeleted],
+  execute: ({ id, index }) =>
+    Effect.sync(() => {
+      try {
+        window.localStorage.removeItem(saveKeyOf(id))
+        window.localStorage.setItem(SAVE_INDEX_KEY, JSON.stringify(index))
+      } catch {
+        // Storage blocked: the Company stays where it was.
+      }
+      return Message.CompanyDeleted({ id })
+    }),
+})
+
+/** Reads the single save of the build before Company files, for the hidden recovery action. */
+export const ReadOldSave = Command.define('ReadOldSave', {
+  args: {},
+  messages: [Message.OldSaveLoaded],
+  execute: () =>
+    Effect.sync(() => {
+      try {
+        return Message.OldSaveLoaded({
+          json: window.localStorage.getItem(LEGACY_SAVE_KEY),
+          now: Date.now(),
+        })
+      } catch {
+        return Message.OldSaveLoaded({ json: null, now: Date.now() })
+      }
     }),
 })
 
@@ -351,21 +430,6 @@ export const PlaySound = Command.define('PlaySound', {
   messages: [Message.Synced],
   execute: ({ sound, pitch, spatial }) =>
     Effect.sync(() => play(sound, pitch, spatial)).pipe(Effect.as(Message.Synced())),
-})
-
-/** Forgets the Company save: after an Exit there is nothing to continue. */
-export const ClearSave = Command.define('ClearSave', {
-  args: {},
-  messages: [Message.Synced],
-  execute: () =>
-    Effect.sync(() => {
-      try {
-        window.localStorage.removeItem(SAVE_KEY)
-      } catch {
-        // Nothing to forget.
-      }
-      return Message.Synced()
-    }),
 })
 
 export const LoadFounder = Command.define('LoadFounder', {

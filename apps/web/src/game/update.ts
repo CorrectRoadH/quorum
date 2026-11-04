@@ -155,11 +155,15 @@ import * as Work from '@quorum/simulation/work'
 import {
   AskPlaybook,
   ApplySettings,
-  ClearSave,
+  DeleteCompany,
   FocusInspector,
   CopyText,
+  LoadCompany,
   LoadFounder,
+  LoadSaves,
   KeepBrokenSave,
+  ReadOldSave,
+  WriteCompany,
   WriteFounder,
   AppendLog,
   ClearLog,
@@ -171,7 +175,6 @@ import {
   FitBoard,
   LoadPrefs,
   LoadSandboxStore,
-  LoadSave,
   LoadUrl,
   PlaySound,
   PushUrl,
@@ -181,7 +184,6 @@ import {
   ToggleFullscreen,
   WritePrefs,
   WriteSandboxStore,
-  WriteSave,
   SubmitChallenge,
 } from './commands.ts'
 import {
@@ -221,7 +223,9 @@ import {
   type Tone,
   type Tradeoff,
   type TradeoffOption,
+  currentFile,
   halted,
+  hasCompany,
   offCompany,
   placingOf,
   stampedPlaybook,
@@ -230,6 +234,22 @@ import {
   boardChallenge,
   boardSandbox,
 } from './model.ts'
+import {
+  EMPTY_SAVE_INDEX,
+  MAX_COMPANY_NAME,
+  fileFor,
+  fileOf,
+  hasRecovered,
+  nameOr,
+  newSaveId,
+  refreshedIndex,
+  savedIndex,
+  withFile,
+  withoutFile,
+  type CompanyFile,
+  SaveIndex,
+} from './saves.ts'
+import { DEFAULT_LOGO } from './logos.ts'
 import { poolName, recipeOf } from '@quorum/ui/game/pools'
 import { bootStep } from './boot-machine.ts'
 import { sessionStep } from './session-machine.ts'
@@ -314,7 +334,12 @@ export const initialModel = (): Model =>
     toastSeq: 0,
     board: freshBoard(newGame()),
     company: null,
-    saved: false,
+    saves: EMPTY_SAVE_INDEX,
+    oldSave: false,
+    loaded: false,
+    draft: { name: '', logo: DEFAULT_LOGO },
+    saveFocus: null,
+    saveConfirm: false,
     founder: emptyFounder(),
     passed: [],
     freeBoard: null,
@@ -341,7 +366,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, void, ApiRpc> 
   return {
     model: { ...initialModel(), route, boot: { _tag: 'Shut' } },
     commands: [
-      LoadSave({}),
+      LoadSaves({}),
       LoadSandboxStore({}),
       LoadPrefs({}),
       LoadFounder({}),
@@ -389,14 +414,24 @@ const sync = (model: Model, fit: boolean): AnyCommand =>
     cue: cueNode(model),
   })
 
-/** The Company save: the Game, and what this Company has shown so far. */
-const saveOf = (model: Model): AnyCommand =>
-  WriteSave({
+/** The open Company's file, with what the board has shown so far. Null when no Company is open. */
+const saveOf = (model: Model): AnyCommand | null => {
+  const id = model.saves.current
+  if (id === null || !model.loaded || !fileOf(model.saves, id)) return null
+  return WriteCompany({
+    id,
+    index: refreshedIndex(model.saves, model.board.game),
     game: model.board.game,
     revealed: model.board.disclosure.revealed,
     pending: model.board.disclosure.pending,
     dashboard: model.board.dashboard.history,
   })
+}
+
+const saveCommands = (model: Model): ReadonlyArray<AnyCommand> => {
+  const command = saveOf(model)
+  return command === null ? [] : [command]
+}
 
 /** The Playbook being placed, as the board draws it: ghosts where research is missing. */
 const stampOf = (model: Model) => {
@@ -1410,7 +1445,7 @@ const tick = (model: Model): Result => {
   }
   if (game.time - model.board.clock.savedAt >= SAVE_EVERY) {
     next = { ...next, board: { ...next.board, clock: { ...next.board.clock, savedAt: game.time } } }
-    if (!offCompany(next)) commands.push(saveOf(next))
+    if (!offCompany(next)) commands.push(...saveCommands(next))
     else if (boardSandbox(next.board)?.id === null) {
       next = { ...next, freeBoard: game }
       commands.push(WriteSandboxStore({ store: storeOf(next) }))
@@ -1439,21 +1474,30 @@ const ARROWS: Record<string, Direction> = {
   ArrowRight: 'right',
 }
 
-const startCompany = (model: Model, game: Game, panel: Model['panel']): Result => {
+const startCompany = (
+  model: Model,
+  game: Game,
+  panel: Model['panel'],
+  file: CompanyFile,
+): Result => {
   const fresh: Model = {
     ...model,
     route: AppRoute.Company(),
-    saved: true,
+    loaded: true,
     toast: null,
     panel,
     company: null,
+    saves: { current: file.id, companies: withFile(model.saves, file).companies },
+    draft: { name: '', logo: model.draft.logo },
+    saveFocus: null,
+    saveConfirm: false,
     board: freshBoard(game),
   }
   const next = revealAtStart(fresh, ledgerOf(fresh))
   return {
     model: next,
     commands: [
-      saveOf(next),
+      ...saveCommands(next),
       FitBoard({}),
       AppendLog({
         entries: [
@@ -1535,6 +1579,122 @@ const afterRound = (game: Game): Model['panel'] => (isFinalEra(game) ? 'end' : '
 /* ---------- the Founder ---------- */
 
 const parseFounder = Schema.decodeUnknownOption(Schema.fromJsonString(Founder))
+const parseIndex = Schema.decodeUnknownOption(Schema.fromJsonString(SaveIndex))
+
+/** A decoded Company Game goes onto the board. Time away plays out at 1×: a real
+ *  second is a sim second (04 "Offline progress"). Opening it also leaves the title. */
+const applyCompany = (
+  model: Model,
+  id: string,
+  game: Game,
+  file: unknown,
+  now: number,
+  open: boolean,
+): Result => {
+  const away = game.wall > 0 ? (now - game.wall) / 1_000 : 0
+  const back = away >= OFFLINE_MIN && !game.sandbox ? simulateAway(game, away) : null
+  const played = back?.game ?? game
+  const next: Model = {
+    ...model,
+    loaded: true,
+    saves: { ...model.saves, current: id },
+    route: open ? AppRoute.Company() : model.route,
+    panel: open ? (back ? 'away' : 'none') : model.panel,
+    saveFocus: null,
+    saveConfirm: false,
+    board: {
+      ...model.board,
+      disclosure: { ...model.board.disclosure, ...revealsOfSave(file) },
+      dashboard: { ...model.board.dashboard, history: historyOfSave(file) },
+      game: played,
+      clock: { ...model.board.clock, savedAt: played.time, sampledAt: played.time },
+      bottleneckAt: -1,
+      away: back?.report ?? null,
+    },
+  }
+  return {
+    model: { ...next, saves: refreshedIndex(next.saves, played) },
+    commands: back
+      ? [AppendLog({ entries: [line(played.time, 'OfflineReturned', { ...back.report })] })]
+      : [],
+  }
+}
+
+/** The single save of the build before Company files becomes the first Company. */
+const adoptLegacy = (model: Model, json: string, now: number): Result => {
+  const raw = parseJson(json)
+  const decoded = Option.match(raw, {
+    onNone: () => Exit.fail('The save is not JSON.'),
+    onSome: (value) => Exit.mapError(decodeGame(value), (error) => error.message),
+  })
+  if (Exit.isFailure(decoded))
+    return withToast(model, 'Your save could not be read. A copy was kept.', 'warn', [
+      KeepBrokenSave({ json, reason: String(Cause.squash(decoded.cause)) }),
+    ])
+  const game = decoded.value
+  const createdAt = game.wall > 0 ? game.wall : now
+  const file = fileFor({
+    id: newSaveId(model.saves.companies, game.seed),
+    name: 'Recovered company',
+    logo: DEFAULT_LOGO,
+    founding: game.founding,
+    game,
+    now,
+    createdAt,
+    recovered: true,
+  })
+  const saves: SaveIndex = { current: file.id, companies: withFile(model.saves, file).companies }
+  const applied = applyCompany(
+    { ...model, saves, oldSave: true },
+    file.id,
+    game,
+    Option.getOrNull(raw),
+    now,
+    false,
+  )
+  return {
+    ...applied,
+    commands: [...(applied.commands ?? []), ...saveCommands(applied.model)],
+  }
+}
+
+/** Imports the single save of the build before Company files, leaving the old key in place. */
+const importOldSave = (model: Model, json: string | null, now: number): Result => {
+  if (json === null) return withToast(model, 'There is no previous save to recover.', 'plain')
+  if (hasRecovered(model.saves.companies))
+    return withToast(model, 'The previous save is already in your companies.', 'plain')
+  const raw = parseJson(json)
+  const decoded = Option.match(raw, {
+    onNone: () => Exit.fail('The save is not JSON.'),
+    onSome: (value) => Exit.mapError(decodeGame(value), (error) => error.message),
+  })
+  if (Exit.isFailure(decoded))
+    return withToast(model, 'The previous save could not be read. It was left untouched.', 'warn')
+  const game = decoded.value
+  const file = fileFor({
+    id: newSaveId(model.saves.companies, game.seed),
+    name: 'Recovered company',
+    logo: DEFAULT_LOGO,
+    founding: game.founding,
+    game,
+    now,
+    createdAt: game.wall > 0 ? game.wall : now,
+    recovered: true,
+  })
+  const saves: SaveIndex = { current: file.id, companies: withFile(model.saves, file).companies }
+  const applied = applyCompany(
+    { ...model, saves, oldSave: true },
+    file.id,
+    game,
+    Option.getOrNull(raw),
+    now,
+    true,
+  )
+  return withToast(applied.model, `Recovered ${file.name}.`, 'ok', [
+    ...(applied.commands ?? []),
+    ...saveCommands(applied.model),
+  ])
+}
 
 /** Applies a change to the Founder record, saves it, or says why not. */
 const changeFounder = (
@@ -1554,12 +1714,18 @@ const changeFounder = (
 /** Founds the next Company with the Founder's Venture, Mutators, perks and kept research. */
 const found = (model: Model): Result => {
   const founder = founded(model.founder)
-  const game = foundCompany(
-    model.board.game.seed + 7919,
-    foundingOf(model.founder),
-    model.founder.keep,
-  )
-  const started = startCompany({ ...model, founder }, game, game.stage >= 1 ? 'era' : 'none')
+  const founding = foundingOf(model.founder)
+  const game = foundCompany(model.board.game.seed + 7919, founding, model.founder.keep)
+  const now = Date.now()
+  const file = fileFor({
+    id: newSaveId(model.saves.companies, game.seed),
+    name: nameOr(model.draft.name),
+    logo: model.draft.logo,
+    founding,
+    game,
+    now,
+  })
+  const started = startCompany({ ...model, founder }, game, game.stage >= 1 ? 'era' : 'none', file)
   return {
     ...started,
     commands: [...(started.commands ?? []), WriteFounder({ founder })],
@@ -1572,14 +1738,17 @@ const leaveExited = (model: Model, menu: Menu): Result => ({
     ...model,
     route: routeOfMenu(menu),
     panel: 'none',
-    saved: false,
+    loaded: false,
+    saves: { ...model.saves, current: null },
+    saveFocus: null,
+    saveConfirm: false,
     board: freshBoard(newGame(model.board.game.seed)),
   },
 })
 
 /** The IPO lists the Company: Legacy for the listing, and the Company goes on as Public. */
 const listed = (model: Model, game: Game): Readonly<{ game: Game; founder: Founder }> => {
-  const ipo = ipoExit(game, solveFlow(game))
+  const ipo = ipoExit(game, solveFlow(game), currentFile(model)?.name ?? '')
   return { game: ipo.game, founder: recordExit(model.founder, ipo) }
 }
 
@@ -1873,9 +2042,10 @@ const leaveBoard = (model: Model): Result => {
         ...model,
         route: AppRoute.Title(),
         panel: 'none',
+        saves: savedIndex(model.saves, model.board.game, Date.now()),
         board: { ...model.board, tool: null },
       },
-      commands: [saveOf(model)],
+      commands: saveCommands(model),
     }
   const free = boardSandbox(model.board)
   const freeBoard = free?.id === null ? model.board.game : model.freeBoard
@@ -1898,8 +2068,14 @@ const leaveBoard = (model: Model): Result => {
 const open = (model: Model, route: AppRoute): Result =>
   AppRoute.match<Result>(route, {
     Title: () => ({ model: { ...model, route } }),
-    Menu: () => ({ model: { ...model, route } }),
-    Company: () => (model.saved ? continued(model) : { model }),
+    Menu: ({ menu }) => ({
+      model: {
+        ...model,
+        route,
+        ...(menu === 'companies' ? {} : { saveFocus: null, saveConfirm: false }),
+      },
+    }),
+    Company: () => (hasCompany(model) ? continued(model) : { model }),
     Sandbox: ({ sandbox }) =>
       sandbox === 'free'
         ? enterSandbox(model, model.freeBoard ?? freeSandbox(), { id: null, progress: START })
@@ -1946,43 +2122,89 @@ const route = (model: Model, message: Message): Result => {
 
 const handle = (model: Model, message: Message): Result =>
   Message.match<Result>(message, {
-    SaveLoaded: ({ json, now }) => {
-      if (json === null) return { model }
+    SavesLoaded: ({ index, legacy, now }) => {
+      if (index !== null) {
+        const parsed = Option.getOrNull(parseIndex(index))
+        if (!parsed)
+          return withToast(model, 'Your company list could not be read. A copy was kept.', 'warn', [
+            KeepBrokenSave({ json: index, reason: 'The company list is not a save index.' }),
+          ])
+        return {
+          model: { ...model, saves: parsed, oldSave: legacy !== null },
+          commands:
+            parsed.current === null ? [] : [LoadCompany({ id: parsed.current, open: false })],
+        }
+      }
+      return legacy === null ? { model } : adoptLegacy(model, legacy, now)
+    },
+    CompanyLoaded: ({ id, open, json, now }) => {
+      if (json === null)
+        return open ? withToast(model, 'That company file is missing.', 'warn') : { model }
       const raw = parseJson(json)
       const decoded = Option.match(raw, {
         onNone: () => Exit.fail('The save is not JSON.'),
         onSome: (value) => Exit.mapError(decodeGame(value), (error) => error.message),
       })
-      // A save this version cannot read is set aside, not overwritten by the next Company.
+      // A save this version cannot read is set aside, not overwritten by the next autosave.
       if (Exit.isFailure(decoded))
-        return withToast(model, 'Your save could not be read. A copy was kept.', 'warn', [
+        return withToast(model, 'That company could not be read. A copy was kept.', 'warn', [
           KeepBrokenSave({ json, reason: String(Cause.squash(decoded.cause)) }),
         ])
-      const saved = decoded.value
-      const file = Option.getOrNull(raw)
-      // Time away plays out at 1×: a real second is a sim second (04 "Offline progress").
-      const away = saved.wall > 0 ? (now - saved.wall) / 1_000 : 0
-      const back = away >= OFFLINE_MIN && !saved.sandbox ? simulateAway(saved, away) : null
-      const game = back?.game ?? saved
-      return {
-        model: {
-          ...model,
-          saved: true,
-          board: {
-            ...model.board,
-            disclosure: { ...model.board.disclosure, ...revealsOfSave(file) },
-            dashboard: { ...model.board.dashboard, history: historyOfSave(file) },
-            game,
-            clock: { ...model.board.clock, savedAt: game.time, sampledAt: game.time },
-            bottleneckAt: -1,
-            away: back?.report ?? null,
-          },
-        },
-        commands: back
-          ? [AppendLog({ entries: [line(game.time, 'OfflineReturned', { ...back.report })] })]
-          : [],
-      }
+      return applyCompany(model, id, decoded.value, Option.getOrNull(raw), now, open)
     },
+    CompanyNameChanged: ({ name }) => ({
+      model: { ...model, draft: { ...model.draft, name: name.slice(0, MAX_COMPANY_NAME) } },
+    }),
+    LogoChosen: ({ logo }) => ({ model: { ...model, draft: { ...model.draft, logo } } }),
+    CompanyChosen: ({ id }) =>
+      fileOf(model.saves, id)
+        ? { model: { ...model, saveFocus: id, saveConfirm: false } }
+        : { model },
+    CompanyClosed: () => ({
+      model: {
+        ...model,
+        route: AppRoute.Menu({ menu: 'companies' }),
+        saveFocus: null,
+        saveConfirm: false,
+      },
+    }),
+    CompanyOpened: ({ id }) =>
+      fileOf(model.saves, id) === null
+        ? { model }
+        : model.loaded && model.saves.current === id
+          ? continued({ ...model, saveFocus: null, saveConfirm: false })
+          : {
+              model: { ...model, saveFocus: null, saveConfirm: false },
+              commands: [LoadCompany({ id, open: true })],
+            },
+    CompanyDeleteAsked: () => ({ model: { ...model, saveConfirm: true } }),
+    CompanyDeleteCancelled: () => ({ model: { ...model, saveConfirm: false } }),
+    CompanyDeleteConfirmed: () => {
+      const id = model.saveFocus
+      if (id === null || fileOf(model.saves, id) === null) return { model }
+      const saves = withoutFile(model.saves, id)
+      const current = model.saves.current === id
+      const next: Model = {
+        ...model,
+        saves,
+        saveFocus: null,
+        saveConfirm: false,
+        ...(current
+          ? {
+              loaded: false,
+              board: freshBoard(newGame(model.board.game.seed)),
+              panel: 'none' as const,
+            }
+          : {}),
+      }
+      return { model: next, commands: [DeleteCompany({ id, index: saves })] }
+    },
+    CompanyDeleted: () => ({ model }),
+    OldSaveImportAsked: () =>
+      model.oldSave
+        ? { model, commands: [ReadOldSave({})] }
+        : withToast(model, 'There is no previous save to recover.', 'plain'),
+    OldSaveLoaded: ({ json, now }) => importOldSave(model, json, now),
     FounderLoaded: ({ json, deviceId, today }) => {
       const loaded = Option.getOrElse(
         json === null ? Option.none() : parseFounder(json),
@@ -1993,19 +2215,26 @@ const handle = (model: Model, message: Message): Result =>
       return { model: { ...model, founder, today }, commands: [WriteFounder({ founder })] }
     },
 
-    Saved: () => ({ model: model.saved ? model : { ...model, saved: true } }),
+    Saved: () => ({ model }),
 
     Continued: () => continued(model),
     Connected: () => ({ model: { ...model, boot: bootStep(model.boot, { _tag: 'Connected' }) } }),
 
-    NewCompanyStarted: () => found(model),
     CompanyFounded: () => found(model),
-    PreseedStarted: () =>
-      startCompany(
-        model,
-        { ...preseedGame(model.board.game.seed + 7919), founding: foundingOf(model.founder) },
-        'era',
-      ),
+    PreseedStarted: () => {
+      const founding = foundingOf(model.founder)
+      const game = { ...preseedGame(model.board.game.seed + 7919), founding }
+      const now = Date.now()
+      const file = fileFor({
+        id: newSaveId(model.saves.companies, game.seed),
+        name: nameOr(model.draft.name),
+        logo: model.draft.logo,
+        founding,
+        game,
+        now,
+      })
+      return startCompany(model, game, 'era', file)
+    },
     AwayClosed: () => ({
       model: { ...model, panel: 'none', board: { ...model.board, away: null } },
     }),
@@ -2018,7 +2247,13 @@ const handle = (model: Model, message: Message): Result =>
     MenuChosen: ({ menu }) =>
       model.board.exited
         ? leaveExited(model, menu)
-        : { model: { ...model, route: routeOfMenu(menu) } },
+        : {
+            model: {
+              ...model,
+              route: routeOfMenu(menu),
+              ...(menu === 'companies' ? {} : { saveFocus: null, saveConfirm: false }),
+            },
+          },
     ClickedLink: ({ request }) =>
       UrlRequest.match<Result>(request, {
         Internal: ({ url }) => ({ model, commands: [PushUrl({ url: urlToString(url) })] }),
@@ -2181,7 +2416,7 @@ const handle = (model: Model, message: Message): Result =>
         ? replaceFree(model, bigBoard(), 'The big board is loaded.')
         : replaceFree(model, stressBoard(), 'The stress board is loaded.'),
     CompanyCopied: () =>
-      model.company && model.saved
+      model.company && hasCompany(model)
         ? replaceFree(model, sandboxOf(model.company.game), 'Copied the Company Design.')
         : withToast(model, 'There is no Company to copy.', 'plain'),
     DemandStepped: ({ direction }) => {
@@ -3290,50 +3525,61 @@ const handle = (model: Model, message: Message): Result =>
     },
 
     ExitTaken: ({ exit }) =>
-      Result.match(takeExit(model.board.game, solveFlow(model.board.game), exit), {
-        onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
-        onSuccess: (result) => {
-          const exited = recordExit(model.founder, result)
-          const [earned, earnedCommands] = achieve(
-            { ...model, founder: exited },
-            everyVenture(exited.history.map((row) => row.founding.venture))
-              ? ['serial-founder']
-              : [],
-          )
-          const founder = earned.founder
-          const next: Model = {
-            ...earned,
-            founder,
-            panel: 'exited',
-            saved: false,
-            board: {
-              ...earned.board,
-              selected: null,
-              selection: [],
-              tool: null,
-              exited: { row: result.row, researched: model.board.game.researched },
-              clock: { ...earned.board.clock, paused: true },
-            },
-          }
-          return {
-            model: next,
-            commands: [
-              ...earnedCommands,
-              WriteFounder({ founder }),
-              ClearSave({}),
-              AppendLog({
-                entries: [
-                  line(model.board.game.time, 'Exited', {
-                    exit: EXITS[exit].name,
-                    payout: result.row.payout,
-                    legacy: result.legacy,
-                  }),
-                ],
-              }),
-            ],
-          }
+      Result.match(
+        takeExit(
+          model.board.game,
+          solveFlow(model.board.game),
+          exit,
+          currentFile(model)?.name ?? '',
+        ),
+        {
+          onFailure: (refusal) => withToast(model, Actions.describeRefusal(refusal), 'warn'),
+          onSuccess: (result) => {
+            const exited = recordExit(model.founder, result)
+            const [earned, earnedCommands] = achieve(
+              { ...model, founder: exited },
+              everyVenture(exited.history.map((row) => row.founding.venture))
+                ? ['serial-founder']
+                : [],
+            )
+            const founder = earned.founder
+            const removed = earned.saves.current
+            const saves = removed === null ? earned.saves : withoutFile(earned.saves, removed)
+            const next: Model = {
+              ...earned,
+              founder,
+              panel: 'exited',
+              loaded: false,
+              saves,
+              board: {
+                ...earned.board,
+                selected: null,
+                selection: [],
+                tool: null,
+                exited: { row: result.row, researched: model.board.game.researched },
+                clock: { ...earned.board.clock, paused: true },
+              },
+            }
+            return {
+              model: next,
+              commands: [
+                ...earnedCommands,
+                WriteFounder({ founder }),
+                ...(removed === null ? [] : [DeleteCompany({ id: removed, index: saves })]),
+                AppendLog({
+                  entries: [
+                    line(model.board.game.time, 'Exited', {
+                      exit: EXITS[exit].name,
+                      payout: result.row.payout,
+                      legacy: result.legacy,
+                    }),
+                  ],
+                }),
+              ],
+            }
+          },
         },
-      }),
+      ),
     KeepToggled: ({ id }) => changeFounder(model, toggleKeep(model.founder, id)),
     PerkBought: ({ id }) =>
       changeFounder(model, buyPerk(model.founder, id), `${PERKS[id].name} bought.`),
@@ -3615,7 +3861,9 @@ const QUIET = new Set([
   'NodeSampleChosen',
   'ToastCleared',
   'Saved',
-  'SaveLoaded',
+  'SavesLoaded',
+  'CompanyLoaded',
+  'CompanyDeleted',
   // Sent by the compute worker several times a second.
   'BottleneckFound',
   'PreviewComputed',

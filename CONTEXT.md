@@ -12,8 +12,14 @@ engineering terms that the game teaches are in the
 ### The company
 
 **Company**:
-One play-through, from founding to Exit.
+One play-through, from founding to Exit. It has a name and a logo, and the browser keeps any number
+of Companies.
 _Avoid_: run, save, game, playthrough
+
+**Company file**:
+The stored Company in the browser: its name, logo, Venture, Mutators, and Game. The Companies page
+lists them.
+_Avoid_: save, save slot, savegame
 
 **Venture**:
 The kind of Company the player founds. It sets the request mix, demand shape, constraints, and signature incidents.
@@ -438,6 +444,7 @@ _Avoid_: leaderboard, ranking, high score
 ## Relationships
 
 - A **Company** has one **Venture**, any number of **Mutators**, and passes through **Eras** in order.
+- A **Company** is stored as one **Company file** in the browser; the title screen lists them.
 - A **Design** is made of **Nodes** and **Links** on one or more **Boards**.
 - A **Node** is a copy of one **Component**. Compute Nodes run a **Stack** and belong to a **Service**.
 - A **Service** is owned by one **Team**. **Engineers** in Teams produce **Dev Hours**.
