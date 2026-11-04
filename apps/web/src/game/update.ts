@@ -1,5 +1,5 @@
 import { refusal, stateJson } from './webmcp.ts'
-import { DragAndDrop, Listbox, Menu as UiMenu } from '@foldkit/ui'
+import { Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { moreMenu, type MoreItem } from './more.ts'
 import { languageListbox } from '../i18n/listbox.ts'
 import { Cause, Exit, Option, Result, Schema } from 'effect'
@@ -116,6 +116,13 @@ import {
   updateInbox,
 } from './inbox.ts'
 import { PrefsMessage, updatePrefs } from './prefs.ts'
+import {
+  EMPTY_RESEARCH,
+  ResearchOutMessage,
+  updateResearch,
+  type ResearchMessage,
+} from './research.ts'
+import { TeamOutMessage, initTeam, updateTeam, type TeamMessage } from './team.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, isFinalEra, nextEra, zoned } from '@quorum/simulation/lookups'
 import { cheatCash, cheatInsight } from './cheats.ts'
@@ -248,8 +255,8 @@ export const freshBoard = (game: Game): Board => ({
   confirmSell: null,
   clipboard: null,
   buildGroup: null,
-  teamDrag: DragAndDrop.init({ id: 'team-drag' }),
-  researchFocus: null,
+  team: initTeam(),
+  research: EMPTY_RESEARCH,
   insightHelp: false,
   clock: { speed: 1, paused: false, carry: 0, savedAt: game.time, sampledAt: game.time },
   change: null,
@@ -673,7 +680,7 @@ const mailAction = (model: Model, kind: string, target: string | null): Result =
     case 'decline':
       return route(model, Message.RoundDeclined())
     case 'hire':
-      return route(model, Message.HireChosen())
+      return teamAction(model, TeamOutMessage.Hire())
     case 'team':
       return route(model, Message.PanelOpened({ panel: 'team' }))
     case 'first':
@@ -688,6 +695,82 @@ const mailAction = (model: Model, kind: string, target: string | null): Result =
       return { model }
   }
 }
+
+/** Runs a Team panel action on the board's Game, with its undo entry and note. */
+const teamAction = (model: Model, out: TeamOutMessage): Result => {
+  const game = model.board.game
+  return TeamOutMessage.match<Result>(out, {
+    Hire: () =>
+      act(model, 'Hired', Work.hire(game), {
+        note: () => ['Offer accepted. They start soon.', 'ok'],
+      }),
+    Layoff: ({ engineerId }) =>
+      act(model, 'Laid off', Work.layoff(game, engineerId), {
+        note: () => ['Laid off. The team is shaken for a week.', 'warn'],
+      }),
+    CreateTeam: () => act(model, 'New team', Work.createTeam(game)),
+    RemoveTeam: ({ teamId }) => act(model, 'Removed a team', Work.removeTeam(game, teamId)),
+    Assign: ({ engineerId, teamId }) =>
+      act(model, 'Moved an engineer', Work.assign(game, engineerId, teamId)),
+    SetPolicy: ({ teamId, policy }) =>
+      act(model, `${POLICIES[policy].label} policy`, Work.setTeamPolicy(game, teamId, policy)),
+    QueueFeature: ({ id }) =>
+      act(model, `Queued ${FEATURES[id].name}`, Work.queueFeature(game, id)),
+  })
+}
+
+const foldTeam = (model: Model, message: TeamMessage): Result =>
+  Update.foldChild({
+    update: updateTeam,
+    read: (parent: Model) => Option.some(parent.board.team),
+    write: (parent, team) => ({ ...parent, board: { ...parent.board, team } }),
+    toParentMessage: (child) => Message.TeamChanged({ message: child }),
+    foldOutMessage: (out: TeamOutMessage) => (parent: Model) => teamAction(parent, out),
+  })(model, message)
+
+const foldResearch = (model: Model, message: ResearchMessage): Result =>
+  Update.foldChild({
+    update: updateResearch,
+    read: (parent: Model) => Option.some(parent.board.research),
+    write: (parent, research) => ({ ...parent, board: { ...parent.board, research } }),
+    toParentMessage: (child) => Message.ResearchChanged({ message: child }),
+    foldOutMessage: (out: ResearchOutMessage) => (parent: Model) =>
+      ResearchOutMessage.match<Result>(out, {
+        Study: ({ id }) =>
+          act(parent, `Study ${RESEARCH[id].name}`, Actions.study(parent.board.game, id), {
+            note: (game) => {
+              // Warn when the pools hold less than the recipe: the Study waits on their rates.
+              const short = recipeOf(id)
+                .filter(([pool, cost]) => game.pools[pool] < cost)
+                .map(([pool]) => poolName(pool))
+              return short.length > 0
+                ? [
+                    `Study queued: ${RESEARCH[id].name}. Not enough ${short.join(', ')} yet: it runs at their earn rate.`,
+                    'warn',
+                  ]
+                : [`Study queued: ${RESEARCH[id].name}.`, 'primary']
+            },
+          }),
+        Move: ({ id, direction }) =>
+          act(parent, 'Reordered research', Actions.moveStudy(parent.board.game, id, direction)),
+        StudyNow: ({ id }) =>
+          act(
+            parent,
+            `Study ${RESEARCH[id].name} now`,
+            Actions.study(parent.board.game, id, true),
+            { note: () => [`Studying now: ${RESEARCH[id].name}.`, 'primary'] },
+          ),
+        Cancel: ({ id }) =>
+          act(
+            parent,
+            `Cancelled ${RESEARCH[id].name}`,
+            Actions.cancelStudy(parent.board.game, id),
+            {
+              note: () => [`Study cancelled: ${RESEARCH[id].name}.`, 'plain'],
+            },
+          ),
+      }),
+  })(model, message)
 
 /** An Inbox gesture. The Inbox reads the board's Game and whether its panel is open. */
 const foldInbox = (model: Model, message: InboxMessage): Result =>
@@ -2873,72 +2956,8 @@ const handle = (model: Model, message: Message): Result =>
     UndoChosen: () => reverse(model, undoGame(model.board), 'Undid'),
     RedoChosen: () => reverse(model, redoGame(model.board), 'Redid'),
 
-    ResearchFocused: ({ id }) => ({
-      model: { ...model, board: { ...model.board, researchFocus: id } },
-    }),
-
-    ResearchBought: ({ id }) =>
-      act(model, `Study ${RESEARCH[id].name}`, Actions.study(model.board.game, id), {
-        note: (game) => {
-          // Warn when the pools hold less than the recipe: the Study waits on their rates.
-          const short = recipeOf(id)
-            .filter(([pool, cost]) => game.pools[pool] < cost)
-            .map(([pool]) => poolName(pool))
-          return short.length > 0
-            ? [
-                `Study queued: ${RESEARCH[id].name}. Not enough ${short.join(', ')} yet: it runs at their earn rate.`,
-                'warn',
-              ]
-            : [`Study queued: ${RESEARCH[id].name}.`, 'primary']
-        },
-      }),
-    StudyMoved: ({ id, direction }) =>
-      act(model, 'Reordered research', Actions.moveStudy(model.board.game, id, direction)),
-    StudyPrioritized: ({ id }) =>
-      act(model, `Study ${RESEARCH[id].name} now`, Actions.study(model.board.game, id, true), {
-        note: () => [`Studying now: ${RESEARCH[id].name}.`, 'primary'],
-      }),
-    StudyCancelled: ({ id }) =>
-      act(model, `Cancelled ${RESEARCH[id].name}`, Actions.cancelStudy(model.board.game, id), {
-        note: () => [`Study cancelled: ${RESEARCH[id].name}.`, 'plain'],
-      }),
-
-    HireChosen: () =>
-      act(model, 'Hired', Work.hire(model.board.game), {
-        note: () => ['Offer accepted. They start soon.', 'ok'],
-      }),
-    LayoffChosen: ({ engineerId }) =>
-      act(model, 'Laid off', Work.layoff(model.board.game, engineerId), {
-        note: () => ['Laid off. The team is shaken for a week.', 'warn'],
-      }),
-    TeamCreated: () => act(model, 'New team', Work.createTeam(model.board.game)),
-    TeamRemoved: ({ teamId }) =>
-      act(model, 'Removed a team', Work.removeTeam(model.board.game, teamId)),
-    EngineerAssigned: ({ engineerId, teamId }) =>
-      act(model, 'Moved an engineer', Work.assign(model.board.game, engineerId, teamId)),
-    TeamDragChanged: ({ message }) =>
-      Update.foldChild({
-        update: DragAndDrop.update,
-        read: (parent: Model) => Option.some(parent.board.teamDrag),
-        write: (parent, teamDrag) => ({ ...parent, board: { ...parent.board, teamDrag } }),
-        toParentMessage: (child) => Message.TeamDragChanged({ message: child }),
-        foldOutMessage: (out) => (parent) =>
-          out._tag === 'Reordered' && out.fromContainerId !== out.toContainerId
-            ? act(
-                parent,
-                'Moved an engineer',
-                Work.assign(parent.board.game, out.itemId, out.toContainerId),
-              )
-            : { model: parent },
-      })(model, message),
-    TeamPolicyChosen: ({ teamId, policy }) =>
-      act(
-        model,
-        `${POLICIES[policy].label} policy`,
-        Work.setTeamPolicy(model.board.game, teamId, policy),
-      ),
-    FeatureQueued: ({ id }) =>
-      act(model, `Queued ${FEATURES[id].name}`, Work.queueFeature(model.board.game, id)),
+    ResearchChanged: ({ message }) => foldResearch(model, message),
+    TeamChanged: ({ message }) => foldTeam(model, message),
     TaskQueued: ({ id }) =>
       act(model, `Queued ${TASKS[id].name}`, Work.queueTask(model.board.game, id)),
     WorkMoved: ({ id, direction }) =>
@@ -3100,9 +3119,9 @@ const handle = (model: Model, message: Message): Result =>
         panel,
         board: {
           ...model.board,
-          teamDrag: DragAndDrop.init({ id: 'team-drag' }),
+          team: initTeam(),
           tool: null,
-          researchFocus: null,
+          research: EMPTY_RESEARCH,
           dashboard: { ...model.board.dashboard, hover: null },
         },
       }
@@ -3290,7 +3309,9 @@ const quiet = (model: Model, message: Message, after: Model): boolean =>
   QUIET.has(message._tag) ||
   // The Dashboard crosshair sends a Message on every pointer move.
   (message._tag === 'DashboardChanged' && message.message._tag === 'Hovered') ||
-  (message._tag === 'TeamDragChanged' && after.board.game === model.board.game)
+  (message._tag === 'TeamChanged' &&
+    message.message._tag === 'DragChanged' &&
+    after.board.game === model.board.game)
 
 const fieldsOf = (message: Message): Record<string, unknown> =>
   Object.fromEntries(Object.entries(message).filter(([key]) => key !== '_tag'))

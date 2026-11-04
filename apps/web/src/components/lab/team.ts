@@ -1,3 +1,4 @@
+import { TeamMessage } from '@/game/team.ts'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { Option } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
@@ -315,7 +316,9 @@ const engineerControls = (
           iconButton(
             `Move to ${next.name}`,
             ArrowLeftRight,
-            Message.EngineerAssigned({ engineerId: engineer.id, teamId: next.id }),
+            Message.TeamChanged({
+              message: TeamMessage.EngineerAssigned({ engineerId: engineer.id, teamId: next.id }),
+            }),
             true,
             h,
           ),
@@ -327,7 +330,7 @@ const engineerControls = (
       iconButton(
         `Lay off ${nameOf(engineer.id)}`,
         UserMinus,
-        Message.LayoffChosen({ engineerId: engineer.id }),
+        Message.TeamChanged({ message: TeamMessage.LayoffChosen({ engineerId: engineer.id }) }),
         true,
         h,
         'hover:text-danger',
@@ -357,7 +360,7 @@ const hireSeat = (game: Game, h: HtmlBuilder<Message>): Html => {
     [
       h.Key('hire'),
       h.Type('button'),
-      h.OnClick(Message.HireChosen()),
+      h.OnClick(Message.TeamChanged({ message: TeamMessage.HireChosen() })),
       h.Disabled(!open || !afford),
       h.AriaLabel(
         open ? `Hire ${LANGUAGES[language].name} engineer for ${money(price)}` : 'Hiring locked',
@@ -429,7 +432,9 @@ const policySwitch = (team: Team, h: HtmlBuilder<Message>): Html =>
           h.Key(`${team.id}-${policy}`),
           h.Type('button'),
           h.AriaPressed(selected ? 'true' : 'false'),
-          h.OnClick(Message.TeamPolicyChosen({ teamId: team.id, policy })),
+          h.OnClick(
+            Message.TeamChanged({ message: TeamMessage.PolicyChosen({ teamId: team.id, policy }) }),
+          ),
           h.Class(
             cn(
               'press flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-medium',
@@ -453,9 +458,9 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
   const now = policyNow(game, team)
   const pending = game.hires.filter((entry) => entry.team === team.id)
   const sandbox = game.sandbox
-  const target = DragAndDrop.maybeDropTarget(model.board.teamDrag)
+  const target = DragAndDrop.maybeDropTarget(model.board.team.drag)
   const dropTarget =
-    DragAndDrop.isDragging(model.board.teamDrag) &&
+    DragAndDrop.isDragging(model.board.team.drag) &&
     Option.exists(target, (entry) => entry.containerId === team.id)
   return h.section(
     [
@@ -499,7 +504,13 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
             ],
           ),
           index > 0
-            ? iconButton('Remove team', Trash2, Message.TeamRemoved({ teamId: team.id }), true, h)
+            ? iconButton(
+                'Remove team',
+                Trash2,
+                Message.TeamChanged({ message: TeamMessage.Removed({ teamId: team.id }) }),
+                true,
+                h,
+              )
             : h.empty,
         ],
       ),
@@ -522,8 +533,9 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
                   [
                     ...DragAndDrop.draggable(
                       {
-                        model: model.board.teamDrag,
-                        toParentMessage: (message) => Message.TeamDragChanged({ message }),
+                        model: model.board.team.drag,
+                        toParentMessage: (message) =>
+                          Message.TeamChanged({ message: TeamMessage.DragChanged({ message }) }),
                         itemId: engineer.id,
                         containerId: team.id,
                         index: memberIndex,
@@ -536,7 +548,7 @@ const pod = (model: Model, team: Team, index: number, h: HtmlBuilder<Message>): 
                       cn(
                         'cursor-grab touch-none rounded-xl focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing',
                         Option.exists(
-                          DragAndDrop.maybeDraggedItemId(model.board.teamDrag),
+                          DragAndDrop.maybeDraggedItemId(model.board.team.drag),
                           (id) => id === engineer.id,
                         ) && 'opacity-45',
                       ),
@@ -587,7 +599,7 @@ const floor = (model: Model, h: HtmlBuilder<Message>): Html => {
     [
       h.Class(`flex min-h-0 flex-col gap-3 p-4 ${SCROLL}`),
       h.DataAttribute('team-drag-floor', ''),
-      ...(DragAndDrop.isDragging(model.board.teamDrag)
+      ...(DragAndDrop.isDragging(model.board.team.drag)
         ? [h.DataAttribute('team-drag-active', '')]
         : []),
     ],
@@ -599,10 +611,10 @@ const floor = (model: Model, h: HtmlBuilder<Message>): Html => {
           )
         : h.empty,
       ...game.teams.map((team, index) => pod(model, team, index, h)),
-      Option.match(DragAndDrop.ghostStyle(model.board.teamDrag), {
+      Option.match(DragAndDrop.ghostStyle(model.board.team.drag), {
         onNone: () => h.empty,
         onSome: (style) =>
-          Option.match(DragAndDrop.maybeDraggedItemId(model.board.teamDrag), {
+          Option.match(DragAndDrop.maybeDraggedItemId(model.board.team.drag), {
             onNone: () => h.empty,
             onSome: (id) =>
               h.div(
@@ -619,7 +631,7 @@ const floor = (model: Model, h: HtmlBuilder<Message>): Html => {
             [
               h.Key('new-team'),
               h.Type('button'),
-              h.OnClick(Message.TeamCreated()),
+              h.OnClick(Message.TeamChanged({ message: TeamMessage.Created() })),
               h.Class(
                 'press flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-dashed border-foreground/20 text-[13px] font-medium text-muted-foreground hover:border-foreground/40 hover:text-foreground',
               ),
@@ -1415,7 +1427,7 @@ const featureTile = (game: Game, id: FeatureId, review: boolean, h: HtmlBuilder<
           ? badge({ variant: 'outline' }, ['Queued'], h)
           : queueButton(
               'Build',
-              Message.FeatureQueued({ id }),
+              Message.TeamChanged({ message: TeamMessage.FeatureQueued({ id }) }),
               refusal ? describeRefusal(refusal) : null,
               h,
             ),

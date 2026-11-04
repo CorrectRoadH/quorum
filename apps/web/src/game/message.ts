@@ -1,4 +1,4 @@
-import { DragAndDrop, Listbox, Menu as UiMenu } from '@foldkit/ui'
+import { Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { Schema } from 'effect'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
@@ -10,14 +10,12 @@ import {
   ComponentId,
   GpuType,
   FamilyId,
-  FeatureId,
   FrameworkId,
   IncidentId,
   MutatorId,
   VentureId,
   LbPolicy,
   PmMode,
-  PolicyId,
   PoolerMode,
   RequestKindId,
   ResearchId,
@@ -35,6 +33,8 @@ import { DashboardMessage } from './dashboard.ts'
 import { GlossaryMessage } from './glossary.ts'
 import { InboxMessage } from './inbox.ts'
 import { PrefsMessage } from './prefs.ts'
+import { ResearchMessage } from './research.ts'
+import { TeamMessage } from './team.ts'
 import {
   BuildGroupKey,
   Menu,
@@ -226,21 +226,9 @@ export const Message = defineMessageUnion({
   UndoChosen: {},
   RedoChosen: {},
 
-  ResearchFocused: { id: ResearchId },
-  ResearchBought: { id: ResearchId },
-  /** The Study queue: move one, run one now, or take one off. */
-  StudyMoved: { id: ResearchId, direction: Schema.Literals([1, -1]) },
-  StudyPrioritized: { id: ResearchId },
-  StudyCancelled: { id: ResearchId },
+  ResearchChanged: { message: ResearchMessage },
   /** The Team panel: engineers, teams, the backlog, migrations, and deploys. */
-  HireChosen: {},
-  LayoffChosen: { engineerId: Schema.String },
-  TeamCreated: {},
-  TeamRemoved: { teamId: Schema.String },
-  EngineerAssigned: { engineerId: Schema.String, teamId: Schema.String },
-  TeamDragChanged: { message: DragAndDrop.Message },
-  TeamPolicyChosen: { teamId: Schema.String, policy: PolicyId },
-  FeatureQueued: { id: FeatureId },
+  TeamChanged: { message: TeamMessage },
   TaskQueued: { id: Schema.Literals(TASK_IDS) },
   WorkMoved: { id: Schema.Finite, direction: Schema.Literals([1, -1]) },
   WorkCancelled: { id: Schema.Finite },

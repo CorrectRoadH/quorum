@@ -89,10 +89,12 @@ const gestureCue = (before: Model, message: Message, after: Model): Cue | null =
       return gesture('coin')
     case 'UndoChosen':
       return next !== game ? gesture('undo') : null
-    case 'ResearchFocused':
-      return after.board.researchFocus !== before.board.researchFocus ? gesture('tick') : null
-    case 'ResearchBought':
-      return gesture('unlock')
+    case 'ResearchChanged':
+      return message.message._tag === 'Bought'
+        ? gesture('unlock')
+        : after.board.research.focus !== before.board.research.focus
+          ? gesture('tick')
+          : null
     case 'RoundRaised':
       return gesture('fanfare')
     case 'PostmortemFiled':

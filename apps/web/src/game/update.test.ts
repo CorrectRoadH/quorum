@@ -1,3 +1,5 @@
+import { ResearchMessage } from './research.ts'
+import { TeamMessage } from './team.ts'
 import { DashboardMessage } from './dashboard.ts'
 import { GlossaryMessage } from './glossary.ts'
 import { InboxMessage } from './inbox.ts'
@@ -52,7 +54,7 @@ test('dropping an engineer on another team moves them', () => {
     },
   }
   const send = (model: Model, message: DragAndDrop.Message) =>
-    update(model, Message.TeamDragChanged({ message })).model
+    update(model, Message.TeamChanged({ message: TeamMessage.DragChanged({ message }) })).model
   const picked = send(
     start,
     DragAndDrop.Message.ActivatedKeyboardDrag({ itemId: 'e1', containerId: 'core', index: 0 }),
@@ -773,14 +775,25 @@ test('a queued Study can run now, keeping the running one’s progress, and be c
       },
     },
   }
-  const now = update(queued, Message.StudyPrioritized({ id: second.id })).model
+  const now = update(
+    queued,
+    Message.ResearchChanged({ message: ResearchMessage.StudyPrioritized({ id: second.id }) }),
+  ).model
   expect(now.board.game.studies).toEqual([
     { id: second.id, progress: 0 },
     { id: first.id, progress: 0.25 },
   ])
-  const back = update(now, Message.StudyMoved({ id: first.id, direction: -1 })).model
+  const back = update(
+    now,
+    Message.ResearchChanged({
+      message: ResearchMessage.StudyMoved({ id: first.id, direction: -1 }),
+    }),
+  ).model
   expect(back.board.game.studies.map((item) => item.id)).toEqual([first.id, second.id])
-  const cancelled = update(back, Message.StudyCancelled({ id: first.id })).model
+  const cancelled = update(
+    back,
+    Message.ResearchChanged({ message: ResearchMessage.StudyCancelled({ id: first.id }) }),
+  ).model
   expect(cancelled.board.game.studies).toEqual([{ id: second.id, progress: 0 }])
 })
 

@@ -316,6 +316,14 @@ export const Inbox = Schema.Struct({
 export type Inbox = typeof Inbox.Type
 
 /** The Glossary panel: its open entry, search, category filter, and the panel it closes back to. */
+/** The Team panel's transient drag gesture for moving engineers between teams. */
+export const Team = Schema.Struct({ drag: DragAndDrop.Model })
+export type Team = typeof Team.Type
+
+/** The research item the Research panel shows in its side pane; null picks one. */
+export const Research = Schema.Struct({ focus: Schema.NullOr(ResearchId) })
+export type Research = typeof Research.Type
+
 export const Glossary = Schema.Struct({
   focus: Schema.NullOr(Schema.String),
   /** Research when a (?) link opened it. */
@@ -384,10 +392,8 @@ export const Board = Schema.Struct({
   clipboard: Schema.NullOr(Playbook),
   /** The open build tray, or null when the dock shows only its group icons. */
   buildGroup: Schema.NullOr(BuildGroupKey),
-  /** The transient drag gesture for moving engineers between teams. */
-  teamDrag: DragAndDrop.Model,
-  /** The research item the Research panel shows in its side pane; null picks one. */
-  researchFocus: Schema.NullOr(ResearchId),
+  team: Team,
+  research: Research,
   /** The Insight card's help section is open. */
   insightHelp: Schema.Boolean,
   clock: Clock,

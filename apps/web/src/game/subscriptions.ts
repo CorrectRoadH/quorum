@@ -5,6 +5,7 @@ import { Option, Schema } from 'effect'
 import { DragAndDrop } from '@foldkit/ui'
 import { Subscription } from 'foldkit'
 import { Message } from './message.ts'
+import { TeamMessage } from './team.ts'
 import { halted, type Model } from './model.ts'
 import { onBoard } from './route.ts'
 import { TICK_MS } from './update.ts'
@@ -97,8 +98,9 @@ const blurs = Stream.callback<Message>((queue) =>
 )
 
 const teamDrag = Subscription.lift(DragAndDrop.subscriptions)<Model, Message>({
-  read: (model) => (model.panel === 'team' ? Option.some(model.board.teamDrag) : Option.none()),
-  toParentMessage: (message) => Message.TeamDragChanged({ message }),
+  read: (model) => (model.panel === 'team' ? Option.some(model.board.team.drag) : Option.none()),
+  toParentMessage: (message) =>
+    Message.TeamChanged({ message: TeamMessage.DragChanged({ message }) }),
 })
 
 const teamDragScroll = Stream.callback<Message>((queue) =>
@@ -147,15 +149,17 @@ const teamDragScroll = Stream.callback<Message>((queue) =>
             })
             Queue.offerUnsafe(
               queue,
-              Message.TeamDragChanged({
-                message: DragAndDrop.Message.MovedPointer({
-                  screenX,
-                  screenY,
-                  clientX,
-                  clientY,
-                  maybeDropTarget: containerId
-                    ? Option.some({ containerId, index: index < 0 ? items.length : index })
-                    : Option.none(),
+              Message.TeamChanged({
+                message: TeamMessage.DragChanged({
+                  message: DragAndDrop.Message.MovedPointer({
+                    screenX,
+                    screenY,
+                    clientX,
+                    clientY,
+                    maybeDropTarget: containerId
+                      ? Option.some({ containerId, index: index < 0 ? items.length : index })
+                      : Option.none(),
+                  }),
                 }),
               }),
             )
@@ -211,7 +215,7 @@ export const subscriptions = {
       {
         modelToDependencies: (model: Model) => ({
           lab: onBoard(model.route),
-          dragging: model.panel === 'team' && model.board.teamDrag.dragState._tag !== 'Idle',
+          dragging: model.panel === 'team' && model.board.team.drag.dragState._tag !== 'Idle',
         }),
         dependenciesToStream: ({ lab, dragging }: { lab: boolean; dragging: boolean }) =>
           lab && !dragging ? keys : Stream.empty,
@@ -223,8 +227,8 @@ export const subscriptions = {
         modelToDependencies: (model: Model) => ({
           active:
             model.panel === 'team' &&
-            (model.board.teamDrag.dragState._tag === 'Pending' ||
-              model.board.teamDrag.dragState._tag === 'Dragging'),
+            (model.board.team.drag.dragState._tag === 'Pending' ||
+              model.board.team.drag.dragState._tag === 'Dragging'),
         }),
         dependenciesToStream: ({ active }: { active: boolean }) =>
           active ? teamDragScroll : Stream.empty,

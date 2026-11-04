@@ -1,3 +1,4 @@
+import { ResearchMessage } from '@/game/research.ts'
 import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
@@ -118,7 +119,7 @@ const stateOf = (game: Game, entry: ResearchDef): State =>
 /** The item the side pane shows: the player's pick, else the most useful next one. */
 const focusOf = (model: Model): ResearchDef => {
   const game = model.board.game
-  if (model.board.researchFocus) return RESEARCH[model.board.researchFocus]
+  if (model.board.research.focus) return RESEARCH[model.board.research.focus]
   const action = game.openActions.find((id) => !has(game, id))
   if (action) return RESEARCH[action]
   const ready = researchList
@@ -444,8 +445,10 @@ const node = (model: Model, place: Placed, focused: boolean, h: HtmlBuilder<Mess
       h.Type('button'),
       h.DataAttribute('research', entry.id),
       h.AriaPressed(focused ? 'true' : 'false'),
-      h.OnClick(Message.ResearchFocused({ id: entry.id })),
-      h.OnDoubleClick(Message.ResearchBought({ id: entry.id })),
+      h.OnClick(Message.ResearchChanged({ message: ResearchMessage.Focused({ id: entry.id }) })),
+      h.OnDoubleClick(
+        Message.ResearchChanged({ message: ResearchMessage.Bought({ id: entry.id }) }),
+      ),
       h.Style({
         left: `${place.x}px`,
         top: `${place.y}px`,
@@ -739,7 +742,7 @@ const linkRow = (game: Game, entry: ResearchDef, h: HtmlBuilder<Message>): Html 
     [
       h.Key(entry.id),
       h.Type('button'),
-      h.OnClick(Message.ResearchFocused({ id: entry.id })),
+      h.OnClick(Message.ResearchChanged({ message: ResearchMessage.Focused({ id: entry.id }) })),
       h.Class(
         'flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[12.5px] hover:bg-foreground/5',
       ),
@@ -827,7 +830,9 @@ const queuePanel = (model: Model, focus: ResearchId, h: HtmlBuilder<Message>): H
             h.button(
               [
                 h.Type('button'),
-                h.OnClick(Message.ResearchFocused({ id: item.id })),
+                h.OnClick(
+                  Message.ResearchChanged({ message: ResearchMessage.Focused({ id: item.id }) }),
+                ),
                 h.Class(
                   'flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-left text-[12.5px] hover:text-foreground',
                 ),
@@ -844,18 +849,28 @@ const queuePanel = (model: Model, focus: ResearchId, h: HtmlBuilder<Message>): H
             queueButton(
               'Move up',
               ArrowUp,
-              Message.StudyMoved({ id: item.id, direction: -1 }),
+              Message.ResearchChanged({
+                message: ResearchMessage.StudyMoved({ id: item.id, direction: -1 }),
+              }),
               index > 0,
               h,
             ),
             queueButton(
               'Move down',
               ArrowDown,
-              Message.StudyMoved({ id: item.id, direction: 1 }),
+              Message.ResearchChanged({
+                message: ResearchMessage.StudyMoved({ id: item.id, direction: 1 }),
+              }),
               index < studies.length - 1,
               h,
             ),
-            queueButton('Cancel', X, Message.StudyCancelled({ id: item.id }), true, h),
+            queueButton(
+              'Cancel',
+              X,
+              Message.ResearchChanged({ message: ResearchMessage.StudyCancelled({ id: item.id }) }),
+              true,
+              h,
+            ),
           ],
         )
       }),
@@ -955,10 +970,12 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
         [
           button(
             {
-              onClick:
-                queued > 0
-                  ? Message.StudyPrioritized({ id: entry.id })
-                  : Message.ResearchBought({ id: entry.id }),
+              onClick: Message.ResearchChanged({
+                message:
+                  queued > 0
+                    ? ResearchMessage.StudyPrioritized({ id: entry.id })
+                    : ResearchMessage.Bought({ id: entry.id }),
+              }),
               isDisabled: state !== 'buy' && !(state === 'saving' && queued > 0),
               size: 'lg',
               variant: state === 'buy' || queued > 0 ? 'default' : 'outline',
@@ -970,7 +987,9 @@ const detail = (model: Model, entry: ResearchDef, h: HtmlBuilder<Message>): Html
           queued >= 0
             ? button(
                 {
-                  onClick: Message.StudyCancelled({ id: entry.id }),
+                  onClick: Message.ResearchChanged({
+                    message: ResearchMessage.StudyCancelled({ id: entry.id }),
+                  }),
                   size: 'lg',
                   variant: 'outline',
                 },
