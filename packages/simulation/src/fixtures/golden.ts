@@ -57,8 +57,9 @@ export const GOLDEN_STEPS = 10_000
 // The Company replay is unchanged.
 // SIM_VERSION 14: async work is scored on when it finishes, a Queue has a max
 // length and max attempts, a Worker prefetches, a backlog is offered only as fast
-// as Workers take it, and Kubernetes Clusters cost Dev Hours and need upgrades.
-// The save gains each Node's attempts, max length, prefetch and upgrade time.
+// as Workers take it, and Kubernetes Clusters cost Dev Hours, roll deploys,
+// reschedule pods and need upgrades. The save gains each Node's attempts, max
+// length, prefetch and upgrade time.
 export const GOLDEN_HASH = '42965c3e'
 
 /**

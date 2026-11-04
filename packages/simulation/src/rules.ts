@@ -40,6 +40,7 @@ import {
   P2C_CAPACITY,
   POOLER_CONNECTIONS,
   REQUEST_KINDS,
+  ROLLOUT_SHARE,
   RUNTIMES,
   SESSION_STATE_CRASHES,
   UPGRADE_CRASHES,
@@ -176,12 +177,14 @@ export const taskMixOf = (game: Game): Partial<Record<RequestKind, number>> => {
 
 /**
  * Share of requests the code itself fails on an App Server or Worker: a bad
- * deploy, a migration's bugs, or a Cluster upgrade gone wrong.
+ * deploy, a migration's bugs, or a Cluster upgrade gone wrong. A rolling deploy
+ * stops after its first batch of pods, so pods take a share of a bad deploy.
  */
 export const codeCrashes = (game: Game, node: GameNode): number => {
   const incident = game.incident
   const cluster = clusterOf(game, node)
-  const deploy = incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0
+  const deploy =
+    incident?.kind === 'bad-deploy' ? badDeployShare(game) * (cluster ? ROLLOUT_SHARE : 1) : 0
   const upgrade =
     incident?.kind === 'cluster-upgrade' && cluster !== undefined && cluster === incident.nodeId
       ? UPGRADE_CRASHES

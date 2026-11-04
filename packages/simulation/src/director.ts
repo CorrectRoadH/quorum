@@ -10,6 +10,7 @@ import {
   INCIDENT_IDS,
   LEAK_RATE,
   MIN_WEAKNESS,
+  POD_RESCHEDULE,
   RUNTIMES,
   SLO_FROM_STAGE,
   STORM_TRIGGER,
@@ -22,7 +23,17 @@ import {
 import { StepEvent } from './events.ts'
 import { mutatorWeight, openActionWeight } from './founding.ts'
 import type { Ledger } from './ledger.ts'
-import { eraOf, has, isDown, podsOf, ramOf, researchReady, restarted, zoned } from './lookups.ts'
+import {
+  clusterOf,
+  eraOf,
+  has,
+  isDown,
+  podsOf,
+  ramOf,
+  researchReady,
+  restarted,
+  zoned,
+} from './lookups.ts'
 
 export { zoned }
 import { nextRandom, pickWeighted } from './random.ts'
@@ -56,6 +67,10 @@ const SANDBOX_STORM = 3_600
 /** A standby takes over in a share of the outage: 20 s of a 120 s zone outage. */
 export const failoverSeconds = (game: Game): number =>
   (FAILOVER_SECONDS * incidentDuration(game, 'zone')) / INCIDENTS.zone.duration
+
+/** A Cluster reschedules a pod in a share of the outage: 30 s of a 60 s instance failure. */
+export const rescheduleSeconds = (game: Game): number =>
+  (POD_RESCHEDULE * incidentDuration(game, 'instance')) / INCIDENTS.instance.duration
 
 /** The director avoids repeating the last incident type. */
 const REPEAT_WEIGHT = 0.3
@@ -449,8 +464,13 @@ export const startIncident = (
             : kind === 'instance'
               ? {
                   ...node,
-                  // A standby takes over: the Node is back once failover finishes.
-                  down: node.standby ? failoverSeconds(game) : -1,
+                  // A standby takes over: the Node is back once failover finishes. A Cluster
+                  // reschedules a pod on another host by itself (self-healing).
+                  down: node.standby
+                    ? failoverSeconds(game)
+                    : clusterOf(game, node) !== undefined
+                      ? rescheduleSeconds(game)
+                      : -1,
                   downCause: 'failure' as const,
                   downAt: game.time,
                 }

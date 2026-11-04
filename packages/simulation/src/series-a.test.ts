@@ -6,6 +6,7 @@ import {
   ERAS,
   FAILOVER_SECONDS,
   INCIDENTS,
+  POD_RESCHEDULE,
   UPGRADE_CRASHES,
   VM_REACTION,
   type ResearchId,
@@ -233,6 +234,28 @@ describe('the Kubernetes Cluster', () => {
     const placed = ok(Actions.place(game, 'cluster', 440, 80))
     return ok(Actions.connect(placed, 'server', placed.nodes.at(-1)?.id ?? ''))
   }
+
+  test('a rolling deploy stops after its first pods: a bad deploy fails a quarter as much', () => {
+    const failing = (game: Game) => {
+      const deploy = forceIncident(game, solve(game), 'bad-deploy')
+      if (!deploy) throw new Error('no bad deploy')
+      return 1 - (solve(deploy).kinds.page?.success ?? 0)
+    }
+    const vm = seriesA(4_000, 'go')
+    // 8% of App Server requests crash on VMs; 2% on pods.
+    expect(failing(vm)).toBeCloseTo(0.08, 3)
+    expect(failing(podded(vm))).toBeCloseTo(0.02, 3)
+  })
+
+  test('a Cluster reschedules a pod whose host died; a VM waits to be replaced', () => {
+    const downAfter = (game: Game) => {
+      const hit = forceIncident(game, solve(game), 'instance', 'server')
+      if (!hit) throw new Error('no instance failure')
+      return settle(hit, POD_RESCHEDULE + 1).nodes.find((entry) => entry.id === 'server')?.down
+    }
+    expect(downAfter(seriesA(4_000, 'go'))).toBe(-1)
+    expect(downAfter(podded(seriesA(4_000, 'go')))).toBe(0)
+  })
 
   test('a Cluster past its supported quarter risks a forced upgrade that crashes its pods', () => {
     const game = podded(seriesA(4_000, 'go'))

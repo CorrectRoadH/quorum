@@ -687,6 +687,10 @@ export const POD_BURN = 0.85
  */
 export const NOISY_SHARE = 0.01
 export const NOISY_MS = 10
+/** A rolling deploy stops after its first batch of pods: they take this share of a bad deploy. Proposed. */
+export const ROLLOUT_SHARE = 0.25
+/** Seconds a Cluster takes to reschedule a pod whose host died (self-healing). */
+export const POD_RESCHEDULE = 30
 /** Share of pod requests that fail while a forced Cluster upgrade breaks them. Proposed. */
 export const UPGRADE_CRASHES = 0.3
 /** Calendar quarters a Kubernetes version stays supported before the provider forces an upgrade. */
