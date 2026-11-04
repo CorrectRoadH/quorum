@@ -90,11 +90,11 @@ A region built from another region's Nodes and Links, after the player picks whe
 _Avoid_: clone, duplicate, copy (that is a Node's machine)
 
 **Drift**:
-Every difference between a Mirror and its source that is not an override: source changes the Mirror is behind on, and hand changes on the Mirror. Unmanaged Nodes drift without showing it.
+Every difference between a Mirror and its source that is not an override: source changes the Mirror is behind on, and hand changes on the Mirror. Pulumi and Alchemy plans show a hand change only after the player reads live state.
 _Avoid_: desync, divergence, config skew
 
 **IaC tool**:
-The infrastructure-as-code tool the Company writes Mirrors in: Terraform, Pulumi, or Alchemy. It sets apply time, what can be an override, and which Components it can build.
+The infrastructure-as-code tool the Company writes Mirrors in: Terraform, Pulumi, or Alchemy. It sets how a plan finds hand changes: on every plan (Terraform), or after Refresh (Pulumi) or Check drift (Alchemy).
 _Avoid_: provisioner, deployer, IaC (alone in UI copy)
 
 **Region tab**:

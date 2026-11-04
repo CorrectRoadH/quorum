@@ -29,40 +29,43 @@ Formatting: SI suffixes only (k, M, B, T). No letter suffixes such as "aa".
 
 ## Constants
 
-| Constant              | Symbol        | Value                                           | Where used                                                       |
-| --------------------- | ------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
-| Step length           | —             | 100 ms                                          | [Simulation](./04-simulation.md#time)                            |
-| Calendar rate         | —             | 1 sim s = 1 calendar min                        | [Simulation](./04-simulation.md#time)                            |
-| Requests per user     | `R_user`      | 0.02 rps                                        | [Demand](./04-simulation.md#demand)                              |
-| Diurnal amplitude     | `A`           | 0.45                                            | [Demand](./04-simulation.md#demand)                              |
-| Copy price growth     | —             | 1.25×                                           | [Prices](#prices)                                                |
-| Resize price growth   | —             | 2× per size step                                | [Vertical and horizontal](#vertical-and-horizontal)              |
-| Sell refund           | —             | 50%                                             | [Components](./05-components.md#rules-for-all-components)        |
-| Insight yield         | —             | 1 × √(sampled rps), per Component type and kind | [Observability](./12-observability.md#earning-insight)           |
-| Default sample rate   | —             | 10%                                             | [Observability](./12-observability.md#earning-insight)           |
-| Default retention     | —             | 15 min; pool cap at least 100                   | [Observability](./12-observability.md#retention)                 |
-| Study duration        | —             | 20 s (Garage) to 60 min (Public)                | [Progression](./10-progression.md#studies)                       |
-| Spike speed           | —             | 2×                                              | [Team](./08-team-and-velocity.md#spikes)                         |
-| Growth rate           | `g`           | See [User growth](#user-growth)                 |                                                                  |
-| Churn rate            | `c`           | 0.004/s                                         | [User growth](#user-growth)                                      |
-| Declined-round growth | —             | 0.7 × `g`                                       | [Funding](./09-economy.md#funding)                               |
-| Abroad seed share     | `seed_share`  | 0.05 (proposed)                                 | [Going global](./04-simulation.md#going-global)                  |
-| Fickle share          | `f`           | 0.5 (proposed)                                  | [Users and growth](./04-simulation.md#users-and-growth)          |
-| Steady churn          | `s`           | 0.2 × `c` (proposed)                            | [Users and growth](./04-simulation.md#users-and-growth)          |
-| Border mixing         | `m`           | 0.1 (proposed)                                  | [Users and growth](./04-simulation.md#users-and-growth)          |
-| Mirror time           | `mirror_time` | 30 calendar minutes (proposed)                  | [Mirror a region](./05-components.md#mirror-a-region)            |
-| Staged sync wait      | `stage_wait`  | 60 calendar minutes (proposed)                  | [GitOps](./05-components.md#gitops)                              |
-| Valuation scale       | —             | 1.5 × 10⁻⁴                                      | [Valuation scale](#valuation-scale)                              |
-| Coordination penalty  | `k`           | 0.08                                            | [Team](./08-team-and-velocity.md#coordination)                   |
-| Dev Hours per day     | —             | 8 per engineer, 6.4 founder                     | [Team](./08-team-and-velocity.md#dev-hours)                      |
-| Adoption time         | `τ`           | 7 calendar days                                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
-| Lift spread           | `σ`           | 1.0                                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
-| Upkeep ceiling        | —             | 0.4 × S / (S + 2,000), max 0.6                  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
-| Market gain cap       | —             | +100% of the Era market                         | [Sizes](./08-team-and-velocity.md#sizes)                         |
-| Link timeout          | —             | 30 s                                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
-| Drawer size           | —             | 60 s of revenue                                 | [Economy](./09-economy.md#the-payments-drawer)                   |
-| Offline cap           | —             | 8 h                                             | [Simulation](./04-simulation.md#offline-progress)                |
-| Offline churn cap     | —             | 5%                                              | [Simulation](./04-simulation.md#offline-progress)                |
+| Constant              | Symbol         | Value                                           | Where used                                                       |
+| --------------------- | -------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| Step length           | —              | 100 ms                                          | [Simulation](./04-simulation.md#time)                            |
+| Calendar rate         | —              | 1 sim s = 1 calendar min                        | [Simulation](./04-simulation.md#time)                            |
+| Requests per user     | `R_user`       | 0.02 rps                                        | [Demand](./04-simulation.md#demand)                              |
+| Diurnal amplitude     | `A`            | 0.45                                            | [Demand](./04-simulation.md#demand)                              |
+| Copy price growth     | —              | 1.25×                                           | [Prices](#prices)                                                |
+| Resize price growth   | —              | 2× per size step                                | [Vertical and horizontal](#vertical-and-horizontal)              |
+| Sell refund           | —              | 50%                                             | [Components](./05-components.md#rules-for-all-components)        |
+| Insight yield         | —              | 1 × √(sampled rps), per Component type and kind | [Observability](./12-observability.md#earning-insight)           |
+| Default sample rate   | —              | 10%                                             | [Observability](./12-observability.md#earning-insight)           |
+| Default retention     | —              | 15 min; pool cap at least 100                   | [Observability](./12-observability.md#retention)                 |
+| Study duration        | —              | 20 s (Garage) to 60 min (Public)                | [Progression](./10-progression.md#studies)                       |
+| Spike speed           | —              | 2×                                              | [Team](./08-team-and-velocity.md#spikes)                         |
+| Growth rate           | `g`            | See [User growth](#user-growth)                 |                                                                  |
+| Churn rate            | `c`            | 0.004/s                                         | [User growth](#user-growth)                                      |
+| Declined-round growth | —              | 0.7 × `g`                                       | [Funding](./09-economy.md#funding)                               |
+| Abroad seed share     | `seed_share`   | 0.05 (proposed)                                 | [Going global](./04-simulation.md#going-global)                  |
+| Fickle share          | `f`            | 0.5 (proposed)                                  | [Users and growth](./04-simulation.md#users-and-growth)          |
+| Steady churn          | `s`            | 0.2 × `c` (proposed)                            | [Users and growth](./04-simulation.md#users-and-growth)          |
+| Border mixing         | `m`            | 0.1 (proposed)                                  | [Users and growth](./04-simulation.md#users-and-growth)          |
+| Mirror time           | `mirror_time`  | 30 calendar minutes (proposed)                  | [Mirror a region](./05-components.md#mirror-a-region)            |
+| Staged sync wait      | `stage_wait`   | 60 calendar minutes (proposed)                  | [GitOps](./05-components.md#gitops)                              |
+| GitOps poll           | `sync_poll`    | 3 calendar minutes (Argo CD's default)          | [GitOps](./05-components.md#gitops)                              |
+| Plan refresh          | `refresh_time` | 0.5 calendar minutes per Node (proposed)        | [IaC tools](./05-components.md#iac-tools)                        |
+| IaC tool switch       | `iac_switch`   | 1,440 calendar minutes (proposed)               | [IaC tools](./05-components.md#iac-tools)                        |
+| Valuation scale       | —              | 1.5 × 10⁻⁴                                      | [Valuation scale](#valuation-scale)                              |
+| Coordination penalty  | `k`            | 0.08                                            | [Team](./08-team-and-velocity.md#coordination)                   |
+| Dev Hours per day     | —              | 8 per engineer, 6.4 founder                     | [Team](./08-team-and-velocity.md#dev-hours)                      |
+| Adoption time         | `τ`            | 7 calendar days                                 | [Adoption](./08-team-and-velocity.md#adoption)                   |
+| Lift spread           | `σ`            | 1.0                                             | [Measured lift](./08-team-and-velocity.md#measured-lift)         |
+| Upkeep ceiling        | —              | 0.4 × S / (S + 2,000), max 0.6                  | [Upkeep](./08-team-and-velocity.md#upkeep)                       |
+| Market gain cap       | —              | +100% of the Era market                         | [Sizes](./08-team-and-velocity.md#sizes)                         |
+| Link timeout          | —              | 30 s                                            | [Simulation](./04-simulation.md#capacity-utilization-and-queues) |
+| Drawer size           | —              | 60 s of revenue                                 | [Economy](./09-economy.md#the-payments-drawer)                   |
+| Offline cap           | —              | 8 h                                             | [Simulation](./04-simulation.md#offline-progress)                |
+| Offline churn cap     | —              | 5%                                              | [Simulation](./04-simulation.md#offline-progress)                |
 
 ## Prices
 

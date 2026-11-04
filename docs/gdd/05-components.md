@@ -575,18 +575,20 @@ write goes.
    it is not open yet, at the usual opening price.
 2. The game shows a plan, like `terraform plan`: the Nodes to create, the Cash to place them, the Burn
    they add, and one choice for each data Node.
-3. **Apply** places the Nodes as pending. They appear after `mirror_time` calendar minutes, cold,
-   and warm up as usual.
+3. **Apply** pays at once. The plan lands after `mirror_time` when it builds Nodes, plus Terraform's
+   refresh. New Nodes arrive cold and warm up as usual. The region's Users Node gets
+   its Links only when the plan lands, so GeoDNS never sends users to a Mirror that is still being
+   built. A plan with no new Nodes lands at once.
 
 | In the source region                                                | In the Mirror                                                                                                                                                                                           |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Edge, compute, and platform Nodes, Caches, and Queues               | A copy with the same Instance type, Stack, copies, and options. Caches start cold and Queues start empty.                                                                                               |
 | Relational Database, with its replicas and pooler                   | The player picks one: a **read replica** of the source primary (the default: reads stay local, writes cross to the source), an **own primary** partitioned by region, or **call the source** (no copy). |
 | Object Storage                                                      | The player picks one: **replicate** (pays cross-region Egress for each write) or **call the source**.                                                                                                   |
-| Wide-column Store, Distributed SQL                                  | Not copied. The plan offers to Spread the source Node to the target region.                                                                                                                             |
+| Wide-column Store, Distributed SQL                                  | Not copied. The Mirror's Links go to the source Node; Spread it from its card to answer locally.                                                                                                        |
 | Global and Managed Components                                       | Not copied. The Mirror's Links go to the same Node.                                                                                                                                                     |
 | The source region's Users Node                                      | Its Links start from the target region's Users Node. With GeoDNS, the plan routes the region's users there.                                                                                             |
-| Links between source Nodes, and from source Nodes to a third region | Copied with their timeout, retry, and circuit breaker settings.                                                                                                                                         |
+| Links between source Nodes, and from source Nodes to a third region | Copied with their timeout, retry, and circuit breaker settings. Drift counts a Link added or removed, not a change to its settings.                                                                     |
 
 The three database choices are the patterns in [Multi-region data](./07-data-tier.md#multi-region-data),
 and each one has the RPO and outage behavior that table gives.
@@ -604,15 +606,16 @@ built. **Drift** is every difference between them, of two kinds:
   resized, a Stack or option changed, a Link added or removed.
 - **Hand change.** A change made directly on the Mirror's tab.
 
-The Mirror's tab shows its drift, for example `Mirror of NA · 3 behind · 1 hand change`, with a
-**Plan** button. The plan lists each change. Apply brings the Mirror back to the source: placed Nodes
-arrive after `mirror_time`, and resizes and option changes are immediate. **Apply reverts every hand
-change**, and the plan marks those changes in red.
+A Mirror's region tab shows a dot while it drifts. The **Mirror** button beside the region tabs
+opens the plan, for example `Europe · Mirror of North America · 3 behind · 1 hand change`. The plan
+lists each change. Apply brings the Mirror back to the source, on the same timing as the first Apply.
+**Apply reverts every hand change**, and the plan marks those changes in red. A Node placed by hand in
+a Mirror's region is not in the code, and Apply leaves it alone.
 
 Some differences between regions are correct, because each region has its own demand. The player
-can keep a hand change as an **override**, like a per-region variable file in Terraform. Only the
-Instance size, the copy count, and the Autoscaler's minimum and maximum can be overrides. An override
-is not drift, and apply keeps it.
+can keep a hand change as an **override** from its row in the plan, like a per-region variable file in
+Terraform or stack config in Pulumi. Any setting can be an override. An override is not drift, and
+Apply keeps it.
 
 Data Nodes are never applied without the player:
 
@@ -635,30 +638,38 @@ failed row in the Mirror's region.
 
 ### IaC tools
 
-Research `infra-as-code` asks the player to pick an **IaC tool** on a Tradeoff card. The tool sets
-how Mirrors apply, what can be an override, and what the tool can build. Like a Stack, no tool is
-best: each one is a real tradeoff.
+Research `infra-as-code` asks the player to pick an **IaC tool** on a Tradeoff card. All three tools
+build every Component and can set any value per region: Terraform with variables, Pulumi with stack
+config, and Alchemy with stage values. They differ in how a plan finds hand changes, as in each
+tool's documented default workflow. No tool is best.
 
-| Tool      | Language                          | Apply time         | Overrides                                                                                               | Coverage                                                                                                   | Cost                                                                                                |
-| --------- | --------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Terraform | HCL, declarative, a state file    | 1× `mirror_time`   | Size, copies, and Autoscaler bounds                                                                     | Every Component                                                                                            | None. The plan is the most exact: it lists every change                                             |
-| Pulumi    | TypeScript, Python, or Go         | 1× `mirror_time`   | Any option, and computed overrides: a Mirror's sizes and copies can follow its region's share of demand | Every Component                                                                                            | Upkeep: the IaC code is a Service the Platform Team owns ([Team](./08-team-and-velocity.md#upkeep)) |
-| Alchemy   | TypeScript, run as a plain script | 0.5× `mirror_time` | Any option                                                                                              | Edge, serverless, managed, and Cloudflare-style Components. A Component it does not cover is **unmanaged** | Unmanaged Nodes are placed by hand and drift silently                                               |
+| Tool      | Language                  | How a plan finds hand changes                                                                                                                                 | Tradeoff                                                                                         |
+| --------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Terraform | HCL                       | `terraform plan` refreshes live state first, so every plan shows every hand change.                                                                           | Each Apply waits `refresh_time` per managed Node before it changes anything.                     |
+| Pulumi    | TypeScript, Python, or Go | `pulumi preview` diffs against the recorded state. **Refresh** (`pulumi refresh`) reads live state, and the plan then shows the hand changes made so far.     | Fast plans. A hand change made after the last Refresh stays through an Apply.                    |
+| Alchemy   | TypeScript                | `alchemy plan` diffs against the recorded state. **Check drift** (`alchemy drift`) reads live state, and **Repair** (`drift --repair`) restores hand changes. | Fast plans. Repair restores the last deploy without taking source changes, which wait for Apply. |
 
-- An unmanaged Node is not in the code, so the plan never shows it as behind. The player must
-  remember to change it in every region. Silent drift is the cost of a fast, light tool.
-- A computed override in Pulumi removes most hand changes, but a mistake in it reaches every Mirror,
-  like any other code.
-- Changing the tool later is a [migration](./08-team-and-velocity.md#migrations): Dev Hours and
-  calendar time, during which Mirrors do not sync.
+- An Apply reverts only the hand changes its plan saw. The rest stay until the next refresh, as in
+  the real tools.
+- **Follow users** is a computed value any tool can express: each copy's size is the size nearest
+  to the source size times the region's share of users over the source's, one size step per
+  doubling. The Autoscaler's bounds scale the same way.
+- Changing the tool later takes `iac_switch` calendar minutes, during which no Mirror applies or
+  syncs.
 
-Reality check: the coverage of each tool is stylized. Real Terraform, Pulumi, and Alchemy each
-support many providers; the game gives each tool one clear strength and one clear gap.
+Reality check: all three tools support many providers and have more ways to detect drift, such as
+`terraform plan -refresh-only`, `pulumi up --refresh`, and Pulumi Cloud's scheduled drift detection.
+The game uses each tool's default plan behavior and nothing else.
 
 ### GitOps
 
-Research `gitops` applies each source change to every Mirror on its own. The Mirror is never behind,
-and hand changes revert at the next sync, so overrides are the only way to tune a region. The cost
+Research `gitops` applies each source change to every Mirror on its own. The Mirror is never behind
+for long, and hand changes revert at the next sync, because a GitOps controller reconciles against
+live state with every tool, so overrides are the only way to tune a region.
+All at once syncs at the next poll, `sync_poll` calendar minutes after the drift starts, as Argo CD
+polls its repository every three minutes by default. A sync pays for its plan like an Apply; without
+the Cash, the Mirror stays behind. A new data Node still waits for the player to pick its pattern, and
+GitOps never removes a data Node. The cost
 moves from drift to blast radius: a bad change now reaches every region. The player picks the sync
 mode on a Tradeoff card:
 
@@ -667,6 +678,9 @@ mode on a Tradeoff card:
 | All at once | None                                          | Reaches every region together.                                                |
 | Staged      | The other Mirrors are behind for `stage_wait` | Reaches one region. The player rolls it back before the other Mirrors get it. |
 
-The Bad config push incident uses this rule ([Incidents](./11-incidents.md#catalog)): with GitOps
-all at once, it reaches every mirrored region; with Staged, it reaches one region. GitOps works with
-every IaC tool. It does not sync unmanaged Nodes.
+The Bad config push incident uses this rule ([Incidents](./11-incidents.md#catalog)). It crashes every
+App Server and Worker in the first Mirror's source region, or in the region with the most App Servers
+when there is no Mirror. With GitOps all at once, it crashes them in every Mirror of that region too.
+With Staged, or without GitOps, it stays in one region. Roll back ends it, and the crashed Nodes
+restart on the old config. The director can pick it once `infra-as-code` is researched. GitOps works with
+every IaC tool.
