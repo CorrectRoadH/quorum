@@ -129,6 +129,10 @@ export type Pass = Readonly<{
   /** The Edges that carried anything, in the order they first did: sums over Links run in it. */
   linkOrder: ReadonlyArray<number>
   connections: ReadonlyArray<Readonly<{ used: number; max: number }> | undefined>
+  /** Tasks per second each Queue or Worker gets, by the request kind that enqueued them. */
+  tasks: ReadonlyArray<Partial<Record<RequestKind, number>> | undefined>
+  /** Tasks per second each Queue's Workers take from it. */
+  drained: ReadonlyArray<number | undefined>
   /** Milliseconds replicas lag behind the primary. */
   lag: number
   /** Share of replica reads that are stale. */

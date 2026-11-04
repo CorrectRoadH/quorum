@@ -55,6 +55,8 @@ export const GOLDEN_STEPS = 10_000
 // something fails. A Tomcat box holding realtime connections refuses work at its
 // RAM instead of swapping, and a store spread across regions survives a zone.
 // The Company replay is unchanged.
+// SIM_VERSION 14: async work is scored on when it finishes, as well as on its
+// acknowledgement, so a Queue's backlog costs Apdex.
 export const GOLDEN_HASH = '90ba0bf8'
 
 /**
@@ -84,10 +86,10 @@ export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
   'reports-at-noon': '8c31368e',
   'gpu-economics': 'c9d086db',
   metastable: 'a96abdd1',
-  'regex-of-doom': '72ee666c',
+  'regex-of-doom': '13c06855',
   'forty-three-seconds': '70ad50bb',
   'follow-the-sun': '2944917a',
-  celebrity: 'b442fd7c',
+  celebrity: 'ab8859e7',
   'gone-from-the-internet': '7885be6e',
   'the-typo': 'b1b41114',
   'leap-second': 'd92d5c1a',

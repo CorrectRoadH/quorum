@@ -129,6 +129,11 @@ export type RequestProfile = Readonly<{
   inKB: number
   /** Share of the app CPU an App Server can hand to a Worker through a Queue. */
   offload: number
+  /**
+   * Apdex target T, in ms, for the async part to finish once it went through a
+   * Queue: the user waits for the result, not only the acknowledgement. Proposed.
+   */
+  completion?: number
   /** Counts toward Apdex, errors, revenue and growth. Bots do not. */
   scored: boolean
 }>
@@ -223,6 +228,7 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     compressible: false,
     inKB: 2_000,
     offload: 0.9,
+    completion: 10_000,
     scored: true,
   },
   bot: {
@@ -303,6 +309,7 @@ export const PROFILES: Record<RequestKind, RequestProfile> = {
     compressible: false,
     inKB: 0,
     offload: 0.95,
+    completion: 60_000,
     scored: true,
   },
   // A dashboard: one scan of a whole table, on a Warehouse or, badly, on the primary.

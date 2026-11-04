@@ -274,6 +274,25 @@ describe('the Queue and the Worker', () => {
     if (!poisoned) throw new Error('no poison')
     expect(step(ok(Actions.deleteMessage(poisoned)), 1).game.incident).toBeNull()
   })
+
+  const withNodes = (game: Game, change: Readonly<Record<string, Partial<GameNode>>>): Game => ({
+    ...game,
+    nodes: game.nodes.map((entry) => ({ ...entry, ...change[entry.id] })),
+  })
+
+  test('users wait for an upload to finish: a backlog costs its Apdex, Workers that keep up do not', () => {
+    const keeping = solve(settle(queued(6_000, 1), 60))
+    expect(keeping.nodes.queue?.age).toBe(0)
+    expect(keeping.kinds.upload?.completion).toBeGreaterThan(0.99)
+    expect(keeping.kinds.upload?.apdex).toBeGreaterThan(0.99)
+    // A nano Worker falls behind: new uploads wait minutes behind the backlog, past 4 × 10 s.
+    const behind = solve(settle(withNodes(queued(6_000, 1), { worker0: { size: 0 } }), 60))
+    expect(behind.nodes.queue?.age ?? 0).toBeGreaterThan(40)
+    expect(behind.kinds.upload?.completion).toBe(0)
+    expect(behind.kinds.upload?.apdex).toBe(0)
+    // The acknowledgement still comes back: the upload succeeds, and its result is late.
+    expect(behind.kinds.upload?.success).toBeGreaterThan(0.99)
+  })
 })
 
 describe('a Cache stampede', () => {

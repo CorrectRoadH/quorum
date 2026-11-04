@@ -3,7 +3,7 @@ import type { ComponentId, IncidentId, ResearchId } from './catalog.ts'
 import { company, link, node } from './company.ts'
 import { forceIncident } from './director.ts'
 import type { Ledger } from './ledger.ts'
-import { RESEARCH_IDS } from './catalog.ts'
+import { RESEARCH_IDS, SIZES } from './catalog.ts'
 import type { Game, GameLink, GameNode } from './state.ts'
 
 /* ==========================================================================
@@ -243,7 +243,12 @@ export const seriesCData = (scale = 1): ReadonlyArray<GameNode> => [
   node('llm', 'llm', 880, 700, { size: 1 + scale }),
   node('msgp', 'msgp', 880, 840),
   node('queue', 'queue', 360, 40),
-  node('worker', 'worker', 880, 60, { size: scale > 1 ? 9 : 4, runtime: 'go' }),
+  // At scale, three metal Workers keep up with the exports and uploads.
+  node('worker', 'worker', 880, 60, {
+    size: scale > 1 ? SIZES.length - 1 : 4,
+    replicas: scale > 1 ? 3 : 1,
+    runtime: 'go',
+  }),
 ]
 export const seriesCLinks = (
   servers: ReadonlyArray<string>,

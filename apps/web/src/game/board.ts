@@ -80,7 +80,7 @@ import {
 } from '@quorum/simulation/lookups'
 import { isGlobal } from '@quorum/simulation/regions'
 import type { Game, GameNode, Region } from '@quorum/simulation/state'
-import { compact, money, ms, priceLabel, rate } from './format.ts'
+import { compact, money, ms, priceLabel, queueWait, rate } from './format.ts'
 import { isPhone } from './viewport.ts'
 import {
   CARD_W,
@@ -993,8 +993,15 @@ const rowsOf = (
         {
           glyph: 'depth',
           name: 'Depth',
-          value: compact(Math.round(node.depth)),
-          tone: node.depth >= 1_000 ? 'danger' : node.depth >= 100 ? 'warn' : 'plain',
+          // How long a new task waits behind the backlog: past 40 s, an upload's result is late.
+          value:
+            node.depth < 1 ? '0' : `${compact(Math.round(node.depth))} · ${queueWait(own.age)}`,
+          tone:
+            (own.age ?? 0) >= 40
+              ? 'danger'
+              : (own.age ?? 0) >= 10 || node.depth >= 100
+                ? 'warn'
+                : 'plain',
         },
         capacity,
         out,

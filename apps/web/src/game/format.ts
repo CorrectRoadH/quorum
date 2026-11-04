@@ -33,6 +33,18 @@ export const rate = (value: number): string =>
 export const ms = (value: number): string =>
   value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} s`
 
+/** How long a new task waits in a Queue: seconds, minutes or hours, or stalled with no Worker draining. */
+export const queueWait = (seconds: number | null): string =>
+  seconds === null
+    ? '—'
+    : seconds === Number.POSITIVE_INFINITY
+      ? 'stalled'
+      : seconds < 60
+        ? `${Math.round(seconds)} s`
+        : seconds < 3600
+          ? `${Math.round(seconds / 60)} min`
+          : `${Math.round(seconds / 3600)} h`
+
 /** What an alert rule pages on, at its threshold. */
 export const alertText = (rule: 'errors' | 'latency' | 'saturation', threshold: number): string =>
   rule === 'errors'

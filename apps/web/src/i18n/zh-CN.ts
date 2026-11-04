@@ -513,6 +513,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Failed tasks': '失败任务',
   'Retry forever': '无限重试',
   'Dead-letter queue': '死信队列',
+  stalled: '停滞',
   'No standby': '无备用节点',
   Standby: '备用节点',
   One: '单个',

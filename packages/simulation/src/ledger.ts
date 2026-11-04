@@ -31,6 +31,8 @@ export type NodeLedger = Readonly<{
   connections: Readonly<{ used: number; max: number }> | null
   /** Cache or CDN hit ratio. */
   hitRatio: number | null
+  /** Seconds a new task waits in this Queue before a Worker takes it; infinite with none draining. */
+  age: number | null
   /** Milliseconds a replica lags behind the primary. */
   lag: number | null
   /** The working set does not fit in RAM. */
@@ -59,7 +61,10 @@ export type KindLedger = Readonly<{
   /** Requests per second users send. */
   rate: number
   success: number
+  /** Apdex, with the async part also scored on when its result is ready. */
   apdex: number
+  /** Apdex of the async part's completion, or null when nothing went through a Queue. */
+  completion: number | null
   mean: number
   p50: number
   p95: number

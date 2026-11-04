@@ -442,6 +442,20 @@ type Inputs = Readonly<{
   intake: ReadonlyArray<number | undefined>
 }>
 
+/** Shares of a per-kind rate record, or null when it is empty. */
+const sharesOf = (
+  rates: Partial<Record<RequestKind, number>> | undefined,
+): Partial<Record<RequestKind, number>> | null => {
+  if (!rates) return null
+  let total = 0
+  for (const kind of Object.keys(rates) as Array<RequestKind>) total += rates[kind] ?? 0
+  if (total <= 0) return null
+  const shares: Partial<Record<RequestKind, number>> = {}
+  for (const kind of Object.keys(rates) as Array<RequestKind>)
+    shares[kind] = (rates[kind] ?? 0) / total
+  return shares
+}
+
 const NO_CALLS: Calls = {}
 
 /** What the rules may ask about the Design in this pass. */
@@ -492,9 +506,12 @@ const CALLOUT: Outcome = failSome(
 
 const forward = (inputs: Inputs): Pass => {
   const { game, graph, demand } = inputs
+  const tasks: Array<Partial<Record<RequestKind, number>> | undefined> = []
   const solver = solverOf(inputs)
   const at = graph.at
   const arriving: Array<Rates> = game.nodes.map(() => ({}))
+  // The request kinds behind the tasks the Node now walking sends on.
+  let composition: Partial<Record<RequestKind, number>> | null = null
   const models: Array<Model | undefined> = []
   const hits: Array<number | undefined> = []
   const staleHits: Array<number | undefined> = []
@@ -526,6 +543,12 @@ const forward = (inputs: Inputs): Pass => {
         linkOrder.push(edge.index)
       }
       carried[kind] = (carried[kind] ?? 0) + sent
+      if (kind === 'task' && composition) {
+        const into = tasks[edge.toAt] ?? {}
+        for (const origin of Object.keys(composition) as Array<RequestKind>)
+          into[origin] = (into[origin] ?? 0) + sent * (composition[origin] ?? 0)
+        tasks[edge.toAt] = into
+      }
     }
   }
 
@@ -544,6 +567,13 @@ const forward = (inputs: Inputs): Pass => {
     if (shares && !isDown(node))
       for (const kind of Object.keys(rates) as Array<Kind>)
         kept[kind] = (rates[kind] ?? 0) * (shares[kind] ?? model.share)
+    // An App Server enqueues one task per request of a kind that goes async; a Queue passes on its mix.
+    if (node.type === 'server') {
+      const offloaded: Partial<Record<RequestKind, number>> = {}
+      for (const kind of REQUEST_KINDS)
+        if (PROFILES[kind].offload > 0 && (kept[kind] ?? 0) > 0) offloaded[kind] = kept[kind] ?? 0
+      composition = sharesOf(offloaded)
+    } else composition = node.type === 'queue' ? sharesOf(tasks[slot]) : null
     rule.serve(
       {
         solver,
@@ -583,6 +613,19 @@ const forward = (inputs: Inputs): Pass => {
     writes += arriving[slot]?.['q-write'] ?? 0
   }
 
+  // What each Queue's Workers take from it.
+  const drained: Array<number | undefined> = []
+  for (const node of game.nodes) {
+    if (node.type !== 'queue') continue
+    let total = 0
+    for (const edge of graph.out.get(node.id) ?? []) {
+      if (edge.to.type !== 'worker') continue
+      const share = isDown(edge.to) ? 0 : (models[edge.toAt]?.share ?? 1)
+      total += (links[edge.index]?.task ?? 0) * share
+    }
+    drained[at.get(node.id) as number] = total
+  }
+
   // A burst of writes during a Replication lag incident leaves replicas far behind.
   const surge = game.incident?.kind === 'repl-lag'
   const lag = REPLICA_LAG_MS + REPLICA_LAG_PER_WRITE * writes
@@ -596,6 +639,8 @@ const forward = (inputs: Inputs): Pass => {
     links,
     linkOrder,
     connections,
+    tasks,
+    drained,
     lag: surge ? lag * LAG_SURGE : lag,
     staleShare: surge ? Math.min(0.5, (lag * LAG_SURGE) / 1000) : Math.min(0.15, lag / 1000),
   }
@@ -993,6 +1038,40 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
   return ledgerOf(game, graph, demand, pass, outcomes, routes)
 }
 
+/**
+ * When the async part of each kind is done (16 "Series B": completion-time
+ * Apdex). A new task waits behind its Queue's backlog for as long as the
+ * Workers take to drain it (Little's law), then runs.
+ */
+const completionsOf = (game: Game, pass: Pass, outcomes: ReturnType<typeof outcomesOf>) => {
+  const enqueued: Partial<Record<RequestKind, number>> = {}
+  const scored: Partial<Record<RequestKind, number>> = {}
+  const waits = new Map<string, number>()
+  for (const queue of game.nodes) {
+    if (queue.type !== 'queue') continue
+    const slot = slotOf(pass, queue)
+    const drained = pass.drained[slot] ?? 0
+    const wait =
+      queue.depth <= 0 ? 0 : drained > 0 ? queue.depth / drained : Number.POSITIVE_INFINITY
+    waits.set(queue.id, wait)
+    const tasks = pass.tasks[slot]
+    if (!tasks || isDown(queue)) continue
+    const worker = outcomes.downstream(queue, 'task')
+    const done: Outcome =
+      wait === Number.POSITIVE_INFINITY || worker.fail.stranded >= 1
+        ? failed('stranded')
+        : { ...worker, fixed: worker.fixed + wait * 1000 }
+    for (const kind of Object.keys(tasks) as Array<RequestKind>) {
+      const target = PROFILES[kind].completion
+      const rate = tasks[kind] ?? 0
+      if (!target || rate <= 0) continue
+      enqueued[kind] = (enqueued[kind] ?? 0) + rate
+      scored[kind] = (scored[kind] ?? 0) + rate * done.success * apdexOf(done, target)
+    }
+  }
+  return { enqueued, scored, waits }
+}
+
 const ledgerOf = (
   game: Game,
   graph: Graph,
@@ -1018,6 +1097,8 @@ const ledgerOf = (
     return mixed ?? failed('stranded')
   }
 
+  const completion = completionsOf(game, pass, outcomes)
+
   // What users get back, per kind.
   const kinds: Partial<Record<RequestKind, KindLedger>> = {}
   const errors: Record<ErrorCause, number> = { ...NO_FAILURES }
@@ -1032,11 +1113,17 @@ const ledgerOf = (
     const rate = demand[kind] ?? 0
     if (rate <= 0) continue
     const result = answerOf(kind)
-    const apdex = apdexOf(result, PROFILES[kind].apdex)
+    // The part that went through a Queue is also scored on when its result is ready.
+    const enqueued = completion.enqueued[kind] ?? 0
+    const done = enqueued > 0 ? (completion.scored[kind] ?? 0) / enqueued : null
+    const async =
+      done === null || result.success <= 0 ? 0 : Math.min(1, enqueued / (rate * result.success))
+    const apdex = apdexOf(result, PROFILES[kind].apdex) * (1 - async + async * (done ?? 1))
     kinds[kind] = {
       rate,
       success: result.success,
       apdex,
+      completion: done,
       mean: meanOf(result),
       p50: percentile(result, 0.5),
       p95: percentile(result, 0.95),
@@ -1118,6 +1205,7 @@ const ledgerOf = (
       strandedKinds: strand ? [...strand.kinds] : [],
       connections: pool,
       hitRatio: node.type === 'cache' || node.type === 'cdn' ? (pass.hits[slot] ?? 0) : null,
+      age: node.type === 'queue' ? (completion.waits.get(node.id) ?? 0) : null,
       lag: node.type === 'replica' ? pass.lag : null,
       disk: model?.disk ?? false,
       out,

@@ -408,6 +408,7 @@ export const fr: Readonly<Record<string, string>> = {
   'Failed tasks': 'Tâches en échec',
   'Retry forever': 'Réessayer sans limite',
   'Dead-letter queue': 'File des messages non traités',
+  stalled: 'bloquée',
   Zone: 'Zone',
   'No standby': 'Sans secours',
   Standby: 'Secours',
