@@ -527,19 +527,21 @@ incidents ran 30 to 300 sim seconds, against 11's 5, 20 and 60. Three changes, r
 A well-built Series A Design at 60,000 users (two zones, standbys, a WAF and Load Balancer pair, a
 coalescing Cache) with a scripted responder holds 99.84–99.89% over a calendar week without a traffic
 spike, and 99.40% in a week with one: a 3–10× spike still drops what spare capacity cannot take in its
-5 seconds. The Balanced bot does not play this well: over its last calendar week it holds 97.6–99.0% (85.7–91.8%
+5 seconds. The Balanced bot does not play this well: over its last calendar week it holds 95.5–98.2% (85.7–91.8%
 before these changes), so it still spends its budget, mostly in the minutes a spike or slow query outruns
 its responder.
 
-At the design pace, on seeds 1–5, the Balanced bot raises Series A at 46.5–54.9 sim minutes and Series B
-at 80.1–93.3 (`pacing.test.ts`, `runBot(…, 'balanced', 5)` until 130 minutes; 62.7–71.3 and
-112.2–121.3 before `SIM_VERSION` 8). Its autopilot ships Video, Chat, Checkout, and Notifications
+At the design pace, on seeds 1–5, the Balanced bot raises Series A at 51.9–63.8 sim minutes and Series B
+at 90.7–106.4 (`pacing.test.ts`, `runBot(…, 'balanced', 5)` until 130 minutes; 46.5–54.9 and
+80.1–93.3 before CVE patch tickets, 62.7–71.3 and 112.2–121.3 before `SIM_VERSION` 8). It moves each
+CVE patch ticket to the top of the backlog. Before it did, every ticket expired into a Data breach that
+took 15% of its users: 7 to 10 breaches per run, which held seed 5 in Series A at 130 minutes. Its autopilot ships Video, Chat, Checkout, and Notifications
 center in Series A, so `media`, `rt`, and `buy` reach a bot Company. It still ships none of the
 Series B Features, so `job`, `report` and `ai`, the Warehouse and the GPU Node do not appear;
 `series-b.test.ts` and the Series B Sandboxes play them. PHP-FPM holds no realtime connections and
 refuses every `rt` request, which alone costs about 10% of requests. So once Chat is on the backlog,
 the bot researches Node.js cluster mode and migrates to it. At 130 minutes it holds Apdex
-0.951–0.964 with 4 engineers, 42–43 App Servers, and 265,000–305,000 users; on two seeds the
+0.951–0.964 with 4 engineers, 42–43 App Servers, and 274,000–291,000 users; on two seeds the
 migration is still at step 3, where `rt` succeeds about 70% of the time. Without the migration it
 held Apdex 0.881–0.904 with 66,000–104,000 users. The Realtime Hub
 ([Components](./05-components.md#realtime-hub)) is not built, so a migration is the only way to serve

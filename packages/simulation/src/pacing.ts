@@ -60,7 +60,16 @@ import { bottleneckOf, solveFlow } from './solve.ts'
 import type { Founding, Game, GameNode } from './state.ts'
 import { step } from './step.ts'
 import { languageOfService, salaryOf, serviceOf, signingOf, stackOf } from './team.ts'
-import { addIndex, changeStack, hire, moveItem, queueFeature, queueTask, rushItem } from './work.ts'
+import {
+  addIndex,
+  changeStack,
+  hire,
+  moveItem,
+  prioritizeItem,
+  queueFeature,
+  queueTask,
+  rushItem,
+} from './work.ts'
 
 /* ==========================================================================
    Pacing bots (16 "Pacing model"): scripted players that run against the real
@@ -626,6 +635,10 @@ const look = (game: Game, tuning: Tuning, strategy: Strategy): Game => {
   for (const server of servers(next))
     if (RUNTIMES[server.runtime].pool && server.down > 0 && server.workers < fittingWorkers(server))
       next = tried(next, setWorkers(next, server.id, fittingWorkers(server)))
+
+  // A CVE's patch ticket goes first: an expired one starts a Data breach.
+  for (const item of next.backlog.filter((entry) => entry.kind === 'patch'))
+    next = tried(next, prioritizeItem(next, item.id))
 
   // Transaction pooling breaks session state: drop it, first in line, rushed from the pool.
   if (next.nodes.some((node) => node.type === 'pooler')) {

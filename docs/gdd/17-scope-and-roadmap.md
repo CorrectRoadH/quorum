@@ -45,8 +45,8 @@ shedding and idempotency keys; read-your-writes routing; Axum and Actix; Disk fu
 and Series A incidents; five Series B Features; the Stale Checkout Sandbox and the Series B Sandbox
 track. From Series A, incidents run on 11's calendar durations, so the
 SLO can be met (see the divergence log). Not built: SQS, delivery and visibility timeouts, GPU batch
-size, quantization and model size, the Service Mesh, and the Margin bot. Built since: completion-time Apdex for async kinds, Queue max length and max attempts, Worker prefetch and per-Queue task mixes, and the Kubernetes Cluster's rolling deploys, self-healing, platform Dev Hours, forced upgrades, and the Platform team. The Balanced bot raises Series A at 62.7–71.3 sim minutes and Series B at
-112.2–121.3 on seeds 1–5, holding 97.6–99.0% availability; it has not shipped the Series B Features by
+size, quantization and model size, the Service Mesh, and the Margin bot. Built since: completion-time Apdex for async kinds, Queue max length and max attempts, Worker prefetch and per-Queue task mixes, and the Kubernetes Cluster's rolling deploys, self-healing, platform Dev Hours, forced upgrades, and the Platform team. The Balanced bot raises Series A at 51.9–63.8 sim minutes and Series B at
+90.7–106.4 on seeds 1–5, holding 95.5–98.2% availability; it has not shipped the Series B Features by
 then.
 
 **M6 status.** Batches B15–B22 are in the build: regions as tabs over one Design
