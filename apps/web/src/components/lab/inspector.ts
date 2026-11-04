@@ -17,7 +17,9 @@ import {
   FRAMEWORK_IDS,
   KINDS,
   LB_POLICIES,
+  MAX_ATTEMPTS,
   PM_MODES,
+  QUEUE_LENGTHS,
   OS_RAM,
   PARANOIA,
   PROFILES,
@@ -474,7 +476,10 @@ const stats = (
           h,
         ),
         row('Latency', ms(own.latency), 'plain', h),
-        row('Dropped', `${rate(own.dropped)}/s`, own.dropped > 0.05 ? 'danger' : 'plain', h),
+        // What a Worker cannot take waits in its Queue: it is not lost.
+        node.type === 'worker'
+          ? row('Requeued', `${rate(own.dropped)}/s`, own.dropped > 0.05 ? 'warn' : 'plain', h)
+          : row('Dropped', `${rate(own.dropped)}/s`, own.dropped > 0.05 ? 'danger' : 'plain', h),
         ...(own.hitRatio !== null ? [row('Hit ratio', percent(own.hitRatio), 'plain', h)] : []),
         ...(own.lag !== null ? [row('Lag', ms(own.lag), 'plain', h)] : []),
         row('Burn', `${money(burnOf(game, node))}/s`, 'plain', h),
@@ -1006,7 +1011,7 @@ const cache = (game: Game, node: GameNode, h: HtmlBuilder<Message>): Html =>
     h,
   )
 
-const queue = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+const queue = (node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => [
   section(
     'Failed tasks',
     [
@@ -1020,9 +1025,36 @@ const queue = (node: GameNode, h: HtmlBuilder<Message>): Html =>
         (dlq) => Message.DlqChosen({ nodeId: node.id, dlq }),
         h,
       ),
+      ...(node.dlq
+        ? [
+            picker(
+              'attempts',
+              MAX_ATTEMPTS.map((attempts) => [attempts, `${attempts}×`] as const),
+              node.attempts,
+              (attempts) => Message.AttemptsChosen({ nodeId: node.id, attempts }),
+              h,
+            ),
+          ]
+        : []),
     ],
     h,
-  )
+  ),
+  section(
+    'Max length',
+    [
+      picker(
+        'max-length',
+        QUEUE_LENGTHS.map(
+          (maxLength) => [maxLength, maxLength === 0 ? 'None' : compact(maxLength)] as const,
+        ),
+        node.maxLength,
+        (maxLength) => Message.MaxLengthChosen({ nodeId: node.id, maxLength }),
+        h,
+      ),
+    ],
+    h,
+  ),
+]
 
 /** Which zone the Node runs in, and a standby in another for data Nodes. */
 const placement = (node: GameNode, h: HtmlBuilder<Message>): Html =>
@@ -1586,7 +1618,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...(node.type === 'analytics' ? [sampler(game, node, h)] : []),
           ...(node.type === 'lb' ? loadBalancer(game, node, h) : []),
           ...(node.type === 'cache' ? [cache(game, node, h)] : []),
-          ...(node.type === 'queue' ? [queue(node, h)] : []),
+          ...(node.type === 'queue' ? queue(node, h) : []),
           ...(node.type === 'waf' ? [waf(node, h)] : []),
           ...(node.type === 'cdn' ? [cdnTtl(node, h)] : []),
           ...(node.type === 'pooler' ? [pooler(node, h)] : []),

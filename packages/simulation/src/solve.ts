@@ -32,6 +32,8 @@ import {
   SAMPLE_LATENCY,
   SAMPLE_OVERHEAD,
   LINK_TIMEOUT,
+  FOREVER_ATTEMPTS,
+  TASK_RETRY_SECONDS,
   WEEKEND_FACTOR,
   BACKEND_KINDS,
   isBackendKind,
@@ -48,6 +50,8 @@ import {
   NO_FAILURES,
   RETRY_BUDGET,
   attemptsFor,
+  taskAttempts,
+  taskLost,
   backedOff,
   failSome,
   heldFor,
@@ -440,7 +444,19 @@ type Inputs = Readonly<{
   sick: ReadonlyArray<boolean | undefined>
   /** Share of the demand each Users Node takes in. */
   intake: ReadonlyArray<number | undefined>
+  /** Share of each Worker's attempts that failed on the last pass: they come back as retries. */
+  taskFailure: ReadonlyArray<number | undefined>
+  /** Tasks per second each Worker could take on the last pass. */
+  taskCapacity: ReadonlyArray<number | undefined>
 }>
+
+/** Attempts a Queue gives a task: its max attempts with a dead-letter queue, else forever. */
+export const attemptsAllowed = (queue: GameNode): number =>
+  queue.dlq ? queue.attempts : FOREVER_ATTEMPTS
+
+/** The Queue a Worker pulls from, if any. */
+const queueOf = (graph: Graph, node: GameNode): GameNode | undefined =>
+  (graph.parents.get(node.id) ?? []).find((parent) => parent.type === 'queue')
 
 /** Shares of a per-kind rate record, or null when it is empty. */
 const sharesOf = (
@@ -476,6 +492,20 @@ const solverOf = (inputs: Inputs): Solver => {
       return (graph.parents.get(node.id) ?? []).some(
         (parent) => parent.id === incident.nodeId && !parent.dlq,
       )
+    },
+    attempts: (node) => {
+      const queue = queueOf(graph, node)
+      if (!queue) return 1
+      const failure = Math.min(0.99, inputs.taskFailure[graph.at.get(node.id) as number] ?? 0)
+      return taskAttempts(failure, attemptsAllowed(queue))
+    },
+    drainable: (node) => {
+      let total = 0
+      for (const edge of graph.out.get(node.id) ?? []) {
+        if (edge.to.type !== 'worker' || isDown(edge.to)) continue
+        total += inputs.taskCapacity[edge.toAt] ?? Number.POSITIVE_INFINITY
+      }
+      return total
     },
   }
 }
@@ -951,6 +981,8 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       const slot = at.get(entry.source.id) as number
       intake[slot] = (intake[slot] ?? 0) + entry.share
     }
+  let taskFailure: Array<number | undefined> = []
+  let taskCapacity: Array<number | undefined> = []
   const seed: Inputs = {
     game,
     graph,
@@ -963,6 +995,8 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
     nominal,
     sick,
     intake,
+    taskFailure,
+    taskCapacity,
   }
   const seedSolver = solverOf(seed)
   for (const node of game.nodes)
@@ -984,9 +1018,29 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
       nominal,
       sick: [...sick],
       intake,
+      taskFailure,
+      taskCapacity,
     }
     pass = forward(inputs)
     outcomes = outcomesOf(inputs, pass)
+    // A Worker's failed attempts come back: what its calls and code failed, not what it dropped,
+    // since a dropped task waits in the Queue.
+    const nextTaskFailure: Array<number | undefined> = []
+    const nextTaskCapacity: Array<number | undefined> = []
+    for (const node of game.nodes) {
+      if (node.type !== 'worker') continue
+      const slot = at.get(node.id) as number
+      const utilization = pass.models[slot]?.utilization ?? 0
+      const offered = pass.arriving[slot]?.task ?? 0
+      if (utilization > 0 && offered > 0) nextTaskCapacity[slot] = offered / utilization
+      if (!pass.tasks[slot]) continue
+      const result = outcomes.outcome(node, 'task')
+      const fresh = Math.max(0, 1 - (result.success + result.fail.dropped))
+      const previous = taskFailure[slot]
+      nextTaskFailure[slot] = previous === undefined ? fresh : (previous + fresh) / 2
+    }
+    taskFailure = nextTaskFailure
+    taskCapacity = nextTaskCapacity
     const nextLatency: Array<Calls | undefined> = []
     const nextInflight: Array<number | undefined> = []
     const nextWeights: Array<number | undefined> = []
@@ -1041,7 +1095,9 @@ const solveWith = (game: Game, boost: string | null): Ledger => {
 /**
  * When the async part of each kind is done (16 "Series B": completion-time
  * Apdex). A new task waits behind its Queue's backlog for as long as the
- * Workers take to drain it (Little's law), then runs.
+ * Workers take to drain it (Little's law), then runs. An attempt that fails
+ * comes back after a backoff until the Queue's attempts run out, and then the
+ * task is lost.
  */
 const completionsOf = (game: Game, pass: Pass, outcomes: ReturnType<typeof outcomesOf>) => {
   const enqueued: Partial<Record<RequestKind, number>> = {}
@@ -1057,10 +1113,20 @@ const completionsOf = (game: Game, pass: Pass, outcomes: ReturnType<typeof outco
     const tasks = pass.tasks[slot]
     if (!tasks || isDown(queue)) continue
     const worker = outcomes.downstream(queue, 'task')
+    // A task a busy Worker dropped waits in the Queue: the wait counts it, not the attempts.
+    const failure = Math.min(1, Math.max(0, 1 - worker.success - worker.fail.dropped))
+    const allowed = attemptsAllowed(queue)
+    const lost = taskLost(failure, allowed)
+    const extra = taskAttempts(failure, allowed) - 1
     const done: Outcome =
       wait === Number.POSITIVE_INFINITY || worker.fail.stranded >= 1
         ? failed('stranded')
-        : { ...worker, fixed: worker.fixed + wait * 1000 }
+        : {
+            ...worker,
+            success: 1 - lost,
+            fixed: worker.fixed + (wait + extra * TASK_RETRY_SECONDS) * 1000,
+            fail: { ...NO_FAILURES, upstream: lost },
+          }
     for (const kind of Object.keys(tasks) as Array<RequestKind>) {
       const target = PROFILES[kind].completion
       const rate = tasks[kind] ?? 0

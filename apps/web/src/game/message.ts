@@ -178,6 +178,8 @@ export const Message = defineMessageUnion({
     warming: Schema.optional(Schema.Boolean),
   },
   DlqChosen: { nodeId: Schema.String, dlq: Schema.Boolean },
+  AttemptsChosen: { nodeId: Schema.String, attempts: Schema.Finite },
+  MaxLengthChosen: { nodeId: Schema.String, maxLength: Schema.Finite },
   ParanoiaChosen: { nodeId: Schema.String, paranoia: Schema.Finite },
   UnderAttackChosen: { nodeId: Schema.String, underAttack: Schema.Boolean },
   ZoneChosen: { nodeId: Schema.String, zone: Zone },

@@ -19,7 +19,9 @@ import {
   KINDS,
   LANGUAGES,
   LB_POLICIES,
+  MAX_ATTEMPTS,
   POOL_LIMITS,
+  QUEUE_LENGTHS,
   REQUEST_KINDS,
   RESEARCH,
   RUNTIMES,
@@ -187,6 +189,8 @@ export const blankNode = (
     mode: 'transaction',
     depth: 0,
     dlq: false,
+    attempts: 25,
+    maxLength: 0,
     coalesce: false,
     warming: false,
     paranoia: 2,
@@ -575,6 +579,31 @@ export const setDlq = (game: Game, id: string, dlq: boolean): Action =>
       ? ok(node.dlq === dlq ? game : patch(game, id, { dlq }))
       : notAllowed('Only a Queue has a dead-letter queue.'),
   )
+
+/** Sets the attempts a Queue's dead-letter queue allows a task. */
+export const setAttempts = (game: Game, id: string, attempts: number): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'queue') return notAllowed('Only a Queue retries tasks.')
+    if (!(MAX_ATTEMPTS as ReadonlyArray<number>).includes(attempts))
+      return notAllowed(`Max attempts are ${MAX_ATTEMPTS.join(', ')}.`)
+    return ok(node.attempts === attempts ? game : patch(game, id, { attempts }))
+  })
+
+/** Sets the most tasks a Queue holds before it refuses new ones; 0 means no limit. */
+export const setMaxLength = (game: Game, id: string, maxLength: number): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'queue') return notAllowed('Only a Queue has a max length.')
+    if (!(QUEUE_LENGTHS as ReadonlyArray<number>).includes(maxLength))
+      return notAllowed('That max length is not on offer.')
+    return ok(
+      node.maxLength === maxLength
+        ? game
+        : patch(game, id, {
+            maxLength,
+            depth: maxLength > 0 ? Math.min(node.depth, maxLength) : node.depth,
+          }),
+    )
+  })
 
 /** Sets a WAF's paranoia level, 1 to 4. */
 export const setParanoia = (game: Game, id: string, paranoia: number): Action =>

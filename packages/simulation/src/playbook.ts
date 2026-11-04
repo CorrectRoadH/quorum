@@ -59,6 +59,8 @@ export const NODE_SETTINGS = [
   'pm',
   'mode',
   'dlq',
+  'attempts',
+  'maxLength',
   'coalesce',
   'warming',
   'paranoia',

@@ -95,7 +95,7 @@ An isolated data center, or group of data centers, inside a cloud region, with i
 
 A signal from a slow consumer that tells producers to slow down or stop, so a buffer or queue does not grow without limit. Without it, a backlog grows until memory or latency runs out.
 
-**In the game:** No Component sends backpressure yet: nothing tells an App Server to slow down. The closest is the Queue. When Workers drain tasks slower than they arrive, Queue depth grows with no limit, and each waiting task adds 0.01 ms to every new enqueue. Add Workers or make them bigger to bring the depth down.
+**In the game:** The Queue's Max length is the closest thing to backpressure: past it, the Queue refuses new tasks, and the upload or export that sent one fails. With no limit, Queue depth grows when Workers drain tasks slower than they arrive. A new task waits behind the backlog, and users score an upload or export on when its result is ready: past 40 s for an upload, or 4 minutes for an export, they are frustrated. Add Workers or make them bigger to bring the depth down.
 
 **Design:** Queue max length ([Components](./05-components.md#queue)).
 
@@ -407,7 +407,7 @@ An attack that floods a service with traffic from many machines at once, often a
 
 A separate queue that holds messages a consumer cannot process, after a set number of failed attempts. It stops one bad message from blocking the queue, and keeps the message for people to inspect or replay.
 
-**In the game:** A Queue card has a Failed tasks setting: Retry forever or Dead-letter queue. The Poison message Incident can hit only a Queue that retries forever: a task that always fails keeps coming back, and its Workers spend 90% of their time on it. Turn on the dead-letter queue to make the Queue immune, or delete the message to end the Incident.
+**In the game:** A Queue card has a Failed tasks setting: Retry forever or Dead-letter queue, with 1, 3, 10, or 25 attempts. A failed attempt comes back 30 s later and runs on the Worker again; a task that fails every attempt is lost. The Poison message Incident can hit only a Queue that retries forever: a task that always fails keeps coming back, and its Workers spend 90% of their time on it. Turn on the dead-letter queue to make the Queue immune, or delete the message to end the Incident.
 
 **Related:** [At-least-once delivery](#at-least-once-delivery), [Retry with backoff and jitter](#retry-with-backoff-and-jitter), [Idempotency](#idempotency), [Backpressure](#backpressure)
 

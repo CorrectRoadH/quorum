@@ -110,6 +110,10 @@ export type Solver = Readonly<{
   offloads: (node: GameNode) => boolean
   /** This Worker pulls from a Queue a poison message is stuck in. */
   poisoned: (node: GameNode) => boolean
+  /** Attempts per task this Worker runs: failed tasks come back until the Queue parks them. */
+  attempts: (node: GameNode) => number
+  /** Tasks per second a Queue's live Workers could take, from the last pass; infinite before one. */
+  drainable: (node: GameNode) => number
 }>
 
 export type Model = NodeModel & { disk?: boolean }
@@ -167,6 +171,12 @@ export const taskMixOf = (game: Game): Partial<Record<RequestKind, number>> => {
   for (const kind of Object.keys(shares) as Array<RequestKind>)
     shares[kind] = (shares[kind] ?? 0) / total
   return shares
+}
+
+/** Share of requests the code itself fails on an App Server or Worker: a bad deploy, or a migration's bugs. */
+export const codeCrashes = (game: Game, node: GameNode): number => {
+  const deploy = game.incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0
+  return deploy + (buggy(game, node) ? MIGRATION_BUGS : 0)
 }
 
 /** What `outcome` may ask: this Node's own hop, and what its calls get back. */
@@ -347,10 +357,7 @@ export const RULES: Record<ComponentId, ComponentRule> = {
           served.fixed +
           transferMs(node, requestKind, answer.offloads) * payloadFactor(game, requestKind),
       }
-      // A bad deploy, or a migration's bugs, make the code itself fail some requests.
-      const crashes =
-        (game.incident?.kind === 'bad-deploy' ? badDeployShare(game) : 0) +
-        (buggy(game, node) ? MIGRATION_BUGS : 0)
+      const crashes = codeCrashes(game, node)
       // A runtime that holds a worker per open connection cannot keep realtime connections.
       if (requestKind === 'rt' && RUNTIMES[node.runtime].connectionKB === null)
         return failed('refused')
@@ -510,23 +517,38 @@ export const RULES: Record<ComponentId, ComponentRule> = {
   },
   queue: {
     model: flat({ fixed: 2, variable: 0.05 }, (node) => QUEUE_RATE * flatScale(node)),
-    // It offers its Workers what arrived, plus a share of its backlog.
-    serve: (serve, node, rates, share) =>
-      serve.route('task', share > 0 ? (rates.task ?? 0) * share + node.depth / DRAIN_SECONDS : 0),
+    // It offers its Workers what arrived, plus a share of its backlog as far as they have room.
+    serve: (serve, node, rates, share) => {
+      if (share <= 0) return
+      const arrived = (rates.task ?? 0) * share
+      const room = Math.max(0, serve.solver.drainable(node) - arrived)
+      serve.route('task', arrived + Math.min(node.depth / DRAIN_SECONDS, room))
+    },
     // The caller waits for the enqueue only. A long backlog slows the broker.
     outcome: (answer, node, kind) => {
       const own = answer.ownHop(kind)
       // With no Worker linked, the task has nowhere to go.
       if (answer.downstream(kind).fail.stranded >= 1) return failed('stranded')
-      return through({ ...own, fixed: own.fixed + BACKLOG_MS * node.depth })
+      const enqueued = through({ ...own, fixed: own.fixed + BACKLOG_MS * node.depth })
+      // A full Queue refuses what its Workers cannot take (RabbitMQ `reject-publish`).
+      if (node.maxLength <= 0 || node.depth < node.maxLength) return enqueued
+      const slot = slotOf(answer.pass, node)
+      const inflow = answer.pass.arriving[slot]?.task ?? 0
+      const drained = answer.pass.drained[slot] ?? 0
+      return inflow > 0
+        ? failSome(enqueued, Math.max(0, 1 - drained / inflow), 'dropped')
+        : enqueued
     },
     connections: noConnections,
     probe: noProbe,
   },
   worker: {
-    // Each task costs the async part of the kind it came from. A poison message eats most of its time.
+    // Each task costs the async part of the kind it came from, once per attempt. A poison
+    // message eats most of its time.
     model: (solver, node, arriving) => {
-      const tasks = (arriving.task ?? 0) / (solver.poisoned(node) ? 1 - POISON_SHARE : 1)
+      const tasks =
+        ((arriving.task ?? 0) * solver.attempts(node)) /
+        (solver.poisoned(node) ? 1 - POISON_SHARE : 1)
       const mix = taskMixOf(solver.game)
       const work: Partial<Record<RequestKind, number>> = {}
       for (const kind of Object.keys(mix) as Array<RequestKind>)
@@ -546,9 +568,9 @@ export const RULES: Record<ComponentId, ComponentRule> = {
         pod: inCluster(solver.game, node),
       })
     },
-    // It sends the async part's calls: an export's 50 reads.
-    serve: (serve, _, rates, share) => {
-      const tasks = (rates.task ?? 0) * share
+    // It sends the async part's calls, once per attempt: an export's 50 reads.
+    serve: (serve, node, rates, share) => {
+      const tasks = (rates.task ?? 0) * share * serve.solver.attempts(node)
       if (tasks <= 0) return
       const mix = taskMixOf(serve.solver.game)
       for (const kind of Object.keys(mix) as Array<RequestKind>) {
@@ -557,7 +579,30 @@ export const RULES: Record<ComponentId, ComponentRule> = {
           serve.route(backend, tasks * (mix[kind] ?? 0) * (calls[backend] ?? 0))
       }
     },
-    outcome: (answer, _, kind) => through(answer.ownHop(kind)),
+    // One attempt: its own time, its calls, and the code's own failures. Users never wait for it.
+    outcome: (answer, node, kind) => {
+      const { game } = answer
+      const mix = taskMixOf(game)
+      const calls: Partial<Record<Kind, number>> = {}
+      for (const origin of Object.keys(mix) as Array<RequestKind>) {
+        const each = asyncCallsOf(game, origin)
+        for (const backend of BACKEND_KINDS)
+          calls[backend] = (calls[backend] ?? 0) + (mix[origin] ?? 0) * (each[backend] ?? 0)
+      }
+      const hop = hopMs(game)
+      return failSome(
+        through(
+          answer.ownHop(kind),
+          BACKEND_KINDS.flatMap((backend) =>
+            (calls[backend] ?? 0) > 0
+              ? [[answer.downstream(backend, hop), calls[backend] ?? 0] as const]
+              : [],
+          ),
+        ),
+        codeCrashes(game, node),
+        'crash',
+      )
+    },
     // A Worker holds a pool to each database it reads, like an App Server.
     connections: (_, node, model) => (model?.processes ?? 0) * RUNTIMES[node.runtime].connections,
     probe: noProbe,

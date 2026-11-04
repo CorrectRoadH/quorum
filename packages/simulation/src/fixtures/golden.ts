@@ -55,45 +55,46 @@ export const GOLDEN_STEPS = 10_000
 // something fails. A Tomcat box holding realtime connections refuses work at its
 // RAM instead of swapping, and a store spread across regions survives a zone.
 // The Company replay is unchanged.
-// SIM_VERSION 14: async work is scored on when it finishes, as well as on its
-// acknowledgement, so a Queue's backlog costs Apdex.
-export const GOLDEN_HASH = '90ba0bf8'
+// SIM_VERSION 14: async work is scored on when it finishes, a Queue has a max
+// length and max attempts, and a backlog is offered only as fast as Workers take
+// it. The save gains each Node's attempts and max length.
+export const GOLDEN_HASH = 'fc80068d'
 
 /**
  * The hash of the Game each Challenge's reference solution ends on
  * (`fixtures/challenges.ts`). Node, the browsers and workerd must agree.
  */
 export const REFERENCE_HASHES: Readonly<Record<string, string>> = {
-  'hello-world': 'c90d1a1b',
-  'split-the-box': 'f08a87fb',
-  slashdotted: '213c0695',
-  c10k: 'bc5308ff',
-  'event-loop': '546f8990',
-  'too-many-connections': '140a8993',
-  shoestring: '97bbd978',
-  'n-plus-one': '06cbf6a8',
-  'thirteen-engineers': '29a60c15',
-  'credential-stuffing': 'c81b303f',
-  'black-friday': 'ea9860d3',
-  'us-east-1': '7304a4d1',
-  'exactly-once': '1b208f2f',
-  'two-million-sockets': 'e2d03c96',
-  'pokemon-go': '52c9108c',
-  'healthcare-launch': 'dd3baab2',
-  'thundering-herd': 'bb8154e9',
-  'read-states': 'c4769871',
-  'fail-whale': 'e8222ed9',
-  'reports-at-noon': '8c31368e',
-  'gpu-economics': 'c9d086db',
-  metastable: 'a96abdd1',
-  'regex-of-doom': '13c06855',
-  'forty-three-seconds': '70ad50bb',
-  'follow-the-sun': '2944917a',
-  celebrity: 'ab8859e7',
-  'gone-from-the-internet': '7885be6e',
-  'the-typo': 'b1b41114',
-  'leap-second': 'd92d5c1a',
-  'rule-of-40': '3e9938c5',
-  'postgres-for-everything': '287adde9',
-  'five-nines': '9f20f63c',
+  'hello-world': '116e7c83',
+  'split-the-box': '3dbe2e18',
+  slashdotted: '42534672',
+  c10k: '66270af4',
+  'event-loop': '8e76df75',
+  'too-many-connections': 'a3e999e1',
+  shoestring: 'cce5332d',
+  'n-plus-one': '30463c87',
+  'thirteen-engineers': '1f684733',
+  'credential-stuffing': '89e5319e',
+  'black-friday': 'fa6be489',
+  'us-east-1': 'f02d29d4',
+  'exactly-once': 'fa99f359',
+  'two-million-sockets': 'e2e9b028',
+  'pokemon-go': '8448d831',
+  'healthcare-launch': '3bb7b324',
+  'thundering-herd': '2f6385fb',
+  'read-states': '17585ef5',
+  'fail-whale': '655d73cf',
+  'reports-at-noon': '8947b649',
+  'gpu-economics': '55422bc3',
+  metastable: '503b7a55',
+  'regex-of-doom': '4f277053',
+  'forty-three-seconds': '31a53b3e',
+  'follow-the-sun': 'cdc89c3b',
+  celebrity: 'faf3692e',
+  'gone-from-the-internet': '25895c1c',
+  'the-typo': '12ef57d2',
+  'leap-second': '1175410d',
+  'rule-of-40': '5c7abf31',
+  'postgres-for-everything': 'c9422d3d',
+  'five-nines': 'bd2c56cc',
 }

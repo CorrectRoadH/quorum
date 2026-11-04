@@ -58,6 +58,8 @@ export const node = (
   mode: 'transaction',
   depth: 0,
   dlq: false,
+  attempts: 25,
+  maxLength: 0,
   coalesce: false,
   warming: false,
   paranoia: 2,

@@ -50,7 +50,7 @@ export const layoutOf = (type: ComponentId): Layout => {
     case 'queue':
       return { rows: 4, inRow: 0, outRow: 3, footer: true }
     case 'worker':
-      return { rows: 3, inRow: 0, outRow: null, footer: true }
+      return { rows: 4, inRow: 0, outRow: 3, footer: true }
     case 'cdn':
       return { rows: 3, inRow: 0, outRow: 2, footer: false }
     case 'waf':

@@ -114,7 +114,9 @@ const depthAfter = (game: Game, ledger: Ledger, queue: GameNode, seconds: number
     if (!worker || worker.inbound <= 0) continue
     drained += link.rate * ((worker.inbound - worker.dropped) / worker.inbound)
   }
-  return Math.max(0, queue.depth + (accepted - drained) * seconds)
+  const depth = Math.max(0, queue.depth + (accepted - drained) * seconds)
+  // A full Queue refuses new tasks: its outcome failed the excess already.
+  return queue.maxLength > 0 ? Math.min(queue.maxLength, depth) : depth
 }
 
 /** Seconds a cold Node takes to warm: its runtime's JIT for App Servers and Workers. */

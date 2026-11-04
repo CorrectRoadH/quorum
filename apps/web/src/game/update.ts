@@ -2766,6 +2766,22 @@ const handle = (model: Model, message: Message): Result =>
           undoable: true,
         },
       ),
+    AttemptsChosen: ({ nodeId, attempts }) =>
+      act(
+        model,
+        `Max attempts ${attempts}`,
+        Actions.setAttempts(model.board.game, nodeId, attempts),
+        {
+          undoable: true,
+        },
+      ),
+    MaxLengthChosen: ({ nodeId, maxLength }) =>
+      act(
+        model,
+        maxLength > 0 ? `Max length ${maxLength}` : 'No max length',
+        Actions.setMaxLength(model.board.game, nodeId, maxLength),
+        { undoable: true },
+      ),
 
     ParanoiaChosen: ({ nodeId, paranoia }) =>
       act(model, `Paranoia ${paranoia}`, Actions.setParanoia(model.board.game, nodeId, paranoia), {

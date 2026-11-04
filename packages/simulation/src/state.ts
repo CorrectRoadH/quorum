@@ -131,6 +131,10 @@ export const GameNode = Schema.Struct({
   depth: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** A Queue moves a task that keeps failing to a dead-letter queue. */
   dlq: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Attempts a Queue with a dead-letter queue gives a task before it parks it there. */
+  attempts: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(25))),
+  /** Most tasks a Queue holds; past it, new tasks are refused. 0 means no limit. */
+  maxLength: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   /** A Cache coalesces misses for the same key (Stampede protection). */
   coalesce: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   /** A Cache refills before it takes traffic after a restart (Cache warming). */

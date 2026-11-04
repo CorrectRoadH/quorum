@@ -609,6 +609,14 @@ export const BACKLOG_MS = 0.01
 export const DRAIN_SECONDS = 10
 /** While a poison message is stuck, Workers spend this share of their time on it. Proposed. */
 export const POISON_SHARE = 0.9
+/** Max attempts a Queue with a dead-letter queue offers (05 "Worker"). Sidekiq retries 25 times. */
+export const MAX_ATTEMPTS = [1, 3, 10, 25] as const
+/** A Queue with no dead-letter queue retries forever; the math stops at Sidekiq's 25. */
+export const FOREVER_ATTEMPTS = 25
+/** Seconds a failed task waits before its next attempt, with backoff. Proposed. */
+export const TASK_RETRY_SECONDS = 30
+/** Max lengths a Queue offers; 0 means no limit (RabbitMQ `x-max-length`). */
+export const QUEUE_LENGTHS = [0, 1_000, 10_000, 100_000] as const
 
 /** Search queries per second one Search Engine answers at size 1 (05 "Stats"). */
 export const SEARCH_QPS = 400

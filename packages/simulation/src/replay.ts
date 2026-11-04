@@ -133,6 +133,8 @@ const SETTERS: ReadonlyArray<readonly [ReadonlyArray<keyof GameNode>, Setter]> =
   [['pm'], (game, id, node) => Actions.setPm(game, id, node.pm)],
   [['mode'], (game, id, node) => Actions.setPoolerMode(game, id, node.mode)],
   [['dlq'], (game, id, node) => Actions.setDlq(game, id, node.dlq)],
+  [['attempts'], (game, id, node) => Actions.setAttempts(game, id, node.attempts)],
+  [['maxLength'], (game, id, node) => Actions.setMaxLength(game, id, node.maxLength)],
   [
     ['coalesce', 'warming'],
     (game, id, node) =>

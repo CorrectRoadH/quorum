@@ -313,6 +313,24 @@ export const timedOut = (outcome: Outcome, ms: number): Outcome => {
 export const attemptsFor = (failure: number): number =>
   1 + failure + failure * failure + failure * failure * failure
 
+/** Attempts per task when a share `f` of attempts fails and the Queue allows `n`: 1 + f + … + fⁿ⁻¹. */
+export const taskAttempts = (failure: number, n: number): number => {
+  let total = 0
+  let term = 1
+  for (let attempt = 0; attempt < n; attempt += 1) {
+    total += term
+    term *= failure
+  }
+  return total
+}
+
+/** Share of tasks that fail every one of `n` attempts: fⁿ. */
+export const taskLost = (failure: number, n: number): number => {
+  let lost = 1
+  for (let attempt = 0; attempt < n; attempt += 1) lost *= failure
+  return lost
+}
+
 /**
  * A timed-out call with up to three naive retries: only f⁴ still fails, and the
  * failed attempts add their time. A timeout costs the whole wait; a refusal

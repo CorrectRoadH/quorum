@@ -243,6 +243,11 @@ describe('the Queue and the Worker', () => {
     )
     const backlog = behind.nodes.find((entry) => entry.id === 'queue')?.depth ?? 0
     expect(backlog).toBeGreaterThan(100)
+    // A Worker that fell behind gets no share of the backlog: only what arrives.
+    const ledger = solve(behind)
+    expect(ledger.nodes.worker0?.inbound ?? 0).toBeLessThan(
+      (ledger.nodes.queue?.inbound ?? 0) * 1.01,
+    )
     const caughtUp = settle(
       {
         ...behind,
@@ -292,6 +297,39 @@ describe('the Queue and the Worker', () => {
     expect(behind.kinds.upload?.apdex).toBe(0)
     // The acknowledgement still comes back: the upload succeeds, and its result is late.
     expect(behind.kinds.upload?.success).toBeGreaterThan(0.99)
+  })
+
+  test('a full Queue refuses new tasks instead of growing its backlog', () => {
+    const slow = { worker0: { size: 0 } }
+    const capped = settle(
+      withNodes(queued(6_000, 1), { ...slow, queue: { maxLength: 1_000 } }),
+      400,
+    )
+    const open = settle(withNodes(queued(6_000, 1), slow), 400)
+    expect(capped.nodes.find((entry) => entry.id === 'queue')?.depth).toBe(1_000)
+    expect(open.nodes.find((entry) => entry.id === 'queue')?.depth ?? 0).toBeGreaterThan(1_000)
+    // What the Worker cannot take is refused: about 1.5 of 4.8 uploads a second get in.
+    const refused = solve(capped)
+    expect(refused.kinds.upload?.success ?? 1).toBeLessThan(0.5)
+    expect(refused.errors.dropped).toBeGreaterThan(0)
+    expect(solve(open).kinds.upload?.success).toBeGreaterThan(0.99)
+  })
+
+  test('fewer attempts lose the tasks that fail; more attempts run them again on the Worker', () => {
+    const crashing = (attempts: number) => {
+      const game = withNodes(queued(6_000, 1), { queue: { dlq: true, attempts } })
+      const deploy = forceIncident(game, solve(game), 'bad-deploy')
+      if (!deploy) throw new Error('no bad deploy')
+      return solve(deploy)
+    }
+    const once = crashing(1)
+    const many = crashing(25)
+    // A bad deploy crashes 8% of attempts: one attempt loses them, 25 attempts finish nearly all.
+    expect(once.kinds.upload?.completion).toBeCloseTo(0.92, 2)
+    expect(many.kinds.upload?.completion).toBeGreaterThan(0.99)
+    expect(many.nodes.worker0?.utilization ?? 0).toBeGreaterThan(
+      (once.nodes.worker0?.utilization ?? 0) * 1.05,
+    )
   })
 })
 

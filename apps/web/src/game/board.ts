@@ -1019,6 +1019,7 @@ const rowsOf = (
           value: framework ? FRAMEWORKS[framework].name : '—',
           ...(framework ? { valueLogo: framework } : { tone: 'muted' }),
         },
+        out,
       ]
     }
     case 'cdn':
