@@ -331,6 +331,30 @@ describe('the Queue and the Worker', () => {
       (once.nodes.worker0?.utilization ?? 0) * 1.05,
     )
   })
+
+  test('a higher prefetch keeps a Worker busier, and a crash loses what it prefetched', () => {
+    // One process waits on the broker for every fetch at prefetch 1.
+    const capacity = (prefetch: number) =>
+      solve(withNodes(queued(6_000, 1), { worker0: { workers: 1, prefetch } })).nodes.worker0
+        ?.capacity ?? 0
+    expect(capacity(100)).toBeGreaterThan(capacity(1) * 1.05)
+    const lost = (prefetch: number) => {
+      const company: Game = {
+        ...withNodes(queued(6_000, 1), { worker0: { prefetch } }),
+        sandbox: false,
+        stage: 3,
+      }
+      const running = settle(company, 2)
+      const crashed = withNodes(running, {
+        worker0: { down: -1, downCause: 'failure', downAt: running.time },
+      })
+      const before = running.budget.at(-1)?.failed ?? 0
+      return (settle(crashed, 2).budget.at(-1)?.failed ?? 0) - before
+    }
+    // 16 processes each held `prefetch` tasks; the crash counts once.
+    expect(lost(1)).toBe(16)
+    expect(lost(100)).toBe(1_600)
+  })
 })
 
 describe('a Cache stampede', () => {

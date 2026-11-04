@@ -515,6 +515,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Retry forever': '无限重试',
   'Dead-letter queue': '死信队列',
   'Max length': '最大长度',
+  Prefetch: '预取',
   '{0}×': '{0}×',
   stalled: '停滞',
   'No standby': '无备用节点',

@@ -29,6 +29,7 @@ import { churnFactor, growthFactor } from './features.ts'
 import { growthPerk } from './founding.ts'
 import type { Ledger } from './ledger.ts'
 import {
+  copiesOf,
   drawerSize,
   eraOf,
   has,
@@ -38,7 +39,7 @@ import {
   vcpuOf,
   warmAfterRestart,
 } from './lookups.ts'
-import { recordBudget } from './slo.ts'
+import { recordBudget, spendBudget } from './slo.ts'
 import { calendarMinute, solveFlow } from './solve.ts'
 import { advanceDrill } from './ipo.ts'
 import { advanceQuarter } from './quarters.ts'
@@ -117,6 +118,22 @@ const depthAfter = (game: Game, ledger: Ledger, queue: GameNode, seconds: number
   const depth = Math.max(0, queue.depth + (accepted - drained) * seconds)
   // A full Queue refuses new tasks: its outcome failed the excess already.
   return queue.maxLength > 0 ? Math.min(queue.maxLength, depth) : depth
+}
+
+/**
+ * Tasks Workers held when they crashed: each process had `prefetch` taken from
+ * the Queue and not finished. A planned restart hands them back first. A crash
+ * counts once: in the Step whose start it falls in, or that follows it.
+ */
+const lostOnCrash = (game: Game, from: number, seconds: number): number => {
+  let lost = 0
+  for (const node of game.nodes) {
+    if (node.type !== 'worker' || node.down === 0 || node.downCause === 'restart') continue
+    if (node.downAt < from || node.downAt >= from + seconds) continue
+    const processes = RUNTIMES[node.runtime].pool ? node.workers : vcpuOf(node)
+    lost += node.prefetch * Math.max(1, processes) * copiesOf(node)
+  }
+  return lost
 }
 
 /** Seconds a cold Node takes to warm: its runtime's JIT for App Servers and Workers. */
@@ -413,6 +430,14 @@ export const step = (
     next = directed.game
     events.push(...directed.events)
   }
+  // A crashed Worker's prefetched tasks are lost: they spend the error budget like failed requests.
+  const lost = lostOnCrash(next, game.time, seconds)
+  if (lost > 0)
+    next = {
+      ...next,
+      budget: spendBudget(next, lost),
+      incident: next.incident ? { ...next.incident, failed: next.incident.failed + lost } : null,
+    }
 
   return { game: next, ledger, events }
 }

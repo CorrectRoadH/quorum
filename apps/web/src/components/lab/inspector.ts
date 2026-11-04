@@ -19,6 +19,7 @@ import {
   LB_POLICIES,
   MAX_ATTEMPTS,
   PM_MODES,
+  PREFETCH,
   QUEUE_LENGTHS,
   OS_RAM,
   PARANOIA,
@@ -1056,6 +1057,21 @@ const queue = (node: GameNode, h: HtmlBuilder<Message>): ReadonlyArray<Html> => 
   ),
 ]
 
+const prefetching = (node: GameNode, h: HtmlBuilder<Message>): Html =>
+  section(
+    'Prefetch',
+    [
+      picker(
+        'prefetch',
+        PREFETCH.map((prefetch) => [prefetch, String(prefetch)] as const),
+        node.prefetch,
+        (prefetch) => Message.PrefetchChosen({ nodeId: node.id, prefetch }),
+        h,
+      ),
+    ],
+    h,
+  )
+
 /** Which zone the Node runs in, and a standby in another for data Nodes. */
 const placement = (node: GameNode, h: HtmlBuilder<Message>): Html =>
   section(
@@ -1619,6 +1635,7 @@ export const inspector = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>)
           ...(node.type === 'lb' ? loadBalancer(game, node, h) : []),
           ...(node.type === 'cache' ? [cache(game, node, h)] : []),
           ...(node.type === 'queue' ? queue(node, h) : []),
+          ...(node.type === 'worker' ? [prefetching(node, h)] : []),
           ...(node.type === 'waf' ? [waf(node, h)] : []),
           ...(node.type === 'cdn' ? [cdnTtl(node, h)] : []),
           ...(node.type === 'pooler' ? [pooler(node, h)] : []),

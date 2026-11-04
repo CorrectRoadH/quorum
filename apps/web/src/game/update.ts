@@ -2782,6 +2782,10 @@ const handle = (model: Model, message: Message): Result =>
         Actions.setMaxLength(model.board.game, nodeId, maxLength),
         { undoable: true },
       ),
+    PrefetchChosen: ({ nodeId, prefetch }) =>
+      act(model, `Prefetch ${prefetch}`, Actions.setPrefetch(model.board.game, nodeId, prefetch), {
+        undoable: true,
+      }),
 
     ParanoiaChosen: ({ nodeId, paranoia }) =>
       act(model, `Paranoia ${paranoia}`, Actions.setParanoia(model.board.game, nodeId, paranoia), {

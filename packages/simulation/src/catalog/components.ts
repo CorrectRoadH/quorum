@@ -617,6 +617,10 @@ export const FOREVER_ATTEMPTS = 25
 export const TASK_RETRY_SECONDS = 30
 /** Max lengths a Queue offers; 0 means no limit (RabbitMQ `x-max-length`). */
 export const QUEUE_LENGTHS = [0, 1_000, 10_000, 100_000] as const
+/** Tasks each Worker process takes from the Queue ahead of time (05 "Worker": Prefetch). */
+export const PREFETCH = [1, 10, 100] as const
+/** Milliseconds a Worker waits on the broker for each fetch, ack included. Proposed. */
+export const FETCH_MS = 20
 
 /** Search queries per second one Search Engine answers at size 1 (05 "Stats"). */
 export const SEARCH_QPS = 400

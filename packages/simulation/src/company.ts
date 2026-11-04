@@ -60,6 +60,7 @@ export const node = (
   dlq: false,
   attempts: 25,
   maxLength: 0,
+  prefetch: 10,
   coalesce: false,
   warming: false,
   paranoia: 2,

@@ -6,6 +6,7 @@ import {
   KINDS,
   APACHE_MAX_WORKERS,
   APACHE_SPARE,
+  FETCH_MS,
   NOISY_MS,
   NOISY_SHARE,
   BURST_BASELINE,
@@ -424,9 +425,11 @@ export const serverModel = (context: ServerContext, shed = true): NodeModel => {
   const meanService = rate > 0 ? cpuWork / rate / perRequest : 0
   const cpuWait = waitFor(meanService, cpuUtilization, cores)
 
+  // A Worker also waits on the broker for each fetch, and takes `prefetch` tasks per fetch.
+  const fetching = context.worker ? FETCH_MS / Math.max(1, node.prefetch) : 0
   const waiting = (kind: RequestKind): number => {
     if (context.local) return 0
-    return waitOf(calls[kind], context.callLatency)
+    return waitOf(calls[kind], context.callLatency) + fetching
   }
   // A slow client holds the slot while its request body comes up the wire, unless the work went
   // async: then the file goes straight to storage and the App Server keeps the small sync part.

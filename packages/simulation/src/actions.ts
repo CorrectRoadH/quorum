@@ -21,6 +21,7 @@ import {
   LB_POLICIES,
   MAX_ATTEMPTS,
   POOL_LIMITS,
+  PREFETCH,
   QUEUE_LENGTHS,
   REQUEST_KINDS,
   RESEARCH,
@@ -191,6 +192,7 @@ export const blankNode = (
     dlq: false,
     attempts: 25,
     maxLength: 0,
+    prefetch: 10,
     coalesce: false,
     warming: false,
     paranoia: 2,
@@ -603,6 +605,15 @@ export const setMaxLength = (game: Game, id: string, maxLength: number): Action 
             depth: maxLength > 0 ? Math.min(node.depth, maxLength) : node.depth,
           }),
     )
+  })
+
+/** Sets how many tasks each Worker process takes from its Queue ahead of time. */
+export const setPrefetch = (game: Game, id: string, prefetch: number): Action =>
+  withNode(game, id, (node) => {
+    if (node.type !== 'worker') return notAllowed('Only a Worker prefetches tasks.')
+    if (!(PREFETCH as ReadonlyArray<number>).includes(prefetch))
+      return notAllowed(`Prefetch is ${PREFETCH.join(', ')}.`)
+    return ok(node.prefetch === prefetch ? game : patch(game, id, { prefetch }))
   })
 
 /** Sets a WAF's paranoia level, 1 to 4. */

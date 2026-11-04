@@ -93,3 +93,10 @@ export const recordBudget = (
     ]
   return [...kept, { hour, requests, failed, users: game.users }]
 }
+
+/** Counts failures outside the Ledger, such as tasks a crashed Worker lost, in the current hour. */
+export const spendBudget = (game: Game, failed: number): ReadonlyArray<BudgetHour> => {
+  const last = game.budget.at(-1)
+  if (!budgeted(game) || !last || failed <= 0) return game.budget
+  return [...game.budget.slice(0, -1), { ...last, failed: last.failed + failed }]
+}
