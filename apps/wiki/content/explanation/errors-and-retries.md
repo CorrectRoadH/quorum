@@ -48,7 +48,7 @@ the work the callee already did for them is wasted, because nobody uses the answ
 A retry turns one failure into another attempt. With naive retries, a Link retries at once, up to
 three times. If a share `f` of calls fails, each call becomes this many attempts:
 
-```text
+```formula
 attempts = 1 + f + f² + f³
 ```
 

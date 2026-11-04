@@ -135,3 +135,164 @@ input[type='search']::-webkit-search-cancel-button {
 .prose .not-prose a {
   text-decoration: none;
 }
+
+/* ==========================================================================
+   Formulas. A ```formula fence is a rule from the Simulation, set the way a
+   paper sets one: Computer Modern for the math, Geist for labels and notes,
+   the relation in the center, and the page's rule number in the margin.
+
+   Computer Modern is KaTeX's build of the face (public/fonts, MIT). It is
+   only used here: the page's own text stays Geist.
+   ========================================================================== */
+@font-face {
+  font-family: 'Quorum Math';
+  src: url('/fonts/KaTeX_Main-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Quorum Math';
+  src: url('/fonts/KaTeX_Math-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+.formula {
+  --math: 'Quorum Math', 'Latin Modern Roman', 'Computer Modern', serif;
+  position: relative;
+  max-width: 620px;
+  margin: 22px 0;
+  padding: 4px 52px 4px 0;
+  font-family: var(--math);
+  font-size: 17px;
+  line-height: 1.9;
+  color: color-mix(in oklch, var(--foreground) 86%, transparent);
+}
+.formula-lines {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  align-items: center;
+  justify-content: center;
+  row-gap: 8px;
+}
+.formula-lhs {
+  justify-self: end;
+}
+.formula-relation {
+  margin: 0 0.42em;
+  color: color-mix(in oklch, var(--foreground) 72%, transparent);
+}
+.formula-rhs {
+  justify-self: start;
+}
+.formula-rule {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+.formula-note {
+  grid-column: 3;
+  justify-self: start;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+.formula-tag {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+
+/* The math itself. */
+.formula-var {
+  font-style: italic;
+  padding-right: 0.02em;
+}
+.formula-num {
+  font-variant-numeric: tabular-nums;
+}
+.formula-op {
+  margin: 0 0.24em;
+  color: color-mix(in oklch, var(--foreground) 78%, transparent);
+}
+.formula-comma {
+  margin-right: 0.22em;
+}
+.formula-paren {
+  color: color-mix(in oklch, var(--foreground) 70%, transparent);
+}
+.formula-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0.14em;
+  vertical-align: -0.52em;
+  line-height: 1.12;
+}
+.formula-numerator {
+  padding: 0 0.34em 0.3em;
+}
+.formula-denominator {
+  padding: 0.18em 0.34em 0;
+  border-top: 0.7px solid currentColor;
+}
+.formula-root {
+  display: inline-flex;
+  align-items: stretch;
+  margin: 0 0.06em;
+}
+.formula-root-sign {
+  display: block;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 0.62em;
+  color: color-mix(in oklch, var(--foreground) 86%, transparent);
+}
+.formula-root-sign path {
+  vector-effect: non-scaling-stroke;
+}
+.formula-root-body {
+  display: flex;
+  align-items: center;
+  padding: 0.14em 0.34em 0.12em 0.12em;
+  border-top: 0.7px solid color-mix(in oklch, var(--foreground) 86%, transparent);
+}
+.formula-call {
+  padding-right: 0.02em;
+}
+.formula-sum-sign {
+  font-size: 1.18em;
+  line-height: 1;
+}
+.formula-sum-label {
+  font-size: 0.68em;
+  margin-left: 0.12em;
+}
+.formula-script-value {
+  font-size: 0.68em;
+  line-height: 0;
+  vertical-align: 0.55em;
+}
+
+/* A phone keeps the rule whole and lets a long one scroll; the margin number
+   is a page device, not a phone one. */
+@media (max-width: 639px) {
+  .formula {
+    font-size: 14px;
+    padding-right: 0;
+    overflow-x: auto;
+  }
+  .formula-lines {
+    justify-content: start;
+  }
+  .formula-tag {
+    display: none;
+  }
+}

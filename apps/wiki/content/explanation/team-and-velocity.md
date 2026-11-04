@@ -19,7 +19,7 @@ because you also run the Company. You draw no salary. Hiring opens in Pre-seed.
 
 Each team makes Dev Hours by this rule:
 
-```text
+```formula
 DH per Team day = effective engineers × velocity × 8
 velocity        = Stack velocity × (1 − 0.5 × tech debt) × policy × morale × error budget
 ```
@@ -49,7 +49,7 @@ Every person on a team must agree with the others, and the number of conversatio
 than the headcount. The game models this as a coordination penalty, its version of
 [Brooks's law](/glossary/brookss-law):
 
-```text
+```formula
 effective engineers = n / (1 + 0.08 × (n − 1) + 0.0004 × n × (n − 1))
 ```
 
@@ -73,7 +73,7 @@ when debt gets high.
 
 A finished Feature does not reach users at once. It waits for the next deploy:
 
-```text
+```formula
 deploys per Team day = min(policy cap, 480 work minutes / (build + deploy + 15 verify))
 ```
 

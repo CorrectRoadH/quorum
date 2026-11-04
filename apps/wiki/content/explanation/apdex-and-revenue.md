@@ -25,7 +25,7 @@ expect a page to take a moment. Each served request falls into one class:
 
 [Apdex](/glossary/apdex) is the share of satisfied requests plus half the share of tolerating ones:
 
-```text
+```formula
 Apdex = (satisfied + tolerating / 2) / total
 ```
 
@@ -52,7 +52,7 @@ scored on when their result is ready, not on the enqueue.
 
 Revenue is the sum, over every kind, of its value times its Apdex credit:
 
-```text
+```formula
 revenue = Σ kinds: rate × value × (satisfied + tolerating / 2)
 ```
 

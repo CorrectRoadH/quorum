@@ -44,7 +44,7 @@ kind ([Insight and observability](/explanation/observability)).
 
 Demand is your user count times the requests each user sends, shaped by the clock and the mix:
 
-```text
+```formula
 demand(kind) = users × requests per user × daily cycle × weekly cycle × mix(kind) × features
 ```
 

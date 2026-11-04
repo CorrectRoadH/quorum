@@ -16,7 +16,7 @@ slowdowns you meet in Quorum.
 [Utilization](/glossary/utilization), written ρ (rho), is the work that arrives divided by the work the
 Node can do:
 
-```text
+```formula
 utilization = offered work / capacity
 ```
 

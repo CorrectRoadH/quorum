@@ -77,7 +77,7 @@ The Bootstrapped indie [Venture](/prestige#ventures) takes no rounds at all. Its
 
 Your Valuation is annual revenue times a multiple:
 
-```text
+```formula
 ARR       = revenue per calendar day × 365 × 0.00015
 multiple  = 4 + 0.15 × max(0, Rule of 40)          kept between 2 and 30
 Valuation = ARR × multiple

@@ -36,7 +36,7 @@ quarter in your current streak of beaten guidance adds 0.1 to its multiplier, up
 
 ## From payout to Legacy
 
-```text
+```formula
 Legacy = floor( √(payout / $1,000,000) × founding multiplier )
 ```
 

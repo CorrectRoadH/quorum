@@ -26,7 +26,7 @@ nothing strikes the moment you return.
 The director does not pick incidents at random. Each incident type gets a weight from how hard it
 would hit your current Design:
 
-```text
+```formula
 weight = weakness × (1 + tech debt) × repeat × open action item × Mutators
 ```
 
@@ -88,7 +88,7 @@ From Series A, each Era has an availability SLO, such as 99.9%. The game counts 
 and failures over the last calendar week. The failures the SLO allows are your
 [error budget](/glossary/error-budget):
 
-```text
+```formula
 error budget = (1 − SLO) × requests in the last calendar week
 ```
 

@@ -20,7 +20,7 @@ explains why Insight comes in kinds.
 
 The yield follows a square root:
 
-```text
+```formula
 Insight(kind) = Σ over Component types: √(sampled requests of that kind per second)
 Failure       = 3 × Σ over Component types: √(sampled failed requests per second)
 ```

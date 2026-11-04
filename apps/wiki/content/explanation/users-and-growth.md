@@ -17,7 +17,7 @@ New users come from word of mouth: the more users you have, the more people hear
 also slows as you approach the size of the market, because fewer people are left to win. Together
 these give an S-curve:
 
-```text
+```formula
 growth = rate × users × (1 − users / market) × health
 ```
 
@@ -35,7 +35,7 @@ play that role.
 
 The `health` term compares your users' Apdex over the last calendar hour with the Era's target:
 
-```text
+```formula
 health = (Apdex − target) / (1 − target)     kept between −1 and 1
 ```
 

@@ -47,7 +47,7 @@ make extra reads on page views and API reads until you ship Eager loading. See
 A [Cache](/components/cache) answers read queries from memory and sends misses on to the Database. Its
 hit ratio decides how much load it takes off:
 
-```text
+```formula
 hit ratio = √(memory / hot data) × TTL factor × write penalty × warmth
 ```
 
@@ -89,7 +89,7 @@ fixes most stale errors and keeps some read load on the primary.
 A [Wide-column Store](/components/wide) keeps each key on N replicas. You choose two numbers: R, the
 replicas a read asks, and W, the replicas a write waits for.
 
-```text
+```formula
 R + W > N   every read asks at least one replica that has the latest write
 R + W ≤ N   a read can miss the latest write: eventual consistency
 ```

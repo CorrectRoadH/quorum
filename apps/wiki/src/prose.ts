@@ -1,13 +1,17 @@
 import * as Markdown from '@foldkit/markdown'
+import { Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { Message, Model } from './main.ts'
+import { formulaView } from './components/formula.ts'
 import { islandViews } from './components/islands.ts'
+import { parseFormula } from './formula.ts'
 import { type Heading, slug } from './page.ts'
 
 /* ==========================================================================
    Markdown in the wiki's style. Headings get anchors, links stay in the
-   wiki when they can, tables sit in the game's nested-group style, and
-   directives become live islands (src/island-views.ts).
+   wiki when they can, tables sit in the game's nested-group style,
+   ```formula fences become typeset rules, and directives become live
+   islands (src/island-views.ts).
    ========================================================================== */
 
 type Inline = Markdown.Inline
@@ -49,12 +53,26 @@ export const textOf = (document: Markdown.MarkdownDocument): string =>
 
 const external = (url: string): boolean => /^https?:/.test(url)
 
+/** The margin number beside each rule on a page, in document order. */
+const formulaTags = (document: Markdown.MarkdownDocument): ReadonlyMap<number, number> => {
+  const tags = new Map<number, number>()
+  let codeBlocks = 0
+  let formulas = 0
+  for (const block of document.blocks) {
+    if (block._tag !== 'CodeBlock') continue
+    if (Option.getOrNull(block.maybeLanguage) === 'formula') tags.set(codeBlocks, ++formulas)
+    codeBlocks += 1
+  }
+  return tags
+}
+
 export const prose = (
   document: Markdown.MarkdownDocument,
   model: Model,
   h: HtmlBuilder<Message>,
-): Html =>
-  h.div(
+): Html => {
+  const tags = formulaTags(document)
+  return h.div(
     [h.Class('prose')],
     Markdown.viewBlocks(document, {
       islands: islandViews(model, h),
@@ -104,6 +122,11 @@ export const prose = (
                 ],
                 content,
               ),
+        CodeBlock: (block, index) =>
+          Option.getOrNull(block.maybeLanguage) === 'formula'
+            ? formulaView(parseFormula(block.value), tags.get(index) ?? 0, h)
+            : h.pre([], [h.code([], [block.value])]),
       },
     }),
   )
+}
