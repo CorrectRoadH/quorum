@@ -1262,12 +1262,6 @@ export const fr: Readonly<Record<string, string>> = {
   'A Challenge is open. Challenges are scored, so agents cannot read them.':
     'Un Challenge est ouvert. Les défis sont notés, les agents ne peuvent donc pas les lire.',
   'Unknown tool: {0}': 'Outil inconnu : {0}',
-  '[quorum] WebMCP unavailable: document.modelContext is undefined':
-    "[quorum] WebMCP indisponible : document.modelContext n'est pas défini",
-  '[quorum] WebMCP registerTool({0}) rejected': '[quorum] WebMCP registerTool ({0}) rejeté',
-  '[quorum] WebMCP registerTool({0}) threw': '[quorum] WebMCP registerTool ({0}) a été lancé',
-  '[quorum] WebMCP: registered {0} read-only tools':
-    '[quorum] WebMCP : outils en lecture seule enregistrés {0}',
   'New Company': 'Nouvelle entreprise',
   Legacy: 'Héritage',
   Help: 'Aide',

@@ -17,7 +17,7 @@ This repository is a pnpm monorepo for an Effect + Foldkit application deployed 
 
 - Keep the browser from importing `apps/backend` or platform-specific modules.
 - Keep game rules, the catalog, and the Game schema in `packages/simulation`; keep rendering, input, and storage in `apps/web`.
-- Keep the agent tool names and wire protocol in `packages/mcp-relay`; keep their implementation over the Model in `apps/web/src/game/webmcp.ts`. Agent tools only read.
+- Keep the agent tool names and wire protocol in `packages/mcp-relay`; keep their implementation over the Model in `apps/web/src/game/agent-tools.ts`. Agent tools only read.
 - Keep RPC schemas and errors in `packages/rpc`; keep handlers and internal models in `apps/backend`.
 - Keep unstable Effect APIs inside the tsconfig allowlist for their file. See `docs/guardrails.md` before you widen one.
 - Use Foldkit Query for retained remote data. Loading and revalidation decisions belong in Foldkit update handlers.

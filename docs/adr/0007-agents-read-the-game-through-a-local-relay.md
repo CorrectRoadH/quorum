@@ -11,14 +11,14 @@ server on `127.0.0.1` for the page. The page connects while the setting is on. F
 the relay asks the open tab, and the tab answers from its newest Model. Nothing leaves the
 player's machine.
 
-The same read-only tools are also registered with WebMCP (`document.modelContext`) for agents that
-run inside the browser, and a **Copy state as JSON** button in Settings covers every other case.
+A **Copy state as JSON** button in Settings covers every other case.
 The tools are described once, in `packages/mcp-relay/src/tools.ts`.
 
 Considered options:
 
 - **WebMCP alone.** It needs an experimental Chrome, a third-party extension, and a native
-  server to reach a terminal agent. Kept as an extra, not the main path.
+  server to reach a terminal agent. Rejected; an earlier version registered the tools with WebMCP as
+  an extra, and it was removed.
 - **A hosted MCP server.** Zero install for the player, but it needs a backend store, accounts or
   tokens, and uploads every player's game. That breaks [single-player first](./0001-single-player-first.md)
   and the client-state rule above. Rejected.

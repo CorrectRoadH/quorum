@@ -4,7 +4,7 @@ import {
   type PageMessage,
   type RelayMessage,
 } from 'quorum-mcp-relay/protocol'
-import { readTool } from './webmcp.ts'
+import { readTool } from './agent-tools.ts'
 
 /* ==========================================================================
    The page's end of the agent relay (packages/mcp-relay): while "Agent access"

@@ -1,4 +1,4 @@
-import { refusal, stateJson } from './webmcp.ts'
+import { refusal, stateJson } from './agent-tools.ts'
 import { Listbox, Menu as UiMenu } from '@foldkit/ui'
 import { moreMenu, type MoreItem } from './more.ts'
 import { languageListbox } from '../i18n/listbox.ts'

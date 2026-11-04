@@ -1,13 +1,11 @@
-import { TOOLS, type ToolName } from 'quorum-mcp-relay/tools'
+import type { ToolName } from 'quorum-mcp-relay/tools'
 import { ledgerOf, offCompany, type Model } from './model.ts'
 
 /* ==========================================================================
-   The read-only tools an agent can call: WebMCP for an agent in the player's
-   browser, the agent relay for a terminal agent, and the "Copy state as JSON"
-   button. They share one set of readers over the last Model that `publish`
-   saw. Nothing here can send a Message: the player decides.
-   Tool names and descriptions live in `quorum-mcp-relay/tools`.
-   https://developer.chrome.com/docs/ai/webmcp/imperative-api
+   The read-only tools an agent can call: the agent relay for a terminal agent,
+   and the "Copy state as JSON" button. They share one set of readers over the
+   last Model that `publish` saw. Nothing here can send a Message: the player
+   decides. Tool names and descriptions live in `quorum-mcp-relay/tools`.
    ========================================================================== */
 
 type Input = Record<string, unknown>
@@ -133,49 +131,3 @@ export const stateJson = (model: Model): string =>
     null,
     2,
   )
-
-type WebMcpTool = Readonly<{
-  name: string
-  description: string
-  inputSchema: object
-  annotations: { readOnlyHint: true }
-  execute: (input: Input) => string
-}>
-
-type ModelContext = { registerTool: (tool: WebMcpTool) => unknown }
-
-/** WebMCP shows a tool's error to the agent as a result, so a refusal returns its reason. */
-const execute = (name: string, input: Input): string => {
-  try {
-    return readTool(name, input ?? {})
-  } catch (error) {
-    return JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
-  }
-}
-
-/** Registers the tools with the browser, when it supports WebMCP. */
-export const registerWebMcp = (): void => {
-  const context = ((document as unknown as { modelContext?: ModelContext }).modelContext ??
-    (navigator as unknown as { modelContext?: ModelContext }).modelContext) as
-    | ModelContext
-    | undefined
-  if (!context) {
-    console.warn('[quorum] WebMCP unavailable: document.modelContext is undefined')
-    return
-  }
-  for (const definition of TOOLS) {
-    const tool: WebMcpTool = {
-      ...definition,
-      annotations: { readOnlyHint: true },
-      execute: (input) => execute(definition.name, input),
-    }
-    try {
-      void Promise.resolve(context.registerTool(tool)).catch((error: unknown) =>
-        console.error(`[quorum] WebMCP registerTool(${tool.name}) rejected`, error),
-      )
-    } catch (error) {
-      console.error(`[quorum] WebMCP registerTool(${tool.name}) threw`, error)
-    }
-  }
-  console.info(`[quorum] WebMCP: registered ${TOOLS.length} read-only tools`)
-}

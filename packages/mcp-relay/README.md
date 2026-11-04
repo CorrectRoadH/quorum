@@ -55,4 +55,4 @@ pnpm --filter quorum-mcp-relay build   # writes dist/cli.mjs
 ```
 
 `src/tools.ts` lists the tools and `src/protocol.ts` holds the wire messages. Both import nothing, so
-the web app (`apps/web/src/game/webmcp.ts`) imports them too.
+the web app (`apps/web/src/game/agent-tools.ts`) imports them too.

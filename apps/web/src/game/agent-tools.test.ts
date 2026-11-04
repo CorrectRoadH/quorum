@@ -5,7 +5,7 @@ import { Message } from './message.ts'
 import type { Model } from './model.ts'
 import { AppRoute } from './route.ts'
 import { initialModel, update } from './update.ts'
-import { publish, readTool, stateJson } from './webmcp.ts'
+import { publish, readTool, stateJson } from './agent-tools.ts'
 
 const company: Model = {
   ...initialModel(),
