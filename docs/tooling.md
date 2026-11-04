@@ -50,5 +50,5 @@ pnpm dev:reference
 
 ## Interface languages
 
-See [Interface languages](i18n.md) for the English/Chinese presentation boundary,
+See [Interface languages](i18n.md) for the English/French/Chinese presentation boundary,
 translation catalog and acceptance checks.

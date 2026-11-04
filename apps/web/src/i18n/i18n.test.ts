@@ -16,89 +16,100 @@ describe('interface languages', () => {
     expect(prefs).toMatchObject({ locale: 'en', muted: true, motion: 'reduce' })
   })
 
-  test('a language change persists, applies and synchronizes a paused board without changing the game', () => {
-    const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
-    const result = update(model, Message.LocaleChosen({ locale: 'zh-CN' }))
-    expect(result.model.locale).toBe('zh-CN')
-    expect(result.model.game).toBe(model.game)
-    expect(result.model.paused).toBe(true)
-    expect(result.commands).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'WritePrefs',
-          args: expect.objectContaining({ prefs: expect.objectContaining({ locale: 'zh-CN' }) }),
+  test.each(['fr', 'zh-CN'] as const)(
+    'switching to %s persists and synchronizes a paused board without changing the game',
+    (locale) => {
+      const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
+      const result = update(model, Message.LocaleChosen({ locale }))
+      expect(result.model.locale).toBe(locale)
+      expect(result.model.game).toBe(model.game)
+      expect(result.model.paused).toBe(true)
+      expect(result.commands).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'WritePrefs',
+            args: expect.objectContaining({ prefs: expect.objectContaining({ locale }) }),
+          }),
+          expect.objectContaining({
+            name: 'ApplySettings',
+            args: expect.objectContaining({ locale }),
+          }),
+          expect.objectContaining({
+            name: 'SyncBoard',
+            args: expect.objectContaining({ locale }),
+          }),
+        ]),
+      )
+      const restored = update(
+        initialModel(),
+        Message.PrefsLoaded({
+          json: JSON.stringify({ locale, muted: true, motion: 'reduce' }),
         }),
-        expect.objectContaining({
-          name: 'ApplySettings',
-          args: expect.objectContaining({ locale: 'zh-CN' }),
-        }),
-        expect.objectContaining({
-          name: 'SyncBoard',
-          args: expect.objectContaining({ locale: 'zh-CN' }),
-        }),
-      ]),
-    )
-    const restored = update(
-      initialModel(),
-      Message.PrefsLoaded({
-        json: JSON.stringify({ locale: 'zh-CN', muted: true, motion: 'reduce' }),
-      }),
-    )
-    expect(restored.model).toMatchObject({ locale: 'zh-CN', muted: true, motion: 'reduce' })
-    expect(update(result.model, Message.LocaleChosen({ locale: 'en' })).model.game).toBe(model.game)
-  })
+      )
+      expect(restored.model).toMatchObject({ locale, muted: true, motion: 'reduce' })
+      expect(update(result.model, Message.LocaleChosen({ locale: 'en' })).model.game).toBe(
+        model.game,
+      )
+    },
+  )
 
-  test('language and existing preferences survive company, sandbox and challenge entry', () => {
-    const model = {
-      ...initialModel(),
-      locale: 'zh-CN' as const,
-      muted: true,
-      motion: 'reduce' as const,
-    }
-    for (const message of [
-      Message.NewCompanyStarted(),
-      Message.PreseedStarted(),
-      Message.FreeSandboxStarted(),
-      Message.ChallengeStarted({ id: 'hello-world' }),
-    ]) {
-      expect(update(model, message).model).toMatchObject({
-        locale: 'zh-CN',
+  test.each(['fr', 'zh-CN'] as const)(
+    '%s and existing preferences survive company, sandbox and challenge entry',
+    (locale) => {
+      const model = {
+        ...initialModel(),
+        locale,
         muted: true,
-        motion: 'reduce',
-      })
-    }
-  })
+        motion: 'reduce' as const,
+      }
+      for (const message of [
+        Message.NewCompanyStarted(),
+        Message.PreseedStarted(),
+        Message.FreeSandboxStarted(),
+        Message.ChallengeStarted({ id: 'hello-world' }),
+      ]) {
+        expect(update(model, message).model).toMatchObject({
+          locale,
+          muted: true,
+          motion: 'reduce',
+        })
+      }
+    },
+  )
 
-  test('listbox selection closes, restores focus and uses the persisted locale path', () => {
-    const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
-    const opened = update(
-      model,
-      Message.LanguagePickerChanged({
-        message: Listbox.Message.Opened({ maybeActiveItemIndex: Option.some(0) }),
-      }),
-    )
-    expect(opened.model.languagePicker.isOpen).toBe(true)
-    const selected = update(
-      opened.model,
-      Message.LanguagePickerChanged({
-        message: Listbox.Message.SelectedItem({ item: 'zh-CN' }),
-      }),
-    )
-    expect(selected.model.languagePicker.isOpen).toBe(false)
-    expect(selected.model.locale).toBe('zh-CN')
-    expect(selected.model.game).toBe(model.game)
-    expect(selected.model.paused).toBe(true)
-    expect(selected.commands?.map((command) => command.name)).toEqual(
-      expect.arrayContaining(['FocusButton', 'WritePrefs', 'ApplySettings', 'SyncBoard']),
-    )
-    const closed = update(
-      opened.model,
-      Message.LanguagePickerChanged({ message: Listbox.Message.Closed() }),
-    )
-    expect(closed.model.locale).toBe('en')
-    expect(closed.model.languagePicker.isOpen).toBe(false)
-    expect(closed.commands?.map((command) => command.name)).not.toContain('WritePrefs')
-  })
+  test.each(['fr', 'zh-CN'] as const)(
+    'selecting %s closes the listbox, restores focus and persists the locale',
+    (locale) => {
+      const model = { ...initialModel(), route: AppRoute.Company(), paused: true }
+      const opened = update(
+        model,
+        Message.LanguagePickerChanged({
+          message: Listbox.Message.Opened({ maybeActiveItemIndex: Option.some(0) }),
+        }),
+      )
+      expect(opened.model.languagePicker.isOpen).toBe(true)
+      const selected = update(
+        opened.model,
+        Message.LanguagePickerChanged({
+          message: Listbox.Message.SelectedItem({ item: locale }),
+        }),
+      )
+      expect(selected.model.languagePicker.isOpen).toBe(false)
+      expect(selected.model.locale).toBe(locale)
+      expect(selected.model.game).toBe(model.game)
+      expect(selected.model.paused).toBe(true)
+      expect(selected.commands?.map((command) => command.name)).toEqual(
+        expect.arrayContaining(['FocusButton', 'WritePrefs', 'ApplySettings', 'SyncBoard']),
+      )
+      const closed = update(
+        opened.model,
+        Message.LanguagePickerChanged({ message: Listbox.Message.Closed() }),
+      )
+      expect(closed.model.locale).toBe('en')
+      expect(closed.model.languagePicker.isOpen).toBe(false)
+      expect(closed.commands?.map((command) => command.name)).not.toContain('WritePrefs')
+    },
+  )
 
   test('upstream glossary categories still constrain Chinese search results', () => {
     const model = { ...initialModel(), locale: 'zh-CN' as const, glossaryQuery: '背压' }

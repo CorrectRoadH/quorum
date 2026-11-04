@@ -35,6 +35,10 @@ const CATEGORY_NAMES: Record<GlossaryCategory, string> = {
 
 const BY_ID = new Map(GLOSSARY.map((entry) => [entry.id, entry]))
 
+/** Accept unaccented keyboard input as well as the spelling shown in the glossary. */
+const searchable = (text: string): string =>
+  text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+
 const matches = (
   entry: GlossaryEntry,
   query: string,
@@ -42,14 +46,14 @@ const matches = (
   locale: Locale,
 ): boolean => {
   if (category !== null && entry.category !== category) return false
-  const text = query.trim().toLowerCase()
+  const text = searchable(query.trim())
   return (
     text === '' ||
-    entry.term.toLowerCase().includes(text) ||
-    entry.definition.toLowerCase().includes(text) ||
-    entry.inGame.toLowerCase().includes(text) ||
+    searchable(entry.term).includes(text) ||
+    searchable(entry.definition).includes(text) ||
+    searchable(entry.inGame).includes(text) ||
     [entry.term, entry.definition, entry.inGame].some((copy) =>
-      translate(locale, copy).toLowerCase().includes(text),
+      searchable(translate(locale, copy)).includes(text),
     )
   )
 }

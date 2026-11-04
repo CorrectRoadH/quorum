@@ -122,7 +122,11 @@ const stat = (
     [
       icon(h, glyph, 'size-3.5 shrink-0 text-muted-foreground'),
       h.span(
-        [h.Class('w-[46px] shrink-0 text-[11.5px] text-muted-foreground compact:hidden')],
+        [
+          h.Class(
+            'w-[var(--hud-label-width,46px)] shrink-0 text-[11.5px] text-muted-foreground compact:hidden',
+          ),
+        ],
         [name],
       ),
       // With no note, the tone colours the value itself.
@@ -601,7 +605,10 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
   )
   // On a phone the wrapper dissolves, so both cards stack with the rest of the top.
   return h.div(
-    [h.Class('absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-2 compact:contents')],
+    [
+      h.Class('absolute top-3 left-3 z-20 flex w-[248px] flex-col gap-2 compact:contents'),
+      h.Style({ '--hud-label-width': model.locale === 'fr' ? '64px' : '46px' }),
+    ],
     [header, shown(model, 'research') ? insightCard(model, ledger, h) : h.empty],
   )
 }
