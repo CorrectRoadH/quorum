@@ -129,7 +129,13 @@ const gauge = (
   )
 }
 
-/** A folded section: the title alone until opened. */
+/**
+ * A folded section: the title alone until opened. Once the player has opened or
+ * closed it, the browser owns that state, so a re-render on every Step leaves
+ * the section as they left it. `open` forces it open while it holds, as a
+ * pinned Tradeoff card does; when it stops holding, the fold is the player's
+ * again.
+ */
 const section = (
   title: string,
   children: ReadonlyArray<Html>,
@@ -137,7 +143,7 @@ const section = (
   open = false,
 ) =>
   h.details(
-    [h.Key(title), h.Open(open), h.Class('fold group px-4')],
+    [h.Key(title), ...(open ? [h.Open(true)] : []), h.Class('fold group px-4')],
     [
       h.summary(
         [

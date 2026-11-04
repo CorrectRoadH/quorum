@@ -250,10 +250,14 @@ const tiny = (label: string, message: Message, h: HtmlBuilder<Message>, active =
     h,
   )
 
-/** On a phone the controls fold away under their name; on a desktop they stay open. */
+/**
+ * On a phone the controls fold away under their name; on a desktop they stay
+ * open, and there is no summary to fold them by. On a phone the fold belongs to
+ * the player once they touch it, so the open state is not written on every Step.
+ */
 const controls = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.details(
-    [h.Key('controls'), h.Open(!isPhone()), h.Class('fold group')],
+    [h.Key('controls'), ...(isPhone() ? [] : [h.Open(true)]), h.Class('fold group')],
     [
       h.summary(
         [
