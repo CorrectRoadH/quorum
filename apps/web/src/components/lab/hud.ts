@@ -1,3 +1,4 @@
+import { Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import {
   Circle,
@@ -106,11 +107,23 @@ const stat = (
   h: HtmlBuilder<Message>,
   title = name,
   className = '',
+  onClick?: Message,
 ): Html =>
   h.div(
     [
       h.Key(name),
       h.Title(title),
+      ...(onClick
+        ? [
+            h.OnClick(onClick),
+            h.OnKeyDownPreventDefault((key) =>
+              key === 'Enter' || key === ' ' ? Option.some(onClick) : Option.none(),
+            ),
+            h.Role('button'),
+            h.Tabindex(0),
+            h.AriaLabel(title),
+          ]
+        : []),
       h.Class(
         cn(
           'flex h-8 items-center gap-2.5 px-2.5 compact:shrink-0 compact:gap-1.5 compact:px-3',
@@ -567,6 +580,9 @@ export const hud = (model: Model, ledger: Ledger, h: HtmlBuilder<Message>): Html
             trend === 0 ? '' : `${trend > 0 ? '▲' : '▼'} ${compact(Math.abs(trend))}`,
             trend >= 0 ? 'ok' : 'danger',
             h,
+            'Why users leave',
+            'cursor-pointer rounded-lg hover:bg-muted',
+            Message.PanelOpened({ panel: model.panel === 'churn' ? 'none' : 'churn' }),
           ),
           stat(
             'Apdex',

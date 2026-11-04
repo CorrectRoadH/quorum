@@ -193,7 +193,17 @@ const answerOf = (kind: string | undefined, mail: Mail): string | null => {
 const answersOnly = (kind: string | undefined, mail: Mail): boolean =>
   kind === 'later' || (kind === 'decline' && mail.sender.startsWith('mate:'))
 
-const ACTING = new Set(['raise', 'decline', 'hire', 'team', 'first', 'rush', 'show', 'trap'])
+const ACTING = new Set([
+  'raise',
+  'decline',
+  'hire',
+  'team',
+  'first',
+  'rush',
+  'show',
+  'trap',
+  'churn',
+])
 
 export const updateInbox = (
   inbox: Inbox,

@@ -55,6 +55,7 @@ export const Panel = Schema.Literals([
   'glossary',
   'inbox',
   'dashboard',
+  'churn',
 ])
 export type Panel = typeof Panel.Type
 

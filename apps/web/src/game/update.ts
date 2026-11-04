@@ -32,6 +32,8 @@ import {
   SIZES,
   STEP_SECONDS,
   TASKS,
+  type RegionId as Region,
+  type ResearchId,
 } from '@quorum/simulation/catalog'
 import { newGame, preseedGame } from '@quorum/simulation/company'
 import {
@@ -100,7 +102,15 @@ import {
 import { forceIncident } from '@quorum/simulation/director'
 import { StepEvent } from '@quorum/simulation/events'
 import { nextAdvice } from '@quorum/simulation/goals'
-import { EVENT_EVERY, disclosureFact, eventFact, eventMail, factOf, type Fact } from './mail.ts'
+import {
+  EVENT_EVERY,
+  churnFact,
+  disclosureFact,
+  eventFact,
+  eventMail,
+  factOf,
+  type Fact,
+} from './mail.ts'
 import type { EventMail } from './copy/index.ts'
 import { updateDashboard } from './dashboard.ts'
 import { updateGlossary } from './glossary.ts'
@@ -116,12 +126,7 @@ import {
   updateInbox,
 } from './inbox.ts'
 import { PrefsMessage, updatePrefs } from './prefs.ts'
-import {
-  EMPTY_RESEARCH,
-  ResearchOutMessage,
-  updateResearch,
-  type ResearchMessage,
-} from './research.ts'
+import { EMPTY_RESEARCH, ResearchMessage, ResearchOutMessage, updateResearch } from './research.ts'
 import { TeamOutMessage, initTeam, updateTeam, type TeamMessage } from './team.ts'
 import type { Ledger } from '@quorum/simulation/ledger'
 import { eraOf, has, isFinalEra, nextEra, zoned } from '@quorum/simulation/lookups'
@@ -214,7 +219,8 @@ import { AppRoute, menuFor, onBoard, routeOfMenu, urlOf, urlToAppRoute } from '.
 import type { LogEntry } from './playlog.ts'
 import { contextOf, diffOf, line, sampleOf } from './telemetry.ts'
 import { nearestNode, type Direction } from './viewport.ts'
-import { regionView } from '@quorum/simulation/regions'
+import { openRegions, regionApdexOf, regionView } from '@quorum/simulation/regions'
+import { churnOf } from '@quorum/simulation/churn'
 
 /* ==========================================================================
    Quorum — init and update. The Simulation owns every rule; update routes
@@ -384,6 +390,9 @@ const stampOf = (model: Model) => {
 /* ---------- Mail (GDD 18) ---------- */
 
 /** A fact joins the Inbox; it needs no preview card while the Inbox panel is open. */
+/** Sim seconds in one calendar hour. */
+const CALENDAR_HOUR = 60
+
 const mailedTo = (model: Model, fact: Fact, time: number, repeats = false): Model => ({
   ...model,
   board: {
@@ -690,6 +699,8 @@ const mailAction = (model: Model, kind: string, target: string | null): Result =
       return teamAction(model, TeamOutMessage.Hire())
     case 'team':
       return route(model, Message.PanelOpened({ panel: 'team' }))
+    case 'churn':
+      return route(model, Message.PanelOpened({ panel: 'churn' }))
     case 'first':
       return route(model, Message.WorkPrioritized({ id: Number(target) }))
     case 'rush':
@@ -1248,6 +1259,34 @@ const tick = (model: Model): Result => {
         factOf(advice, game),
         game.time,
       )
+  }
+  // Once a calendar hour, a region whose users fell over the hour gets a Customers Mail; its
+  // thread resolves when the region grows again (GDD 12 "The Churn breakdown").
+  if (
+    !offCompany(next) &&
+    Math.floor(game.time / CALENDAR_HOUR) > Math.floor(model.board.game.time / CALENDAR_HOUR)
+  ) {
+    for (const region of churnOf(game, ledger)) {
+      const key = `customers:churn:${region.region}`
+      const falling = region.perHour < 0 && regionApdexOf(game, region.region) < region.target
+      const open = next.board.inbox.mail.some(
+        (mail) => mail.key === key && mail.resolved === null && !mail.trashed,
+      )
+      if (falling) next = mailedTo(next, churnFact(game, region), game.time)
+      else if (open)
+        next = {
+          ...next,
+          board: {
+            ...next.board,
+            inbox: closed(
+              next.board.inbox,
+              key,
+              game.time,
+              `${REGION_INFO[region.region].name} is growing again.`,
+            ),
+          },
+        }
+    }
   }
   // The world writes too: teammates, CVEs, customers, and spam.
   const bucket = Math.floor(game.time / EVENT_EVERY)
@@ -3169,6 +3208,35 @@ const handle = (model: Model, message: Message): Result =>
             }
           : opened
       return { model: next }
+    },
+    ChurnFixTaken: ({ fix, target }) => {
+      const game = model.board.game
+      const board = { ...model, panel: 'none' as const }
+      if (fix === 'research') {
+        const opened = route(model, Message.PanelOpened({ panel: 'research' }))
+        const focused = route(
+          opened.model,
+          Message.ResearchChanged({
+            message: ResearchMessage.Focused({ id: target as ResearchId }),
+          }),
+        )
+        return { ...focused, commands: [...(opened.commands ?? []), ...(focused.commands ?? [])] }
+      }
+      if (fix === 'node') {
+        const node = game.nodes.find((entry) => entry.id === target)
+        if (!node) return { model: board }
+        return route(
+          { ...board, board: { ...board.board, region: node.region } },
+          Message.NodeTapped({ nodeId: node.id }),
+        )
+      }
+      const region = target as Region
+      return route(
+        board,
+        openRegions(game).includes(region)
+          ? Message.RegionPicked({ region })
+          : Message.RegionOpened({ region }),
+      )
     },
     // An exited Company has nothing left to play: closing its panel goes to the next one.
     PanelClosed: () => {

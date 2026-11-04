@@ -264,6 +264,11 @@ export const Message = defineMessageUnion({
   PostmortemFiled: { id: Schema.Finite, take: Schema.Boolean },
 
   PanelOpened: { panel: Panel },
+  /** A fix in the Churn breakdown: open or show a region, a research item, or a Node. */
+  ChurnFixTaken: {
+    fix: Schema.Literals(['region', 'research', 'node']),
+    target: Schema.String,
+  },
   PanelClosed: {},
 
   /** Settings and the Glossary (15). Each panel is a Submodel with its own Messages. */

@@ -38,7 +38,7 @@ import {
   BACKUPS,
   REGION_INFO,
 } from '@quorum/simulation/catalog'
-import { isGlobal, openRegions, regional } from '@quorum/simulation/regions'
+import { isGlobal, openRegions, regional, regionUsers } from '@quorum/simulation/regions'
 import { platformTax, quartersBehind } from '@quorum/simulation/team'
 import type { Ledger } from '@quorum/simulation/ledger'
 import {
@@ -469,7 +469,12 @@ const stats = (
     case 'users': {
       const target = eraOf(game).apdexTarget
       return [
-        row('Users', compact(game.users), 'plain', h),
+        row(
+          'Users',
+          compact(regional(game) ? regionUsers(game)[node.region] : game.users),
+          'plain',
+          h,
+        ),
         row('Market', compact(ledger.market), 'plain', h),
         row('Requests', `${rate(ledger.demand)}/s`, 'plain', h),
         row('Apdex now', ledger.apdex.toFixed(3), ledger.apdex >= target ? 'ok' : 'danger', h),

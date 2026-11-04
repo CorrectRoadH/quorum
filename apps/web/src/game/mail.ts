@@ -7,11 +7,20 @@ import type {
 } from '@quorum/simulation/goals'
 import type { Game } from '@quorum/simulation/state'
 import type { Mail } from './model.ts'
-import { COMPONENTS, CVE_DEFS, patchCost, patchWindow } from '@quorum/simulation/catalog'
+import {
+  COMPONENTS,
+  CVE_DEFS,
+  REGION_INFO,
+  patchCost,
+  patchWindow,
+} from '@quorum/simulation/catalog'
+import type { ChurnCause, RegionChurn } from '@quorum/simulation/churn'
+import { compact } from './format.ts'
 import type { WorkItem } from '@quorum/simulation/state'
 import { itemName } from '@quorum/simulation/work'
 import {
   ADVICE,
+  CHURN_LETTERS,
   CVE_LETTERS,
   CVES,
   EVENTS,
@@ -242,6 +251,53 @@ const customerFact = (game: Game, n: number): Fact => {
   const key = 'customers:slow'
   const sender = senderFor('customers', game, `slow:${n}`)
   return fact(key, sender, write(TICKETS, {}, sender, game, key, n))
+}
+
+/** A region's users fell for a calendar hour: the Customers sender says why (GDD 12). */
+export const churnFact = (game: Game, region: RegionChurn): Fact => {
+  const key = `customers:churn:${region.region}`
+  const sender = senderFor('customers', game, key)
+  const causes = region.rows
+    .slice(0, 2)
+    .map((row) => `- ${row.kind}: ${CAUSE_TEXT[row.cause]}`)
+    .join('\n')
+  return fact(
+    key,
+    sender,
+    write(
+      CHURN_LETTERS,
+      {
+        region: REGION_INFO[region.region].name,
+        users: compact(region.users),
+        perHour: compact(Math.abs(region.perHour)),
+        inADay: compact(region.inADay),
+        causes: causes || '- nothing one cause explains',
+      },
+      sender,
+      game,
+      key,
+    ),
+    [{ id: 'churn', label: 'Open Churn breakdown' }],
+  )
+}
+
+/** A cause as a customer would put it. */
+const CAUSE_TEXT: Record<ChurnCause, string> = {
+  far: 'slow from far away',
+  slow: 'slow',
+  failed: 'errors',
+  stranded: 'not available at all',
+  dropped: 'requests dropped',
+  refused: 'connection refused',
+  down: 'down',
+  stale: 'old data',
+  oom: 'crashes (out of memory)',
+  timeout: 'timeouts',
+  crash: 'crashes',
+  blocked: 'blocked by the firewall',
+  upstream: 'a provider is down',
+  throttled: 'rate limited',
+  duplicate: 'charged twice',
 }
 
 const spamFact = (pitch: Pitch, game: Game, salt: number): Fact => {

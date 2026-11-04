@@ -203,3 +203,24 @@ export const TICKETS: Letters = [
     body: `Hi,\n\nPassing this one along from ${from}. It's the nicest complaint we've had all month:\n\n> Hello! I don't want to be a bother. The app has gotten slow lately and I wondered if it was me. I restarted my router, my laptop, and my phone, twice. It's still slow. No rush! (A little rush.)\n\nOur dashboard says we typically reply in a few days. We suggest you reply sooner.\n\nWarm regards,\n${from}`,
   }),
 ]
+
+/** What a falling region's churn Mail says (GDD 12 "The Churn breakdown"). */
+export type ChurnVars = Readonly<{
+  region: string
+  users: string
+  perHour: string
+  inADay: string
+  /** The top two causes, one per line. */
+  causes: string
+}>
+
+export const CHURN_LETTERS: Letters<ChurnVars> = [
+  ({ from, region, users, perHour, inADay, causes }) => ({
+    subject: `${region}: users are leaving`,
+    body: `Hi,\n\nCancellations from ${region} are up. You have ${users} users there, and you lose ${perHour} an hour. At this rate you will have ${inADay} tomorrow.\n\nWhat they complain about most:\n${causes}\n\nThe Churn breakdown lists every cause and the fix for each.\n\n${from}`,
+  }),
+  ({ from, region, users, perHour, inADay, causes }) => ({
+    subject: `Support queue: ${region} is unhappy`,
+    body: `Hello,\n\nThe ${region} queue doubled this hour. ${users} users, down ${perHour} an hour, ${inADay} by this time tomorrow if nothing changes.\n\nTop tags:\n${causes}\n\nOpen the Churn breakdown to see what wins them back.\n\n${from}`,
+  }),
+]

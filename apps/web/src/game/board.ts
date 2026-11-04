@@ -79,7 +79,7 @@ import {
   zoned,
   zoneMs,
 } from '@quorum/simulation/lookups'
-import { isGlobal } from '@quorum/simulation/regions'
+import { isGlobal, regional, regionApdexOf, regionUsers } from '@quorum/simulation/regions'
 import { quartersBehind } from '@quorum/simulation/team'
 import type { Game, GameNode, Region } from '@quorum/simulation/state'
 import { compact, money, ms, priceLabel, queueWait, rate } from './format.ts'
@@ -872,15 +872,25 @@ const rowsOf = (
   switch (node.type) {
     case 'users': {
       const target = eraOf(game).apdexTarget
+      // From Series C each Users Node shows its own region's users (04 "Users and growth").
+      const split = regional(game)
+      const users = split ? regionUsers(game)[node.region] : game.users
+      const apdex = split ? regionApdexOf(game, node.region) : game.apdex
+      const sent = split
+        ? Object.values(ledger.regionKinds[node.region] ?? {}).reduce(
+            (sum, entry) => sum + (entry?.rate ?? 0),
+            0,
+          )
+        : ledger.demand
       return [
-        { glyph: 'users', name: 'Users', value: compact(game.users) },
+        { glyph: 'users', name: 'Users', value: compact(users) },
         {
           glyph: 'apdex',
           name: 'Apdex',
-          value: game.apdex.toFixed(2),
-          tone: game.apdex >= target ? 'ok' : 'danger',
+          value: apdex.toFixed(2),
+          tone: apdex >= target ? 'ok' : 'danger',
         },
-        { glyph: 'requests', name: 'Requests', value: `${rate(ledger.demand)}/s` },
+        { glyph: 'requests', name: 'Requests', value: `${rate(sent)}/s` },
       ]
     }
     case 'payments': {
