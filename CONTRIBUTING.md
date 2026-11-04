@@ -24,6 +24,7 @@ Quorum is built on Cafe: **C**loudflare for the runtime, **A**lchemy for infrast
 | `apps/backend`        | Effect RPC handlers and the API Worker entry.                                |
 | `packages/simulation` | The pure Simulation. The browser plays it; the API Worker replays it.        |
 | `packages/rpc`        | The wire contract: RPC groups, schemas, declared errors, and the API prefix. |
+| `packages/ui`         | The shared design language: primitives, the theme, and game views.           |
 | `examples/reference`  | A Foldkit Query to RPC example, deployed only to the `reference` stage.      |
 
 Alchemy composes the website and the API into one deployment. A service binding routes

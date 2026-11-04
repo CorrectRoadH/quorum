@@ -70,9 +70,9 @@ import { compact, duration, money, ms, priceLabel, rate } from '@/game/format.ts
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
 import { COMPONENT_ICONS } from '@/game/icons.ts'
-import { icon } from '@/lib/icons'
-import { badge } from '@/components/ui/badge'
-import { button } from '@/components/ui/button'
+import { icon } from '@quorum/ui/primitives/icon'
+import { badge } from '@quorum/ui/primitives/badge'
+import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
 import {
   EYEBROW,

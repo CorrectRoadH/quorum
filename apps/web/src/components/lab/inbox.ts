@@ -19,8 +19,8 @@ import {
   type IconNode,
   Dices,
 } from 'lucide'
-import { badge as chip } from '@/components/ui/badge'
-import { button } from '@/components/ui/button'
+import { badge as chip } from '@quorum/ui/primitives/badge'
+import { button } from '@quorum/ui/primitives/button'
 import { clock } from '@/game/format.ts'
 import {
   KIND_LABEL,
@@ -31,16 +31,16 @@ import {
   type SenderKind,
 } from '@/game/mail.ts'
 import type { BuildGroup } from '@quorum/simulation/catalog'
-import { Kbd } from '@/components/ui/kbd'
+import { Kbd } from '@quorum/ui/primitives/kbd'
 import {
   nativeSelect,
   nativeSelectOptGroup,
   nativeSelectOption,
-} from '@/components/ui/native-select'
+} from '@quorum/ui/primitives/native-select'
 import { folderHolds, folderList } from '@/game/inbox.ts'
 import { Message } from '@/game/message.ts'
 import type { Folder, Mail, Model } from '@/game/model.ts'
-import { icon } from '@/lib/icons'
+import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
 import { EYEBROW, FIGURE, FLOAT, PANEL, SCROLL, WELL, groupBadge } from './bits.ts'
 

@@ -2,7 +2,7 @@ import * as Effect from 'effect/Effect'
 import { Mount } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { ArrowUpRight, Check, Download, Lock, ScrollText, Settings, Store, Trophy } from 'lucide'
-import { icon } from '@/lib/icons'
+import { icon } from '@quorum/ui/primitives/icon'
 import {
   ACHIEVEMENTS,
   ACHIEVEMENT_IDS,

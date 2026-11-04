@@ -1,0 +1,23 @@
+{
+  "name": "@quorum/ui",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./primitives/*": "./src/primitives/*.ts",
+    "./theme.css": "./src/theme.css"
+  },
+  "scripts": {
+    "typecheck": "tsrs --noEmit -p tsconfig.json && effect-tsrs diagnostics --strict --project tsconfig.json"
+  },
+  "dependencies": {
+    "@foldkit/ui": "0.168.0",
+    "cn": "0.5.0",
+    "d3-shape": "^3.2.0",
+    "effect": "4.0.0",
+    "foldkit": "0.167.0",
+    "lucide": "1.58.0"
+  },
+  "devDependencies": {
+    "@types/d3-shape": "^3.2.0"
+  }
+}

@@ -5,7 +5,7 @@ import { GROUP_SHAPES, type GroupShape, STACK_LOGOS, type StackLogoId } from '@/
 import type { Message } from '@/game/message.ts'
 import { POOL_ICONS, poolColor, poolName } from '@/game/pools.ts'
 import type { Toast } from '@/game/model.ts'
-import { icon } from '@/lib/icons'
+import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
 
 /* ==========================================================================

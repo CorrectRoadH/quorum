@@ -10,7 +10,7 @@ import {
 } from '@quorum/simulation/catalog'
 import { Message } from '@/game/message.ts'
 import type { Model } from '@/game/model.ts'
-import { icon } from '@/lib/icons'
+import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
 import { EYEBROW, FIGURE, SCROLL, WELL } from './bits.ts'
 import { shell } from './panels.ts'

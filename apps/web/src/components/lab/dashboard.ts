@@ -18,10 +18,10 @@ import { type Field, TIERS, type Tier, startOf } from '@/game/history.ts'
 import { compact, money, ms } from '@/game/format.ts'
 import { Message } from '@/game/message.ts'
 import { type Model, ledgerOf } from '@/game/model.ts'
-import { icon } from '@/lib/icons'
+import { icon } from '@quorum/ui/primitives/icon'
 import { cn } from '@/lib/utils'
-import { button } from '@/components/ui/button'
-import { Pie, PieChart } from '@/components/ui/chart-core'
+import { button } from '@quorum/ui/primitives/button'
+import { Pie, PieChart } from '@quorum/ui/primitives/chart-core'
 import {
   Area,
   type CartesianChild,
@@ -32,7 +32,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from '@/components/ui/composed-chart'
+} from '@quorum/ui/primitives/composed-chart'
 import { FIGURE, PANEL, SCROLL, WELL } from './bits.ts'
 
 /* ==========================================================================

@@ -68,8 +68,8 @@ import { exitLegacy, offCompany, type Board, type Model } from '@/game/model.ts'
 import { POOL_ICONS, POOL_ORDER, poolColor } from '@/game/pools.ts'
 import { moreMenu, type MoreItem } from '@/game/more.ts'
 import { glowing, playbooksShown, shown } from '@/game/reveal.ts'
-import { icon } from '@/lib/icons'
-import { button } from '@/components/ui/button'
+import { icon } from '@quorum/ui/primitives/icon'
+import { button } from '@quorum/ui/primitives/button'
 import { cn } from '@/lib/utils'
 import {
   CHIPS,
