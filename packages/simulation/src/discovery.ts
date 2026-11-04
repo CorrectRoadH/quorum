@@ -8,7 +8,7 @@ import type { Game } from './state.ts'
    per tick in a Company and keeps the ids in the Founder record.
    ========================================================================== */
 
-const BY_COMPONENT: Partial<Record<ComponentId, ReadonlyArray<string>>> = {
+export const BY_COMPONENT: Partial<Record<ComponentId, ReadonlyArray<string>>> = {
   queue: ['at-least-once-delivery', 'backpressure', 'dead-letter-queue', 'transactional-outbox'],
   autoscaler: ['autoscaling', 'cold-start', 'diurnal-traffic', 'vertical-and-horizontal-scaling'],
   auth: ['bcrypt'],
@@ -141,7 +141,7 @@ export const BY_RESEARCH: Partial<Record<ResearchId, ReadonlyArray<string>>> = {
   waf: ['waf-web-application-firewall'],
 }
 
-const BY_INCIDENT: Partial<Record<IncidentId, ReadonlyArray<string>>> = {
+export const BY_INCIDENT: Partial<Record<IncidentId, ReadonlyArray<string>>> = {
   poison: ['at-least-once-delivery', 'dead-letter-queue'],
   'double-charge': [
     'at-least-once-delivery',

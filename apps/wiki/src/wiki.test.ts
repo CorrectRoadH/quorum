@@ -1,4 +1,15 @@
 import { expect, test } from 'vitest'
+import {
+  COMPONENT_IDS,
+  ERAS,
+  FRAMEWORK_IDS,
+  GLOSSARY,
+  INCIDENT_IDS,
+  RUNTIME_IDS,
+  researchList,
+} from '@quorum/simulation/catalog'
+import { SANDBOX_IDS } from '@quorum/simulation/sandbox'
+import { prosePaths } from './content.ts'
 import { normalize } from './main.ts'
 import { renderPage, prerenderPaths } from './entry.server.ts'
 import { PAGES, pageAt } from './pages.ts'
@@ -20,6 +31,24 @@ test('every prerendered path renders its own page', async () => {
     expect(result.status, path).toBeUndefined()
     expect(result.application.title, path).toContain(pageAt(path)?.title ?? '')
   }
+}, 120_000)
+
+test('every catalog entry has its own page', () => {
+  const ids = [
+    ...COMPONENT_IDS.map((id) => `/components/${id}`),
+    ...researchList.map((entry) => `/research/${entry.id}`),
+    ...INCIDENT_IDS.map((id) => `/incidents/${id}`),
+    ...RUNTIME_IDS.map((id) => `/runtimes/${id}`),
+    ...FRAMEWORK_IDS.map((id) => `/frameworks/${id}`),
+    ...GLOSSARY.map((entry) => `/glossary/${entry.id}`),
+    ...SANDBOX_IDS.map((id) => `/sandboxes/${id}`),
+  ]
+  expect(ids.filter((path) => !pageAt(path))).toEqual([])
+  expect(PAGES.filter((page) => page.parent === '/eras')).toHaveLength(ERAS.length)
+})
+
+test('every prose file belongs to a page', () => {
+  expect(prosePaths.filter((path) => !pageAt(path))).toEqual([])
 })
 
 test('a path with no page renders the 404 page with a 404 status', async () => {
