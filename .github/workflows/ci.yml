@@ -51,6 +51,9 @@ jobs:
       SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Sentry reads the commit history to attach commits to the release.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -58,3 +61,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec alchemy deploy --stage prod --yes
+      # The release exists from the build (the Sentry plugins create it). These steps add what the
+      # plugins would run twice, once per bundler: its commits and its deploy.
+      - name: Attach commits to the Sentry release
+        # Both steps are bookkeeping: a failure must not fail a deploy that already shipped.
+        continue-on-error: true
+        run: pnpm dlx @sentry/cli@3.8.2 releases set-commits "$VITE_SENTRY_RELEASE" --local --ignore-missing
+      - name: Record the Sentry deploy
+        continue-on-error: true
+        run: pnpm dlx @sentry/cli@3.8.2 releases deploys "$VITE_SENTRY_RELEASE" new --env production --url https://playquorum.dev
