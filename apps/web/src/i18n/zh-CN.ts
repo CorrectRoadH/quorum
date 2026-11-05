@@ -1,8 +1,14 @@
 import { glossaryZhCN } from './zh-CN-glossary.ts'
+import { mailZhCN } from './zh-CN-mail.ts'
+import { interfaceZhCN } from './zh-CN-interface.ts'
+import { zhCNCurrent } from './zh-CN-current.ts'
 
 /** English source messages are stable lookup keys; technical names remain recognizable. */
 export const zhCN: Readonly<Record<string, string>> = {
   ...glossaryZhCN,
+  ...mailZhCN,
+  ...interfaceZhCN,
+  ...zhCNCurrent,
   'Review {0} migration': '评估迁移到 {0}',
   'Start migration': '开始迁移',
   Proposed: '提议',
