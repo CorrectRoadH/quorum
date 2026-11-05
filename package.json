@@ -24,6 +24,7 @@
     "@cloudflare/workers-types": "5.20261008.1",
     "@effect/language-service": "0.87.5",
     "@quorum/rpc": "workspace:*",
+    "@sentry/rollup-plugin": "11.10.0",
     "@types/node": "26.6.4",
     "@yielded/effect-tsrs": "0.2.3",
     "alchemy": "2.0.0-beta.84",

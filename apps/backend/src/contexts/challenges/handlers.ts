@@ -1,4 +1,4 @@
-import { Clock, Effect, Result } from 'effect'
+import { Cause, Clock, Effect, ErrorReporter, Result } from 'effect'
 import { ApiError, ChallengeRpc, type ChallengeScores } from '@quorum/rpc'
 import {
   type ScoreAxis,
@@ -16,12 +16,14 @@ const DAY_MS = 86_400_000
 
 const unavailable = () => new ApiError({ message: 'Results are unavailable. Try again later.' })
 
-/** A store failure reaches the client as "unavailable"; its cause goes to the Worker log. */
+/** A store failure reaches the client as "unavailable"; its cause goes to the Worker log and the error reporters. */
 const storeUnavailable = <A, E, R>(effect: Effect.Effect<A, E | StoreError, R>) =>
   effect.pipe(
     Effect.tapError((error) =>
       error instanceof StoreError
-        ? Effect.logError('ResultStore failed', error.cause)
+        ? Effect.logError('ResultStore failed', error.cause).pipe(
+            Effect.andThen(ErrorReporter.report(Cause.fail(error))),
+          )
         : Effect.void,
     ),
     Effect.catchTag('StoreError', () => Effect.fail(unavailable())),
@@ -62,11 +64,26 @@ export const ChallengeHandlers = ChallengeRpc.toLayer(
             return yield* fail('The device id is not valid.')
           const now = yield* Clock.currentTimeMillis
           if (!drillOpen(challenge.id, now)) return yield* fail('That daily drill is closed.')
-          const replay = decodeReplay(submission.replay)
+          yield* Effect.annotateCurrentSpan({
+            'challenge.id': challenge.id,
+            'challenge.replay_chars': submission.replay.length,
+            'sim.version': SIM_VERSION,
+          })
+          const replay = yield* Effect.sync(() => decodeReplay(submission.replay)).pipe(
+            Effect.withSpan('challenge.decode'),
+          )
           if (Result.isFailure(replay)) return yield* fail(replay.failure)
           // The Simulation scores the replay; nothing the client claims about its result is read.
-          const result = runChallenge(challenge, replay.success)
+          // A Worker's clock stands still until I/O, so this span's duration reads zero: its
+          // attributes carry the outcome, and the Worker's CPU time carries the cost.
+          const result = yield* Effect.sync(() => runChallenge(challenge, replay.success)).pipe(
+            Effect.withSpan('challenge.replay'),
+          )
           if (Result.isFailure(result)) return yield* fail(result.failure)
+          yield* Effect.annotateCurrentSpan({
+            'challenge.passed': result.success.passed,
+            'challenge.missed': result.success.missed ?? 'none',
+          })
           const board: Board = { challengeId: challenge.id, simVersion: SIM_VERSION }
           const score = scoresOf(result.success)
           const best = result.success.passed

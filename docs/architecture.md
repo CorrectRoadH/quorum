@@ -31,9 +31,12 @@ The API Worker sets `workersDev: false`. The website origin is its only public s
 
 ## Telemetry
 
-Observability is configured on the host resources in `alchemy.run.ts`, never in contexts. Both Workers enable logs and traces with full sampling. Lower both `headSamplingRate` values before real traffic, and keep the compatibility date at `2026-07-28` or later, which traces require.
+Sentry records errors, traces, and profiles ([ADR 0013](./adr/0013-sentry-for-errors-traces-and-profiles.md)). Cloudflare Workers Observability keeps logs only: `alchemy.run.ts` turns its traces off, so a request is traced once. Observability is configured on the host resources in `alchemy.run.ts`, never in contexts.
 
-To nest Effect spans in the same waterfall, provide `Cloudflare.Telemetry()` from Alchemy. That layer is a binding, so it needs the inline Worker form: the entry module must default-export `Cloudflare.Worker(...)` with an init effect. This template keeps `src/worker.ts` as a plain module, so Effect spans are not mirrored today. If you adopt the layer, omit `observability.traces` on that Worker: the binding contributes it, and an explicit value wins.
+- The browser starts Sentry in `apps/web/src/platform/sentry.ts`. Foldkit's `crash` and `slow` options report to it; `traced` wraps work that matters to load time or smoothness.
+- Both Workers wrap their entry with `Sentry.withSentry`. They need the `nodejs_compat` flag, which `sentryCompatibility` sets. The API Worker also provides the Effect tracer, logger, and error reporter, so `Effect.withSpan` in a context becomes a Sentry span.
+- The browser sends trace headers to `/api/` only. The website Worker passes them through the service binding, so one trace covers the browser, both Workers, and D1.
+- Sampling: traces 10%, profiles 5% of sessions. Review both after a week of real traffic.
 
 ## Product analytics
 

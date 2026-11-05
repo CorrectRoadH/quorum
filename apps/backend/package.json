@@ -9,6 +9,8 @@
   "dependencies": {
     "@quorum/rpc": "workspace:*",
     "@quorum/simulation": "workspace:*",
+    "@sentry/cloudflare": "11.10.0",
+    "@sentry/effect": "11.10.0",
     "effect": "4.0.0"
   }
 }

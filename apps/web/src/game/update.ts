@@ -96,6 +96,7 @@ import type { AchievementId } from '@quorum/simulation/catalog'
 import { discoverTerms } from '@quorum/simulation/discovery'
 import { foundCompany, perkLevel } from '@quorum/simulation/founding'
 import { OFFLINE_MIN, simulateAway } from '@quorum/simulation/offline'
+import { traced } from '../platform/sentry.ts'
 import {
   capture,
   SHARED,
@@ -1611,7 +1612,12 @@ const applyCompany = (
   open: boolean,
 ): Result => {
   const away = game.wall > 0 ? (now - game.wall) / 1_000 : 0
-  const back = away >= OFFLINE_MIN && !game.sandbox ? simulateAway(game, away) : null
+  const back =
+    away >= OFFLINE_MIN && !game.sandbox
+      ? traced('sim.offline_catchup', { away_seconds: Math.round(away) }, () =>
+          simulateAway(game, away),
+        )
+      : null
   const played = back?.game ?? game
   const next: Model = {
     ...model,
@@ -1971,7 +1977,7 @@ const finishRun = (model: Model): Result => {
         challengeId: run.id,
         simVersion: SIM_VERSION,
         deviceId: founder.deviceId,
-        replay: encodeReplay(run.replay),
+        replay: traced('challenge.encode_replay', {}, () => encodeReplay(run.replay)),
       },
     }),
     AppendLog({

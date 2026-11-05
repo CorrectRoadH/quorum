@@ -26,6 +26,10 @@ When you play, the game sends events to PostHog, our analytics processor:
   installed app.
 - A random device ID, stored in your browser, so a return visit counts as the same player.
 - A crash report if the game throws an error: the error and its stack trace.
+- Performance data: how long some actions take (saving, loading, a simulation step, a request to the
+  server), how long the page takes to load, and a sample of function-level profiles in some Chromium
+  browsers. An error report also carries the kind of screen, the Era, and the version of the game's
+  rules. It never carries your Company or its name.
 - On the wiki, the page you read and the site that referred you.
 
 PostHog derives an approximate country from your IP address. The game does not send your IP address
@@ -48,19 +52,22 @@ do not use it for advertising.
 
 - **PostHog** (US Cloud) stores the events in the United States. See
   [PostHog's privacy policy](https://posthog.com/privacy).
+- **Sentry** stores crash reports and performance data. See
+  [Sentry's privacy policy](https://sentry.io/privacy/).
 - **Cloudflare** serves the game and forwards analytics requests. See
   [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
 
 ## How long
 
-PostHog keeps events for one year on the free plan.
+PostHog keeps events for one year on the free plan. Sentry keeps errors and performance data for 90
+days.
 
 ## Turn it off
 
 1. Open **Settings** in the game.
 2. Turn off **Share anonymous usage data**.
 
-The game stops sending events immediately and remembers the choice in your browser. It also respects
+The game stops sending events, crash reports, and performance data immediately and remembers the choice in your browser. It also respects
 your browser's Do Not Track setting. Clearing your browser storage removes the device ID and the
 stored choice.
 
@@ -74,4 +81,4 @@ Open an issue at [github.com/elianiva/quorum](https://github.com/elianiva/quorum
 
 This page changes when the data changes. The date below is the last change.
 
-Last updated: 4 November 2026.
+Last updated: 5 November 2026.

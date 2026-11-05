@@ -23,6 +23,10 @@ export interface SqlRunner {
 
 const AXES: ReadonlyArray<Axis> = ['cost', 'tail', 'complexity']
 
+/** One span per store operation, named for the job, never for the SQL or its values. */
+const traced = (operation: string) =>
+  Effect.withSpan(`ResultStore.${operation}`, { attributes: { 'db.system': 'd1' } })
+
 const query = <T>(db: SqlRunner, sql: string, values: Array<unknown>) =>
   Effect.tryPromise({
     try: () =>
@@ -69,6 +73,7 @@ export const d1ResultStore = (db: SqlRunner): ResultStore['Service'] => ({
   best: (board: Board, deviceId: string) =>
     query<Scores>(db, BEST, [board.challengeId, board.simVersion, deviceId]).pipe(
       Effect.map((rows) => rows[0] ?? null),
+      traced('best'),
     ),
   record: (board, deviceId, score, replay, at) =>
     query<Scores>(db, RECORD, [
@@ -86,6 +91,7 @@ export const d1ResultStore = (db: SqlRunner): ResultStore['Service'] => ({
       Effect.flatMap((rows) =>
         rows[0] ? Effect.succeed(rows[0]) : Effect.fail(new StoreError({ cause: 'no row' })),
       ),
+      traced('record'),
     ),
   percentiles: (board, best) =>
     query<Readonly<{ players: number } & Scores>>(db, PERCENTILES, [
@@ -106,6 +112,7 @@ export const d1ResultStore = (db: SqlRunner): ResultStore['Service'] => ({
           complexity: share(row?.complexity),
         }
       }),
+      traced('percentiles'),
     ),
   histogram: (board: Board, edges: Edges) =>
     Effect.gen(function* () {
@@ -122,5 +129,5 @@ export const d1ResultStore = (db: SqlRunner): ResultStore['Service'] => ({
         players = counts[axis].reduce((sum, n) => sum + n, 0)
       }
       return { players, ...counts } satisfies Counts
-    }),
+    }).pipe(traced('histogram')),
 })

@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/cloudflare'
 import { INGEST_PREFIX } from '@quorum/rpc'
 
 interface ApiBinding {
@@ -6,6 +7,9 @@ interface ApiBinding {
 
 interface Environment {
   readonly API: ApiBinding
+  /** Without it the Sentry SDK stays off. */
+  readonly SENTRY_DSN?: string
+  readonly SENTRY_RELEASE?: string
 }
 
 /** PostHog Cloud US. The proxy keeps the project token and the hostname out of the page. */
@@ -43,9 +47,19 @@ const ingest = async (request: Request, url: URL): Promise<Response> => {
  * `runWorkerFirst` in `alchemy.run.ts`). Every other path is served from the
  * static assets.
  */
-export default {
-  fetch(request: Request, env: Environment): Promise<Response> {
-    const url = new URL(request.url)
-    return isIngest(url.pathname) ? ingest(request, url) : env.API.fetch(request)
+export default Sentry.withSentry(
+  (env: Environment) => ({
+    dsn: env.SENTRY_DSN,
+    release: env.SENTRY_RELEASE,
+    tracesSampleRate: 0.1,
+    initialScope: { tags: { service: 'website-worker' } },
+  }),
+  {
+    // The incoming request carries the browser's trace headers. Sentry continues that trace, and
+    // the service binding passes the same headers on, so the API Worker joins it.
+    fetch(request: Request, env: Environment): Promise<Response> {
+      const url = new URL(request.url)
+      return isIngest(url.pathname) ? ingest(request, url) : env.API.fetch(request)
+    },
   },
-}
+)

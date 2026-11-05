@@ -19,6 +19,7 @@ import { appendLog, clearLog, downloadLog, LogEntry } from './playlog.ts'
 import { forward, setAnalyticsEnabled } from '../platform/analytics.ts'
 import { ChallengeSubmission } from '@quorum/rpc'
 import { ApiRpc } from '@/platform/rpc.ts'
+import { annotateSpan, setSentryConsent, traced } from '../platform/sentry.ts'
 
 /* ==========================================================================
    Commands: every side effect Quorum has. The board, localStorage, the
@@ -108,7 +109,9 @@ export const ComputePreview = Command.define('ComputePreview', {
   args: { game: Game, nodeId: Schema.String, option: TradeoffOption },
   messages: [Message.PreviewComputed, Message.Synced],
   execute: ({ game, nodeId, option }) =>
-    Effect.promise(() => compute('preview', { game, nodeId, option })).pipe(
+    Effect.promise(() =>
+      traced('compute.preview', {}, () => compute('preview', { game, nodeId, option })),
+    ).pipe(
       Effect.map((preview) =>
         preview
           ? Message.PreviewComputed({
@@ -126,7 +129,9 @@ export const ComputeBottleneck = Command.define('ComputeBottleneck', {
   args: { game: Game, at: Schema.Finite },
   messages: [Message.BottleneckFound, Message.Synced],
   execute: ({ game, at }) =>
-    Effect.promise(() => compute('bottleneck', { game })).pipe(
+    Effect.promise(() =>
+      traced('compute.bottleneck', {}, () => compute('bottleneck', { game })),
+    ).pipe(
       Effect.map((bottleneck) =>
         bottleneck === undefined ? Message.Synced() : Message.BottleneckFound({ bottleneck, at }),
       ),
@@ -214,15 +219,16 @@ export const WriteCompany = Command.define('WriteCompany', {
         const file = index.companies.find((entry) => entry.id === id)
         if (file) {
           const stamped = refreshed(file, game, now)
-          window.localStorage.setItem(
-            saveKeyOf(id),
-            JSON.stringify({
+          traced('save.write', {}, () => {
+            const json = JSON.stringify({
               ...game,
               wall: now,
               disclosure: { revealed, pending },
               dashboard,
-            }),
-          )
+            })
+            annotateSpan({ 'save.bytes': json.length })
+            window.localStorage.setItem(saveKeyOf(id), json)
+          })
           window.localStorage.setItem(
             SAVE_INDEX_KEY,
             JSON.stringify({
@@ -358,6 +364,7 @@ export const ApplySettings = Command.define('ApplySettings', {
       setMuted(muted)
       setAgentAccess(agentAccess)
       setAnalyticsEnabled(analytics)
+      setSentryConsent(analytics)
       document.documentElement.lang = locale
       if (motion === 'reduce') document.documentElement.dataset.motion = 'reduce'
       else delete document.documentElement.dataset.motion

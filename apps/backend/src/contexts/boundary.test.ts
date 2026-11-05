@@ -5,9 +5,9 @@ import { expect, test } from 'vitest'
 
 const contextsRoot = dirname(fileURLToPath(import.meta.url))
 
-/** Adapters the deployment owns; contexts must stay platform-agnostic. */
+/** Adapters the deployment owns, and Sentry (ADR 0013); contexts must stay platform-agnostic. */
 const importsAdapter =
-  /(?:\bfrom\s+|\bimport\s*\(?\s*)['"](?:alchemy(?:\/|['"])|cloudflare:|@cloudflare\/|wrangler)/
+  /(?:\bfrom\s+|\bimport\s*\(?\s*)['"](?:alchemy(?:\/|['"])|cloudflare:|@cloudflare\/|@sentry\/|wrangler)/
 
 /**
  * `@cloudflare/workers-types` is ambient in this package, so a context can name
@@ -37,7 +37,7 @@ test('backend contexts do not depend on the host platform', async () => {
     const file = relative(contextsRoot, source)
 
     if (importsAdapter.test(text))
-      violations.push(`${file}: imports an Alchemy or Cloudflare adapter`)
+      violations.push(`${file}: imports an Alchemy, Cloudflare, or Sentry adapter`)
     if (namesHostType.test(text)) violations.push(`${file}: names a Cloudflare global type`)
   }
 
